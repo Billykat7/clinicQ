@@ -12,14 +12,14 @@ Browse ideas and features here.
 
 | # | Project | Repo slug | Idea card | Features (HTML) |
 |---|---|---|---|---|
-| 1 | **CivicConnect** | `civic-connect` | [Card](docs/PROJECTS/Top_6_Final_Year_Project_Ideas.md#1-civicconnect-civic-connect) | [Modules](https://raw.githack.com/Billykat7/capstone2026/main/docs/PROJECTS/index.html#civic-connect) |
-| 2 | **EduAttend** | `edu-attend` | [Card](docs/PROJECTS/Top_6_Final_Year_Project_Ideas.md#2-eduattend-edu-attend) | [Modules](https://raw.githack.com/Billykat7/capstone2026/main/docs/PROJECTS/index.html#edu-attend) |
-| 3 | **KasiMarket** | `kasi-market` | [Card](docs/PROJECTS/Top_6_Final_Year_Project_Ideas.md#3-kasimarket-kasi-market) | [Modules](https://raw.githack.com/Billykat7/capstone2026/main/docs/PROJECTS/index.html#kasi-market) |
-| 4 | **CommunityNet** | `community-net` | [Card](docs/PROJECTS/Top_6_Final_Year_Project_Ideas.md#4-communitynet-community-net) | [Modules](https://raw.githack.com/Billykat7/capstone2026/main/docs/PROJECTS/index.html#community-net) |
-| 5 | **ClinicQueue** | `clinic-queue` | [Card](docs/PROJECTS/Top_6_Final_Year_Project_Ideas.md#5-clinicqueue-clinic-queue) | [Modules](https://raw.githack.com/Billykat7/capstone2026/main/docs/PROJECTS/index.html#clinic-queue) |
-| 6 | **IsangoPass** | `isango-pass` | [Card](docs/PROJECTS/Top_6_Final_Year_Project_Ideas.md#6-isangopass-isango-pass) | [Modules](https://raw.githack.com/Billykat7/capstone2026/main/docs/PROJECTS/index.html#isango-pass) |
+| 1 | **CivicConnect** | `civic-connect` | [Card](docs/PROJECTS/Top_6_Final_Year_Project_Ideas.md#1-civicconnect-civic-connect) | [Modules](https://raw.githack.com/Billykat7/rgit-capstone2026/main/docs/PROJECTS/index.html#civic-connect) |
+| 2 | **EduAttend** | `edu-attend` | [Card](docs/PROJECTS/Top_6_Final_Year_Project_Ideas.md#2-eduattend-edu-attend) | [Modules](https://raw.githack.com/Billykat7/rgit-capstone2026/main/docs/PROJECTS/index.html#edu-attend) |
+| 3 | **KasiMarket** | `kasi-market` | [Card](docs/PROJECTS/Top_6_Final_Year_Project_Ideas.md#3-kasimarket-kasi-market) | [Modules](https://raw.githack.com/Billykat7/rgit-capstone2026/main/docs/PROJECTS/index.html#kasi-market) |
+| 4 | **CommunityNet** | `community-net` | [Card](docs/PROJECTS/Top_6_Final_Year_Project_Ideas.md#4-communitynet-community-net) | [Modules](https://raw.githack.com/Billykat7/rgit-capstone2026/main/docs/PROJECTS/index.html#community-net) |
+| 5 | **ClinicQueue** | `clinic-queue` | [Card](docs/PROJECTS/Top_6_Final_Year_Project_Ideas.md#5-clinicqueue-clinic-queue) | [Modules](https://raw.githack.com/Billykat7/rgit-capstone2026/main/docs/PROJECTS/index.html#clinic-queue) |
+| 6 | **IsangoPass** | `isango-pass` | [Card](docs/PROJECTS/Top_6_Final_Year_Project_Ideas.md#6-isangopass-isango-pass) | [Modules](https://raw.githack.com/Billykat7/rgit-capstone2026/main/docs/PROJECTS/index.html#isango-pass) |
 
-**Docs folder:** [`docs/PROJECTS/`](docs/PROJECTS/) · [`Ideas overview`](docs/PROJECTS/Top_6_Final_Year_Project_Ideas.md) · [Feature browser (live)](https://raw.githack.com/Billykat7/capstone2026/main/docs/PROJECTS/index.html) · [Feature browser (repo file)](docs/PROJECTS/index.html)
+**Docs folder:** [`docs/PROJECTS/`](docs/PROJECTS/) · [`Ideas overview`](docs/PROJECTS/Top_6_Final_Year_Project_Ideas.md) · [Feature browser (live)](https://raw.githack.com/Billykat7/rgit-capstone2026/main/docs/PROJECTS/index.html) · [Feature browser (repo file)](docs/PROJECTS/index.html)
 
 ### At a glance
 
@@ -115,7 +115,7 @@ To avoid blocking each other over a 4-month timeline, split work by **layer**, n
 
 ```bash
 git clone <repo-url>
-cd capstone2026
+cd rgit-capstone2026
 # Implementation setup TBD once the project is chosen
 ```
 
@@ -127,7 +127,7 @@ open docs/PROJECTS/index.html
 ```
 
 Or use the live preview (same as README Features links):  
-https://raw.githack.com/Billykat7/capstone2026/main/docs/PROJECTS/index.html
+https://raw.githack.com/Billykat7/rgit-capstone2026/main/docs/PROJECTS/index.html
 ## Timeline (draft, 16 weeks)
 
 | Weeks | Focus |
