@@ -1,0 +1,1580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Capstone 2026: Top 6 Project Features</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #14241f;
+      --ink-soft: #3a4f47;
+      --muted: #5c7269;
+      --line: rgba(20, 36, 31, 0.11);
+      --surface: rgba(255, 255, 255, 0.78);
+      --surface-solid: #f6faf7;
+      --brand: #0c7a54;
+      --brand-deep: #055a3c;
+      --brand-soft: #e3f3eb;
+      --accent: #c9782a;
+      --ai: #2a6f8f;
+      --civic: #0c7a54;
+      --edu: #247392;
+      --kasi: #c9782a;
+      --net: #5b4a9e;
+      --clinic: #b84a5a;
+      --isango: #1a6b8a;
+      --radius: 16px;
+      --shadow: 0 16px 44px rgba(6, 50, 35, 0.08);
+      --max: 1040px;
+      --font-display: "Bricolage Grotesque", sans-serif;
+      --font-body: "Public Sans", sans-serif;
+      --tab-h: 3.25rem;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: var(--font-body);
+      font-size: 1.02rem;
+      line-height: 1.6;
+      letter-spacing: -0.011em;
+      background:
+        radial-gradient(1100px 560px at 8% -12%, rgba(12, 122, 84, 0.15), transparent 55%),
+        radial-gradient(860px 480px at 100% 6%, rgba(201, 120, 42, 0.09), transparent 50%),
+        radial-gradient(760px 460px at 78% 100%, rgba(36, 115, 146, 0.07), transparent 45%),
+        linear-gradient(180deg, #eef6f1 0%, #f4f7f5 42%, #eef2f0 100%);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.28;
+      background-image:
+        linear-gradient(rgba(12, 122, 84, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(12, 122, 84, 0.045) 1px, transparent 1px);
+      background-size: 44px 44px;
+      mask-image: linear-gradient(180deg, rgba(0,0,0,0.4), transparent 68%);
+    }
+
+    a { color: var(--brand-deep); }
+
+    .wrap {
+      width: min(var(--max), calc(100% - 2rem));
+      margin-inline: auto;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* -- Top bar -- */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      backdrop-filter: blur(16px);
+      background: rgba(238, 246, 241, 0.82);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .topbar-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.8rem 0;
+    }
+
+    .brand-mark {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      text-decoration: none;
+      color: inherit;
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 1.05rem;
+      letter-spacing: -0.03em;
+    }
+
+    .brand-mark .dot {
+      width: 1.1rem;
+      height: 1.1rem;
+      border-radius: 0.32rem;
+      background: linear-gradient(145deg, var(--brand), var(--brand-deep));
+      box-shadow: 0 0 0 4px rgba(12, 122, 84, 0.12);
+    }
+
+    .topbar-note {
+      font-size: 0.82rem;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    /* -- Hero -- */
+    .hero {
+      padding: 2.75rem 0 1.75rem;
+      animation: rise 0.55s ease both;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--brand-deep);
+      margin-bottom: 0.85rem;
+    }
+
+    .eyebrow span {
+      width: 0.4rem;
+      height: 0.4rem;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .hero h1 {
+      margin: 0 0 0.7rem;
+      font-family: var(--font-display);
+      font-size: clamp(2.05rem, 4.6vw, 3.05rem);
+      line-height: 1.08;
+      letter-spacing: -0.04em;
+      font-weight: 800;
+      font-optical-sizing: auto;
+    }
+
+    .hero .lede {
+      max-width: 40rem;
+      margin: 0 0 1.35rem;
+      font-size: 1.08rem;
+      color: var(--ink-soft);
+      line-height: 1.55;
+    }
+
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.4rem 0.78rem;
+      border-radius: 999px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      font-size: 0.84rem;
+      color: var(--ink-soft);
+      font-weight: 500;
+    }
+
+    .pill strong {
+      color: var(--ink);
+      font-weight: 650;
+    }
+
+    /* -- Tabs -- */
+    .tabs-shell {
+      position: sticky;
+      top: 3.35rem;
+      z-index: 25;
+      margin: 0.5rem 0 1.5rem;
+      padding: 0.55rem 0 0.65rem;
+      background: linear-gradient(180deg, rgba(238, 246, 241, 0.95) 40%, rgba(238, 246, 241, 0.72));
+      backdrop-filter: blur(10px);
+    }
+
+    .tablist {
+      display: flex;
+      gap: 0.4rem;
+      padding: 0.35rem;
+      overflow-x: auto;
+      scrollbar-width: thin;
+      border-radius: 14px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .tab {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font-family: var(--font-body);
+      font-size: 0.9rem;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+      padding: 0.7rem 1rem;
+      border-radius: 10px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    .tab:hover {
+      color: var(--ink);
+      background: rgba(12, 122, 84, 0.06);
+    }
+
+    .tab:focus-visible {
+      outline: 2px solid var(--brand);
+      outline-offset: 2px;
+    }
+
+    .tab[aria-selected="true"] {
+      color: #fff;
+      background: linear-gradient(145deg, var(--brand), var(--brand-deep));
+      box-shadow: 0 6px 16px rgba(6, 90, 60, 0.22);
+    }
+
+    .tab[data-project="edu-attend"][aria-selected="true"] {
+      background: linear-gradient(145deg, #3a8eae, var(--edu));
+      box-shadow: 0 6px 16px rgba(36, 115, 146, 0.25);
+    }
+
+    .tab[data-project="kasi-market"][aria-selected="true"] {
+      background: linear-gradient(145deg, #d99242, #a85f18);
+      box-shadow: 0 6px 16px rgba(168, 95, 24, 0.25);
+    }
+
+    .tab[data-project="community-net"][aria-selected="true"] {
+      background: linear-gradient(145deg, #7a6bb8, var(--net));
+      box-shadow: 0 6px 16px rgba(91, 74, 158, 0.25);
+    }
+
+    .tab[data-project="clinic-queue"][aria-selected="true"] {
+      background: linear-gradient(145deg, #d06a78, var(--clinic));
+      box-shadow: 0 6px 16px rgba(184, 74, 90, 0.25);
+    }
+
+    .tab[data-project="isango-pass"][aria-selected="true"] {
+      background: linear-gradient(145deg, #2a8aad, var(--isango));
+      box-shadow: 0 6px 16px rgba(26, 107, 138, 0.25);
+    }
+
+    .tab .num {
+      display: inline-block;
+      font-family: var(--font-display);
+      font-size: 0.72rem;
+      opacity: 0.7;
+      margin-right: 0.35rem;
+      font-weight: 700;
+    }
+
+    .tab[aria-selected="true"] .num { opacity: 0.9; }
+
+    /* -- Panels -- */
+    .panels { min-height: 40vh; }
+
+    .project {
+      display: none;
+      animation: rise 0.35s ease both;
+    }
+
+    .project.is-active { display: block; }
+
+    .project-hero {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: calc(var(--radius) + 4px);
+      box-shadow: var(--shadow);
+      padding: clamp(1.25rem, 2.8vw, 1.85rem);
+      margin-bottom: 1rem;
+    }
+
+    .project-hero .repo {
+      display: inline-block;
+      font-size: 0.74rem;
+      font-weight: 700;
+      letter-spacing: 0.055em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.45rem;
+    }
+
+    .project-hero h2 {
+      margin: 0 0 0.55rem;
+      font-family: var(--font-display);
+      font-size: clamp(1.55rem, 2.8vw, 2rem);
+      letter-spacing: -0.03em;
+      font-weight: 750;
+      line-height: 1.15;
+    }
+
+    .project-hero .lede {
+      margin: 0 0 0.95rem;
+      color: var(--ink-soft);
+      max-width: 44rem;
+      font-size: 1.02rem;
+    }
+
+    .vision {
+      border-left: 3px solid var(--brand);
+      padding-left: 0.95rem;
+      margin: 0.85rem 0 0;
+      color: var(--ink-soft);
+      font-style: italic;
+      font-size: 0.98rem;
+    }
+
+    .project.civic .vision { border-color: var(--civic); }
+    .project.edu .vision { border-color: var(--edu); }
+    .project.kasi .vision { border-color: var(--kasi); }
+    .project.net .vision { border-color: var(--net); }
+    .project.clinic .vision { border-color: var(--clinic); }
+    .project.isango .vision { border-color: var(--isango); }
+
+    .tech-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-top: 0.95rem;
+    }
+
+    .tech-strip span {
+      font-size: 0.78rem;
+      padding: 0.28rem 0.6rem;
+      border-radius: 7px;
+      background: rgba(20, 36, 31, 0.05);
+      color: var(--muted);
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .modules {
+      display: grid;
+      gap: 0.95rem;
+      padding-bottom: 1rem;
+    }
+
+    .module {
+      background: var(--surface-solid);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: clamp(1.05rem, 2.2vw, 1.45rem);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .module:hover {
+      border-color: rgba(12, 122, 84, 0.26);
+      box-shadow: 0 10px 28px rgba(6, 50, 35, 0.055);
+    }
+
+    .module-head {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.85rem;
+      margin-bottom: 0.8rem;
+    }
+
+    .badge {
+      flex: 0 0 auto;
+      width: 2.2rem;
+      height: 2.2rem;
+      border-radius: 9px;
+      display: grid;
+      place-items: center;
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: #fff;
+      background: linear-gradient(145deg, var(--brand), var(--brand-deep));
+    }
+
+    .project.edu .badge {
+      background: linear-gradient(145deg, #3a8eae, var(--edu));
+    }
+
+    .project.kasi .badge {
+      background: linear-gradient(145deg, #d99242, #a85f18);
+    }
+
+    .project.net .badge {
+      background: linear-gradient(145deg, #7a6bb8, var(--net));
+    }
+
+    .project.clinic .badge {
+      background: linear-gradient(145deg, #d06a78, var(--clinic));
+    }
+
+    .project.isango .badge {
+      background: linear-gradient(145deg, #2a8aad, var(--isango));
+    }
+
+    .module.stretch .badge {
+      background: linear-gradient(145deg, #3a8eae, var(--ai));
+    }
+
+    .module h3 {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: 1.12rem;
+      letter-spacing: -0.025em;
+      font-weight: 700;
+      line-height: 1.25;
+    }
+
+    .module .intro {
+      margin: 0.22rem 0 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.45;
+    }
+
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .tags li {
+      padding: 0.36rem 0.7rem;
+      border-radius: 999px;
+      background: #eef5f1;
+      border: 1px solid rgba(12, 122, 84, 0.1);
+      font-size: 0.86rem;
+      color: var(--ink-soft);
+      font-weight: 500;
+      letter-spacing: -0.01em;
+    }
+
+    .project.edu .tags li {
+      background: #e9f2f6;
+      border-color: rgba(36, 115, 146, 0.14);
+    }
+
+    .project.kasi .tags li {
+      background: #faf2e9;
+      border-color: rgba(201, 120, 42, 0.15);
+    }
+
+    .project.net .tags li {
+      background: #f0eef7;
+      border-color: rgba(91, 74, 158, 0.13);
+    }
+
+    .project.clinic .tags li {
+      background: #f7eef0;
+      border-color: rgba(184, 74, 90, 0.13);
+    }
+
+    .project.isango .tags li {
+      background: #e8f3f7;
+      border-color: rgba(26, 107, 138, 0.14);
+    }
+
+    .module.stretch .tags li {
+      background: #e9f2f6;
+      border-color: rgba(42, 111, 143, 0.13);
+    }
+
+    .split {
+      display: grid;
+      gap: 0.9rem;
+    }
+
+    @media (min-width: 720px) {
+      .split.two { grid-template-columns: 1fr 1fr; }
+    }
+
+    .sublabel {
+      margin: 0 0 0.45rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .quote {
+      margin: 0.9rem 0 0;
+      padding: 0.9rem 1rem;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(42, 111, 143, 0.08), rgba(12, 122, 84, 0.06));
+      border: 1px solid rgba(42, 111, 143, 0.14);
+      color: var(--ink-soft);
+      font-style: italic;
+      font-size: 0.95rem;
+    }
+
+    .quote strong {
+      display: block;
+      font-style: normal;
+      font-size: 0.7rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--ai);
+      margin-bottom: 0.3rem;
+      font-weight: 700;
+    }
+
+    footer {
+      padding: 1.35rem 0 2.75rem;
+      color: var(--muted);
+      font-size: 0.86rem;
+      border-top: 1px solid var(--line);
+      margin-top: 0.5rem;
+    }
+
+    footer code {
+      font-size: 0.82em;
+      background: rgba(20, 36, 31, 0.05);
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+    }
+
+    @keyframes rise {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .topbar-note { display: none; }
+      .hero { padding-top: 1.85rem; }
+      .tabs-shell { top: 3.1rem; }
+      .tab { padding: 0.65rem 0.85rem; font-size: 0.84rem; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <a class="brand-mark" href="#top">
+        <span class="dot" aria-hidden="true"></span>
+        Capstone 2026
+      </a>
+      <span class="topbar-note">Feature shortlist · 6 projects</span>
+    </div>
+  </header>
+
+  <main id="top">
+    <div class="wrap">
+      <header class="hero">
+        <p class="eyebrow"><span></span> Final-year shortlist · Feature overview</p>
+        <h1>Six project ideas, feature by feature</h1>
+        <p class="lede">
+          Pick a tab to compare modules for CivicConnect, EduAttend, KasiMarket, CommunityNet, ClinicQueue,
+          and IsangoPass before locking a capstone direction.
+        </p>
+        <div class="meta-row">
+          <span class="pill"><strong>Source</strong> Top_6_Final_Year_Project_Ideas.md</span>
+          <span class="pill"><strong>Context</strong> South African communities &amp; SMEs</span>
+          <span class="pill"><strong>Stack</strong> React · Flutter · API · PostgreSQL · Docker</span>
+        </div>
+      </header>
+
+      <div class="tabs-shell">
+        <div class="tablist" role="tablist" aria-label="Project ideas">
+          <button class="tab" role="tab" id="tab-civic" data-project="civic-connect" aria-controls="civic-connect" aria-selected="true" tabindex="0">
+            <span class="num">01</span>CivicConnect
+          </button>
+          <button class="tab" role="tab" id="tab-edu" data-project="edu-attend" aria-controls="edu-attend" aria-selected="false" tabindex="-1">
+            <span class="num">02</span>EduAttend
+          </button>
+          <button class="tab" role="tab" id="tab-kasi" data-project="kasi-market" aria-controls="kasi-market" aria-selected="false" tabindex="-1">
+            <span class="num">03</span>KasiMarket
+          </button>
+          <button class="tab" role="tab" id="tab-net" data-project="community-net" aria-controls="community-net" aria-selected="false" tabindex="-1">
+            <span class="num">04</span>CommunityNet
+          </button>
+          <button class="tab" role="tab" id="tab-clinic" data-project="clinic-queue" aria-controls="clinic-queue" aria-selected="false" tabindex="-1">
+            <span class="num">05</span>ClinicQueue
+          </button>
+          <button class="tab" role="tab" id="tab-isango" data-project="isango-pass" aria-controls="isango-pass" aria-selected="false" tabindex="-1">
+            <span class="num">06</span>IsangoPass
+          </button>
+        </div>
+      </div>
+
+      <div class="panels">
+
+        <!-- CivicConnect -->
+        <section class="project civic is-active" id="civic-connect" role="tabpanel" aria-labelledby="tab-civic" data-project="civic-connect">
+          <div class="project-hero">
+            <span class="repo">civic-connect</span>
+            <h2>CivicConnect</h2>
+            <p class="lede">
+              Community platform for reporting municipal issues: potholes, leaks, dumping, streetlights.
+              Includes GPS, photos, status tracking, and analytics for residents and municipal staff.
+            </p>
+            <div class="meta-row">
+              <span class="pill"><strong>Effort</strong> High</span>
+              <span class="pill"><strong>Complexity</strong> High</span>
+              <span class="pill"><strong>Monetisation</strong> Municipal SaaS / white-label</span>
+            </div>
+            <p class="vision">
+              Affordable citizen engagement and field-ops tooling for municipalities still stuck on
+              phone lines, WhatsApp groups, and paper logs.
+            </p>
+            <div class="tech-strip">
+              <span>Next.js</span>
+              <span>Micronaut / FastAPI</span>
+              <span>PostgreSQL + PostGIS</span>
+              <span>Object storage</span>
+              <span>Docker · GitHub Actions</span>
+            </div>
+          </div>
+
+          <div class="modules">
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">1</div>
+                <div>
+                  <h3>Citizen Issue Reporting</h3>
+                  <p class="intro">Residents log service failures with evidence and a reference number.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Issue categories (pothole, leak, dumping, streetlight…)</li>
+                <li>GPS / map pin</li>
+                <li>Photo &amp; video evidence</li>
+                <li>Description &amp; severity</li>
+                <li>Anonymous or verified submitter</li>
+                <li>Reference / ticket number</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">2</div>
+                <div>
+                  <h3>Maps &amp; GIS</h3>
+                  <p class="intro">See where problems cluster and route field teams by ward or zone.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Interactive map of open issues</li>
+                <li>Ward / suburb boundaries</li>
+                <li>Hotspot heatmaps</li>
+                <li>Nearby issues (dedupe)</li>
+                <li>PostGIS spatial queries</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">3</div>
+                <div>
+                  <h3>Workflow &amp; Assignment</h3>
+                  <p class="intro">Municipal staff triage, assign, and close issues against SLAs.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Status lifecycle (submitted → assigned → in progress → resolved)</li>
+                <li>Department routing</li>
+                <li>Field agent assignment</li>
+                <li>SLA timers &amp; escalation</li>
+                <li>Before / after resolution photos</li>
+                <li>Audit trail</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">4</div>
+                <div>
+                  <h3>Citizen Status &amp; Feedback</h3>
+                  <p class="intro">Keep reporters informed without calling the switchboard.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Track my ticket</li>
+                <li>Push / SMS / email updates</li>
+                <li>Resolution confirmation</li>
+                <li>Satisfaction rating</li>
+                <li>Comment thread (optional)</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">5</div>
+                <div>
+                  <h3>Admin Dashboard &amp; Analytics</h3>
+                  <p class="intro">Volume, performance, and accountability for managers.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Open vs closed by category</li>
+                <li>Average resolution time</li>
+                <li>SLA breach rates</li>
+                <li>Ward leaderboards</li>
+                <li>Export CSV / PDF</li>
+                <li>Role-based access (citizen, agent, admin)</li>
+              </ul>
+            </article>
+
+            <article class="module stretch">
+              <div class="module-head">
+                <div class="badge">6</div>
+                <div>
+                  <h3>Stretch · Smart routing &amp; channels</h3>
+                  <p class="intro">Optional intelligence and familiar intake channels.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Auto-categorise from description</li>
+                <li>Duplicate detection</li>
+                <li>WhatsApp intake bot</li>
+                <li>Offline-friendly mobile capture</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <!-- EduAttend -->
+        <section class="project edu" id="edu-attend" role="tabpanel" aria-labelledby="tab-edu" data-project="edu-attend" hidden>
+          <div class="project-hero">
+            <span class="repo">edu-attend</span>
+            <h2>EduAttend</h2>
+            <p class="lede">
+              School attendance with QR or face recognition, instant parent notifications,
+              and principal dashboards for class and grade trends.
+            </p>
+            <div class="meta-row">
+              <span class="pill"><strong>Effort</strong> Medium–High</span>
+              <span class="pill"><strong>Complexity</strong> High</span>
+              <span class="pill"><strong>Monetisation</strong> Per-school subscription</span>
+            </div>
+            <p class="vision">
+              Replace paper registers with a practical attendance and parent-comms stack
+              for South African schools.
+            </p>
+            <div class="tech-strip">
+              <span>React</span>
+              <span>Flutter</span>
+              <span>FastAPI</span>
+              <span>PostgreSQL</span>
+              <span>OpenCV</span>
+              <span>Docker</span>
+            </div>
+          </div>
+
+          <div class="modules">
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">1</div>
+                <div>
+                  <h3>Teacher Attendance UI</h3>
+                  <p class="intro">Mark a class present, late, or absent in minutes.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Class &amp; period selection</li>
+                <li>Manual roll call</li>
+                <li>QR scan check-in</li>
+                <li>Bulk mark present</li>
+                <li>Late / excused reasons</li>
+                <li>Same-day corrections</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">2</div>
+                <div>
+                  <h3>QR &amp; Face Recognition</h3>
+                  <p class="intro">Optional faster capture at the gate or classroom door.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Learner QR badges</li>
+                <li>Camera check-in</li>
+                <li>Face enrolment (opt-in)</li>
+                <li>Confidence thresholds</li>
+                <li>Fallback to manual mark</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">3</div>
+                <div>
+                  <h3>Parent Portal / Mobile</h3>
+                  <p class="intro">Caregivers see attendance without calling the school office.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Linked learners</li>
+                <li>Daily attendance status</li>
+                <li>Absence history</li>
+                <li>Excuse / sick notes</li>
+                <li>Push notifications</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">4</div>
+                <div>
+                  <h3>Principal Dashboard</h3>
+                  <p class="intro">School-wide visibility for leadership and interventions.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Attendance % by grade</li>
+                <li>Chronic absentee alerts</li>
+                <li>Class comparison</li>
+                <li>Day-of-week trends</li>
+                <li>Export for district reporting</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">5</div>
+                <div>
+                  <h3>Notifications &amp; Reporting</h3>
+                  <p class="intro">Close the loop when a learner is marked absent or late.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Instant absent alerts</li>
+                <li>Late arrival alerts</li>
+                <li>Weekly parent summary</li>
+                <li>SMS / email / push channels</li>
+                <li>Term attendance certificates</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">6</div>
+                <div>
+                  <h3>School Admin &amp; Security</h3>
+                  <p class="intro">Learners, classes, staff roles, and privacy controls.</p>
+                </div>
+              </div>
+              <div class="split two">
+                <div>
+                  <p class="sublabel">Admin</p>
+                  <ul class="tags">
+                    <li>Learner &amp; guardian profiles</li>
+                    <li>Timetable / periods</li>
+                    <li>Teacher assignments</li>
+                  </ul>
+                </div>
+                <div>
+                  <p class="sublabel">Security</p>
+                  <ul class="tags">
+                    <li>Role-based access</li>
+                    <li>Consent for biometrics</li>
+                    <li>Audit logs</li>
+                  </ul>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <!-- KasiMarket -->
+        <section class="project kasi" id="kasi-market" role="tabpanel" aria-labelledby="tab-kasi" data-project="kasi-market" hidden>
+          <div class="project-hero">
+            <span class="repo">kasi-market</span>
+            <h2>KasiMarket</h2>
+            <p class="lede">
+              Marketplace and ops toolkit for township businesses: catalogues, ordering, delivery,
+              and analytics, with a Pro path toward POS, inventory, and loyalty.
+            </p>
+            <div class="meta-row">
+              <span class="pill"><strong>Effort</strong> Medium</span>
+              <span class="pill"><strong>Complexity</strong> Medium</span>
+              <span class="pill"><strong>Monetisation</strong> Fees · subscriptions · promos</span>
+            </div>
+            <p class="vision">
+              An affordable cloud business platform for South African SMEs, informal traders,
+              and township entrepreneurs.
+            </p>
+            <div class="tech-strip">
+              <span>Next.js</span>
+              <span>NestJS</span>
+              <span>PostgreSQL</span>
+              <span>Redis</span>
+              <span>Docker</span>
+            </div>
+          </div>
+
+          <div class="modules">
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">1</div>
+                <div>
+                  <h3>Customer Marketplace</h3>
+                  <p class="intro">Discover nearby shops and order without leaving the neighbourhood.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Browse products</li>
+                <li>Search nearby businesses</li>
+                <li>Order online</li>
+                <li>Reserve stock</li>
+                <li>Click &amp; Collect</li>
+                <li>Delivery requests</li>
+                <li>Ratings &amp; reviews</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">2</div>
+                <div>
+                  <h3>Merchant Portal</h3>
+                  <p class="intro">Publish catalogues and manage day-to-day shop data.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Products &amp; categories</li>
+                <li>Pricing &amp; discounts</li>
+                <li>Stock levels</li>
+                <li>Business profile &amp; hours</li>
+                <li>Order inbox</li>
+                <li>Promoted listings</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">3</div>
+                <div>
+                  <h3>Orders &amp; Payments</h3>
+                  <p class="intro">From cart to fulfilment with local payment patterns in mind.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Cart &amp; checkout</li>
+                <li>Cash on collection</li>
+                <li>Card / EFT (simulated or gateway)</li>
+                <li>Order status tracking</li>
+                <li>Refunds &amp; cancellations</li>
+                <li>Delivery driver assignment</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">4</div>
+                <div>
+                  <h3>Inventory &amp; POS <span style="font-weight:600;color:var(--kasi);font-size:0.8rem">(Pro)</span></h3>
+                  <p class="intro">Counter sales and stock control for merchants who want more than a storefront.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Barcode / QR scan</li>
+                <li>Low stock alerts</li>
+                <li>Purchase orders</li>
+                <li>Split payments</li>
+                <li>Receipts</li>
+                <li>Daily cash-up</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">5</div>
+                <div>
+                  <h3>Customers &amp; Loyalty</h3>
+                  <p class="intro">Know regulars and reward repeat spend.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Customer profiles</li>
+                <li>Purchase history</li>
+                <li>Loyalty points</li>
+                <li>Promotions</li>
+                <li>Birthday rewards</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">6</div>
+                <div>
+                  <h3>Analytics, Reports &amp; Alerts</h3>
+                  <p class="intro">What sold, what stalled, and what needs restocking.</p>
+                </div>
+              </div>
+              <div class="split two">
+                <div>
+                  <p class="sublabel">Insights</p>
+                  <ul class="tags">
+                    <li>Daily / weekly / monthly sales</li>
+                    <li>Best sellers</li>
+                    <li>Slow-moving stock</li>
+                    <li>Revenue &amp; profit</li>
+                  </ul>
+                </div>
+                <div>
+                  <p class="sublabel">Exports &amp; alerts</p>
+                  <ul class="tags">
+                    <li>PDF / Excel / CSV</li>
+                    <li>Low stock alerts</li>
+                    <li>Order notifications</li>
+                    <li>Admin oversight</li>
+                  </ul>
+                </div>
+              </div>
+            </article>
+
+            <article class="module stretch">
+              <div class="module-head">
+                <div class="badge">7</div>
+                <div>
+                  <h3>Stretch · AI assistants</h3>
+                  <p class="intro">Optional intelligence on top of operational data.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Demand forecasting</li>
+                <li>Stock recommendations</li>
+                <li>Product recommendations</li>
+                <li>Natural-language report summaries</li>
+              </ul>
+              <blockquote class="quote">
+                <strong>Example</strong>
+                “What were my top five products this month?”
+              </blockquote>
+            </article>
+          </div>
+        </section>
+
+        <!-- CommunityNet -->
+        <section class="project net" id="community-net" role="tabpanel" aria-labelledby="tab-net" data-project="community-net" hidden>
+          <div class="project-hero">
+            <span class="repo">community-net</span>
+            <h2>CommunityNet</h2>
+            <p class="lede">
+              ISP and community Wi-Fi management: subscribers, payments, bandwidth profiles,
+              captive portal, and usage monitoring in one control plane.
+            </p>
+            <div class="meta-row">
+              <span class="pill"><strong>Effort</strong> High</span>
+              <span class="pill"><strong>Complexity</strong> High</span>
+              <span class="pill"><strong>Monetisation</strong> Monthly SaaS / managed services</span>
+            </div>
+            <p class="vision">
+              Replace spreadsheet + router-UI chaos with a managed platform for township
+              and community Wi-Fi providers.
+            </p>
+            <div class="tech-strip">
+              <span>React</span>
+              <span>Micronaut</span>
+              <span>PostgreSQL</span>
+              <span>FreeRADIUS</span>
+              <span>MikroTik API</span>
+              <span>Docker</span>
+            </div>
+          </div>
+
+          <div class="modules">
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">1</div>
+                <div>
+                  <h3>Subscriber Portal</h3>
+                  <p class="intro">Self-serve account, packages, and top-ups for end users.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Account registration</li>
+                <li>View active package</li>
+                <li>Data / time remaining</li>
+                <li>Top-up / renew</li>
+                <li>Payment history</li>
+                <li>Support tickets</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">2</div>
+                <div>
+                  <h3>Captive Portal</h3>
+                  <p class="intro">Onboard devices when they join the Wi-Fi network.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Login / voucher redeem</li>
+                <li>Package selection</li>
+                <li>Terms acceptance</li>
+                <li>Session start / expiry</li>
+                <li>Branded splash pages</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">3</div>
+                <div>
+                  <h3>Admin &amp; Network Ops</h3>
+                  <p class="intro">Operators manage sites, APs, and subscriber lifecycle.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Site / hotspot inventory</li>
+                <li>Subscriber CRUD</li>
+                <li>Suspend / reinstate</li>
+                <li>Device MAC binding</li>
+                <li>MikroTik / RADIUS sync</li>
+                <li>Outage notes</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">4</div>
+                <div>
+                  <h3>Billing &amp; Packages</h3>
+                  <p class="intro">Vouchers, recurring plans, and clear money trails.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Bandwidth profiles</li>
+                <li>Time-based vouchers</li>
+                <li>Data-cap packages</li>
+                <li>Monthly subscriptions</li>
+                <li>Payment recording</li>
+                <li>Invoice / receipt export</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">5</div>
+                <div>
+                  <h3>Usage Monitoring &amp; Reporting</h3>
+                  <p class="intro">See who is online, what is congested, and what is earning.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Active sessions</li>
+                <li>Bandwidth utilisation</li>
+                <li>Top consumers</li>
+                <li>Revenue by package</li>
+                <li>Churn / expiry alerts</li>
+                <li>Export reports</li>
+              </ul>
+            </article>
+
+            <article class="module stretch">
+              <div class="module-head">
+                <div class="badge">6</div>
+                <div>
+                  <h3>Stretch · Automation &amp; alerts</h3>
+                  <p class="intro">Reduce manual voucher and support work.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Auto-suspend on expiry</li>
+                <li>Fair-use throttling hooks</li>
+                <li>SMS payment reminders</li>
+                <li>Agent commission tracking</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <!-- ClinicQueue -->
+        <section class="project clinic" id="clinic-queue" role="tabpanel" aria-labelledby="tab-clinic" data-project="clinic-queue" hidden>
+          <div class="project-hero">
+            <span class="repo">clinic-queue</span>
+            <h2>ClinicQueue</h2>
+            <p class="lede">
+              Digital clinic appointments and queue management with patient notifications
+              and analytics: fewer crowded waiting rooms, clearer flow for staff.
+            </p>
+            <div class="meta-row">
+              <span class="pill"><strong>Effort</strong> Medium</span>
+              <span class="pill"><strong>Complexity</strong> Medium</span>
+              <span class="pill"><strong>Monetisation</strong> Clinic license / hosted SaaS</span>
+            </div>
+            <p class="vision">
+              A low-cost queue layer for South African primary healthcare facilities
+              still running on paper tickets and verbal call-outs.
+            </p>
+            <div class="tech-strip">
+              <span>Flutter</span>
+              <span>React</span>
+              <span>FastAPI</span>
+              <span>PostgreSQL</span>
+              <span>Redis</span>
+              <span>Docker</span>
+            </div>
+          </div>
+
+          <div class="modules">
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">1</div>
+                <div>
+                  <h3>Patient App</h3>
+                  <p class="intro">Book ahead or join today’s queue from a phone.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Find nearby clinics</li>
+                <li>Book appointments</li>
+                <li>Join walk-in queue</li>
+                <li>Ticket / queue number</li>
+                <li>Estimated wait time</li>
+                <li>Cancel / reschedule</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">2</div>
+                <div>
+                  <h3>Live Queue &amp; Check-in</h3>
+                  <p class="intro">Reception controls the floor without shouting numbers into a crowd.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Check-in at reception / kiosk</li>
+                <li>Call next patient</li>
+                <li>Skip / no-show handling</li>
+                <li>Priority / emergency lanes</li>
+                <li>Service type queues (pharmacy, vitals, doctor)</li>
+                <li>Display board support</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">3</div>
+                <div>
+                  <h3>Clinic Dashboard</h3>
+                  <p class="intro">Staff see load, slots, and who is waiting right now.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Today’s appointments</li>
+                <li>Live waiting list</li>
+                <li>Room / clinician assignment</li>
+                <li>Slot capacity settings</li>
+                <li>Patient search</li>
+                <li>Staff roles (reception, nurse, admin)</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">4</div>
+                <div>
+                  <h3>Notifications</h3>
+                  <p class="intro">Tell patients when to leave home - not hours early.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Booking confirmations</li>
+                <li>“You’re next” alerts</li>
+                <li>Delay / clinic closed notices</li>
+                <li>SMS / push reminders</li>
+                <li>Missed appointment follow-up</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">5</div>
+                <div>
+                  <h3>Reporting &amp; Analytics</h3>
+                  <p class="intro">Throughput and wait times for facility managers.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Average wait time</li>
+                <li>Patients served per day</li>
+                <li>No-show rates</li>
+                <li>Peak hour heatmaps</li>
+                <li>Service-type breakdown</li>
+                <li>Export CSV / PDF</li>
+              </ul>
+            </article>
+
+            <article class="module stretch">
+              <div class="module-head">
+                <div class="badge">6</div>
+                <div>
+                  <h3>Stretch · Continuity of care</h3>
+                  <p class="intro">Light extras that stay within a realistic MVP-plus scope.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Chronic patient recall lists</li>
+                <li>Multi-clinic / district view</li>
+                <li>WhatsApp status bot</li>
+                <li>Anonymous feedback after visit</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <!-- IsangoPass (Access Control & Visitor Management) -->
+        <section class="project isango" id="isango-pass" role="tabpanel" aria-labelledby="tab-isango" data-project="isango-pass" hidden>
+          <div class="project-hero">
+            <span class="repo">isango-pass</span>
+            <h2>IsangoPass</h2>
+            <p class="lede">
+              Access control and visitor management for offices, campuses, estates, and industrial sites:
+              pre-registration, check-in, badges, host notifications, and audit-ready entry logs.
+            </p>
+            <div class="meta-row">
+              <span class="pill"><strong>Effort</strong> Medium–High</span>
+              <span class="pill"><strong>Complexity</strong> Medium–High</span>
+              <span class="pill"><strong>Monetisation</strong> Site license / hosted SaaS</span>
+            </div>
+            <p class="vision">
+              Replace paper visitor books and ad-hoc WhatsApp gate lists with a secure, auditable
+              access platform for South African workplaces and residential estates.
+            </p>
+            <div class="tech-strip">
+              <span>React / Next.js</span>
+              <span>Flutter (kiosk / guard)</span>
+              <span>FastAPI / Micronaut</span>
+              <span>PostgreSQL</span>
+              <span>Redis</span>
+              <span>Docker</span>
+            </div>
+          </div>
+
+          <div class="modules">
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">1</div>
+                <div>
+                  <h3>Visitor Pre-Registration</h3>
+                  <p class="intro">Hosts invite visitors ahead of time; visitors arrive expected, not as surprises.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Host-created invitations</li>
+                <li>Visitor self-registration link</li>
+                <li>Expected date / time window</li>
+                <li>Purpose of visit</li>
+                <li>ID / vehicle details capture</li>
+                <li>Approval workflow (optional)</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">2</div>
+                <div>
+                  <h3>Gate / Reception Check-in</h3>
+                  <p class="intro">Guards and receptionists process arrivals quickly with a clear queue of expected guests.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Walk-in registration</li>
+                <li>QR / invite code scan</li>
+                <li>ID verification checklist</li>
+                <li>Photo capture at gate</li>
+                <li>Badge / pass printing</li>
+                <li>Sign-out / exit capture</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">3</div>
+                <div>
+                  <h3>Access Zones &amp; Credentials</h3>
+                  <p class="intro">Control who can enter which areas, and for how long.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Buildings / floors / zones</li>
+                <li>Time-bound access windows</li>
+                <li>Staff access cards / PINs</li>
+                <li>Visitor temporary credentials</li>
+                <li>Blacklist / watchlist</li>
+                <li>Emergency lockdown flag</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">4</div>
+                <div>
+                  <h3>Host &amp; Guard Notifications</h3>
+                  <p class="intro">Tell hosts when their guest arrives; alert security when something is off.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>“Visitor has arrived” alerts</li>
+                <li>Overstay / no sign-out reminders</li>
+                <li>Denied-entry notifications</li>
+                <li>SMS / push / email channels</li>
+                <li>Escort required flags</li>
+              </ul>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">5</div>
+                <div>
+                  <h3>Employee &amp; Contractor Access</h3>
+                  <p class="intro">Ongoing access for staff and contractors, not only one-off visitors.</p>
+                </div>
+              </div>
+              <div class="split two">
+                <div>
+                  <p class="sublabel">People</p>
+                  <ul class="tags">
+                    <li>Employee directory sync</li>
+                    <li>Contractor companies</li>
+                    <li>Department / role mapping</li>
+                  </ul>
+                </div>
+                <div>
+                  <p class="sublabel">Lifecycle</p>
+                  <ul class="tags">
+                    <li>Onboarding / offboarding</li>
+                    <li>Access expiry dates</li>
+                    <li>Lost-card revoke</li>
+                  </ul>
+                </div>
+              </div>
+            </article>
+
+            <article class="module">
+              <div class="module-head">
+                <div class="badge">6</div>
+                <div>
+                  <h3>Admin Dashboard &amp; Audit Logs</h3>
+                  <p class="intro">Who entered, when, where: ready for compliance and incident review.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Live on-site visitor board</li>
+                <li>Entry / exit history</li>
+                <li>Peak arrival times</li>
+                <li>Denied attempts report</li>
+                <li>Export CSV / PDF</li>
+                <li>Role-based admin (guard, host, security manager)</li>
+              </ul>
+            </article>
+
+            <article class="module stretch">
+              <div class="module-head">
+                <div class="badge">7</div>
+                <div>
+                  <h3>Stretch · Hardware &amp; smart access</h3>
+                  <p class="intro">Optional integrations beyond a software-only MVP.</p>
+                </div>
+              </div>
+              <ul class="tags">
+                <li>Turnstile / door controller hooks</li>
+                <li>ANPR number-plate recognition</li>
+                <li>Face / biometric check-in (opt-in)</li>
+                <li>Multi-site estate / campus view</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+      </div>
+
+      <footer>
+        Capstone 2026 · Top 6 feature overview · See also <code>README.md</code> and <code>Top_6_Final_Year_Project_Ideas.md</code>
+      </footer>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+      const panels = Array.from(document.querySelectorAll('[role="tabpanel"]'));
+
+      function activate(tab, { focus = false, scroll = false, updateHash = true } = {}) {
+        const id = tab.getAttribute("aria-controls");
+
+        tabs.forEach((t) => {
+          const selected = t === tab;
+          t.setAttribute("aria-selected", selected ? "true" : "false");
+          t.tabIndex = selected ? 0 : -1;
+        });
+
+        panels.forEach((panel) => {
+          const on = panel.id === id;
+          panel.classList.toggle("is-active", on);
+          panel.hidden = !on;
+        });
+
+        if (focus) tab.focus();
+        if (scroll) {
+          const shell = document.querySelector(".tabs-shell");
+          if (shell) shell.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+
+        const project = tab.dataset.project;
+        if (updateHash && project && history.replaceState) {
+          history.replaceState(null, "", "#" + project);
+        }
+      }
+
+      function activateFromHash() {
+        const hash = (location.hash || "").replace(/^#/, "");
+        const fromHash = tabs.find((t) => t.dataset.project === hash || t.getAttribute("aria-controls") === hash);
+        if (fromHash) activate(fromHash, { updateHash: false });
+      }
+
+      tabs.forEach((tab) => {
+        tab.addEventListener("click", () => activate(tab, { scroll: true }));
+      });
+
+      document.querySelector(".tablist")?.addEventListener("keydown", (e) => {
+        const i = tabs.indexOf(document.activeElement);
+        if (i < 0) return;
+
+        let next = -1;
+        if (e.key === "ArrowRight" || e.key === "ArrowDown") next = (i + 1) % tabs.length;
+        if (e.key === "ArrowLeft" || e.key === "ArrowUp") next = (i - 1 + tabs.length) % tabs.length;
+        if (e.key === "Home") next = 0;
+        if (e.key === "End") next = tabs.length - 1;
+
+        if (next >= 0) {
+          e.preventDefault();
+          activate(tabs[next], { focus: true });
+        }
+      });
+
+      window.addEventListener("hashchange", activateFromHash);
+      activateFromHash();
+    })();
+  </script>
+</body>
+</html>
