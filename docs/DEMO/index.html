@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ClinicQ: Product Walkthrough</title>
+<style>
+:root{
+  --bg:#f6f8f9; --surface:#ffffff; --surface-2:#eef2f4; --ink:#0f1c22; --ink-2:#41565f;
+  --ink-3:#7b8f99; --line:#dde5e9; --accent:#0d7d7d; --accent-2:#0aa3a3; --accent-soft:#e0f2f2;
+  --warn:#c2410c; --warn-soft:#fff1e7; --ok:#15803d; --ok-soft:#e7f6ec; --crit:#b3261e;
+  --shadow:0 1px 2px rgba(15,28,34,.05),0 8px 24px rgba(15,28,34,.06);
+  --radius:14px; --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0b1417; --surface:#111e23; --surface-2:#16272d; --ink:#eaf2f4; --ink-2:#a9c0c8;
+    --ink-3:#6f8b95; --line:#22383f; --accent:#2fbdbd; --accent-2:#5ad6d6; --accent-soft:#0f2f31;
+    --warn:#fb923c; --warn-soft:#2a1a10; --ok:#4ade80; --ok-soft:#0f2417; --crit:#f87171;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.35);
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;
+  -webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+h1,h2,h3,h4{line-height:1.2;margin:0}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
+section{padding:72px 0;border-top:1px solid var(--line)}
+section:first-of-type{border-top:none}
+.sec-title{font-size:clamp(24px,3.2vw,34px);font-weight:800;letter-spacing:-.02em}
+.sec-sub{color:var(--ink-2);max-width:66ch;margin-top:12px;font-size:16px}
+
+/* ---------- header ---------- */
+header{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 88%,transparent);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.nav{display:flex;align-items:center;gap:20px;height:60px}
+.logo{display:flex;align-items:center;gap:9px;font-weight:800;letter-spacing:-.02em;font-size:18px}
+.logo .q{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;
+  background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;font-size:15px;font-weight:800}
+.nav nav{margin-left:auto;display:flex;gap:22px;font-size:14px;color:var(--ink-2)}
+.nav nav a{color:inherit}
+@media(max-width:760px){.nav nav{display:none}}
+
+/* ---------- hero ---------- */
+.hero{padding:76px 0 60px}
+.hero h1{font-size:clamp(34px,6vw,60px);font-weight:850;letter-spacing:-.035em;max-width:16ch}
+.hero .lede{font-size:clamp(17px,2vw,20px);color:var(--ink-2);max-width:60ch;margin-top:20px}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:5px 12px;border-radius:999px;
+  background:var(--accent-soft);color:var(--accent);font-size:12.5px;font-weight:700;
+  border:1px solid color-mix(in srgb,var(--accent) 25%,transparent)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-top:40px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+.stat b{display:block;font-size:26px;font-weight:800;letter-spacing:-.02em;color:var(--accent)}
+.stat span{font-size:13px;color:var(--ink-2)}
+
+/* ---------- doors diagram ---------- */
+.doors{display:grid;grid-template-columns:1fr auto 1fr;gap:28px;align-items:center;margin-top:36px}
+@media(max-width:860px){.doors{grid-template-columns:1fr;gap:16px}}
+.door-list{display:grid;gap:10px}
+.door{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);
+  border-radius:12px;padding:13px 15px;font-size:14px;font-weight:600}
+.door em{font-style:normal;color:var(--ink-3);font-weight:500;font-size:12.5px;display:block}
+.door i{font-style:normal;font-size:19px;width:26px;text-align:center}
+.engine{background:linear-gradient(150deg,var(--accent),var(--accent-2));color:#fff;border-radius:18px;
+  padding:26px 22px;text-align:center;box-shadow:var(--shadow);min-width:210px}
+.engine b{display:block;font-size:17px;font-weight:800;letter-spacing:-.01em}
+.engine span{font-size:12.5px;opacity:.9;display:block;margin-top:8px;line-height:1.5}
+.engine .num{font-family:var(--mono);font-size:38px;font-weight:700;margin-top:14px;letter-spacing:.02em}
+
+/* ---------- tabs / mockups ---------- */
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:28px 0 22px;background:var(--surface-2);
+  padding:5px;border-radius:12px;width:fit-content;border:1px solid var(--line)}
+.tab{border:0;background:transparent;color:var(--ink-2);font:inherit;font-size:13.5px;font-weight:650;
+  padding:8px 15px;border-radius:8px;cursor:pointer}
+.tab[aria-selected=true]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.panel[hidden]{display:none}
+.panel-note{color:var(--ink-2);font-size:14.5px;max-width:62ch;margin-bottom:22px}
+
+/* device frames */
+.stage{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;align-items:start}
+.phone{max-width:330px;margin:0 auto;background:var(--surface);border:1px solid var(--line);
+  border-radius:26px;box-shadow:var(--shadow);overflow:hidden}
+.phone .bar{height:26px;background:var(--surface-2);display:flex;align-items:center;justify-content:center}
+.phone .bar::after{content:"";width:70px;height:5px;border-radius:99px;background:var(--line)}
+.screen{padding:16px}
+.app-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.app-head b{font-size:15px}
+.seg{display:flex;background:var(--surface-2);border-radius:9px;padding:3px;font-size:11.5px;font-weight:650}
+.seg span{padding:5px 9px;border-radius:6px;color:var(--ink-3)}
+.seg span.on{background:var(--surface);color:var(--accent);box-shadow:var(--shadow)}
+.clinic{display:flex;gap:11px;padding:11px;border:1px solid var(--line);border-radius:11px;margin-bottom:9px;background:var(--surface)}
+.clinic .dot{width:9px;height:9px;border-radius:99px;margin-top:6px;flex:none}
+.dot.pub{background:var(--accent)} .dot.priv{background:#8b5cf6}
+.clinic b{font-size:13.5px;display:block}
+.clinic small{color:var(--ink-3);font-size:11.5px;display:block}
+.clinic .meta{margin-left:auto;text-align:right;font-size:11px;white-space:nowrap}
+.badge{display:inline-block;font-size:10px;font-weight:750;letter-spacing:.05em;text-transform:uppercase;
+  padding:2px 7px;border-radius:5px;background:var(--accent-soft);color:var(--accent)}
+.badge.priv{background:#f3e8ff;color:#7e22ce}
+@media(prefers-color-scheme:dark){.badge.priv{background:#2a1b3d;color:#c4a6f5}}
+.badge.warnb{background:var(--warn-soft);color:var(--warn)}
+.badge.okb{background:var(--ok-soft);color:var(--ok)}
+
+/* ticket card */
+.ticket{text-align:center;padding:22px 16px;border:1px solid var(--line);border-radius:16px;background:var(--surface-2)}
+.ticket .lbl{font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:700}
+.ticket .no{font-family:var(--mono);font-size:52px;font-weight:700;color:var(--accent);line-height:1.1;letter-spacing:-.02em}
+.ticket .pos{font-size:14px;color:var(--ink-2);margin-top:6px}
+.ticket .eta{margin-top:14px;font-size:13px;font-weight:700;background:var(--surface);border:1px solid var(--line);
+  padding:8px;border-radius:9px}
+.steps{margin-top:14px;display:grid;gap:7px}
+.step{display:flex;gap:9px;align-items:center;font-size:12.5px;color:var(--ink-3)}
+.step .tick{width:17px;height:17px;border-radius:99px;border:2px solid var(--line);flex:none;display:grid;place-items:center;font-size:9px}
+.step.done{color:var(--ink-2)} .step.done .tick{background:var(--accent);border-color:var(--accent);color:#fff}
+.step.now{color:var(--ink);font-weight:700} .step.now .tick{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+
+/* dashboard */
+.laptop{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.laptop .chrome{height:34px;background:var(--surface-2);display:flex;align-items:center;gap:6px;padding:0 13px;border-bottom:1px solid var(--line)}
+.laptop .chrome i{width:9px;height:9px;border-radius:99px;background:var(--line);display:block}
+.laptop .chrome span{margin-left:10px;font-size:11.5px;color:var(--ink-3);font-family:var(--mono)}
+.dash{padding:16px}
+.dash-top{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.dash-top b{font-size:15px}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:var(--ok)}
+.live .blip{width:7px;height:7px;border-radius:99px;background:var(--ok);animation:blip 1.6s infinite}
+@keyframes blip{0%,100%{opacity:1}50%{opacity:.25}}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:9px;margin-bottom:14px}
+.kpi{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.kpi b{display:block;font-size:20px;font-weight:800;letter-spacing:-.02em}
+.kpi span{font-size:11px;color:var(--ink-3)}
+.qgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:11px}
+.qcard{border:1px solid var(--line);border-radius:12px;padding:13px;background:var(--surface)}
+.qcard.alert{border-color:color-mix(in srgb,var(--warn) 45%,var(--line));background:var(--warn-soft)}
+.qcard h4{font-size:13.5px;display:flex;align-items:center;justify-content:space-between}
+.qcard .big{font-family:var(--mono);font-size:30px;font-weight:700;margin:6px 0 2px}
+.qcard small{color:var(--ink-3);font-size:11.5px;display:block}
+.btn{margin-top:10px;width:100%;border:0;border-radius:9px;padding:10px;font:inherit;font-size:13px;
+  font-weight:750;background:var(--accent);color:#fff;cursor:pointer}
+.btn.ghost{background:var(--surface-2);color:var(--ink-2);border:1px solid var(--line);margin-top:6px;font-size:12px;padding:7px}
+
+/* board */
+.board{background:#07171c;border-radius:14px;padding:22px;color:#eafcfc;box-shadow:var(--shadow);border:1px solid #12303a}
+.board-head{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid #16414d;padding-bottom:12px;margin-bottom:16px}
+.board-head b{font-size:17px;letter-spacing:.02em}
+.board-head span{font-family:var(--mono);font-size:15px;color:#69d5d5}
+.now{display:flex;align-items:center;gap:22px;background:linear-gradient(100deg,#0d5f5f,#0b3f47);
+  border-radius:12px;padding:20px 22px;margin-bottom:16px;transition:transform .25s ease}
+.now.flash{animation:flash .9s ease}
+@keyframes flash{0%{transform:scale(1.015);box-shadow:0 0 0 0 rgba(90,214,214,.6)}100%{transform:scale(1);box-shadow:0 0 0 22px rgba(90,214,214,0)}}
+.now .lbl{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#8fe3e3;font-weight:700}
+.now .n{font-family:var(--mono);font-size:60px;font-weight:700;line-height:1;letter-spacing:-.02em}
+.now .rm{margin-left:auto;text-align:right}
+.now .rm b{font-size:26px;display:block}
+.now .rm span{font-size:12px;color:#8fe3e3}
+.upnext{display:grid;gap:7px}
+.upnext .row{display:flex;align-items:center;gap:16px;padding:11px 16px;background:#0b2229;border-radius:9px;font-family:var(--mono);font-size:19px}
+.upnext .row span:last-child{margin-left:auto;font-family:var(--sans);font-size:12.5px;color:#7fb9c4}
+.board-foot{margin-top:14px;font-size:11.5px;color:#5d97a3;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+
+/* ussd + whatsapp */
+.ussd{background:#0d1117;border:1px solid #26313d;border-radius:12px;padding:18px;font-family:var(--mono);
+  font-size:13.5px;color:#c9e8c9;line-height:1.75;white-space:pre-wrap}
+.ussd .in{color:#7dd3fc}
+.wa{background:#e7ded4;border-radius:14px;padding:14px;display:grid;gap:9px}
+@media(prefers-color-scheme:dark){.wa{background:#12211c}}
+.bub{max-width:82%;padding:9px 12px;border-radius:12px;font-size:13px;box-shadow:0 1px 1px rgba(0,0,0,.08)}
+.bub.them{background:#fff;border-top-left-radius:3px}
+.bub.me{background:#d9fdd3;margin-left:auto;border-top-right-radius:3px;color:#0b1417}
+@media(prefers-color-scheme:dark){.bub.them{background:#1f2c33;color:#eaf2f4}.bub.me{background:#005c4b;color:#eaf2f4}}
+.wa-btns{display:grid;gap:5px;margin-top:7px}
+.wa-btns b{display:block;text-align:center;background:var(--surface);border:1px solid var(--line);
+  border-radius:8px;padding:7px;font-size:12.5px;color:var(--accent);font-weight:650}
+
+/* feature grid */
+.fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin-top:32px}
+.f{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:20px}
+.f .ic{font-size:22px;margin-bottom:10px;display:block}
+.f b{display:block;font-size:15px;margin-bottom:6px;letter-spacing:-.01em}
+.f p{margin:0;font-size:13.5px;color:var(--ink-2)}
+.group-title{margin:44px 0 0;font-size:13px;font-weight:750;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+
+/* table */
+table{width:100%;border-collapse:collapse;margin-top:26px;font-size:14px;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--surface-2);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+tr:last-child td{border-bottom:0}
+td strong{color:var(--accent)}
+.scroll{overflow-x:auto}
+
+/* roadmap */
+.road{display:grid;gap:9px;margin-top:30px}
+.ms{display:grid;grid-template-columns:52px 1fr auto;gap:14px;align-items:center;background:var(--surface);
+  border:1px solid var(--line);border-radius:11px;padding:12px 15px}
+.ms .id{font-family:var(--mono);font-weight:700;font-size:14px;color:var(--accent);
+  background:var(--accent-soft);border-radius:7px;text-align:center;padding:5px 0}
+.ms b{font-size:14px;display:block}
+.ms small{color:var(--ink-3);font-size:12px}
+.ms .sp{font-family:var(--mono);font-size:12px;color:var(--ink-3);white-space:nowrap}
+.ms.crit{border-color:color-mix(in srgb,var(--crit) 45%,var(--line))}
+.ms.crit .id{background:color-mix(in srgb,var(--crit) 14%,transparent);color:var(--crit)}
+
+/* lanes */
+.lanes{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:13px;margin-top:28px}
+.lane{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:15px}
+.lane .who{font-size:12px;font-weight:750;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
+.lane b{font-size:14px;display:block;margin-bottom:8px}
+.lane ul{margin:0;padding-left:16px;font-size:12.5px;color:var(--ink-2)}
+.lane li{margin-bottom:3px}
+.callout{margin-top:26px;background:var(--warn-soft);border:1px solid color-mix(in srgb,var(--warn) 30%,transparent);
+  border-radius:12px;padding:18px 20px;font-size:14px}
+.callout b{color:var(--warn)}
+
+footer{padding:48px 0 64px;border-top:1px solid var(--line);color:var(--ink-3);font-size:13.5px}
+.flinks{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:14px;font-size:14px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <div class="logo"><span class="q">Q</span> ClinicQ</div>
+    <nav>
+      <a href="#product">Product</a>
+      <a href="#features">Features</a>
+      <a href="#different">Why it's different</a>
+      <a href="#roadmap">Roadmap</a>
+      <a href="#team">Team</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+
+<div class="hero">
+  <span class="pill">● Capstone 2026 · Richfield · BSc IT</span>
+  <h1>Find a clinic. Hold your place. Watch your number come up.</h1>
+  <p class="lede">
+    ClinicQ is clinic discovery plus digital queue management for public and private clinics. Join the
+    queue from your phone before you leave home: by app, <strong>USSD on any phone with no data</strong>,
+    WhatsApp or the web, and watch your ticket count down on the clinic's own waiting-room screen while
+    staff run the whole line from one dashboard.
+  </p>
+  <div class="stats">
+    <div class="stat"><b>4</b><span>ways in: PWA, USSD, WhatsApp, web</span></div>
+    <div class="stat"><b>1</b><span>fair queue, whichever door you used</span></div>
+    <div class="stat"><b>5</b><span>languages across menus and announcements</span></div>
+    <div class="stat"><b>~R1.8k</b><span>hardware to start a pilot clinic</span></div>
+  </div>
+</div>
+
+<section id="product">
+  <div class="eyebrow">The mental model</div>
+  <h2 class="sec-title">One queue, four doors in</h2>
+  <p class="sec-sub">
+    Every channel calls the same service. A walk-in ticket and a ticket joined from a taxi take numbers
+    from the same sequence, in arrival order, no channel jumps the physical line.
+  </p>
+
+  <div class="doors">
+    <div class="door-list">
+      <div class="door"><i>📱</i><div>Mobile PWA<em>Installable, works offline</em></div></div>
+      <div class="door"><i>☎️</i><div>USSD menu<em>Any phone · no data needed</em></div></div>
+      <div class="door"><i>💬</i><div>WhatsApp bot<em>Buttons, no typing</em></div></div>
+      <div class="door"><i>🌐</i><div>Web app<em>Any browser</em></div></div>
+      <div class="door"><i>🏥</i><div>Reception walk-in<em>Same sequence, no separate line</em></div></div>
+    </div>
+    <div class="engine">
+      <b>ClinicQ queue engine</b>
+      <span>Ticket number · live position · honest wait range</span>
+      <div class="num">#042</div>
+      <span>Call Next → phone + board, in under 2 seconds</span>
+    </div>
+    <div class="door-list">
+      <div class="door"><i>🖥️</i><div>Clinic dashboard<em>Call next · walk-ins · reordering</em></div></div>
+      <div class="door"><i>📺</i><div>Waiting-room board<em>Number, time, privacy-gated name</em></div></div>
+      <div class="door"><i>🔔</i><div>Notifications<em>Push · SMS · WhatsApp</em></div></div>
+      <div class="door"><i>📊</i><div>Reports<em>Wait times · no-shows · heatmap</em></div></div>
+      <div class="door"><i>🏛️</i><div>District dashboards<em>Anonymised, for planning</em></div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">A glimpse of the finished product</div>
+  <h2 class="sec-title">Four screens, one system</h2>
+  <p class="sec-sub">Mock-ups of the surfaces we are building. The board below is live: watch it call the next patient.</p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-p="p1">Patient</button>
+    <button class="tab" role="tab" aria-selected="false" data-p="p2">Clinic dashboard</button>
+    <button class="tab" role="tab" aria-selected="false" data-p="p3">Waiting-room board</button>
+    <button class="tab" role="tab" aria-selected="false" data-p="p4">USSD &amp; WhatsApp</button>
+  </div>
+
+  <!-- PATIENT -->
+  <div class="panel" id="p1">
+    <p class="panel-note">
+      Find the nearest clinic with the shortest queue, join it, then watch your position tick down.
+      Wait times are always shown as a <strong>range</strong>; a false-precision number that slips
+      does more damage to trust than no number at all.
+    </p>
+    <div class="stage">
+      <div class="phone">
+        <div class="bar"></div>
+        <div class="screen">
+          <div class="app-head"><b>Clinics near you</b>
+            <div class="seg"><span class="on">All</span><span>Public</span><span>Private</span></div></div>
+          <div class="clinic"><span class="dot pub"></span><div><b>Soweto CHC</b><small>1.2 km · open until 16:00</small>
+            <span class="badge">Public</span></div><div class="meta"><b>14</b><small>waiting</small><small>~35–50 min</small></div></div>
+          <div class="clinic"><span class="dot pub"></span><div><b>Zola Clinic</b><small>2.4 km · open until 16:00</small>
+            <span class="badge">Public</span></div><div class="meta"><b>6</b><small>waiting</small><small>~15–25 min</small></div></div>
+          <div class="clinic"><span class="dot priv"></span><div><b>Diepkloof Family GP</b><small>3.1 km · open until 18:00</small>
+            <span class="badge priv">Private</span></div><div class="meta"><b>2</b><small>waiting</small><small>~5–15 min</small></div></div>
+          <div class="clinic"><span class="dot pub"></span><div><b>Chiawelo CHC</b><small>4.7 km · closed · opens 07:00</small>
+            <span class="badge warnb">Closed</span></div><div class="meta"><b>-</b><small></small></div></div>
+        </div>
+      </div>
+      <div class="phone">
+        <div class="bar"></div>
+        <div class="screen">
+          <div class="app-head"><b>Your ticket</b><span class="badge okb">Live</span></div>
+          <div class="ticket">
+            <div class="lbl">Zola Clinic · Doctor Room 2</div>
+            <div class="no" id="myNo">#046</div>
+            <div class="pos">You are <b id="myPos">4th</b> in the queue</div>
+            <div class="eta">Estimated wait <span id="myEta">~15–25 min</span></div>
+          </div>
+          <div class="steps">
+            <div class="step done"><span class="tick">✓</span> Joined from home · 08:12</div>
+            <div class="step done"><span class="tick">✓</span> Consent: number only on the board</div>
+            <div class="step now"><span class="tick"></span> Leave now: you're called in about 20 min</div>
+            <div class="step"><span class="tick"></span> "It's your turn - Room 2"</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div class="panel" id="p2" hidden>
+    <p class="panel-note">
+      What reception keeps open all day. Every active queue side by side, each card answering
+      <em>“is anyone stuck?”</em> at a glance, and when the connection drops the board says so, instead
+      of showing a frozen queue that looks current.
+    </p>
+    <div class="laptop">
+      <div class="chrome"><i></i><i></i><i></i><span>clinicq.app/dashboard/zola-clinic</span></div>
+      <div class="dash">
+        <div class="dash-top">
+          <b>Zola Clinic: front desk</b>
+          <span class="live"><span class="blip"></span> Live · updated just now</span>
+          <span class="badge" style="margin-left:auto">Thabo M. · Receptionist</span>
+        </div>
+        <div class="kpis">
+          <div class="kpi"><b>38</b><span>seen today</span></div>
+          <div class="kpi"><b>15</b><span>waiting now</span></div>
+          <div class="kpi"><b>22 min</b><span>avg wait today</span></div>
+          <div class="kpi"><b>4</b><span>no-shows</span></div>
+          <div class="kpi"><b>61%</b><span>joined remotely</span></div>
+        </div>
+        <div class="qgrid">
+          <div class="qcard">
+            <h4>Triage / Vitals <span class="badge">Nurse A</span></h4>
+            <div class="big">6</div><small>waiting · oldest 12 min</small>
+            <button class="btn">Call next → #051</button>
+            <button class="btn ghost">Add walk-in</button>
+          </div>
+          <div class="qcard">
+            <h4>Doctor Room 1 <span class="badge">Dr N.</span></h4>
+            <div class="big">3</div><small>waiting · oldest 18 min</small>
+            <button class="btn">Call next → #044</button>
+            <button class="btn ghost">Recall #041</button>
+          </div>
+          <div class="qcard alert">
+            <h4>Doctor Room 2 <span class="badge warnb">Oldest 41 min</span></h4>
+            <div class="big">4</div><small>waiting · someone is stuck</small>
+            <button class="btn">Call next → #046</button>
+            <button class="btn ghost">Move up (reason required)</button>
+          </div>
+          <div class="qcard">
+            <h4>Pharmacy <span class="badge">Window 1</span></h4>
+            <div class="big">2</div><small>waiting · oldest 4 min</small>
+            <button class="btn">Call next → #039</button>
+            <button class="btn ghost">Transfer in</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOARD -->
+  <div class="panel" id="p3" hidden>
+    <p class="panel-note">
+      A browser tab in kiosk mode on any TV, driven by a ~R1,000 signage box. <strong>Privacy is applied
+      on the server:</strong> under the default number-only mode a patient's name is not in the payload
+      at all, not merely hidden, so a mis-styled template can never leak it.
+    </p>
+    <div class="board">
+      <div class="board-head"><b>ZOLA CLINIC: NOW SERVING</b><span id="clock">08:41</span></div>
+      <div class="now" id="nowRow">
+        <div>
+          <div class="lbl">Now serving</div>
+          <div class="n" id="nowNum">#042</div>
+        </div>
+        <div class="rm"><b id="nowRoom">Room 2</b><span id="nowTime">called 08:41</span></div>
+      </div>
+      <div class="upnext" id="upNext"></div>
+      <div class="board-foot">
+        <span>Display mode: <b>Number only</b>, no names, no reasons (clinic default)</span>
+        <span>🔊 Audio call-out · isiZulu</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHANNELS -->
+  <div class="panel" id="p4" hidden>
+    <p class="panel-note">
+      The feature no global queue vendor offers. USSD reaches a feature phone with no data and no
+      airtime to browse; WhatsApp reaches the app most patients already have open. Both are
+      <strong>thin adapters</strong> over exactly the same services the web uses.
+    </p>
+    <div class="stage">
+      <div>
+        <h4 style="margin-bottom:10px;font-size:14px">USSD · <code style="font-family:var(--mono)">*120*4357#</code></h4>
+        <div class="ussd">CON ClinicQ
+1. Find a clinic near me
+2. Check my queue position
+3. Cancel my ticket
+4. Language / Ulimi
+<span class="in">&gt; 1</span>
+
+CON Clinics near Zola:
+1. Zola Clinic - 2.4km - 6 waiting
+2. Soweto CHC - 1.2km - 14 waiting
+3. Chiawelo CHC - closed
+<span class="in">&gt; 1</span>
+
+CON Zola Clinic. Choose queue:
+1. Triage (6 waiting, ~20 min)
+2. Doctor (3 waiting, ~30 min)
+3. Pharmacy (2 waiting, ~8 min)
+<span class="in">&gt; 2</span>
+
+END Ticket #046 at Zola Clinic,
+Doctor queue. You are 4th.
+Wait about 15-25 min.
+We will SMS you when it is
+nearly your turn.</div>
+      </div>
+      <div>
+        <h4 style="margin-bottom:10px;font-size:14px">WhatsApp bot</h4>
+        <div class="wa">
+          <div class="bub me">Hi</div>
+          <div class="bub them"><b>ClinicQ</b><br>Sawubona 👋 What would you like to do?
+            <div class="wa-btns"><b>Find a clinic</b><b>My ticket</b><b>Cancel</b></div></div>
+          <div class="bub me">📍 Location shared</div>
+          <div class="bub them">3 clinics within 5 km. Zola Clinic has the shortest queue: 6 waiting, about 20 minutes.
+            <div class="wa-btns"><b>Join Zola Clinic</b><b>See all 3</b></div></div>
+          <div class="bub me">Join Zola Clinic</div>
+          <div class="bub them">✅ You're <b>#046</b>, 4th in the Doctor queue.<br>Estimated wait <b>15–25 min</b>.<br>
+            I'll message you when you're next.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="eyebrow">Scope</div>
+  <h2 class="sec-title">What we are building</h2>
+  <p class="sec-sub">109 tracked issues across 14 milestones. Everything below is specified with acceptance criteria in the repository.</p>
+
+  <div class="group-title">For patients</div>
+  <div class="fgrid">
+    <div class="f"><span class="ic">📍</span><b>Clinic discovery</b><p>PostGIS radius search with a public / private / all toggle, live queue length, open-now status, map and list.</p></div>
+    <div class="f"><span class="ic">🎟️</span><b>Join from anywhere</b><p>A ticket number and live position before you leave home, from the app, USSD, WhatsApp or the web.</p></div>
+    <div class="f"><span class="ic">🔔</span><b>Notifications that arrive</b><p>Push, SMS or WhatsApp, with quiet hours, opt-outs and hard per-clinic cost caps.</p></div>
+    <div class="f"><span class="ic">🗓️</span><b>Scheduled appointments</b><p>Booked slots that convert into a live ticket automatically at the right moment.</p></div>
+    <div class="f"><span class="ic">🧾</span><b>Self check-in kiosk</b><p>Scan a QR at the door instead of queueing to talk to reception at 07:30.</p></div>
+    <div class="f"><span class="ic">👨‍👩‍👧</span><b>Book for a dependant</b><p>One household, one smartphone: a parent for a child, a daughter for her mother, with consent recorded.</p></div>
+    <div class="f"><span class="ic">💊</span><b>Chronic reminders</b><p>Recurring medication-collection nudges with a one-keypress join.</p></div>
+    <div class="f"><span class="ic">🚗</span><b>Virtual waiting room</b><p>Wait nearby; called forward accounting for how long you say you need to travel.</p></div>
+    <div class="f"><span class="ic">🌍</span><b>Five languages</b><p>English, isiZulu, isiXhosa, Afrikaans and Sesotho, across menus, messages and the spoken call-out.</p></div>
+  </div>
+
+  <div class="group-title">For clinic staff</div>
+  <div class="fgrid">
+    <div class="f"><span class="ic">🖥️</span><b>One dashboard</b><p>Every active queue live, with one very large Call Next and an honest offline state.</p></div>
+    <div class="f"><span class="ic">🚶</span><b>Walk-in intake in 10 seconds</b><p>Same sequence as remote joins. One fair queue, printable stub, optional SMS.</p></div>
+    <div class="f"><span class="ic">🏥</span><b>Multi-room queues</b><p>Triage → doctor → pharmacy, with transfers that keep the visit intact.</p></div>
+    <div class="f"><span class="ic">⚖️</span><b>Audited priority overrides</b><p>Bump a visibly unwell patient in two taps, with a reason code and a permanent trail.</p></div>
+    <div class="f"><span class="ic">📺</span><b>Waiting-room board</b><p>Number, time, privacy-gated name, audio call-out, and unattended recovery after load-shedding.</p></div>
+    <div class="f"><span class="ic">⚙️</span><b>Self-service settings</b><p>Hours, holidays, closures, queues, services, staff and display mode, no developer needed.</p></div>
+    <div class="f"><span class="ic">📊</span><b>Reports that sell themselves</b><p>Wait times, no-show rate, channel mix, and the busiest-hour heatmap.</p></div>
+    <div class="f"><span class="ic">💬</span><b>Post-visit feedback</b><p>One question, one tap: a service-quality number a manager can take to their district.</p></div>
+  </div>
+
+  <div class="group-title">Platform, privacy &amp; compliance</div>
+  <div class="fgrid">
+    <div class="f"><span class="ic">🔐</span><b>RBAC &amp; multi-tenancy</b><p>Five roles; a clinic can never read another clinic's data, and cross-site access returns 404, not 403.</p></div>
+    <div class="f"><span class="ic">🛡️</span><b>Privacy by default</b><p>Every new clinic starts number-only. Names and reasons are opt-in, consent-gated and audited.</p></div>
+    <div class="f"><span class="ic">🧹</span><b>Retention &amp; purge</b><p>Reason text and visit notes are automatically deleted after a short window, with a test that proves it.</p></div>
+    <div class="f"><span class="ic">📜</span><b>Tamper-evident audit</b><p>Hash-chained append-only log: a retrospective edit is detectable.</p></div>
+    <div class="f"><span class="ic">📤</span><b>Access &amp; erasure</b><p>A patient can ask what is held about them, and have it deleted: POPIA rights, built not promised.</p></div>
+    <div class="f"><span class="ic">🏛️</span><b>District dashboards</b><p>Anonymised area-level wait trends with small-cell suppression, for health-department planning.</p></div>
+  </div>
+</section>
+
+<section id="different">
+  <div class="eyebrow">Positioning</div>
+  <h2 class="sec-title">Why this doesn't already exist here</h2>
+  <p class="sec-sub">
+    Digital queue management has run abroad for over a decade. Most South African clinics still run
+    paper-and-shout queues, because the existing products were built for different budgets and
+    different phones.
+  </p>
+  <div class="scroll">
+  <table>
+    <tr><th>System</th><th>Where</th><th>What it does</th><th>What it assumes</th></tr>
+    <tr><td><b>Qminder · Qless · Wavetec · Qmatic</b></td><td>Retail, banking, government</td>
+        <td>Digital tickets, SMS alerts, staff dashboards, analytics</td><td>Retail/corporate budgets; smartphone with data</td></tr>
+    <tr><td><b>NHS App · e-Referral Service</b></td><td>UK healthcare</td>
+        <td>National appointment booking, integrated with patient records</td><td>A single national health system and its funding</td></tr>
+    <tr><td><b>NHS outpatient kiosks &amp; boards</b></td><td>UK hospitals</td>
+        <td>Kiosk check-in and called-name display screens</td><td>Hospital IT budget and on-site integration</td></tr>
+    <tr><td><b>Solv · Zocdoc</b></td><td>US urgent &amp; primary care</td>
+        <td>Online booking, virtual waiting room, "you're up next" texts</td><td>Insurance-funded private practice; smartphone-first</td></tr>
+    <tr style="background:var(--accent-soft)"><td><b>ClinicQ</b></td><td>SA public &amp; private clinics</td>
+        <td><strong>Discovery + queue + four channels including USSD</strong>, priced for a clinic, near-zero hardware</td>
+        <td><strong>Any phone. Any budget. No existing clinic system required.</strong></td></tr>
+  </table>
+  </div>
+  <div class="callout">
+    <b>The two wedges.</b> First, <b>USSD</b>: every vendor above assumes a smartphone with data, which
+    excludes exactly the public-clinic population this is for. Second, <b>discovery</b>: they all manage
+    the queue at a clinic you already chose; ClinicQ helps you choose it, by distance, wait and sector.
+  </div>
+</section>
+
+<section id="roadmap">
+  <div class="eyebrow">Delivery</div>
+  <h2 class="sec-title">14 milestones, 28 weeks</h2>
+  <p class="sec-sub">
+    M6 is the critical path: the dashboard, the board, the PWA, the channels, appointments and reports
+    are all views onto the queue engine. Everything in the plan is arranged around protecting it.
+  </p>
+  <div class="callout" style="margin-top:20px;background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 30%,transparent)">
+    <b style="color:var(--accent)">Versioning.</b> One minor version per milestone:
+    <code style="font-family:var(--mono)">v0.1.0</code> through
+    <code style="font-family:var(--mono)">v0.14.0</code>. Every one of those is a pre-release.
+    <b style="color:var(--accent)"><code style="font-family:var(--mono)">v1.0.0</code> is cut only when
+    the last issue in the last milestone closes</b>: it means all 109 issues are done, not that the
+    pilot went live.
+  </div>
+  <div class="road">
+    <div class="ms"><span class="id">M1</span><div><b>Foundation &amp; Local CI</b><small>Repo, FastAPI, PostGIS + Redis, migrations, UI shell, test loop</small></div><span class="sp">S1–2 · #1–8<br>v0.1.0</span></div>
+    <div class="ms"><span class="id">M2</span><div><b>CI/CD &amp; Team Workflow</b><small>Actions CI, GHCR, deploy on tag, CODEOWNERS, labels</small></div><span class="sp">S2 · #9–14<br>v0.2.0</span></div>
+    <div class="ms crit"><span class="id">M3</span><div><b>Identity, Auth, RBAC &amp; Consent</b><small>Staff auth, patient OTP, RBAC, site scoping, audit, consent</small></div><span class="sp">S3–4 · #15–22<br>v0.3.0</span></div>
+    <div class="ms crit"><span class="id">M4</span><div><b>Clinics, Queues &amp; Configuration</b><small>Sites with PostGIS, hours, multi-room queues, onboarding</small></div><span class="sp">S4–5 · #23–30<br>v0.4.0</span></div>
+    <div class="ms"><span class="id">M5</span><div><b>Discovery &amp; Geolocation</b><small>Nearby search, map, sector toggle, area fallback, payment filter</small></div><span class="sp">S5–6 · #31–38<br>v0.5.0</span></div>
+    <div class="ms crit"><span class="id">M6</span><div><b>Queue Engine Core ⚠️ critical path</b><small>Tickets, join, lifecycle, estimates, recall, transfer, priority</small></div><span class="sp">S6–7 · #39–47<br>v0.6.0</span></div>
+    <div class="ms crit"><span class="id">M7</span><div><b>Clinic Dashboard</b><small>Front-desk board, call next, walk-in, reorder, room view, settings</small></div><span class="sp">S8–9 · #48–55<br>v0.7.0</span></div>
+    <div class="ms crit"><span class="id">M8</span><div><b>Waiting-room Display Monitor</b><small>Kiosk board, SSE, privacy modes, accessibility, audio, devices</small></div><span class="sp">S9 · #56–62<br>v0.8.0</span></div>
+    <div class="ms"><span class="id">M9</span><div><b>Notifications &amp; Patient PWA</b><small>Push, SMS, templates, preferences, ticket page, PWA, QR</small></div><span class="sp">S9–10 · #63–71<br>v0.9.0</span></div>
+    <div class="ms"><span class="id">M10</span><div><b>USSD &amp; WhatsApp Channels</b><small>Adapters, USSD menu, WhatsApp bot, 5 languages, parity tests</small></div><span class="sp">S10–11 · #72–79<br>v0.10.0</span></div>
+    <div class="ms"><span class="id">M11</span><div><b>Appointments &amp; Check-in</b><small>Slots, booking, reminders, kiosk, proxy booking, chronic, feedback</small></div><span class="sp">S11–12 · #80–87<br>v0.11.0</span></div>
+    <div class="ms"><span class="id">M12</span><div><b>Reporting &amp; Analytics</b><small>Stats worker, reports UI, KPIs, exports, district dashboard</small></div><span class="sp">S12 · #88–94<br>v0.12.0</span></div>
+    <div class="ms"><span class="id">M13</span><div><b>Security, Privacy &amp; POPIA</b><small>Retention, DSAR, hardening, encryption, pen test, accessibility</small></div><span class="sp">S12–13 · #95–101<br>v0.13.0</span></div>
+    <div class="ms crit"><span class="id">M14</span><div><b>Production, Pilot &amp; Go-live</b><small>Prod infra, backups, load test, pilot kit, UAT, capstone deliverables</small></div><span class="sp">S13–14 · #102–109<br>v0.14.0</span></div>
+    <div class="ms" style="border-color:var(--accent);background:var(--accent-soft)">
+      <span class="id" style="background:var(--accent);color:#fff">1.0</span>
+      <div><b>First official release</b><small>Every issue from 1 to 109 closed: the product is finished</small></div>
+      <span class="sp" style="color:var(--accent);font-weight:700">v1.0.0</span></div>
+  </div>
+</section>
+
+<section id="team">
+  <div class="eyebrow">Working together</div>
+  <h2 class="sec-title">Six lanes that don't block each other</h2>
+  <p class="sec-sub">
+    Everyone owns a surface end to end. The seams between them are contracts and events, so people build
+    in parallel instead of queueing behind each other.
+  </p>
+  <div class="lanes">
+    <div class="lane"><div class="who">A</div><b>Backend Lead</b><ul><li>Identity &amp; RBAC</li><li>Clinics &amp; queues</li><li><b>Queue engine</b></li><li>Appointments</li></ul></div>
+    <div class="lane"><div class="who">B</div><b>Integrations</b><ul><li>Notification service</li><li>SMS &amp; push</li><li>USSD adapter</li><li>WhatsApp bot</li></ul></div>
+    <div class="lane"><div class="who">C</div><b>Frontend · Patient</b><ul><li>Discovery &amp; map</li><li>Ticket page</li><li>PWA &amp; kiosk</li><li>Accessibility</li></ul></div>
+    <div class="lane"><div class="who">D</div><b>Frontend · Clinic</b><ul><li>Dashboard shell</li><li>Call next &amp; walk-ins</li><li>Display board</li><li>Offline states</li></ul></div>
+    <div class="lane"><div class="who">E</div><b>DevOps &amp; QA</b><ul><li>Repo &amp; CI/CD</li><li>Environments</li><li>Security &amp; pen test</li><li>Production &amp; pilot</li></ul></div>
+    <div class="lane"><div class="who">F</div><b>Data &amp; Research</b><ul><li>Reporting &amp; analytics</li><li>POPIA compliance</li><li>Translations &amp; UAT</li><li>Capstone deliverables</li></ul></div>
+  </div>
+
+  <div class="callout">
+    <b>The anti-blocking rule.</b> Whenever one person's work will be consumed by another's, the
+    <b>contract ships first</b> (the OpenAPI file, the schemas and a fixture) as its own small pull
+    request, days before the implementation. The consumer builds against the fixture immediately and
+    swaps to the real service in one line. Nobody ever says “I'm waiting for the API”.
+    <br><br>
+    Full detail, including the sprint-by-sprint lanes and the blocking matrix, is in
+    <a href="../TEAM/WORKLOAD_SPLIT.md"><code>docs/TEAM/WORKLOAD_SPLIT.md</code></a>.
+  </div>
+</section>
+
+<footer>
+  <div class="flinks">
+    <a href="../PLAN/IMPLEMENTATION_PLAN.md">Implementation plan</a>
+    <a href="../GITHUB/README.md">Milestones &amp; issues</a>
+    <a href="../TEAM/WORKLOAD_SPLIT.md">Workload split</a>
+    <a href="../PRODUCT/README.md">Product docs</a>
+    <a href="../../README.md">Repository</a>
+  </div>
+  <div>ClinicQ · Capstone Project 2026 · Richfield Graduate Institute of Technology · BSc IT (Distance Learning)</div>
+  <div style="margin-top:6px">Mock-ups only: illustrative data, no real patient information.</div>
+</footer>
+
+</div>
+
+<script>
+// tabs
+const tabs=[...document.querySelectorAll('.tab')];
+tabs.forEach(t=>t.addEventListener('click',()=>{
+  tabs.forEach(x=>x.setAttribute('aria-selected',String(x===t)));
+  document.querySelectorAll('.panel').forEach(p=>p.hidden = p.id!==t.dataset.p);
+}));
+
+// live board simulation
+let cur=42, mins=41;
+const rooms=['Room 1','Room 2','Room 3','Pharmacy'];
+let r=1;
+const pad=n=>'#'+String(n).padStart(3,'0');
+const two=n=>String(n).padStart(2,'0');
+
+function renderUpNext(){
+  const el=document.getElementById('upNext');
+  el.innerHTML='';
+  for(let i=1;i<=4;i++){
+    const row=document.createElement('div');
+    row.className='row';
+    row.innerHTML=`<span>${pad(cur+i)}</span><span>${i===1?'up next':'waiting'}</span>`;
+    el.appendChild(row);
+  }
+}
+function tickClock(){
+  document.getElementById('clock').textContent='08:'+two(mins);
+}
+function callNext(){
+  cur++; r=(r+1)%rooms.length; mins=Math.min(59,mins+2);
+  document.getElementById('nowNum').textContent=pad(cur);
+  document.getElementById('nowRoom').textContent=rooms[r];
+  document.getElementById('nowTime').textContent='called 08:'+two(mins);
+  const n=document.getElementById('nowRow');
+  n.classList.remove('flash'); void n.offsetWidth; n.classList.add('flash');
+  renderUpNext(); tickClock();
+  // keep the patient ticket in step
+  const pos=Math.max(1,46-cur);
+  document.getElementById('myPos').textContent=pos+(pos===1?'st':pos===2?'nd':pos===3?'rd':'th');
+  const lo=Math.max(0,(pos-1)*4), hi=lo+10;
+  document.getElementById('myEta').textContent = pos<=1 ? "you're next" : `~${lo}–${hi} min`;
+  if(cur>=46){ cur=41; }
+}
+renderUpNext(); tickClock();
+setInterval(callNext, 4200);
+</script>
+</body>
+</html>

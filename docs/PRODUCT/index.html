@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ClinicQ - Clinic discovery &amp; queue docs</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #101d2c;
+      --ink-soft: #2c4058;
+      --muted: #5c7186;
+      --line: rgba(20, 45, 80, 0.12);
+      --surface: rgba(255, 255, 255, 0.9);
+      --brand: #1c6fd4;
+      --brand-deep: #124c98;
+      --brand-soft: #e6effb;
+      --accent: #17a89a;
+      --ok: #0c7a54;
+      --radius: 14px;
+      --shadow: 0 16px 44px rgba(10, 35, 60, 0.08);
+      --font-display: "Bricolage Grotesque", sans-serif;
+      --font-body: "Public Sans", sans-serif;
+      --max: 1040px;
+      --tab-h: 3.1rem;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: var(--font-body);
+      font-size: 1.02rem;
+      line-height: 1.6;
+      letter-spacing: -0.011em;
+      background:
+        radial-gradient(1000px 520px at 0% -10%, rgba(28, 111, 212, 0.14), transparent 55%),
+        radial-gradient(800px 440px at 100% 0%, rgba(23, 168, 154, 0.1), transparent 50%),
+        linear-gradient(180deg, #eef5fc 0%, #f4f8fb 45%, #eef6f4 100%);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--brand-deep); }
+
+    .wrap {
+      width: min(var(--max), calc(100% - 2rem));
+      margin-inline: auto;
+      padding: 1.5rem 0 3rem;
+    }
+
+    .topbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .topbar .mark {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 1.05rem;
+      letter-spacing: -0.03em;
+      color: var(--brand-deep);
+    }
+
+    .topbar .mark span { color: var(--accent); }
+
+    .topbar .links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      font-size: 0.82rem;
+    }
+
+    .hero {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: calc(var(--radius) + 4px);
+      box-shadow: var(--shadow);
+      padding: 1.6rem 1.4rem 1.4rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-size: 0.72rem;
+      font-weight: 650;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--brand);
+      margin: 0 0 0.55rem;
+    }
+
+    .eyebrow i {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--brand);
+      display: inline-block;
+    }
+
+    h1 {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: clamp(1.7rem, 3.4vw, 2.3rem);
+      letter-spacing: -0.04em;
+      line-height: 1.12;
+      margin: 0 0 0.55rem;
+    }
+
+    .lede { color: var(--ink-soft); margin: 0 0 1rem; max-width: 44rem; }
+
+    .pills { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+    .pill {
+      font-size: 0.76rem;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0.28rem 0.7rem;
+      color: var(--ink-soft);
+    }
+
+    .pill strong { color: var(--ink); }
+
+    .names {
+      margin-top: 1rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 0.55rem;
+    }
+
+    .name-card {
+      background: var(--brand-soft);
+      border-radius: 10px;
+      padding: 0.65rem 0.75rem;
+      font-size: 0.86rem;
+      color: var(--ink-soft);
+    }
+
+    .name-card strong {
+      display: block;
+      font-family: var(--font-display);
+      color: var(--brand-deep);
+      font-size: 1rem;
+      margin-bottom: 0.15rem;
+    }
+
+    .verdict {
+      margin-top: 1rem;
+      padding: 0.85rem 1rem;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(12, 122, 84, 0.1), rgba(23, 168, 154, 0.08));
+      border: 1px solid rgba(12, 122, 84, 0.18);
+      font-size: 0.94rem;
+      color: var(--ink-soft);
+    }
+
+    .verdict strong { color: var(--ok); }
+
+    .tabs-shell {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(238, 245, 252, 0.92);
+      backdrop-filter: blur(10px);
+      padding: 0.55rem 0 0.65rem;
+      margin: 0 -0.15rem 1rem;
+    }
+
+    .tablist {
+      display: flex;
+      gap: 0.35rem;
+      overflow-x: auto;
+      padding-bottom: 0.2rem;
+      scrollbar-width: thin;
+    }
+
+    .tab {
+      flex: 0 0 auto;
+      height: var(--tab-h);
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 12px;
+      padding: 0 0.85rem;
+      font-family: var(--font-body);
+      font-size: 0.82rem;
+      font-weight: 650;
+      color: var(--ink-soft);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .tab .num {
+      font-size: 0.68rem;
+      font-weight: 800;
+      color: var(--brand);
+      letter-spacing: 0.04em;
+    }
+
+    .tab[aria-selected="true"] {
+      background: var(--brand);
+      border-color: var(--brand);
+      color: #fff;
+    }
+
+    .tab[aria-selected="true"] .num { color: rgba(255,255,255,0.85); }
+
+    .tab:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.35rem 1.25rem 1.5rem;
+    }
+
+    .panel[hidden] { display: none !important; }
+
+    .panel h2 {
+      font-family: var(--font-display);
+      font-size: 1.4rem;
+      font-weight: 750;
+      letter-spacing: -0.03em;
+      margin: 0 0 0.4rem;
+      color: var(--brand-deep);
+    }
+
+    .panel .intro { color: var(--ink-soft); margin: 0 0 1rem; }
+
+    h3 {
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin: 1.2rem 0 0.4rem;
+      letter-spacing: -0.02em;
+    }
+
+    p { margin: 0.4rem 0 0.7rem; color: var(--ink-soft); }
+    ul, ol { margin: 0.3rem 0 0.85rem; padding-left: 1.2rem; color: var(--ink-soft); }
+    li { margin-bottom: 0.28rem; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      margin: 0.55rem 0 1rem;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 0.5rem 0.55rem;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      background: rgba(28, 111, 212, 0.06);
+    }
+
+    pre {
+      background: #0e1f33;
+      color: #e7f0fb;
+      border-radius: 10px;
+      padding: 0.85rem 1rem;
+      font-size: 0.74rem;
+      line-height: 1.45;
+      overflow-x: auto;
+      margin: 0.65rem 0 1rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .callout {
+      border-left: 3px solid var(--brand);
+      background: var(--brand-soft);
+      padding: 0.7rem 0.85rem;
+      border-radius: 0 10px 10px 0;
+      margin: 0.75rem 0;
+      font-size: 0.9rem;
+      color: var(--ink-soft);
+    }
+
+    .diagram {
+      background: #0e1f33;
+      border-radius: 10px;
+      padding: 0.9rem 0.5rem;
+      margin: 0.7rem 0 1.1rem;
+      overflow-x: auto;
+    }
+
+    .diagram .mermaid { display: flex; justify-content: center; }
+    .diagram svg { max-width: 100%; }
+    .diagram-caption {
+      font-size: 0.76rem;
+      color: var(--muted);
+      text-align: center;
+      margin: -0.4rem 0 0.9rem;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.75rem;
+      margin: 0.75rem 0 1rem;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 0.85rem;
+      background: #fff;
+    }
+
+    .card h4 {
+      margin: 0 0 0.35rem;
+      font-family: var(--font-display);
+      font-size: 0.95rem;
+      color: var(--brand-deep);
+    }
+
+    .card p { margin: 0; font-size: 0.88rem; }
+
+    footer {
+      margin-top: 1.5rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    @media (max-width: 640px) {
+      .tab { padding: 0 0.7rem; font-size: 0.78rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="mark">Clinic<span>Q</span></div>
+      <div class="links">
+        <a href="README.md">Markdown index</a>
+        <a href="REPO/README.md">Repo README (clinicq)</a>
+        <a href="../PROJECTS/index.html#clinic-queue">Capstone shortlist</a>
+      </div>
+    </div>
+
+    <header class="hero">
+      <p class="eyebrow"><i></i> .btk/docs/ClinicQ - clinic discovery &amp; queue</p>
+      <h1>Find a clinic. Get a number. Watch it count down.</h1>
+      <p class="lede">
+        ClinicQ lets a patient geo-locate a nearby public or private clinic, join its digital queue
+        from a phone (app, USSD, WhatsApp) or the web before even leaving home, and see a ticket number
+        count down on the clinic's own waiting-room screen - while staff run the whole line from one
+        dashboard. Global retail queue systems have done this for a decade; most local clinics don't have
+        it yet.
+      </p>
+      <div class="pills">
+        <span class="pill"><strong>Discovery</strong> geo-location, public/private toggle</span>
+        <span class="pill"><strong>Channels</strong> PWA - USSD - WhatsApp - Web</span>
+        <span class="pill"><strong>Display</strong> number/time always, name/comment opt-in</span>
+        <span class="pill"><strong>Start</strong> R1,800-15,000 pilot clinic</span>
+        <span class="pill"><strong>Stack</strong> Python 3.14 - FastAPI - htmx - Postgres/PostGIS</span>
+        <span class="pill"><strong>Payment filter</strong> Phase 2, private clinics only</span>
+      </div>
+      <div class="names">
+        <div class="name-card"><strong>ClinicQ</strong> clinic + queue &mdash; the product wordmark</div>
+        <div class="name-card"><strong>ClinicQueue</strong> the original capstone shortlist name</div>
+        <div class="name-card"><strong>clinicq</strong> repository slug and package name</div>
+      </div>
+      <div class="verdict">
+        <strong>Critical:</strong> the waiting-room display defaults to number-only - name and the
+        optional visit comment ("headache", "follow-up") are clinic-configurable and off by default,
+        because a name next to a health-related comment on a public screen is personal health information
+        under POPIA even though the intent is just a friendlier board.
+      </div>
+    </header>
+
+    <div class="tabs-shell">
+      <div class="tablist" role="tablist" aria-label="ClinicQ docs">
+        <button class="tab" role="tab" id="tab-overview" data-panel="overview" aria-controls="overview" aria-selected="true" tabindex="0"><span class="num">01</span>Overview</button>
+        <button class="tab" role="tab" id="tab-discover" data-panel="discover" aria-controls="discover" aria-selected="false" tabindex="-1"><span class="num">02</span>Discovery</button>
+        <button class="tab" role="tab" id="tab-queue" data-panel="queue" aria-controls="queue" aria-selected="false" tabindex="-1"><span class="num">03</span>Queue</button>
+        <button class="tab" role="tab" id="tab-display" data-panel="display" aria-controls="display" aria-selected="false" tabindex="-1"><span class="num">04</span>Display</button>
+        <button class="tab" role="tab" id="tab-dashboard" data-panel="dashboard" aria-controls="dashboard" aria-selected="false" tabindex="-1"><span class="num">05</span>Dashboard</button>
+        <button class="tab" role="tab" id="tab-channels" data-panel="channels" aria-controls="channels" aria-selected="false" tabindex="-1"><span class="num">06</span>Channels</button>
+        <button class="tab" role="tab" id="tab-devices" data-panel="devices" aria-controls="devices" aria-selected="false" tabindex="-1"><span class="num">07</span>Devices</button>
+        <button class="tab" role="tab" id="tab-topology" data-panel="topology" aria-controls="topology" aria-selected="false" tabindex="-1"><span class="num">08</span>Topology</button>
+        <button class="tab" role="tab" id="tab-budget" data-panel="budget" aria-controls="budget" aria-selected="false" tabindex="-1"><span class="num">09</span>Budget</button>
+        <button class="tab" role="tab" id="tab-biz" data-panel="biz" aria-controls="biz" aria-selected="false" tabindex="-1"><span class="num">10</span>Business</button>
+        <button class="tab" role="tab" id="tab-market" data-panel="market" aria-controls="market" aria-selected="false" tabindex="-1"><span class="num">11</span>Marketing</button>
+        <button class="tab" role="tab" id="tab-scale" data-panel="scale" aria-controls="scale" aria-selected="false" tabindex="-1"><span class="num">12</span>Scale 24m</button>
+        <button class="tab" role="tab" id="tab-tech" data-panel="tech" aria-controls="tech" aria-selected="false" tabindex="-1"><span class="num">13</span>Tech Stack</button>
+        <button class="tab" role="tab" id="tab-bench" data-panel="bench" aria-controls="bench" aria-selected="false" tabindex="-1"><span class="num">14</span>Benchmark</button>
+      </div>
+    </div>
+
+    <div class="panels">
+      <!-- 01 -->
+      <section class="panel" role="tabpanel" id="overview" aria-labelledby="tab-overview">
+        <h2>Overview</h2>
+        <p class="intro">ClinicQ is the discovery + queue + dashboard playbook for clinics, formerly sketched as ClinicQ.</p>
+        <h3>Product</h3>
+        <p>Find a clinic by geo-location -&gt; join its digital queue from any of four channels -&gt; get a ticket number that counts down on the clinic's own display board -&gt; staff run the line from one dashboard.</p>
+        <h3>Actors</h3>
+        <table>
+          <thead><tr><th>Actor</th><th>Role</th></tr></thead>
+          <tbody>
+            <tr><td>Patient</td><td>Searches, joins the queue, gets notified</td></tr>
+            <tr><td>Walk-in patient</td><td>Ticket issued by reception on arrival</td></tr>
+            <tr><td>Receptionist</td><td>Manages the desk queue, calls next, walk-in intake</td></tr>
+            <tr><td>Nurse / doctor</td><td>Runs their own room's queue, adds private visit notes</td></tr>
+            <tr><td>Clinic manager</td><td>Clinic profile, sector, display mode, reports</td></tr>
+          </tbody>
+        </table>
+        <p>Markdown: <a href="01-overview.md">01-overview.md</a></p>
+      </section>
+
+      <!-- 02 -->
+      <section class="panel" role="tabpanel" id="discover" aria-labelledby="tab-discover" hidden>
+        <h2>Clinic discovery: geo-location, public/private, payment filters</h2>
+        <p class="intro">Help a patient find which clinic to queue at, before joining the queue itself.</p>
+        <div class="diagram"><div class="mermaid">
+sequenceDiagram
+    participant U as Patient PWA
+    participant API as ClinicQ API
+    participant DB as Postgres PostGIS
+    U->>U: Allow location or type suburb
+    U->>API: GET clinics nearby lat lon radius type
+    API->>DB: ST_DWithin query ordered by distance
+    DB-->>API: Clinics within radius plus live queue length
+    API-->>U: List map view name distance ETA queue length badge
+        </div></div>
+        <h3>Public / private toggle</h3>
+        <table>
+          <thead><tr><th>State</th><th>Shows</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Public</strong></td><td>Government/municipal clinics and community health centres only</td></tr>
+            <tr><td><strong>Private</strong></td><td>Private GP practices, private clinics, urgent-care centres</td></tr>
+            <tr><td>All (default)</td><td>Both, clearly badged</td></tr>
+          </tbody>
+        </table>
+        <div class="diagram"><div class="mermaid">
+flowchart LR
+  TOGGLE{Public Private or All} -->|Private selected| PAY{Payment filter enabled}
+  PAY --> MA[Accepts medical aid multi-select]
+  PAY --> CASH[Accepts cash]
+  PAY --> CARD[Accepts card]
+  TOGGLE -->|Public selected| NOPAY[Payment filter hidden]
+        </div></div>
+        <div class="callout"><strong>Not in the MVP.</strong> Medical aid/cash/card filtering is a Phase 2 directory enhancement, self-reported by the clinic, only ever shown under "Private" - never a live claims/eligibility check.</div>
+        <p>Markdown: <a href="02-discovery-and-geolocation.md">02-discovery-and-geolocation.md</a></p>
+      </section>
+
+      <!-- 03 -->
+      <section class="panel" role="tabpanel" id="queue" aria-labelledby="tab-queue" hidden>
+        <h2>Booking &amp; digital queue</h2>
+        <p class="intro">One shared queue per clinic/room/service, joinable remotely or in person - fair by arrival order, not by channel.</p>
+        <div class="diagram"><div class="mermaid">
+sequenceDiagram
+    participant P as Patient any channel
+    participant API as ClinicQ API
+    participant Q as Queue
+    participant D as Display monitor
+    P->>API: Join queue at Clinic X
+    API->>Q: Append ticket next sequence number
+    Q-->>API: Ticket number position estimated wait
+    API-->>P: Confirmation plus live position
+    API-->>D: Queue length updates
+        </div></div>
+        <h3>Multi-room queues</h3>
+        <div class="diagram"><div class="mermaid">
+flowchart LR
+  IN[Patient arrives or joins remotely] --> Q1[Queue Triage Vitals]
+  Q1 -->|Nurse calls next| Q2[Queue Doctor Room]
+  Q2 -->|Doctor calls next| Q3[Queue Pharmacy window]
+  Q3 --> DONE[Visit complete]
+        </div></div>
+        <div class="callout"><strong>One queue, not two.</strong> Remote joins and walk-ins share one fair sequence; staff can manually reorder for genuine clinical priority, logged and auditable.</div>
+        <p>Markdown: <a href="03-booking-and-queue.md">03-booking-and-queue.md</a></p>
+      </section>
+
+      <!-- 04 -->
+      <section class="panel" role="tabpanel" id="display" aria-labelledby="tab-display" hidden>
+        <h2>Waiting-room display monitor</h2>
+        <p class="intro">Number and time are always shown; name and comment are clinic-configurable and off by default.</p>
+        <table>
+          <thead><tr><th>Mode</th><th>Number</th><th>Time</th><th>Name</th><th>Comment</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Number-only (default)</strong></td><td>Yes</td><td>Yes</td><td>No</td><td>No</td></tr>
+            <tr><td>Name-lite</td><td>Yes</td><td>Yes</td><td>First name + initial</td><td>No</td></tr>
+            <tr><td>Full (opt-in)</td><td>Yes</td><td>Yes</td><td>Full/first name</td><td>Only if patient consented</td></tr>
+          </tbody>
+        </table>
+        <div class="diagram"><div class="mermaid">
+sequenceDiagram
+    participant R as Receptionist Nurse
+    participant API as ClinicQ API
+    participant D as Display monitor
+    R->>API: Call next ticket in Queue X
+    API->>API: Apply site display mode
+    API-->>D: Push new now serving row
+    D->>D: Update board chime highlight
+        </div></div>
+        <div class="callout">A name next to a symptom comment on a public screen is personal health information under POPIA once attached to an identity - never pair comment with a full name by default; number-only is the safe default, same caution ElimuKadi applies to biometric consent.</div>
+        <p>Markdown: <a href="04-display-monitor.md">04-display-monitor.md</a></p>
+      </section>
+
+      <!-- 05 -->
+      <section class="panel" role="tabpanel" id="dashboard" aria-labelledby="tab-dashboard" hidden>
+        <h2>Clinic dashboard</h2>
+        <p class="intro">Front-desk queue view, per-room queues, walk-in intake, and reporting - everything else is downstream of actions taken here.</p>
+        <div class="diagram"><div class="mermaid">
+flowchart TB
+  BOARD[Front desk board all active queues]
+  BOARD --> Q1[Triage 6 waiting]
+  BOARD --> Q2[Doctor Room 1 3 waiting]
+  BOARD --> Q3[Pharmacy 2 waiting]
+  Q1 -->|Call next| ACT1[Ticket in progress display updates]
+        </div></div>
+        <table>
+          <thead><tr><th>Report</th><th>Shows</th></tr></thead>
+          <tbody>
+            <tr><td>Average wait time</td><td>By queue/room, by hour of day</td></tr>
+            <tr><td>No-show rate</td><td>% of remote tickets that never arrive</td></tr>
+            <tr><td>Channel mix</td><td>App / USSD / WhatsApp / walk-in split</td></tr>
+            <tr><td>Queue-length heatmap</td><td>Busiest hours/days - the easiest "why buy this" chart</td></tr>
+          </tbody>
+        </table>
+        <p>Markdown: <a href="05-clinic-dashboard.md">05-clinic-dashboard.md</a></p>
+      </section>
+
+      <!-- 06 -->
+      <section class="panel" role="tabpanel" id="channels" aria-labelledby="tab-channels" hidden>
+        <h2>Mobile PWA, USSD, WhatsApp bot, Web App</h2>
+        <p class="intro">One queue engine, four doors - no channel gets features the others lack in the core "find, join, get notified" loop.</p>
+        <div class="diagram"><div class="mermaid">
+flowchart LR
+  PWA[Mobile PWA] --> API[ClinicQ API]
+  USSD[USSD gateway] --> API
+  WA[WhatsApp bot] --> API
+  WEB[Web App] --> API
+  API --> ENGINE[Discovery and Queue engine]
+  ENGINE --> DASH[Clinic dashboard]
+  ENGINE --> DISP[Display monitor]
+        </div></div>
+        <table>
+          <thead><tr><th>Channel</th><th>Best for</th></tr></thead>
+          <tbody>
+            <tr><td><strong>PWA</strong></td><td>Richest experience - map, live position, push</td></tr>
+            <tr><td><strong>USSD</strong></td><td>Any phone, no data needed - most inclusive</td></tr>
+            <tr><td><strong>WhatsApp</strong></td><td>Lowest friction - most people already live in it</td></tr>
+            <tr><td><strong>Web App</strong></td><td>Any browser - shared links, library/work PCs</td></tr>
+          </tbody>
+        </table>
+        <p>Markdown: <a href="06-channels-app-ussd-whatsapp-web.md">06-channels-app-ussd-whatsapp-web.md</a></p>
+      </section>
+
+      <!-- 07 -->
+      <section class="panel" role="tabpanel" id="devices" aria-labelledby="tab-devices" hidden>
+        <h2>Devices to buy - cheapest first</h2>
+        <p class="intro">Far less hardware than a card/reader or radio-based project - the whole product is software plus one screen per clinic.</p>
+        <table>
+          <thead><tr><th>#</th><th>Device</th><th>Job</th><th>~USD</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td><strong>Reuse existing TV/monitor + old PC</strong></td><td>Display board</td><td>$0</td></tr>
+            <tr><td>2</td><td>Raspberry Pi 4/5</td><td>Dedicated signage box</td><td>$45-80</td></tr>
+            <tr><td>3</td><td>Fire TV / Android TV stick</td><td>Same job, plug-in</td><td>$35-60</td></tr>
+            <tr><td>4</td><td>Budget 32-43" TV/monitor</td><td>If none on-site</td><td>$120-220</td></tr>
+            <tr><td>5</td><td>Thermal ticket printer (optional)</td><td>Physical stub for walk-ins</td><td>$25-45</td></tr>
+          </tbody>
+        </table>
+        <div class="callout">Cheapest Phase 0 pilot: reuse the clinic's existing TV/monitor + a $45-80 Raspberry Pi. Total new hardware often under $100.</div>
+        <p>Markdown: <a href="07-devices-and-bom.md">07-devices-and-bom.md</a></p>
+      </section>
+
+      <!-- 08 -->
+      <section class="panel" role="tabpanel" id="topology" aria-labelledby="tab-topology" hidden>
+        <h2>System &amp; network topology</h2>
+        <p class="intro">Cloud-hosted API from day one - no local edge hardware needed, unlike card-reader or radio-based projects.</p>
+        <div class="diagram"><div class="mermaid">
+flowchart LR
+  DASH[Reception dashboard] -->|Wi-Fi LAN| NET[Clinic internet]
+  DISP[Display monitor Pi kiosk] -->|Wi-Fi LAN| NET
+  NET -->|HTTPS| API[ClinicQ API cloud VPS]
+  API --> DB[(PostgreSQL PostGIS)]
+  PATIENT((Patient phone)) -->|Internet| API
+        </div></div>
+        <div class="grid-2">
+          <div class="card"><h4>Pros</h4><p>Near-zero clinic hardware; cloud-hosted from day one; one engine behind four channels.</p></div>
+          <div class="card"><h4>Cons</h4><p>Depends on internet reachability for remote-join/notifications; gateway costs scale with volume.</p></div>
+        </div>
+        <p>Markdown: <a href="08-topology.md">08-topology.md</a></p>
+      </section>
+
+      <!-- 09 -->
+      <section class="panel" role="tabpanel" id="budget" aria-labelledby="tab-budget" hidden>
+        <h2>Pricing &amp; startup budget</h2>
+        <p class="intro">Priced in ZAR; the cheapest of the elaborated shortlist directions to start.</p>
+        <table>
+          <thead><tr><th>Tier</th><th>Daily tickets</th><th>Price/month</th></tr></thead>
+          <tbody>
+            <tr><td>Starter</td><td>up to 40</td><td>R450-700</td></tr>
+            <tr><td>Standard</td><td>41-120</td><td>R900-1,400</td></tr>
+            <tr><td>Plus</td><td>121-300+</td><td>R1,600-1,800</td></tr>
+          </tbody>
+        </table>
+        <h3>Startup budget (one pilot clinic)</h3>
+        <table>
+          <thead><tr><th>Scenario</th><th>Budget</th></tr></thead>
+          <tbody>
+            <tr><td>Screen/PC already on-site</td><td><strong>R1,800-4,000 (~$100-220)</strong></td></tr>
+            <tr><td>Neither on-site</td><td>R6,000-15,000 (~$330-830)</td></tr>
+          </tbody>
+        </table>
+        <div class="callout">No card-issuance or hardware revenue line to fund launch - break-even is purely subscription-driven, reached fast in absolute Rand terms once 1-2 paying clinics are live.</div>
+        <p>Markdown: <a href="09-pricing-and-budget.md">09-pricing-and-budget.md</a></p>
+      </section>
+
+      <!-- 10 -->
+      <section class="panel" role="tabpanel" id="biz" aria-labelledby="tab-biz" hidden>
+        <h2>Business plan</h2>
+        <p class="intro">Prove one clinic end-to-end before selling to a second.</p>
+        <div class="diagram"><div class="mermaid">
+gantt
+    dateFormat  YYYY-MM-DD
+    title 90-day pilot launch plan
+    section Setup
+    Sign pilot clinic POPIA sign-off        :a1, 2026-01-01, 10d
+    Onboard clinic profile display box       :a2, after a1, 7d
+    section Phase 0
+    Dashboard plus number-only display        :a3, after a2, 10d
+    Enable remote join PWA plus WhatsApp      :a4, after a3, 14d
+    Enable USSD channel                        :a5, after a4, 14d
+    section Growth
+    Review data get testimonial               :a6, after a5, 20d
+    Pitch clinic number 2                      :a7, after a6, 15d
+        </div></div>
+        <div class="callout">Sell on shorter time physically spent in the waiting room first; let reporting and multi-channel reach be the bonus once the core queue is trusted.</div>
+        <p>Markdown: <a href="10-business-plan.md">10-business-plan.md</a></p>
+      </section>
+
+      <!-- 11 -->
+      <section class="panel" role="tabpanel" id="market" aria-labelledby="tab-market" hidden>
+        <h2>Marketing to clinics</h2>
+        <p class="intro">Clinics buy on manager trust + reception pain relief + patient satisfaction, not jargon.</p>
+        <div class="diagram"><div class="mermaid">
+flowchart LR
+  A[Identify clinic plus decision maker] --> B[Free number-only display plus dashboard pilot]
+  B -->|Trust built| C[Enable remote join PWA plus WhatsApp]
+  C -->|Testimonial plus numbers| D[Sign paid subscription]
+  D -->|Case study| E[Referral to sister clinics]
+        </div></div>
+        <div class="callout">Do not lead with "geo-location" or "PostGIS" - lead with "your patients queue from their phone, your waiting room runs itself."</div>
+        <p>Markdown: <a href="11-marketing.md">11-marketing.md</a></p>
+      </section>
+
+      <!-- 12 -->
+      <section class="panel" role="tabpanel" id="scale" aria-labelledby="tab-scale" hidden>
+        <h2>Upscaling journey - 24 months</h2>
+        <p class="intro">Grow clinic by clinic within one metro first, then expand geographically and add channel/feature depth.</p>
+        <div class="diagram"><div class="mermaid">
+flowchart LR
+  A[Stage 0: 1 pilot clinic] -->|30 percent plus remote joins testimonial| B[Stage 1: 2-5 clinics]
+  B -->|Positive P and L per clinic| C[Stage 2: 6-20 clinics one metro]
+  C -->|Support process documented| D[Stage 3: multi metro district]
+  D -->|District MOU| E[Regional footprint]
+        </div></div>
+        <table>
+          <thead><tr><th>Month</th><th>Clinics</th><th>Revenue (R)</th><th>Net (R)</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>1</td><td>0</td><td>-600</td></tr>
+            <tr><td>6</td><td>5</td><td>5,000</td><td>+2,800</td></tr>
+            <tr><td>12</td><td>12</td><td>13,000</td><td>+8,000</td></tr>
+            <tr><td>24</td><td>35</td><td>40,000</td><td>+26,000</td></tr>
+          </tbody>
+        </table>
+        <p>Markdown: <a href="12-upscaling-24-months.md">12-upscaling-24-months.md</a></p>
+      </section>
+
+      <!-- 13 -->
+      <section class="panel" role="tabpanel" id="tech" aria-labelledby="tab-tech" hidden>
+        <h2>Tech implementation &amp; dashboard stack</h2>
+        <p class="intro">Python 3.14 + FastAPI server-rendered app (Jinja2 + htmx) for discovery, queue, dashboard, and display - one codebase. PostgreSQL/PostGIS, Redis, USSD/WhatsApp channel adapters, Docker.</p>
+        <table>
+          <thead><tr><th>Layer</th><th>Choice</th></tr></thead>
+          <tbody>
+            <tr><td>Language / runtime</td><td><strong>Python 3.14</strong></td></tr>
+            <tr><td>Backend + web app</td><td><strong>FastAPI</strong> (ASGI, Uvicorn)</td></tr>
+            <tr><td>Pages / interactivity</td><td><strong>Jinja2 + htmx</strong> (+ SSE for live display board)</td></tr>
+            <tr><td>Database</td><td>PostgreSQL 18+ with <strong>PostGIS</strong></td></tr>
+            <tr><td>ORM / migrations</td><td>SQLAlchemy 2.x (async) + Alembic</td></tr>
+            <tr><td>Cache / queues</td><td>Redis + <code>arq</code> workers</td></tr>
+            <tr><td>USSD</td><td>Africa's Talking-class gateway</td></tr>
+            <tr><td>WhatsApp</td><td>WhatsApp Business Cloud API</td></tr>
+            <tr><td>Package mgmt</td><td>uv, pinned to Python 3.14</td></tr>
+            <tr><td>Deploy</td><td>Docker Compose, cloud VPS from day one</td></tr>
+          </tbody>
+        </table>
+        <div class="callout">Suggested repo: <strong><code>clinicq</code></strong> - docs-only preview (no code, no remote repo yet) at <a href="REPO/README.md">REPO/README.md</a>.</div>
+        <h3>Logical connection design</h3>
+        <div class="diagram"><div class="mermaid">
+flowchart TB
+  DISP[Display box] -->|Wi-Fi LAN HTTPS SSE| NET[Clinic Wi-Fi LAN]
+  DASH[Reception dashboard] -->|Wi-Fi LAN HTTPS| NET
+  NET -->|Internet| API[Cloud ClinicQ API]
+  API --> DB[(PostgreSQL PostGIS)]
+  API --> REDIS[(Redis)]
+  PATIENT((Patient phone)) -->|HTTPS USSD WhatsApp| API
+        </div></div>
+        <p>Markdown: <a href="13-tech-implementation.md">13-tech-implementation.md</a></p>
+      </section>
+
+      <!-- 14 -->
+      <section class="panel" role="tabpanel" id="bench" aria-labelledby="tab-bench" hidden>
+        <h2>Benchmark vs global queue/appointment systems</h2>
+        <p class="intro">Retail and government services abroad have run digital queue systems for a decade - most local clinics don't have it yet.</p>
+        <table>
+          <thead><tr><th>Region/sector</th><th>System</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>Retail/government (global)</td><td>Qminder, Qless, Wavetec</td><td>Digital tickets, notifications, staff dashboards</td></tr>
+            <tr><td>UK healthcare</td><td>NHS e-Referral Service, NHS App</td><td>National-scale online appointment booking</td></tr>
+            <tr><td>US healthcare</td><td>Solv, Epic MyChart check-in</td><td>Online scheduling + virtual waiting room</td></tr>
+            <tr><td>EU municipal</td><td>Qmatic-class kiosks</td><td>Physical ticket kiosk + numbered call display</td></tr>
+          </tbody>
+        </table>
+        <h3>Positioning</h3>
+        <div class="diagram"><div class="mermaid">
+quadrantChart
+    title Price vs feature depth
+    x-axis Low price --> High price
+    y-axis Narrow feature set --> Full practice-management depth
+    quadrant-1 Premium full-suite
+    quadrant-2 Expensive but narrow
+    quadrant-3 Cheap and narrow
+    quadrant-4 Best value target
+    NHS eRS Epic MyChart: [0.8, 0.9]
+    Qminder Qless Wavetec: [0.6, 0.5]
+    Qmatic kiosk systems: [0.5, 0.3]
+    Generic SMS USSD only tools: [0.2, 0.15]
+    ClinicQ target: [0.25, 0.5]
+        </div></div>
+        <div class="callout">Win by being the first affordable, multi-channel (app + USSD + WhatsApp), geo-aware discovery-and-queue layer for clinics locally and regionally.</div>
+        <p>Markdown: <a href="14-benchmark.md">14-benchmark.md</a></p>
+      </section>
+    </div>
+
+    <footer>
+      ClinicQ docs - <code>docs/PRODUCT/</code> - inactive tab panels are hidden - was ClinicQ in capstone shortlist
+    </footer>
+  </div>
+
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: "dark",
+      themeVariables: {
+        darkMode: true,
+        background: "#0e1f33",
+        primaryColor: "#1c6fd4",
+        primaryTextColor: "#e7f0fb",
+        primaryBorderColor: "#6fa8ea",
+        lineColor: "#6fa8ea",
+        secondaryColor: "#124c98",
+        tertiaryColor: "#0a1626"
+      },
+      gantt: { fontSize: 11 },
+      securityLevel: "loose"
+    });
+
+    function renderMermaid(root) {
+      const nodes = Array.from((root || document).querySelectorAll(".mermaid")).filter(
+        (el) => !el.querySelector("svg")
+      );
+      if (!nodes.length) return;
+      mermaid.run({ nodes }).catch((err) => console.error("mermaid render failed", err));
+    }
+
+    window.__renderMermaid = renderMermaid;
+    renderMermaid(document.querySelector('[role="tabpanel"]:not([hidden])'));
+  </script>
+
+  <script>
+    (function () {
+      const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+      const panels = Array.from(document.querySelectorAll('[role="tabpanel"]'));
+
+      function activate(tab, { focus = false, updateHash = true } = {}) {
+        const id = tab.getAttribute("aria-controls");
+
+        tabs.forEach((t) => {
+          const on = t === tab;
+          t.setAttribute("aria-selected", on ? "true" : "false");
+          t.tabIndex = on ? 0 : -1;
+        });
+
+        panels.forEach((panel) => {
+          const on = panel.id === id;
+          panel.hidden = !on;
+          if (on && window.__renderMermaid) window.__renderMermaid(panel);
+        });
+
+        if (focus) tab.focus();
+        if (updateHash && history.replaceState) {
+          history.replaceState(null, "", "#" + id);
+        }
+      }
+
+      function fromHash() {
+        const hash = (location.hash || "").replace(/^#/, "");
+        const match = tabs.find((t) => t.getAttribute("aria-controls") === hash);
+        if (match) activate(match, { updateHash: false });
+      }
+
+      tabs.forEach((tab) => {
+        tab.addEventListener("click", () => activate(tab));
+      });
+
+      document.querySelector(".tablist")?.addEventListener("keydown", (e) => {
+        const i = tabs.indexOf(document.activeElement);
+        if (i < 0) return;
+        let next = -1;
+        if (e.key === "ArrowRight" || e.key === "ArrowDown") next = (i + 1) % tabs.length;
+        if (e.key === "ArrowLeft" || e.key === "ArrowUp") next = (i - 1 + tabs.length) % tabs.length;
+        if (e.key === "Home") next = 0;
+        if (e.key === "End") next = tabs.length - 1;
+        if (next >= 0) {
+          e.preventDefault();
+          activate(tabs[next], { focus: true });
+        }
+      });
+
+      window.addEventListener("hashchange", fromHash);
+      fromHash();
+    })();
+  </script>
+</body>
+</html>
