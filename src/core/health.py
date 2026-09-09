@@ -35,7 +35,7 @@ from src.schemas.health import CertInfo
 
 logger = logging.getLogger(__name__)
 
-# Project root (…/properties), two levels up from this file, used to locate the
+# Project root (…/clinicq), two levels up from this file, used to locate the
 # Alembic script directory regardless of the process working directory.
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _ALEMBIC_DIR = _PROJECT_ROOT / "alembic"

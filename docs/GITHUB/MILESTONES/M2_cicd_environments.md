@@ -13,7 +13,7 @@ Automate the quality gate and the deployment path, and encode the team's collabo
 
 This is a **six-person student project on the GitHub Free plan**, which means two constraints shape
 the pipeline: Actions minutes are finite, and nobody is available to babysit a broken `main` at
-23:00 the night before a demo. The answer is the same one the sibling `properties` project landed
+23:00 the night before a demo. The answer is the same one the sibling `clinicq` project landed
 on: a **local** gate that every developer runs before pushing (`./scripts/ci-local.sh`), a **cheap**
 CI on pull requests, and **deployment only on tags**.
 

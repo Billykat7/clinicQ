@@ -1,6 +1,6 @@
 """The one client-IP resolver (Issue #179, M30).
 
-Before this module there were **five**: `request_logging`, `auth`, `web/routes`, `properties` and
+Before this module there were **five**: `request_logging`, `auth`, `web/routes`, `clinicq` and
 `applications` each had a private `_client_ip`, and they did not agree. Two of them mattered:
 
 * `src/api/v1/routes/auth.py` returned `request.client.host` with the comment *"no proxy header

@@ -7,7 +7,7 @@ Schema
 ------
 The platform host runs several products against one PostgreSQL database, so this
 project keeps everything in a schema of its own — named by ``DB_SCHEMA``
-(``src.commons.enums.DbSchema``, ``properties``) — and leaves ``public`` to PostGIS.
+(``src.commons.enums.DbSchema``, ``clinicq``) — and leaves ``public`` to PostGIS.
 That covers the application tables *and* Alembic's own ``alembic_version``, which
 ``env.py`` places there via ``version_table_schema``.
 

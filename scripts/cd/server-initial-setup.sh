@@ -65,7 +65,7 @@ else
 fi
 
 echo "[initial-setup] 3/7 Docker (official repo)..."
-apt-get install -y -qq apt-transport-https ca-certificates curl software-properties-common
+apt-get install -y -qq apt-transport-https ca-certificates curl software-clinicq-common
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 chmod a+r /etc/apt/keyrings/docker.gpg

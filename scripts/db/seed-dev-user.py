@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Seed a verified BK ClinicQ user in the configured PostgreSQL schema (local/dev bootstrap).
 
-Creates the user in ``properties.user`` (or ``DB_SCHEMA``) via the normal ORM session.
+Creates the user in ``clinicq.user`` (or ``DB_SCHEMA``) via the normal ORM session.
 Idempotent: skips when the email already exists.
 
 Usage (from project root, venv active, PYTHONPATH set):

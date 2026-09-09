@@ -31,7 +31,7 @@ def build_content_security_policy(nonce: str) -> str:
     * **Tiles.** Map tiles are images from the tile host, already covered by the ``img-src``
       ``https:`` source below.
     * **Geocoding.** Address search goes to *this* origin, which proxies the provider server-side
-      (see :mod:`src.modules.properties.geocoding`), so ``connect-src 'self'`` stays untouched —
+      (see :mod:`src.modules.clinicq.geocoding`), so ``connect-src 'self'`` stays untouched —
       the browser never contacts a third-party geocoding host.
     """
     n = f"'nonce-{nonce}'"

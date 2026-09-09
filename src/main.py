@@ -114,7 +114,7 @@ def create_app(settings_obj: Settings | None = None) -> FastAPI:
 
         Kept off the uniform ``/health`` path so a dependency outage never fails the
         platform heartbeat other services share (Issue #65); the infra poller is pointed at
-        this path for properties specifically, while services that only expose ``/health``
+        this path for clinicq specifically, while services that only expose ``/health``
         keep working unchanged."""
         checks = DependencyChecks(
             database=database, migrations=migrations, storage=storage

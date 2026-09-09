@@ -137,5 +137,5 @@ Free plan allowance. Every tag gets a release note in [`RELEASES/`](RELEASES/).
 | Manual | Smoke check, security scan |
 
 The local gate is the primary one. CI on pull requests is the enforcement, and deployment is
-tag-only: the same shape the sibling `properties` project uses to stay inside 2,000 free minutes a
+tag-only: the same shape the sibling `clinicq` project uses to stay inside 2,000 free minutes a
 month.

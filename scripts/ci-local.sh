@@ -134,7 +134,7 @@ PIP_AUDIT_WARNED=false
 TRIVY_WARNED=false
 
 echo -e "${BLUE}╔══════════════════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║                   Running CI Checks Locally (properties)                      ║${NC}"
+echo -e "${BLUE}║                   Running CI Checks Locally (clinicq)                      ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 

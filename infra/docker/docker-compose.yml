@@ -17,7 +17,7 @@
 # in DATABASE_URL so the app container can reach it (Docker Desktop; on Linux you may need
 # extra_hosts: - "host.docker.internal:host-gateway" under `app`).
 
-name: properties
+name: clinicq
 
 services:
   nginx:

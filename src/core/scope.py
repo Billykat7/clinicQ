@@ -106,7 +106,7 @@ def own_instance_ids(db: Session, user: User) -> frozenset[str]:
     someone put them in charge of (that is :func:`assignment_instance_ids`, the ``assigned`` rung
     stacked on top of this one).
 
-    **The kernel has no first-person relationships to resolve** — "the properties you own", "the
+    **The kernel has no first-person relationships to resolve** — "the clinicq you own", "the
     cases filed against you" are domain facts — so this returns the empty set, which correctly
     means *no rows* for an ``own``-tier caller until a project defines what own-ness is. Fill it in
     with the queries your domain answers that question with; keep it a strict subset of what

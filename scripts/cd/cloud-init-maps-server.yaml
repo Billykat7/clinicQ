@@ -18,7 +18,7 @@ packages:
   - apt-transport-https
   - ca-certificates
   - curl
-  - software-properties-common
+  - software-clinicq-common
   - fail2ban
   - ufw
 

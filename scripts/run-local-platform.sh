@@ -7,10 +7,10 @@
 #
 # Prerequisites:
 #   1. Gateway platform up:  cd ../infra && ./scripts/run-local-platform.sh
-#   2. /etc/hosts: 127.0.0.1 infra.btk.localhost properties.btk.localhost
+#   2. /etc/hosts: 127.0.0.1 infra.btk.localhost clinicq.btk.localhost
 #   3. .env present (from .env.example) and .venv with deps (for migrations)
 #
-# Usage (from properties repo root):
+# Usage (from clinicq repo root):
 #   ./scripts/run-local-platform.sh              # docker: nginx + app on :8011
 #   ./scripts/run-local-platform.sh --uvicorn    # host uvicorn (no product nginx)
 #   ./scripts/run-local-platform.sh --down       # stop docker platform stack
@@ -23,13 +23,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
-PROJECT_SLUG="${PROJECT_SLUG:-properties}"
+PROJECT_SLUG="${PROJECT_SLUG:-clinicq}"
 DISPLAY_NAME="${DISPLAY_NAME:-BK ClinicQ}"
 APP_PORT="${APP_PORT:-8011}"
-DB_SCHEMA="${DB_SCHEMA:-properties}"
+DB_SCHEMA="${DB_SCHEMA:-clinicq}"
 REPO_URL="${REPO_URL:-https://github.com/Billykat7/clinicq}"
 BASE_DOMAIN="${BASE_DOMAIN:-btk.localhost}"
-DOMAIN="${DOMAIN:-properties.${BASE_DOMAIN}}"
+DOMAIN="${DOMAIN:-clinicq.${BASE_DOMAIN}}"
 GATEWAY_BASE_URL="${GATEWAY_BASE_URL:-http://127.0.0.1:8000}"
 REGISTRY_DEPLOY_TOKEN="${REGISTRY_DEPLOY_TOKEN:-local-dev-registry-deploy-token}"
 INFRA_ROOT="${INFRA_ROOT:-}"
@@ -175,7 +175,7 @@ export PUBLIC_URL_SCHEME=http
 export SUBDOMAIN="$DOMAIN"
 export SCHEMA_NAME="$DB_SCHEMA"
 
-# Shared platform Postgres + properties schema (display matches alembic-upgrade.sh; same as infra).
+# Shared platform Postgres + clinicq schema (display matches alembic-upgrade.sh; same as infra).
 export DB_HOST=127.0.0.1
 export DB_PORT="$PG_PORT"
 export DB_NAME=btk
@@ -220,7 +220,7 @@ wait_health() {
 
 register_and_go_live() {
   export STATUS=deploying
-  export IMAGE_REF="${IMAGE_REF:-properties:local-platform}"
+  export IMAGE_REF="${IMAGE_REF:-clinicq:local-platform}"
   export HEALTH_OK=true
   export DEPLOY_STATUS=succeeded
   export DEPLOYED_BY="${DEPLOYED_BY:-local-platform}"

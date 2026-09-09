@@ -4,7 +4,7 @@
 class BKPropertyError(Exception):
     """Base error for domain and infrastructure failures."""
 
-    def __init__(self, message: str, *, code: str = "properties.error") -> None:
+    def __init__(self, message: str, *, code: str = "clinicq.error") -> None:
         super().__init__(message)
         self.code = code
 
@@ -14,13 +14,13 @@ class UnitStatusTransitionError(BKPropertyError):
 
     Carries the ``current`` and ``target`` statuses so the API layer can build a clear
     message and map it to HTTP 409 Conflict. Stored as plain strings to keep this
-    commons module free of a dependency on the properties enum.
+    commons module free of a dependency on the clinicq enum.
     """
 
     def __init__(self, current: str, target: str) -> None:
         super().__init__(
             f"Illegal unit status transition: {current} -> {target}.",
-            code="properties.unit.illegal_status_transition",
+            code="clinicq.unit.illegal_status_transition",
         )
         self.current = current
         self.target = target
@@ -52,7 +52,7 @@ class InvalidImageError(BKPropertyError):
     """
 
     def __init__(self, message: str = "Uploaded file is not a valid image.") -> None:
-        super().__init__(message, code="properties.photo.invalid_image")
+        super().__init__(message, code="clinicq.photo.invalid_image")
 
 
 class ApplicationUnitNotFoundError(BKPropertyError):

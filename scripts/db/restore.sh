@@ -18,7 +18,7 @@ set -euo pipefail
 #   --identity FILE     age identity (private key) file. Default: $BACKUP_AGE_IDENTITY.
 #   --target URL        libpq URL of the SCRATCH database to restore into.
 #                       Default: $RESTORE_TARGET_URL. MUST NOT be the production URL.
-#   --schema NAME       Schema expected in the dump. Default: $DB_SCHEMA or `properties`.
+#   --schema NAME       Schema expected in the dump. Default: $DB_SCHEMA or `clinicq`.
 #   --drop              DROP SCHEMA <name> CASCADE on the target before restoring, for a
 #                       clean-room rehearsal. Off by default so nothing is destroyed by
 #                       accident.
@@ -50,7 +50,7 @@ fi
 DUMP=""
 IDENTITY="${BACKUP_AGE_IDENTITY:-}"
 TARGET_URL="${RESTORE_TARGET_URL:-}"
-SCHEMA="${DB_SCHEMA:-properties}"
+SCHEMA="${DB_SCHEMA:-clinicq}"
 DROP="false"
 
 while [ "$#" -gt 0 ]; do
@@ -105,7 +105,7 @@ echo ""
 START_EPOCH="$(date +%s)"
 
 # --- Decrypt ---------------------------------------------------------------
-WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/properties-restore.XXXXXX")"
+WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/clinicq-restore.XXXXXX")"
 trap 'rm -rf "${WORKDIR}"' EXIT
 PLAIN="${WORKDIR}/restore.dump"
 echo -e "${YELLOW}⏳ Decrypting dump…${NC}"

@@ -366,12 +366,12 @@ class GrantScope(StrEnum):
     portal role and no grant could narrow a management role below the whole business either.
 
     - ``OWN`` — strictly the rows the caller is the *subject* of, resolved per resource shape by
-      :func:`src.core.scope.resolve_scope`: the properties they own, their own lease, the work
+      :func:`src.core.scope.resolve_scope`: the clinicq they own, their own lease, the work
       orders assigned to them as a vendor, the threads they participate in. First-person only —
       an ``own`` grant never reaches a row the caller was merely *assigned to manage*.
     - ``ASSIGNED`` — ``own`` **plus** the rows reachable through the caller's explicit
       assignments (Issue #171, M28): today ``UserRoleAssignment(scope_type='property')`` and the
-      units, tenants, leases and work orders hanging off those properties. The agent /
+      units, tenants, leases and work orders hanging off those clinicq. The agent /
       property-manager breadth — "my own portal, and the portfolio slice I was given" — which
       before this tier existed had no expression of its own and worked only as a side effect of
       ``own`` unioning the assignment rows in. Fail-closed: assigned to nothing reaches nothing.

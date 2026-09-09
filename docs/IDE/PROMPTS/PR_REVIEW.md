@@ -6,7 +6,7 @@ Pay particular attention to this project's non-negotiables (docs/guideline.md):
 
 - Money is integer minor units plus a currency, never float.
 - The payments ledger is append-only; corrections are reversing entries, not edits.
-- `unit.status` is written only by the properties service transition function.
+- `unit.status` is written only by the clinicq service transition function.
 - Active leases are immutable; changes are renewals or addenda.
 - Cross-module calls use public service functions, never another module's models.
 - Tenant documents are private: signed, expiring links only, and every download is audited.

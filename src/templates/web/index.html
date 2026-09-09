@@ -1,40 +1,614 @@
+{#
+  Public landing page (`/`) — the marketing front door, rendered by
+  :func:`src.web.routes.home_page` with :func:`~src.web.context.public_page_context`.
+
+  The web version of the walkthrough in `docs/DEMO/index.html`: the hero, the "one queue,
+  four doors" model, tabbed mock-ups of the four surfaces, the feature scope, the
+  positioning table, the delivery plan and the team. Everything below is *illustrative* —
+  the numbers on the phone, dashboard and board are generated in `landing.js` and no
+  request is made for them, so nothing here can display real patient data.
+
+  Two constraints shape the markup:
+
+  * **CSP** is `script-src 'self'` / `style-src 'self' 'nonce-…'`, so there are no inline
+    handlers and no `style="…"` attributes: presentation lives in `/static/css/landing.css`
+    and behaviour in `/static/js/landing.js`.
+  * **It must render without a database.** The context comes from `public_page_context`,
+    which degrades to the signed-out shell on any DB error, so the only auth-dependent
+    thing on the page is the sign-in / dashboard affordance.
+#}
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>{{ app_name }}</title>
-<meta name="description" content="BK ClinicQ — API and modules">
-<meta name="theme-color" content="#ffffff">
+<title>{{ app_name }} — find a clinic, hold your place, watch your number come up</title>
+<meta name="description" content="Clinic discovery and digital queue management for South African public and private clinics. Join the queue from a phone, a USSD menu, WhatsApp or the web, and watch your number come up on the clinic's own display.">
+<meta name="theme-color" content="#0f6e56">
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/css/site.css">
+<link rel="stylesheet" href="/static/css/landing.css">
 {# Read by csrf-htmx.js to mirror the CSRF cookie into X-CSRF-Token. #}
 <meta name="bkp-csrf-cookie" content="{{ settings.csrf_cookie_name }}">
+{# Applies the saved light/dark choice before first paint (no flash); render-blocking, not deferred. #}
+<script src="/static/js/theme.js"></script>
 <script src="/static/js/site.js" defer></script>
+<script src="/static/js/landing.js" defer></script>
 <script src="/static/js/csrf-htmx.js" defer></script>
 <script src="/static/js/login-modal.js" defer></script>
 </head>
-<body class="home">
+<body>
 
 <a class="skip-link" href="#main">Skip to content</a>
 
-{% include "web/partials/topbar.html" %}
+<header class="lp-header">
+  <div class="lp-wrap lp-nav">
+    <a class="lp-logo" href="/">
+      <span class="lp-logo-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
+      </span>
+      <span>{{ app_name }}</span>
+    </a>
 
-<main id="main" class="home-main">
-  <h1 class="wordmark">{{ app_name }}</h1>
-  <p class="tagline">BK ClinicQ — API and modules</p>
+    <nav class="lp-nav-links" aria-label="Primary">
+      <a href="#product">How it works</a>
+      <a href="#screens">Screens</a>
+      <a href="#features">Features</a>
+      <a href="#different">Why it's different</a>
+      <a href="#delivery">Delivery</a>
+    </nav>
 
-  <p class="home-links">
-    <a href="/features">What ClinicQ does</a>
-    <span aria-hidden="true">·</span>
-    {% if is_authenticated %}<a href="/dashboard">Dashboard</a>{% else %}<a href="#" data-open-signin>Sign in</a>{% endif %}
-  </p>
+    <div class="lp-nav-actions">
+      <button type="button" class="lp-theme-toggle" id="theme-toggle" aria-label="Switch to dark theme" aria-pressed="false">
+        <svg class="lp-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        <svg class="lp-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      {% if is_authenticated %}
+      <a class="lp-btn lp-btn-sm" href="/dashboard">Dashboard</a>
+      {% else %}
+      <button type="button" class="lp-btn lp-btn-sm" data-open-signin>Sign in</button>
+      {% endif %}
+    </div>
+  </div>
+</header>
+
+<main id="main" class="lp-main">
+
+  {# ── Hero ─────────────────────────────────────────────────── #}
+  <div class="lp-wrap lp-hero">
+    <div class="lp-hero-grid">
+      <div>
+        <span class="lp-pill">Capstone 2026 · Richfield · BSc IT</span>
+        <h1>Find a clinic. Hold your place. <em>Watch your number come up.</em></h1>
+        <p class="lp-lede">
+          {{ app_name }} is clinic discovery plus digital queue management for public and private
+          clinics. Join the queue from your phone before you leave home — by app,
+          <strong>USSD on any phone with no data</strong>, WhatsApp or the web — and watch your
+          ticket count down on the clinic's own waiting-room screen while staff run the whole line
+          from one dashboard.
+        </p>
+        <div class="lp-hero-cta">
+          <a class="lp-btn" href="#screens">
+            See the screens
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="13 6 19 12 13 18"/></svg>
+          </a>
+          <a class="lp-btn lp-btn-quiet" href="/features">What we're building</a>
+        </div>
+      </div>
+
+      {# The two halves of the product in one glance: the patient's ticket, and the board it
+         is counting down on. Both are driven by the same simulation in landing.js. #}
+      <div class="lp-hero-art" aria-hidden="true">
+        <div class="lp-phone">
+          <div class="lp-phone-bar"></div>
+          <div class="lp-screen">
+            <div class="lp-app-head"><b>Your ticket</b><span class="lp-badge is-live">Live</span></div>
+            <div class="lp-ticket">
+              <div class="lp-lbl">Zola Clinic · Doctor Room 2</div>
+              <div class="lp-no">#046</div>
+              <div class="lp-pos">You are <b id="lpMyPos">4th</b> in the queue</div>
+              <div class="lp-eta">Estimated wait <span id="lpMyEta">~15–25 min</span></div>
+            </div>
+            <div class="lp-steps">
+              <div class="lp-step is-done"><span class="lp-tick">✓</span> Joined from home · 08:12</div>
+              <div class="lp-step is-done"><span class="lp-tick">✓</span> Consent: number only on the board</div>
+              <div class="lp-step is-now"><span class="lp-tick"></span> Leave now — called in about 20 min</div>
+              <div class="lp-step"><span class="lp-tick"></span> “It's your turn — Room 2”</div>
+            </div>
+          </div>
+        </div>
+        <div class="lp-hero-board">
+          <div class="lp-lbl">Now serving</div>
+          <b id="lpHeroNum">#042</b>
+          <span class="lp-room" id="lpHeroRoom">Room 2 · called 08:41</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="lp-stats">
+      <div class="lp-stat"><b>4</b><span>ways in: PWA, USSD, WhatsApp, web</span></div>
+      <div class="lp-stat"><b>1</b><span>fair queue, whichever door you used</span></div>
+      <div class="lp-stat"><b>5</b><span>languages across menus and announcements</span></div>
+      <div class="lp-stat"><b>~R1.8k</b><span>hardware to start a pilot clinic</span></div>
+    </div>
+  </div>
+
+  {# ── The mental model ─────────────────────────────────────── #}
+  <section class="lp-section lp-wrap" id="product" data-reveal>
+    <div class="lp-eyebrow">The mental model</div>
+    <h2 class="lp-title">One queue, four doors in</h2>
+    <p class="lp-sub">
+      Every channel calls the same service. A walk-in ticket and a ticket joined from a taxi take
+      numbers from the same sequence, in arrival order — no channel jumps the physical line.
+    </p>
+
+    <div class="lp-doors">
+      <div class="lp-door-list">
+        <div class="lp-door"><i>📱</i><div>Mobile PWA<em>Installable, works offline</em></div></div>
+        <div class="lp-door"><i>☎️</i><div>USSD menu<em>Any phone · no data needed</em></div></div>
+        <div class="lp-door"><i>💬</i><div>WhatsApp bot<em>Buttons, no typing</em></div></div>
+        <div class="lp-door"><i>🌐</i><div>Web app<em>Any browser</em></div></div>
+        <div class="lp-door"><i>🏥</i><div>Reception walk-in<em>Same sequence, no separate line</em></div></div>
+      </div>
+
+      <div class="lp-engine">
+        <b>{{ app_name }} queue engine</b>
+        <span>Ticket number · live position · honest wait range</span>
+        <div class="lp-engine-no">#042</div>
+        <span>Call Next → phone and board, in under 2 seconds</span>
+      </div>
+
+      <div class="lp-door-list">
+        <div class="lp-door"><i>🖥️</i><div>Clinic dashboard<em>Call next · walk-ins · reordering</em></div></div>
+        <div class="lp-door"><i>📺</i><div>Waiting-room board<em>Number, time, privacy-gated name</em></div></div>
+        <div class="lp-door"><i>🔔</i><div>Notifications<em>Push · SMS · WhatsApp</em></div></div>
+        <div class="lp-door"><i>📊</i><div>Reports<em>Wait times · no-shows · heatmap</em></div></div>
+        <div class="lp-door"><i>🏛️</i><div>District dashboards<em>Anonymised, for planning</em></div></div>
+      </div>
+    </div>
+  </section>
+
+  {# ── The four surfaces ────────────────────────────────────── #}
+  <section class="lp-section lp-wrap" id="screens" data-reveal>
+    <div class="lp-eyebrow">A glimpse of the finished product</div>
+    <h2 class="lp-title">Four screens, one system</h2>
+    <p class="lp-sub">
+      Mock-ups of the surfaces we are building, with illustrative data only. The board below is
+      live: watch it call the next patient, and the ticket on the phone move one place closer.
+    </p>
+
+    <div class="lp-tabs" role="tablist" aria-label="Product screens">
+      <button class="lp-tab" type="button" role="tab" id="lpTabPatient" aria-controls="lpPanelPatient" aria-selected="true">Patient</button>
+      <button class="lp-tab" type="button" role="tab" id="lpTabDash" aria-controls="lpPanelDash" aria-selected="false" tabindex="-1">Clinic dashboard</button>
+      <button class="lp-tab" type="button" role="tab" id="lpTabBoard" aria-controls="lpPanelBoard" aria-selected="false" tabindex="-1">Waiting-room board</button>
+      <button class="lp-tab" type="button" role="tab" id="lpTabChannels" aria-controls="lpPanelChannels" aria-selected="false" tabindex="-1">USSD &amp; WhatsApp</button>
+    </div>
+
+    <div class="lp-panel" id="lpPanelPatient" role="tabpanel" aria-labelledby="lpTabPatient" tabindex="0">
+      <p class="lp-panel-note">
+        Find the nearest clinic with the shortest queue, join it, then watch your position tick
+        down. Wait times are always shown as a <strong>range</strong>; a false-precision number
+        that slips does more damage to trust than no number at all.
+      </p>
+      <div class="lp-stage">
+        <div class="lp-phone">
+          <div class="lp-phone-bar"></div>
+          <div class="lp-screen">
+            <div class="lp-app-head">
+              <b>Clinics near you</b>
+              <div class="lp-seg"><span class="is-on">All</span><span>Public</span><span>Private</span></div>
+            </div>
+            <div class="lp-clinic">
+              <span class="lp-dot"></span>
+              <div><b>Soweto CHC</b><small>1.2 km · open until 16:00</small><span class="lp-badge">Public</span></div>
+              <div class="lp-meta"><b>14</b><small>waiting</small><small>~35–50 min</small></div>
+            </div>
+            <div class="lp-clinic">
+              <span class="lp-dot"></span>
+              <div><b>Zola Clinic</b><small>2.4 km · open until 16:00</small><span class="lp-badge">Public</span></div>
+              <div class="lp-meta"><b>6</b><small>waiting</small><small>~15–25 min</small></div>
+            </div>
+            <div class="lp-clinic">
+              <span class="lp-dot is-private"></span>
+              <div><b>Diepkloof Family GP</b><small>3.1 km · open until 18:00</small><span class="lp-badge is-private">Private</span></div>
+              <div class="lp-meta"><b>2</b><small>waiting</small><small>~5–15 min</small></div>
+            </div>
+            <div class="lp-clinic">
+              <span class="lp-dot"></span>
+              <div><b>Chiawelo CHC</b><small>4.7 km · closed · opens 07:00</small><span class="lp-badge is-warn">Closed</span></div>
+              <div class="lp-meta"><b>—</b><small>&nbsp;</small></div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="lp-phone">
+            <div class="lp-phone-bar"></div>
+            <div class="lp-screen">
+              <div class="lp-app-head"><b>It's your turn</b><span class="lp-badge is-live">Push</span></div>
+              <div class="lp-ticket">
+                <div class="lp-lbl">Zola Clinic · Doctor Room 2</div>
+                <div class="lp-no">#046</div>
+                <div class="lp-pos">Called at <b>08:53</b> — please come in</div>
+                <div class="lp-eta">Room 2 · ask for Sister Dlamini</div>
+              </div>
+              <div class="lp-steps">
+                <div class="lp-step is-done"><span class="lp-tick">✓</span> “You're #5” · 08:31</div>
+                <div class="lp-step is-done"><span class="lp-tick">✓</span> “You're next — head inside” · 08:48</div>
+                <div class="lp-step is-now"><span class="lp-tick"></span> SMS fallback if push is not delivered</div>
+                <div class="lp-step"><span class="lp-tick"></span> One-tap feedback after your visit</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="lp-panel" id="lpPanelDash" role="tabpanel" aria-labelledby="lpTabDash" tabindex="0" hidden>
+      <p class="lp-panel-note">
+        What reception keeps open all day. Every active queue side by side, each card answering
+        <em>“is anyone stuck?”</em> at a glance — and when the connection drops the dashboard says
+        so, instead of showing a frozen queue that looks current.
+      </p>
+      <div class="lp-laptop">
+        <div class="lp-chrome"><i></i><i></i><i></i><span>clinicq.app/dashboard/zola-clinic</span></div>
+        <div class="lp-dash">
+          <div class="lp-dash-top">
+            <b>Zola Clinic — front desk</b>
+            <span class="lp-live"><span class="lp-blip"></span> Live · updated just now</span>
+            <span class="lp-badge">Thabo M. · Receptionist</span>
+          </div>
+          <div class="lp-kpis">
+            <div class="lp-kpi"><b>38</b><span>seen today</span></div>
+            <div class="lp-kpi"><b>15</b><span>waiting now</span></div>
+            <div class="lp-kpi"><b>22 min</b><span>avg wait today</span></div>
+            <div class="lp-kpi"><b>4</b><span>no-shows</span></div>
+            <div class="lp-kpi"><b>61%</b><span>joined remotely</span></div>
+          </div>
+          <div class="lp-qgrid">
+            <div class="lp-qcard">
+              <h4>Triage / vitals <span class="lp-badge">Nurse A</span></h4>
+              <div class="lp-big">6</div><small>waiting · oldest 12 min</small>
+              <span class="lp-btn">Call next → #051</span>
+              <span class="lp-btn lp-btn-quiet">Add walk-in</span>
+            </div>
+            <div class="lp-qcard">
+              <h4>Doctor Room 1 <span class="lp-badge">Dr N.</span></h4>
+              <div class="lp-big">3</div><small>waiting · oldest 18 min</small>
+              <span class="lp-btn">Call next → #044</span>
+              <span class="lp-btn lp-btn-quiet">Recall #041</span>
+            </div>
+            <div class="lp-qcard is-alert">
+              <h4>Doctor Room 2 <span class="lp-badge is-warn">Oldest 41 min</span></h4>
+              <div class="lp-big">4</div><small>waiting · someone is stuck</small>
+              <span class="lp-btn">Call next → #046</span>
+              <span class="lp-btn lp-btn-quiet">Move up (reason required)</span>
+            </div>
+            <div class="lp-qcard">
+              <h4>Pharmacy <span class="lp-badge">Window 1</span></h4>
+              <div class="lp-big">2</div><small>waiting · oldest 4 min</small>
+              <span class="lp-btn">Call next → #039</span>
+              <span class="lp-btn lp-btn-quiet">Transfer in</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="lp-panel" id="lpPanelBoard" role="tabpanel" aria-labelledby="lpTabBoard" tabindex="0" hidden>
+      <p class="lp-panel-note">
+        A browser tab in kiosk mode on any TV, driven by a ~R1,000 signage box.
+        <strong>Privacy is applied on the server:</strong> under the default number-only mode a
+        patient's name is not in the payload at all, not merely hidden, so a mis-styled template
+        can never leak it.
+      </p>
+      <div class="lp-board">
+        <div class="lp-board-head"><b>ZOLA CLINIC — NOW SERVING</b><span id="lpClock">08:41</span></div>
+        <div class="lp-now" id="lpNowRow">
+          <div>
+            <div class="lp-lbl">Now serving</div>
+            <div class="lp-n" id="lpNowNum">#042</div>
+          </div>
+          <div class="lp-rm"><b id="lpNowRoom">Room 2</b><span id="lpNowTime">called 08:41</span></div>
+        </div>
+        <div class="lp-upnext" id="lpUpNext"></div>
+        <div class="lp-board-foot">
+          <span>Display mode: <b>number only</b> — no names, no reasons (clinic default)</span>
+          <span>🔊 Audio call-out · isiZulu</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="lp-panel" id="lpPanelChannels" role="tabpanel" aria-labelledby="lpTabChannels" tabindex="0" hidden>
+      <p class="lp-panel-note">
+        The feature no global queue vendor offers. USSD reaches a feature phone with no data and no
+        airtime to browse; WhatsApp reaches the app most patients already have open. Both are
+        <strong>thin adapters</strong> over exactly the same services the web uses.
+      </p>
+      <div class="lp-stage">
+        <div>
+          <h3 class="lp-channel-title">USSD · <code>*120*4357#</code></h3>
+          <div class="lp-ussd">CON ClinicQ
+1. Find a clinic near me
+2. Check my queue position
+3. Cancel my ticket
+4. Language / Ulimi
+<span class="lp-in">&gt; 1</span>
+
+CON Clinics near Zola:
+1. Zola Clinic - 2.4km - 6 waiting
+2. Soweto CHC - 1.2km - 14 waiting
+3. Chiawelo CHC - closed
+<span class="lp-in">&gt; 1</span>
+
+CON Zola Clinic. Choose queue:
+1. Triage (6 waiting, ~20 min)
+2. Doctor (3 waiting, ~30 min)
+3. Pharmacy (2 waiting, ~8 min)
+<span class="lp-in">&gt; 2</span>
+
+END Ticket #046 at Zola Clinic,
+Doctor queue. You are 4th.
+Wait about 15-25 min.
+We will SMS you when it is
+nearly your turn.</div>
+        </div>
+        <div>
+          <h3 class="lp-channel-title">WhatsApp bot</h3>
+          <div class="lp-wa">
+            <div class="lp-bub is-me">Hi</div>
+            <div class="lp-bub is-them">
+              <b>{{ app_name }}</b><br>Sawubona 👋 What would you like to do?
+              <div class="lp-wa-btns"><b>Find a clinic</b><b>My ticket</b><b>Cancel</b></div>
+            </div>
+            <div class="lp-bub is-me">📍 Location shared</div>
+            <div class="lp-bub is-them">
+              3 clinics within 5 km. Zola Clinic has the shortest queue: 6 waiting, about 20 minutes.
+              <div class="lp-wa-btns"><b>Join Zola Clinic</b><b>See all 3</b></div>
+            </div>
+            <div class="lp-bub is-me">Join Zola Clinic</div>
+            <div class="lp-bub is-them">
+              ✅ You're <b>#046</b>, 4th in the Doctor queue.<br>Estimated wait <b>15–25 min</b>.<br>
+              I'll message you when you're next.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {# ── Scope ────────────────────────────────────────────────── #}
+  <section class="lp-section lp-wrap" id="features" data-reveal>
+    <div class="lp-eyebrow">Scope</div>
+    <h2 class="lp-title">What we are building</h2>
+    <p class="lp-sub">
+      109 tracked issues across 14 milestones. Everything below is specified with acceptance
+      criteria in the repository.
+    </p>
+
+    <h3 class="lp-group">For patients</h3>
+    <div class="lp-features">
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">📍</span><b>Clinic discovery</b><p>PostGIS radius search with a public / private / all toggle, live queue length, open-now status, map and list.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🎟️</span><b>Join from anywhere</b><p>A ticket number and live position before you leave home — from the app, USSD, WhatsApp or the web.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🔔</span><b>Notifications that arrive</b><p>Push, SMS or WhatsApp, with quiet hours, opt-outs and hard per-clinic cost caps.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🗓️</span><b>Scheduled appointments</b><p>Booked slots that convert into a live ticket automatically at the right moment.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🧾</span><b>Self check-in kiosk</b><p>Scan a QR at the door instead of queueing to talk to reception at 07:30.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">👨‍👩‍👧</span><b>Book for a dependant</b><p>One household, one smartphone: a parent for a child, a daughter for her mother, with consent recorded.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">💊</span><b>Chronic reminders</b><p>Recurring medication-collection nudges with a one-keypress join.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🚗</span><b>Virtual waiting room</b><p>Wait nearby; called forward accounting for how long you say you need to travel.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🌍</span><b>Five languages</b><p>English, isiZulu, isiXhosa, Afrikaans and Sesotho, across menus, messages and the spoken call-out.</p></div>
+    </div>
+
+    <h3 class="lp-group">For clinic staff</h3>
+    <div class="lp-features">
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🖥️</span><b>One dashboard</b><p>Every active queue live, with one very large Call Next and an honest offline state.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🚶</span><b>Walk-ins in 10 seconds</b><p>Same sequence as remote joins. One fair queue, printable stub, optional SMS.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🏥</span><b>Multi-room queues</b><p>Triage → doctor → pharmacy, with transfers that keep the visit intact.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">⚖️</span><b>Audited priority overrides</b><p>Bump a visibly unwell patient in two taps, with a reason code and a permanent trail.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">📺</span><b>Waiting-room board</b><p>Number, time, privacy-gated name, audio call-out, and unattended recovery after load-shedding.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">⚙️</span><b>Self-service settings</b><p>Hours, holidays, closures, queues, services, staff and display mode — no developer needed.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">📊</span><b>Reports that sell themselves</b><p>Wait times, no-show rate, channel mix, and the busiest-hour heatmap.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">💬</span><b>Post-visit feedback</b><p>One question, one tap: a service-quality number a manager can take to their district.</p></div>
+    </div>
+
+    <h3 class="lp-group">Platform, privacy &amp; compliance</h3>
+    <div class="lp-features">
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🔐</span><b>RBAC &amp; multi-tenancy</b><p>Five roles; a clinic can never read another clinic's data, and cross-site access returns 404, not 403.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🛡️</span><b>Privacy by default</b><p>Every new clinic starts number-only. Names and reasons are opt-in, consent-gated and audited.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🧹</span><b>Retention &amp; purge</b><p>Reason text and visit notes are deleted automatically after a short window, with a test that proves it.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">📜</span><b>Tamper-evident audit</b><p>Hash-chained append-only log: a retrospective edit is detectable.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">📤</span><b>Access &amp; erasure</b><p>A patient can ask what is held about them, and have it deleted — POPIA rights, built not promised.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🏛️</span><b>District dashboards</b><p>Anonymised area-level wait trends with small-cell suppression, for health-department planning.</p></div>
+    </div>
+  </section>
+
+  {# ── Positioning ──────────────────────────────────────────── #}
+  <section class="lp-section lp-wrap" id="different" data-reveal>
+    <div class="lp-eyebrow">Positioning</div>
+    <h2 class="lp-title">Why this doesn't already exist here</h2>
+    <p class="lp-sub">
+      Digital queue management has run abroad for over a decade. Most South African clinics still
+      run paper-and-shout queues, because the existing products were built for different budgets
+      and different phones.
+    </p>
+
+    <div class="lp-table-scroll">
+      <table class="lp-table">
+        <thead>
+          <tr><th scope="col">System</th><th scope="col">Where</th><th scope="col">What it does</th><th scope="col">What it assumes</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>Qminder · Qless · Wavetec · Qmatic</b></td><td>Retail, banking, government</td>
+            <td>Digital tickets, SMS alerts, staff dashboards, analytics</td><td>Retail/corporate budgets; a smartphone with data</td>
+          </tr>
+          <tr>
+            <td><b>NHS App · e-Referral Service</b></td><td>UK healthcare</td>
+            <td>National appointment booking, integrated with patient records</td><td>A single national health system and its funding</td>
+          </tr>
+          <tr>
+            <td><b>NHS outpatient kiosks &amp; boards</b></td><td>UK hospitals</td>
+            <td>Kiosk check-in and called-name display screens</td><td>Hospital IT budget and on-site integration</td>
+          </tr>
+          <tr>
+            <td><b>Solv · Zocdoc</b></td><td>US urgent &amp; primary care</td>
+            <td>Online booking, virtual waiting room, “you're up next” texts</td><td>Insurance-funded private practice; smartphone-first</td>
+          </tr>
+          <tr class="lp-mine">
+            <td><b>{{ app_name }}</b></td><td>SA public &amp; private clinics</td>
+            <td><strong>Discovery + queue + four channels including USSD</strong>, priced for a clinic, near-zero hardware</td>
+            <td><strong>Any phone. Any budget. No existing clinic system required.</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="lp-callout">
+      <b>The two wedges.</b> First, <b>USSD</b>: every vendor above assumes a smartphone with data,
+      which excludes exactly the public-clinic population this is for. Second, <b>discovery</b>:
+      they all manage the queue at a clinic you already chose; {{ app_name }} helps you choose it,
+      by distance, wait and sector.
+    </div>
+  </section>
+
+  {# ── Delivery ─────────────────────────────────────────────── #}
+  <section class="lp-section lp-wrap" id="delivery" data-reveal>
+    <div class="lp-eyebrow">Delivery</div>
+    <h2 class="lp-title">14 milestones, 28 weeks</h2>
+    <p class="lp-sub">
+      M6 is the critical path: the dashboard, the board, the PWA, the channels, appointments and
+      reports are all views onto the queue engine. Everything in the plan is arranged around
+      protecting it.
+    </p>
+
+    <div class="lp-callout is-brand">
+      <b>Versioning.</b> One minor version per milestone, <code>v0.1.0</code> through
+      <code>v0.14.0</code>, every one of them a pre-release. <b><code>v1.0.0</code> is cut only
+      when the last issue in the last milestone closes</b> — it means all 109 issues are done, not
+      that the pilot went live.
+    </div>
+
+    <div class="lp-road">
+      <div class="lp-ms"><span class="lp-id">M1</span><div><b>Foundation &amp; local CI</b><small>Repo, FastAPI, PostGIS + Redis, migrations, UI shell, test loop</small></div><span class="lp-sp">S1–2 · #1–8<br>v0.1.0</span></div>
+      <div class="lp-ms"><span class="lp-id">M2</span><div><b>CI/CD &amp; team workflow</b><small>Actions CI, GHCR, deploy on tag, CODEOWNERS, labels</small></div><span class="lp-sp">S2 · #9–14<br>v0.2.0</span></div>
+      <div class="lp-ms is-critical"><span class="lp-id">M3</span><div><b>Identity, auth, RBAC &amp; consent</b><small>Staff auth, patient OTP, RBAC, site scoping, audit, consent</small></div><span class="lp-sp">S3–4 · #15–22<br>v0.3.0</span></div>
+      <div class="lp-ms is-critical"><span class="lp-id">M4</span><div><b>Clinics, queues &amp; configuration</b><small>Sites with PostGIS, hours, multi-room queues, onboarding</small></div><span class="lp-sp">S4–5 · #23–30<br>v0.4.0</span></div>
+      <div class="lp-ms"><span class="lp-id">M5</span><div><b>Discovery &amp; geolocation</b><small>Nearby search, map, sector toggle, area fallback, payment filter</small></div><span class="lp-sp">S5–6 · #31–38<br>v0.5.0</span></div>
+      <div class="lp-ms is-critical"><span class="lp-id">M6</span><div><b>Queue engine core ⚠️ critical path</b><small>Tickets, join, lifecycle, estimates, recall, transfer, priority</small></div><span class="lp-sp">S6–7 · #39–47<br>v0.6.0</span></div>
+      <div class="lp-ms is-critical"><span class="lp-id">M7</span><div><b>Clinic dashboard</b><small>Front-desk board, call next, walk-in, reorder, room view, settings</small></div><span class="lp-sp">S8–9 · #48–55<br>v0.7.0</span></div>
+      <div class="lp-ms is-critical"><span class="lp-id">M8</span><div><b>Waiting-room display monitor</b><small>Kiosk board, SSE, privacy modes, accessibility, audio, devices</small></div><span class="lp-sp">S9 · #56–62<br>v0.8.0</span></div>
+      <div class="lp-ms"><span class="lp-id">M9</span><div><b>Notifications &amp; patient PWA</b><small>Push, SMS, templates, preferences, ticket page, PWA, QR</small></div><span class="lp-sp">S9–10 · #63–71<br>v0.9.0</span></div>
+      <div class="lp-ms"><span class="lp-id">M10</span><div><b>USSD &amp; WhatsApp channels</b><small>Adapters, USSD menu, WhatsApp bot, 5 languages, parity tests</small></div><span class="lp-sp">S10–11 · #72–79<br>v0.10.0</span></div>
+      <div class="lp-ms"><span class="lp-id">M11</span><div><b>Appointments &amp; check-in</b><small>Slots, booking, reminders, kiosk, proxy booking, chronic, feedback</small></div><span class="lp-sp">S11–12 · #80–87<br>v0.11.0</span></div>
+      <div class="lp-ms"><span class="lp-id">M12</span><div><b>Reporting &amp; analytics</b><small>Stats worker, reports UI, KPIs, exports, district dashboard</small></div><span class="lp-sp">S12 · #88–94<br>v0.12.0</span></div>
+      <div class="lp-ms"><span class="lp-id">M13</span><div><b>Security, privacy &amp; POPIA</b><small>Retention, DSAR, hardening, encryption, pen test, accessibility</small></div><span class="lp-sp">S12–13 · #95–101<br>v0.13.0</span></div>
+      <div class="lp-ms is-critical"><span class="lp-id">M14</span><div><b>Production, pilot &amp; go-live</b><small>Prod infra, backups, load test, pilot kit, UAT, capstone deliverables</small></div><span class="lp-sp">S13–14 · #102–109<br>v0.14.0</span></div>
+      <div class="lp-ms is-release"><span class="lp-id">1.0</span><div><b>First official release</b><small>Every issue from 1 to 109 closed: the product is finished</small></div><span class="lp-sp">v1.0.0</span></div>
+    </div>
+  </section>
+
+  {# ── Team ─────────────────────────────────────────────────── #}
+  <section class="lp-section lp-wrap" id="team" data-reveal>
+    <div class="lp-eyebrow">Working together</div>
+    <h2 class="lp-title">Six lanes that don't block each other</h2>
+    <p class="lp-sub">
+      Everyone owns a surface end to end. The seams between them are contracts and events, so
+      people build in parallel instead of queueing behind each other.
+    </p>
+
+    <div class="lp-lanes">
+      <div class="lp-lane"><div class="lp-who">A</div><b>Backend lead</b><ul><li>Identity &amp; RBAC</li><li>Clinics &amp; queues</li><li>Queue engine</li><li>Appointments</li></ul></div>
+      <div class="lp-lane"><div class="lp-who">B</div><b>Integrations</b><ul><li>Notification service</li><li>SMS &amp; push</li><li>USSD adapter</li><li>WhatsApp bot</li></ul></div>
+      <div class="lp-lane"><div class="lp-who">C</div><b>Frontend · patient</b><ul><li>Discovery &amp; map</li><li>Ticket page</li><li>PWA &amp; kiosk</li><li>Accessibility</li></ul></div>
+      <div class="lp-lane"><div class="lp-who">D</div><b>Frontend · clinic</b><ul><li>Dashboard shell</li><li>Call next &amp; walk-ins</li><li>Display board</li><li>Offline states</li></ul></div>
+      <div class="lp-lane"><div class="lp-who">E</div><b>DevOps &amp; QA</b><ul><li>Repo &amp; CI/CD</li><li>Environments</li><li>Security &amp; pen test</li><li>Production &amp; pilot</li></ul></div>
+      <div class="lp-lane"><div class="lp-who">F</div><b>Data &amp; research</b><ul><li>Reporting &amp; analytics</li><li>POPIA compliance</li><li>Translations &amp; UAT</li><li>Capstone deliverables</li></ul></div>
+    </div>
+
+    <div class="lp-callout">
+      <b>The anti-blocking rule.</b> Whenever one person's work will be consumed by another's, the
+      <b>contract ships first</b> — the OpenAPI file, the schemas and a fixture — as its own small
+      pull request, days before the implementation. The consumer builds against the fixture
+      immediately and swaps to the real service in one line. Nobody ever says “I'm waiting for the
+      API”.
+    </div>
+  </section>
+
+  {# ── Closing call to action ───────────────────────────────── #}
+  <div class="lp-wrap">
+    <div class="lp-final" data-reveal>
+      <h2>One queue, whichever door you came in</h2>
+      <p>
+        A morning off work should not be the price of a twenty-minute consultation. Take a look at
+        what {{ app_name }} does, or sign in to the console.
+      </p>
+      <div class="lp-final-cta">
+        <a class="lp-btn" href="/features">What {{ app_name }} does</a>
+        {% if is_authenticated %}
+        <a class="lp-btn lp-btn-ghost" href="/dashboard">Go to the dashboard</a>
+        {% else %}
+        <button type="button" class="lp-btn lp-btn-ghost" data-open-signin>Sign in</button>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
 </main>
 
-{% include "web/partials/footer.html" %}
+<footer class="lp-footer">
+  <div class="lp-wrap">
+    <div class="lp-footer-grid">
+      <div class="lp-footer-about">
+        <div class="lp-logo">
+          <span class="lp-logo-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
+          </span>
+          <span>{{ app_name }}</span>
+        </div>
+        <p>
+          Clinic discovery and digital queue management for South African public and private
+          clinics — from a phone, a USSD menu, WhatsApp or the web.
+        </p>
+      </div>
+
+      <div>
+        <h3>Product</h3>
+        <nav aria-label="Product">
+          <a href="#product">How it works</a>
+          <a href="#screens">Screens</a>
+          <a href="/features">Features</a>
+          <a href="#different">Why it's different</a>
+        </nav>
+      </div>
+
+      <div>
+        <h3>Project</h3>
+        <nav aria-label="Project">
+          <a href="#delivery">Delivery plan</a>
+          <a href="#team">The team</a>
+          {% if is_authenticated %}<a href="/dashboard">Dashboard</a>{% endif %}
+        </nav>
+      </div>
+
+      <div>
+        <h3>Legal</h3>
+        <nav aria-label="Legal">
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+          {% if can_view_status %}<a href="/health">Status</a>{% endif %}
+        </nav>
+      </div>
+    </div>
+
+    <div class="lp-footer-legal">
+      <span>&copy; <span id="year">2026</span> {{ app_name }} · Richfield Graduate Institute of Technology · BSc IT (Distance Learning)</span>
+      <span>Mock-ups only: illustrative data, no real patient information.</span>
+    </div>
+  </div>
+</footer>
 
 {% include "partials/login_modal.html" %}
 

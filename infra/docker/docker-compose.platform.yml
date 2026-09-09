@@ -1,7 +1,7 @@
 # Local platform compose: product nginx + app (joins gateway edge nginx).
 #
 # Traffic path:
-#   browser → infra edge :80 (properties.btk.localhost)
+#   browser → infra edge :80 (clinicq.btk.localhost)
 #          → this nginx on 127.0.0.1:APP_PORT
 #          → app:8000 (compose DNS)
 #
@@ -22,7 +22,7 @@ services:
       target: runtime
       args:
         BUILDKIT_INLINE_CACHE: "1"
-    image: ${IMAGE:-properties:local-platform}
+    image: ${IMAGE:-clinicq:local-platform}
     restart: unless-stopped
     env_file:
       - ../../.env
@@ -32,10 +32,10 @@ services:
       # Host Postgres is published on the Mac/Linux host — not container localhost.
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
       TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-true}
-      DOMAIN: ${DOMAIN:-properties.btk.localhost}
-      PROJECT_SLUG: ${PROJECT_SLUG:-properties}
+      DOMAIN: ${DOMAIN:-clinicq.btk.localhost}
+      PROJECT_SLUG: ${PROJECT_SLUG:-clinicq}
       APP_PORT: ${APP_PORT:-8011}
-      DB_SCHEMA: ${DB_SCHEMA:-properties}
+      DB_SCHEMA: ${DB_SCHEMA:-clinicq}
     healthcheck:
       # Liveness probe: /health/live is dependency-free, so a DB/S3 outage never
       # restart-loops the container (readiness is polled externally against /health/ready).

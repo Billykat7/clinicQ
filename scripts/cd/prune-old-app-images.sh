@@ -8,8 +8,8 @@
 #
 # Usage:
 #   prune-old-app-images.sh <image_ref>
-#   prune-old-app-images.sh ghcr.io/btktechnologies/properties:v3.0.0
-#   prune-old-app-images.sh --dry-run ghcr.io/btktechnologies/properties:v3.0.0
+#   prune-old-app-images.sh ghcr.io/btktechnologies/clinicq:v3.0.0
+#   prune-old-app-images.sh --dry-run ghcr.io/btktechnologies/clinicq:v3.0.0
 #
 # Only tags matching vMAJOR.MINOR.PATCH (optional leading v) on the same repository
 # are considered. Non-semver tags (latest, sha-*, <none>) are left alone.

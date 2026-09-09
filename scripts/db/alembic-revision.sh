@@ -14,7 +14,7 @@ Usage:
 
 Development only — creating a revision is not part of a deploy. Write the
 upgrade() AND a correct downgrade(), keep every statement schema-qualified to
-`properties`, and split incompatible column changes into expand/contract steps.
+`clinicq`, and split incompatible column changes into expand/contract steps.
 See docs/CICD/MIGRATION-RUNBOOK.md before applying it.
 EOF
 }

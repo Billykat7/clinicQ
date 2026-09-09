@@ -13,22 +13,22 @@
 # running so docker-compose.prod.yml can interpolate ${IMAGE}.
 #
 # Platform identity defaults: PROJECT_SLUG=clinicq, APP_PORT=8011,
-# DB_SCHEMA=clinicq, DOMAIN=properties.bkatalayi.com, TRUST_PROXY_HEADERS=true.
+# DB_SCHEMA=clinicq, DOMAIN=clinicq.bkatalayi.com, TRUST_PROXY_HEADERS=true.
 set -e
 
 if [[ "${BTK_ALLOW_LEGACY_WRITE_PROD_ENV:-}" != "1" ]]; then
-  echo "error: properties scripts/cd/write-prod-env.sh is legacy." >&2
+  echo "error: clinicq scripts/cd/write-prod-env.sh is legacy." >&2
   echo "  Production CD uses: /opt/btk/gateway/scripts/cd/write-prod-env.sh" >&2
   echo "  Override for emergency use: BTK_ALLOW_LEGACY_WRITE_PROD_ENV=1 $0 $*" >&2
   exit 1
 fi
 
 OUT="${1:-.env}"
-_DEFAULT_DOMAIN="properties.bkatalayi.com"
+_DEFAULT_DOMAIN="clinicq.bkatalayi.com"
 _DEFAULT_ACME_EMAIL="deployer@bkatalayi.com"
 _DEFAULT_APP_PORT="8011"
-_DEFAULT_PROJECT_SLUG="properties"
-_DEFAULT_DB_SCHEMA="properties"
+_DEFAULT_PROJECT_SLUG="clinicq"
+_DEFAULT_DB_SCHEMA="clinicq"
 
 _normalize_domain() {
   local d="${1:-}"

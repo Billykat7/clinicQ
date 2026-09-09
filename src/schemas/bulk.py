@@ -5,7 +5,7 @@ The list/detail UX framework's single **Delete** button POSTs the selected row i
 **per-id result** so the UI can report partial success rather than silently dropping failures.
 
 These models are resource-agnostic — every console from the RBAC consoles through the M21 rollout
-(properties, vendors, tenants, inspections, maintenance, lease templates) reuses them, so the
+(clinicq, vendors, tenants, inspections, maintenance, lease templates) reuses them, so the
 request/response contract stays identical across the whole admin surface.
 """
 

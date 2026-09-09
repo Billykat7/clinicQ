@@ -18,7 +18,7 @@
 #   GATEWAY_COMPOSE_DIR=/opt/btk/gateway   # gateway deploy root; source of the edge cert
 #                                          # mount below (the canonical env writer sets it).
 #
-# Deploy (on server, /opt/btk/properties):
+# Deploy (on server, /opt/btk/clinicq):
 #   docker compose -f infra/docker/docker-compose.prod.yml --project-directory . up -d
 #
 # Lint before deploy:

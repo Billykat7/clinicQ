@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Scheduled, encrypted logical backup of this product's PostgreSQL schema.
 #
-# BK ClinicQ keeps its tables in the `properties` schema of the shared platform
+# BK ClinicQ keeps its tables in the `clinicq` schema of the shared platform
 # database (see DbSchema / DB_SCHEMA). This dumps ONLY that schema — never the whole
 # cluster, never a sibling product's schema — encrypts the dump off-host with age,
 # optionally ships it to object storage, prunes what has aged out, and pings a
@@ -14,12 +14,12 @@ set -euo pipefail
 #
 # Configuration (env, or `.env` at the repo root):
 #   DATABASE_URL            (required) libpq URL of the platform database.
-#   DB_SCHEMA               Schema to dump. Default: properties.
+#   DB_SCHEMA               Schema to dump. Default: clinicq.
 #   BACKUP_AGE_RECIPIENT    (required) age recipient public key (age1...) the dump is
 #                           encrypted to. Use BACKUP_AGE_RECIPIENTS_FILE for several.
 #   BACKUP_AGE_RECIPIENTS_FILE  File of age recipients, one per line (alt to above).
 #   BACKUP_DIR              Local staging dir. Default: <repo>/var/backups.
-#   BACKUP_S3_URI           Off-host destination, e.g. s3://btk-backups/properties/.
+#   BACKUP_S3_URI           Off-host destination, e.g. s3://btk-backups/clinicq/.
 #                           When set, the encrypted dump is copied there with `aws s3 cp`.
 #   BACKUP_RETENTION_DAYS   Prune local dumps older than this. Default: 14.
 #                           (Off-host retention is enforced by the bucket lifecycle policy.)
@@ -51,7 +51,7 @@ if [ -f ".env" ]; then
   . "${_pre_env}"; rm -f "${_pre_env}"
 fi
 
-DB_SCHEMA="${DB_SCHEMA:-properties}"
+DB_SCHEMA="${DB_SCHEMA:-clinicq}"
 BACKUP_DIR="${BACKUP_DIR:-${PROJECT_ROOT}/var/backups}"
 BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-14}"
 HEARTBEAT_URL="${BACKUP_HEARTBEAT_URL:-}"
@@ -111,7 +111,7 @@ ping_heartbeat "/start"
 mkdir -p "${BACKUP_DIR}"
 # SAST (Africa/Johannesburg) timestamp with offset — business "when", still sortable.
 STAMP="$(TZ=Africa/Johannesburg date +%Y%m%dT%H%M%S%z)"
-OUT="${BACKUP_DIR}/properties-${DB_SCHEMA}-${STAMP}.dump.age"
+OUT="${BACKUP_DIR}/clinicq-${DB_SCHEMA}-${STAMP}.dump.age"
 TMP="${OUT}.partial"
 
 # Redact any password when echoing the target.
@@ -154,7 +154,7 @@ fi
 # enforcer (documented in docs/CICD/BACKUP-RESTORE.md).
 echo ""
 echo -e "${BLUE}🧹 Pruning local dumps older than ${BACKUP_RETENTION_DAYS} day(s)…${NC}"
-PRUNED="$(find "${BACKUP_DIR}" -type f -name 'properties-*.dump.age' \
+PRUNED="$(find "${BACKUP_DIR}" -type f -name 'clinicq-*.dump.age' \
   -mtime "+${BACKUP_RETENTION_DAYS}" -print -delete | wc -l | tr -d ' ')"
 echo -e "${GREEN}✓ Pruned ${PRUNED} old dump(s).${NC}"
 

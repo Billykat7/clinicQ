@@ -10,7 +10,7 @@ ships the seam and the safe default: **nobody is reachable**. Fill in
 they belong to the same organisation, work the same case, occupy the same building — and the rest
 of messaging follows without further edits.
 
-Two properties the implementation must keep, both of which the empty default trivially satisfies
+Two clinicq the implementation must keep, both of which the empty default trivially satisfies
 and a careless one loses:
 
 * **The list and the gate agree.** :func:`can_reach` is derived from
