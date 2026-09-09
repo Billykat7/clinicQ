@@ -1,19 +1,41 @@
+{#
+  Public privacy notice (`/privacy`), rendered by :func:`src.web.routes.privacy_page`.
+
+  POPIA — the Protection of Personal Information Act 4 of 2013 — is the law this page is written
+  against, because a queue in a clinic becomes health information (POPIA's *special personal
+  information*, s26) the moment it carries a name. The notice is structured as s18 asks: who is
+  processing, what, why, on what justification, who else sees it, for how long, and how a data
+  subject exercises the rights in Chapter 3.
+
+  Same design system and same constraints as the rest of the front door: `landing.css` and the
+  shared `lp_header` / `lp_footer` partials, no inline styles or handlers (CSP), and no DB session
+  — `public_page_context` gives config-only context, so the notice stays reachable during an
+  outage. `last_updated` comes from `LEGAL_PAGES_LAST_UPDATED` in `src/web/routes.py`, a single
+  source shared with `/terms`, and is rendered visibly so a stale notice is obvious.
+
+  Keep the retention table honest: whenever a model that stores personal information is added,
+  it gets a row here.
+#}
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Privacy notice · {{ app_name }}</title>
-<meta name="description" content="How ClinicQ collects, uses, protects and retains personal information, and how to request access or deletion.">
-<meta name="theme-color" content="#ffffff">
+<meta name="description" content="How ClinicQ collects, uses, shares, protects and deletes personal information under the Protection of Personal Information Act 4 of 2013 (POPIA), and how to exercise your rights.">
+<meta name="theme-color" content="#0f6e56">
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/css/site.css">
+<link rel="stylesheet" href="/static/css/landing.css">
 {# Read by csrf-htmx.js to mirror the CSRF cookie into X-CSRF-Token. #}
 <meta name="bkp-csrf-cookie" content="{{ settings.csrf_cookie_name }}">
+{# Applies the saved light/dark choice before first paint (no flash); render-blocking, not deferred. #}
+<script src="/static/js/theme.js"></script>
 <script src="/static/js/site.js" defer></script>
+<script src="/static/js/landing.js" defer></script>
 <script src="/static/js/csrf-htmx.js" defer></script>
 <script src="/static/js/login-modal.js" defer></script>
 </head>
@@ -21,53 +43,354 @@
 
 <a class="skip-link" href="#main">Skip to content</a>
 
-{% include "web/partials/topbar.html" %}
+{% include "web/partials/lp_header.html" %}
 
-<main id="main" class="page legal">
-  <h1>Privacy notice</h1>
-  <p class="lead">How {{ app_name }} handles personal information.</p>
-  <p class="legal-updated">Last updated: {{ last_updated }}</p>
+<main id="main" class="lp-main">
 
-  <p class="legal-note">
-    <strong>This is a starting point, not legal advice.</strong> It states what the application
-    actually does — the accounts it stores, the records it keeps, how long it keeps them — so the
-    page is true on day one. Have it reviewed against the law that applies to you before you launch,
-    and update the retention table whenever you add a model that stores personal information.
-  </p>
+  <div class="lp-wrap lp-page-head">
+    <div class="lp-eyebrow">Legal · POPIA</div>
+    <h1>Privacy notice</h1>
+    <p class="lp-lede">
+      How {{ app_name }} collects, uses, shares, protects and deletes personal information under
+      the <strong>Protection of Personal Information Act 4 of 2013</strong>, and what you can ask
+      us to do about it.
+    </p>
+    <p class="lp-updated">Last updated: {{ last_updated }}</p>
+  </div>
 
-  <h2>What we collect</h2>
-  <p>
-    An account holds the name, email address and password hash you provide when you register, plus
-    the two-factor secret if you enable it. Signing in records the time and the IP address the
-    request came from.
-  </p>
+  <div class="lp-wrap lp-doc-grid">
 
-  <h2>Why we hold it</h2>
-  <p>
-    To identify you, to decide what you are allowed to do, and to keep an auditable record of
-    changes made through the application. Access decisions and administrative changes are recorded
-    in an append-only audit trail.
-  </p>
+    <aside class="lp-toc" aria-label="On this page">
+      <h2>On this page</h2>
+      <nav>
+        <a href="#status">Project status</a>
+        <a href="#who">Who processes your information</a>
+        <a href="#what">What we process</a>
+        <a href="#health">Health information</a>
+        <a href="#children">Children and dependants</a>
+        <a href="#why">Why, and on what justification</a>
+        <a href="#sharing">Who else sees it</a>
+        <a href="#transfers">Sending it outside South Africa</a>
+        <a href="#security">How we protect it</a>
+        <a href="#retention">How long we keep it</a>
+        <a href="#rights">Your rights</a>
+        <a href="#marketing">Direct marketing</a>
+        <a href="#automated">Automated decisions</a>
+        <a href="#cookies">Cookies and local storage</a>
+        <a href="#complaints">Complaints</a>
+        <a href="#changes">Changes to this notice</a>
+      </nav>
+    </aside>
 
-  <h2>How long we keep it</h2>
-  <table class="legal-table">
-    <thead><tr><th>Record</th><th>Retained</th></tr></thead>
-    <tbody>
-      <tr><td>Account profile</td><td>While the account exists</td></tr>
-      <tr><td>Sign-in sessions (refresh tokens)</td><td>Until they expire or are revoked</td></tr>
-      <tr><td>Audit events</td><td>Append-only; not deleted by ordinary use</td></tr>
-      <tr><td>Application logs</td><td>Per the retention set on the log store</td></tr>
-    </tbody>
-  </table>
+    <article class="lp-doc">
 
-  <h2>Your rights</h2>
-  <p>
-    You may ask what is held about you, ask for it to be corrected, and ask for it to be deleted
-    where no legal obligation requires it to be kept. Contact the operator of this deployment.
-  </p>
+      <section id="status">
+        <h2>Project status</h2>
+        <div class="lp-callout">
+          <b>Read this first.</b> {{ app_name }} is a final-year BSc IT capstone project at
+          Richfield Graduate Institute of Technology. It is not yet operating in a live clinic, and
+          the screens on this site carry generated, illustrative data — no real patient
+          information. This notice describes how the system is designed to handle personal
+          information, so that it is accurate on the day the first clinic goes live. It is
+          <strong>not legal advice</strong>: it must be reviewed by a suitably qualified person,
+          and completed with the deployment's own responsible-party and Information Officer
+          details, before any real patient uses the service.
+        </div>
+      </section>
+
+      <section id="who">
+        <h2>Who processes your information</h2>
+        <p>
+          POPIA distinguishes the <dfn>responsible party</dfn> — who decides why and how personal
+          information is processed — from the <dfn>operator</dfn>, who processes it on the
+          responsible party's behalf. {{ app_name }} is both, in different places:
+        </p>
+        <ul>
+          <li>
+            <strong>The clinic is the responsible party</strong> for everything about your visit:
+            that you joined its queue, the room you were sent to, the ticket you were given, and
+            anything a staff member records about it. {{ app_name }} processes that as the clinic's
+            <strong>operator</strong>, under a written agreement that binds us to the clinic's
+            instructions and to POPIA's security requirements (sections 20 and 21).
+          </li>
+          <li>
+            <strong>{{ app_name }} is the responsible party</strong> for the account itself — the
+            details you give when you register, your channel and notification preferences, your
+            sign-in sessions, and the technical logs that keep the platform secure and available.
+          </li>
+        </ul>
+        <p>
+          If you are not sure which applies to a question you have, ask us and we will route it,
+          or ask the clinic directly.
+        </p>
+        <dl class="lp-defs">
+          <dt>Responsible party (platform)</dt>
+          <dd>{{ app_name }} — Richfield Graduate Institute of Technology, BSc IT capstone project, South Africa</dd>
+          <dt>Information Officer</dt>
+          <dd>To be appointed and registered with the Information Regulator before the first clinic goes live, as sections 55 and 56 require.</dd>
+          <dt>Contact for privacy questions</dt>
+          <dd>The operator of this deployment. Deployment-specific contact details are published here before go-live.</dd>
+        </dl>
+      </section>
+
+      <section id="what">
+        <h2>What we process</h2>
+        <p>
+          Only what a queue actually needs. The design rule throughout is minimisation: if a field
+          is not required to get you seen, it is either optional or absent.
+        </p>
+        <ul>
+          <li><strong>Who you are.</strong> Your name and the mobile number or email address you register with. A date of birth only where a clinic needs it to distinguish two people with the same name.</li>
+          <li><strong>How you reached us.</strong> The channel you used and its identifier — your MSISDN for USSD and SMS, your WhatsApp number, a push token for the app.</li>
+          <li><strong>Your place in the queue.</strong> Your ticket number, the clinic, the room or service, the times you joined, were called and were seen, and the outcome (seen, transferred, no-show).</li>
+          <li><strong>Why you are here, if you choose to say.</strong> A free-text reason or a visit note recorded by staff. This is optional, it is never shown on the waiting-room screen, and it is deleted automatically on a short retention window.</li>
+          <li><strong>Where you are, if you allow it.</strong> Your device's approximate location, used at the moment you search for a nearby clinic. We do not track your location in the background, and we do not keep a location history.</li>
+          <li><strong>Consent records.</strong> What you agreed to, when, through which channel, and when you withdrew it — including consent given by a parent or guardian on a dependant's behalf.</li>
+          <li><strong>Technical records.</strong> Your IP address, device and browser details, sign-in times, and application logs. These keep the service secure and let us investigate faults and abuse.</li>
+          <li><strong>Staff account information.</strong> For clinic staff and administrators: name, work email address, role and permission assignments, and an audit record of the administrative changes they make.</li>
+        </ul>
+        <div class="lp-callout is-brand">
+          <b>Number only, by default.</b> Every new clinic starts with a waiting-room screen that
+          shows ticket numbers and nothing else. Showing a first name and last initial, or a full
+          name, is a deliberate change a clinic must make, and it depends on consent recorded per
+          patient. The reason you are visiting is never displayed, in any mode.
+        </div>
+      </section>
+
+      <section id="health">
+        <h2>Health information</h2>
+        <p>
+          Information about your health is <dfn>special personal information</dfn> under section 26
+          of POPIA, and processing it is prohibited unless one of the grounds in section 27 or
+          section 32 applies. Two things follow from that, and both shape the product:
+        </p>
+        <ul>
+          <li>
+            <strong>We keep as little of it as possible.</strong> A ticket number in a queue is not
+            in itself health information. A reason for the visit, a triage priority or a visit note
+            is — so those fields are optional, restricted to the staff who need them, excluded from
+            the public display, and purged automatically.
+          </li>
+          <li>
+            <strong>Where we do process it,</strong> we rely on your <strong>consent</strong>
+            (section 27(1)(a)) and, for the clinic, on section 32, which permits processing by or
+            on behalf of a healthcare institution where it is necessary for your proper treatment
+            and care. Everyone with access is under a duty of confidentiality.
+          </li>
+        </ul>
+        <p>
+          You can withdraw consent at any time. Withdrawing consent for your name to appear on the
+          waiting-room screen takes effect immediately and does not affect your place in the queue.
+        </p>
+      </section>
+
+      <section id="children">
+        <h2>Children and dependants</h2>
+        <p>
+          Section 34 of POPIA prohibits processing the personal information of a child except on
+          one of the grounds in section 35, including the prior consent of a competent person.
+          {{ app_name }} supports booking on someone else's behalf — a parent for a child, an adult
+          child for an elderly parent — and treats that as a consent event in its own right: who
+          gave it, for whom, when, and through which channel. A proxy booking can be revoked, and
+          the dependant's information is visible only to the person who holds that consent and to
+          the treating clinic.
+        </p>
+      </section>
+
+      <section id="why">
+        <h2>Why, and on what justification</h2>
+        <p>
+          Section 11 of POPIA requires a justification for each purpose. Ours are:
+        </p>
+        <div class="lp-table-scroll">
+          <table class="lp-table">
+            <thead>
+              <tr><th scope="col">Purpose</th><th scope="col">Justification under POPIA</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Placing you in a queue and telling you when it is your turn</td><td>Performance of the service you asked for — s11(1)(b)</td></tr>
+              <tr><td>Showing a ticket number, or a consented name, on the waiting-room screen</td><td>Consent — s11(1)(a), and s27(1)(a) where it is health information</td></tr>
+              <tr><td>Finding clinics near you</td><td>Consent to use your device location — s11(1)(a)</td></tr>
+              <tr><td>Sending you queue notifications and appointment reminders</td><td>Performance of the service — s11(1)(b)</td></tr>
+              <tr><td>Recording who changed what, in an audit trail</td><td>Legal obligation and our legitimate interest in an accountable system — s11(1)(c) and s11(1)(f)</td></tr>
+              <tr><td>Keeping the service secure, available and free of abuse</td><td>Legitimate interests — s11(1)(f)</td></tr>
+              <tr><td>Anonymised wait-time statistics for clinic and district planning</td><td>Once aggregated and de-identified, it is no longer personal information — s6(1)(b)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          We do not use your information for a new, incompatible purpose without telling you first
+          (section 15), and we do not sell it.
+        </p>
+      </section>
+
+      <section id="sharing">
+        <h2>Who else sees it</h2>
+        <ul>
+          <li><strong>The clinic you joined.</strong> Its staff see what they need to run the queue and treat you, limited by role.</li>
+          <li><strong>Communication providers.</strong> An SMS aggregator, a WhatsApp business provider, a push-notification service and an email provider deliver the messages you have asked for. They receive your number or address and the message, and nothing more.</li>
+          <li><strong>Hosting and infrastructure providers.</strong> Who store and run the service on our behalf.</li>
+          <li><strong>Health departments and district managers.</strong> Only <strong>anonymised, aggregated</strong> statistics, with small counts suppressed so an individual cannot be identified from them.</li>
+          <li><strong>Where the law requires it.</strong> In response to a lawful demand, or to establish, exercise or defend a legal claim.</li>
+        </ul>
+        <p>
+          Every provider above is an operator under POPIA, engaged under a written contract that
+          requires them to process the information only on our instructions and to maintain the
+          security measures section 21 requires.
+        </p>
+      </section>
+
+      <section id="transfers">
+        <h2>Sending it outside South Africa</h2>
+        <p>
+          Section 72 restricts transferring personal information out of the Republic. Our
+          preference is to host and process in South Africa. Where a provider — a messaging or
+          cloud service — necessarily processes information abroad, we rely on one of the section
+          72 grounds: a law or binding agreement in the destination country that provides an
+          adequate, comparable level of protection, or your consent, or that the transfer is
+          necessary to perform the service you asked for. We will tell you which, on request.
+        </p>
+      </section>
+
+      <section id="security">
+        <h2>How we protect it</h2>
+        <p>
+          Section 19 requires appropriate, reasonable technical and organisational measures. Ours
+          are built into the platform rather than bolted on:
+        </p>
+        <ul>
+          <li>Encryption in transit, and encryption at rest for the fields that identify you.</li>
+          <li>Role-based access control with scope tiers: staff see their own clinic's records and no other clinic's. A request for another clinic's data is answered as if the record does not exist.</li>
+          <li>A hash-chained, append-only audit log, so a retrospective edit is detectable rather than merely discouraged.</li>
+          <li>Two-factor authentication for staff accounts, rate limiting on sign-in and on the messaging channels, and regular dependency and vulnerability scanning.</li>
+          <li>Independent penetration testing before go-live, with the findings remediated and re-tested.</li>
+        </ul>
+        <p>
+          If a security compromise affects your personal information, section 22 requires us to
+          notify the Information Regulator and you, as soon as reasonably possible after
+          discovering it. We will tell you what happened, what it means for you and what to do.
+        </p>
+      </section>
+
+      <section id="retention">
+        <h2>How long we keep it</h2>
+        <p>
+          Section 14 says records must not be kept longer than necessary. A clinic can shorten
+          these periods for its own site; it cannot extend them beyond the ceiling below.
+        </p>
+        <div class="lp-table-scroll">
+          <table class="lp-table">
+            <thead>
+              <tr><th scope="col">Record</th><th scope="col">Retained</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Account profile and contact details</td><td>While the account exists, then deleted on request</td></tr>
+              <tr><td>Sign-in sessions and refresh tokens</td><td>Until they expire or are revoked</td></tr>
+              <tr><td>Queue tickets and visit timestamps</td><td>For the period the clinic's own records policy requires, then de-identified into statistics</td></tr>
+              <tr><td>Reason for visit and visit notes</td><td>A short window after the visit is closed, then irreversibly deleted</td></tr>
+              <tr><td>Consent records</td><td>For as long as needed to prove the consent that was relied on</td></tr>
+              <tr><td>Notification delivery records</td><td>Long enough to investigate a failed delivery, then deleted</td></tr>
+              <tr><td>Audit events</td><td>Append-only; retained as the accountability record and not deleted by ordinary use</td></tr>
+              <tr><td>Application and access logs</td><td>Per the retention configured on the log store</td></tr>
+              <tr><td>Anonymised, aggregated statistics</td><td>Indefinitely — they are no longer personal information</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Deletion is automatic and is covered by tests: the purge job is verified to leave the
+          reason text and visit notes unrecoverable, not merely hidden.
+        </p>
+      </section>
+
+      <section id="rights">
+        <h2>Your rights</h2>
+        <p>Chapter 3 of POPIA gives you the right to:</p>
+        <ul>
+          <li><strong>Be told</strong> that we hold information about you, and what it is — sections 23 and 24.</li>
+          <li><strong>Ask for a copy</strong> of it, in a usable form. We export what we hold about you.</li>
+          <li><strong>Have it corrected</strong> if it is inaccurate, irrelevant, excessive, out of date, incomplete, misleading, or obtained unlawfully.</li>
+          <li><strong>Have it deleted or destroyed</strong> where we no longer have a lawful reason to keep it. Some records — the audit trail, and clinical records the clinic must keep by law — cannot be erased on request; we will say so and explain why.</li>
+          <li><strong>Object</strong> to processing we base on legitimate interests, on reasonable grounds — section 11(3).</li>
+          <li><strong>Withdraw consent</strong> at any time, without affecting what was lawfully done before you withdrew it.</li>
+          <li><strong>Not be subject</strong> to a decision with legal consequences based solely on automated processing — section 71.</li>
+          <li><strong>Complain</strong> to the Information Regulator, and to institute civil proceedings — sections 74 and 99.</li>
+        </ul>
+        <p>
+          To exercise any of these, contact the Information Officer. A request for access or
+          correction may be made on the form prescribed under the POPIA regulations. We do not
+          charge for a first access request, we answer within the period the Act allows, and we
+          verify your identity first — so that nobody else can use these rights to reach your
+          records.
+        </p>
+      </section>
+
+      <section id="marketing">
+        <h2>Direct marketing</h2>
+        <p>
+          Section 69 restricts unsolicited electronic direct marketing. We do not send it. The
+          messages you receive from {{ app_name }} are the operational ones you asked for: your
+          place in the queue, your call-forward, your appointment reminder, your chronic-medication
+          collection nudge. Every one of them can be turned off in your notification preferences or
+          by replying with the opt-out keyword, and quiet hours are respected.
+        </p>
+      </section>
+
+      <section id="automated">
+        <h2>Automated decisions</h2>
+        <p>
+          Wait-time estimates and queue order are calculated automatically, and a priority override
+          is always a decision a named staff member makes and records with a reason. No decision
+          with legal consequences for you is made solely by automated processing (section 71), and
+          you can ask a staff member to review any queue decision that affects you.
+        </p>
+      </section>
+
+      <section id="cookies">
+        <h2>Cookies and local storage</h2>
+        <p>
+          We use the minimum a secure application needs: a session cookie and a cross-site request
+          forgery token so that signing in works and cannot be hijacked, and your light/dark theme
+          choice stored in your own browser. There are no advertising cookies and no third-party
+          tracking on this site. Clearing your browser's site data removes all of it.
+        </p>
+      </section>
+
+      <section id="complaints">
+        <h2>Complaints</h2>
+        <p>
+          Please raise a concern with us first — most are a misunderstanding we can fix quickly. If
+          you are not satisfied, you may complain to the Information Regulator:
+        </p>
+        <dl class="lp-defs">
+          <dt>Information Regulator (South Africa)</dt>
+          <dd>JD House, 27 Stiemens Street, Braamfontein, Johannesburg, 2001</dd>
+          <dt>Complaints</dt>
+          <dd>complaints.IR@justice.gov.za</dd>
+          <dt>General enquiries</dt>
+          <dd>inforeg@justice.gov.za</dd>
+        </dl>
+        <p>
+          Please confirm the Regulator's current contact details on
+          <a href="https://inforegulator.org.za" rel="noopener noreferrer">inforegulator.org.za</a>
+          before submitting a complaint.
+        </p>
+      </section>
+
+      <section id="changes">
+        <h2>Changes to this notice</h2>
+        <p>
+          When this notice changes we update the date at the top of the page, and we tell you in
+          the application before a change that materially affects how your information is used
+          takes effect. See also our <a href="/terms">terms of service</a>.
+        </p>
+      </section>
+
+    </article>
+  </div>
+
 </main>
 
-{% include "web/partials/footer.html" %}
+{% include "web/partials/lp_footer.html" %}
 
 {% include "partials/login_modal.html" %}
 

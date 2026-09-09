@@ -66,7 +66,7 @@ APP_TIMEZONE = ZoneInfo("Africa/Johannesburg")
 # The date the public legal pages (`/privacy`, `/terms`) were last reviewed. A single source so
 # both pages show the same visible "last updated" line. Update it whenever the wording changes;
 # it is editorial metadata, not a magic string.
-LEGAL_PAGES_LAST_UPDATED = "1 January 2026"
+LEGAL_PAGES_LAST_UPDATED = "9 September 2026"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
@@ -152,6 +152,13 @@ async def home_page(request: Request) -> HTMLResponse:
     the apps-menu "Sign out" instead of "Sign in". ``settings``/``app_name`` still come from
     config so the shared sign-in modal can render and honour ``?openSignin=1`` after a
     redirect from a protected page.
+
+    The page has **two audiences**. The product half is public; the delivery plan, the team lanes
+    and the tracked-issue count are internal and render only for a caller holding the operator
+    grant behind :func:`~src.web.context.can_view_internals`. That gate lives in the context, not
+    here, because the same flag also gates the nav and footer links into those sections and the
+    kernel section of ``/features``. A DB outage degrades to the signed-out shell, so the internals
+    fail closed rather than open.
     """
     return templates.TemplateResponse(
         request,
@@ -162,7 +169,12 @@ async def home_page(request: Request) -> HTMLResponse:
 
 @router.get("/features", response_class=HTMLResponse)
 async def features_page(request: Request) -> HTMLResponse:
-    """What the platform does, one line per module."""
+    """The long form of the landing page's scope section: what the product does, by audience.
+
+    DB-independent like the rest of the front door. The product scope is public; the list of what
+    the platform kernel ships *today* is internal build state and carries the same
+    :func:`~src.web.context.can_view_internals` gate the landing page's delivery plan does.
+    """
     return templates.TemplateResponse(
         request, "web/features.html", public_page_context(request)
     )
@@ -176,6 +188,12 @@ async def privacy_page(request: Request) -> HTMLResponse:
     still renders when the database is unavailable — exactly like ``/`` and ``/features``. The
     data-retention table it carries mirrors what the models actually store, and the page shows
     a visible last-reviewed date so a stale notice is obvious.
+
+    Written against the Protection of Personal Information Act 4 of 2013 and structured the way
+    section 18 asks — who processes, what, why, on which section 11 justification, who else sees
+    it, for how long, and how a data subject exercises the Chapter 3 rights. The responsible
+    party / operator split matters and is stated on the page: the **clinic** is the responsible
+    party for a patient's visit, and this platform is its operator.
     """
     return templates.TemplateResponse(
         request,
@@ -186,10 +204,15 @@ async def privacy_page(request: Request) -> HTMLResponse:
 
 @router.get("/terms", response_class=HTMLResponse)
 async def terms_page(request: Request) -> HTMLResponse:
-    """Public service terms for managers, owners and tenants (Issue #64).
+    """Public service terms for patients and clinics (Issue #64).
 
     DB-independent like the privacy notice: static config-only context so it survives a
     database outage, with the same visible last-reviewed date.
+
+    South African law throughout — the ECT Act's section 43 supplier disclosure, the Consumer
+    Protection Act's limits on excluding liability, POPIA by reference to ``/privacy``. The first
+    clause on the page is the one that matters most: this is **not** an emergency service, and a
+    queue product must never be mistaken for a way to get urgent help.
     """
     return templates.TemplateResponse(
         request,

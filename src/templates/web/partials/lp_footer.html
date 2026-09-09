@@ -1,0 +1,69 @@
+{# Landing-style footer, shared by every page on the public front door.
+
+   Three gates, all resolved server-side by `public_page_context`:
+
+   * `is_authenticated` — the Dashboard link;
+   * `can_view_status` — the Status link, on the same `logs` grant the log console is;
+   * `can_view_internals` — the Project column's Delivery-plan and Team links, which point at
+     sections only an operator is served (see `web/index.html`). The whole column is dropped when
+     a visitor would be left with an empty heading.
+
+   `landing_page` (set by the including page) switches the in-page anchors to `/#anchor` off the
+   landing page, exactly as in `lp_header.html`.
+#}
+{% set anchor_root = '' if landing_page|default(false) else '/' %}
+<footer class="lp-footer">
+  <div class="lp-wrap">
+    <div class="lp-footer-grid">
+      <div class="lp-footer-about">
+        <div class="lp-logo">
+          <span class="lp-logo-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
+          </span>
+          <span>{{ app_name }}</span>
+        </div>
+        <p>
+          Clinic discovery and digital queue management for South African public and private
+          clinics, from a phone, a USSD menu, WhatsApp or the web.
+        </p>
+      </div>
+
+      <div>
+        <h3>Product</h3>
+        <nav aria-label="Product">
+          <a href="{{ anchor_root }}#product">How it works</a>
+          <a href="{{ anchor_root }}#screens">Screens</a>
+          <a href="/features">Features</a>
+          <a href="{{ anchor_root }}#different">Why it's different</a>
+        </nav>
+      </div>
+
+      {% if can_view_internals or is_authenticated %}
+      <div>
+        <h3>Project</h3>
+        <nav aria-label="Project">
+          {% if can_view_internals %}
+          <a href="{{ anchor_root }}#delivery">Delivery plan</a>
+          <a href="{{ anchor_root }}#team">The team</a>
+          {% endif %}
+          {% if is_authenticated %}<a href="/dashboard">Dashboard</a>{% endif %}
+        </nav>
+      </div>
+      {% endif %}
+
+      <div>
+        <h3>Legal</h3>
+        <nav aria-label="Legal">
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+          {% if can_view_status %}<a href="/health">Status</a>{% endif %}
+        </nav>
+      </div>
+    </div>
+
+    <div class="lp-footer-legal">
+      <span>&copy; <span id="year">2026</span> {{ app_name }} · Richfield Graduate Institute of Technology · BSc IT (Distance Learning)</span>
+      <span>Mock-ups only: illustrative data, no real patient information.</span>
+    </div>
+  </div>
+</footer>

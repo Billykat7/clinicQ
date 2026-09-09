@@ -14,8 +14,20 @@
     handlers and no `style="..."` attributes: presentation lives in `/static/css/landing.css`
     and behaviour in `/static/js/landing.js`.
   * **It must render without a database.** The context comes from `public_page_context`,
-    which degrades to the signed-out shell on any DB error, so the only auth-dependent
-    thing on the page is the sign-in / dashboard affordance.
+    which degrades to the signed-out shell on any DB error. That degradation is also the
+    fail-closed guarantee for everything gated below: an outage yields the public page, never
+    the internal one.
+
+  Two audiences, one page. Everything above `#delivery` is the *product*, and is public.
+  The tracked-issue count, the milestone roadmap, the six delivery lanes and the anti-blocking
+  rule are the *project* — unshipped work, internal sequencing and who owns which surface — and
+  render only for a caller holding the operator grant `can_view_internals` resolves
+  (`logs:READ` at `business`; see `src/web/context.py`). The nav and footer links into those
+  sections carry the same gate, so a visitor is never offered an anchor that is not on their page.
+
+  The header and footer are shared with `/features`, `/privacy` and `/terms` through
+  `web/partials/lp_header.html` and `web/partials/lp_footer.html`; `landing_page` is set here and
+  nowhere else, and switches those partials' in-page anchors on.
 #}
 <!DOCTYPE html>
 <html lang="en">
@@ -44,36 +56,8 @@
 
 <a class="skip-link" href="#main">Skip to content</a>
 
-<header class="lp-header">
-  <div class="lp-wrap lp-nav">
-    <a class="lp-logo" href="/">
-      <span class="lp-logo-mark" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
-      </span>
-      <span>{{ app_name }}</span>
-    </a>
-
-    <nav class="lp-nav-links" aria-label="Primary">
-      <a href="#product">How it works</a>
-      <a href="#screens">Screens</a>
-      <a href="#features">Features</a>
-      <a href="#different">Why it's different</a>
-      <a href="#delivery">Delivery</a>
-    </nav>
-
-    <div class="lp-nav-actions">
-      <button type="button" class="lp-theme-toggle" id="theme-toggle" aria-label="Switch to dark theme" aria-pressed="false">
-        <svg class="lp-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
-        <svg class="lp-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
-      </button>
-      {% if is_authenticated %}
-      <a class="lp-btn lp-btn-sm" href="/dashboard">Dashboard</a>
-      {% else %}
-      <button type="button" class="lp-btn lp-btn-sm" data-open-signin>Sign in</button>
-      {% endif %}
-    </div>
-  </div>
-</header>
+{% set landing_page = true %}
+{% include "web/partials/lp_header.html" %}
 
 <main id="main" class="lp-main">
 
@@ -81,7 +65,7 @@
   <div class="lp-wrap lp-hero">
     <div class="lp-hero-grid">
       <div>
-        <span class="lp-pill">Capstone 2026 · Richfield · BSc IT</span>
+<!--        <span class="lp-pill">Capstone 2026 · Richfield · BSc IT</span>-->
         <h1>Find a clinic. Hold your place. <em>Watch your number come up.</em></h1>
         <p class="lp-lede">
           {{ app_name }} is clinic discovery plus digital queue management for public and private
@@ -388,10 +372,20 @@ nearly your turn.</div>
   <section class="lp-section lp-wrap" id="features" data-reveal>
     <div class="lp-eyebrow">Scope</div>
     <h2 class="lp-title">What we are building</h2>
+    {# The tracked-issue count is internal delivery information — it names how much of what
+       follows is still unbuilt. An operator gets it; a visitor gets the product sentence
+       instead, so the section never opens on a bare heading. #}
+    {% if can_view_internals %}
     <p class="lp-sub">
       109 tracked issues across 14 milestones. Everything below is specified with acceptance
       criteria in the repository.
     </p>
+    {% else %}
+    <p class="lp-sub">
+      What {{ app_name }} does, for the three people who use it: the patient holding a place in
+      the queue, the clinic running the line, and the platform underneath both.
+    </p>
+    {% endif %}
 
     <h3 class="lp-group">For patients</h3>
     <div class="lp-features">
@@ -478,9 +472,13 @@ nearly your turn.</div>
     </div>
   </section>
 
-  {# ── Delivery ─────────────────────────────────────────────── #}
+  {# ── Delivery (operator-only) ─────────────────────────────
+     The milestone roadmap is the project's internal schedule: unshipped work, its sequencing and
+     the version it lands under. It renders for a caller holding the IT/operator grant
+     (`can_view_internals` in `src/web/context.py`) and for nobody else. #}
+  {% if can_view_internals %}
   <section class="lp-section lp-wrap" id="delivery" data-reveal>
-    <div class="lp-eyebrow">Delivery</div>
+    <div class="lp-eyebrow">Delivery <span class="lp-eyebrow-tag">Internal</span></div>
     <h2 class="lp-title">14 milestones, 28 weeks</h2>
     <p class="lp-sub">
       M6 is the critical path: the dashboard, the board, the PWA, the channels, appointments and
@@ -513,10 +511,14 @@ nearly your turn.</div>
       <div class="lp-ms is-release"><span class="lp-id">1.0</span><div><b>First official release</b><small>Every issue from 1 to 109 closed: the product is finished</small></div><span class="lp-sp">v1.0.0</span></div>
     </div>
   </section>
+  {% endif %}
 
-  {# ── Team ─────────────────────────────────────────────────── #}
+  {# ── Team (operator-only) ─────────────────────────────────
+     Who owns which surface, and the anti-blocking contract-first rule they work by. Internal
+     working arrangements, gated with the delivery plan above. #}
+  {% if can_view_internals %}
   <section class="lp-section lp-wrap" id="team" data-reveal>
-    <div class="lp-eyebrow">Working together</div>
+    <div class="lp-eyebrow">Working together <span class="lp-eyebrow-tag">Internal</span></div>
     <h2 class="lp-title">Six lanes that don't block each other</h2>
     <p class="lp-sub">
       Everyone owns a surface end to end. The seams between them are contracts and events, so
@@ -540,6 +542,7 @@ nearly your turn.</div>
       API".
     </div>
   </section>
+  {% endif %}
 
   {# ── Closing call to action ───────────────────────────────── #}
   <div class="lp-wrap">
@@ -562,57 +565,7 @@ nearly your turn.</div>
 
 </main>
 
-<footer class="lp-footer">
-  <div class="lp-wrap">
-    <div class="lp-footer-grid">
-      <div class="lp-footer-about">
-        <div class="lp-logo">
-          <span class="lp-logo-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
-          </span>
-          <span>{{ app_name }}</span>
-        </div>
-        <p>
-          Clinic discovery and digital queue management for South African public and private
-          clinics, from a phone, a USSD menu, WhatsApp or the web.
-        </p>
-      </div>
-
-      <div>
-        <h3>Product</h3>
-        <nav aria-label="Product">
-          <a href="#product">How it works</a>
-          <a href="#screens">Screens</a>
-          <a href="/features">Features</a>
-          <a href="#different">Why it's different</a>
-        </nav>
-      </div>
-
-      <div>
-        <h3>Project</h3>
-        <nav aria-label="Project">
-          <a href="#delivery">Delivery plan</a>
-          <a href="#team">The team</a>
-          {% if is_authenticated %}<a href="/dashboard">Dashboard</a>{% endif %}
-        </nav>
-      </div>
-
-      <div>
-        <h3>Legal</h3>
-        <nav aria-label="Legal">
-          <a href="/privacy">Privacy</a>
-          <a href="/terms">Terms</a>
-          {% if can_view_status %}<a href="/health">Status</a>{% endif %}
-        </nav>
-      </div>
-    </div>
-
-    <div class="lp-footer-legal">
-      <span>&copy; <span id="year">2026</span> {{ app_name }} · Richfield Graduate Institute of Technology · BSc IT (Distance Learning)</span>
-      <span>Mock-ups only: illustrative data, no real patient information.</span>
-    </div>
-  </div>
-</footer>
+{% include "web/partials/lp_footer.html" %}
 
 {% include "partials/login_modal.html" %}
 
