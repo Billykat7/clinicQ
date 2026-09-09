@@ -1,0 +1,73 @@
+{#
+  Signed-in icon rail (Issue 53).
+
+  Server-rendered main navigation for the app shell. Every link renders from the
+  declarative nav registry (Issue #104): ``nav.visible(key)`` evaluates the caller's
+  effective grants against ``src/core/nav_registry.py``, and grouped rail icons read
+  ``nav.group_visible(key)`` / ``nav.group_href(key)``. A user only ever sees the
+  destinations their role can reach — a link they cannot use is never rendered, and
+  guessing its URL returns 403 (see routes.py). Change a grant in the RBAC admin and
+  the rail follows with no template edit.
+
+  Rendered only when ``show_side_bar`` is true (a valid signed-in shell). Icons are
+  inline SVG with no inline styles or handlers, keeping the CSP unchanged. Each item
+  carries a ``nav-*`` class that sets its accent hue (see admin.css) so the rail reads
+  as a set of distinct destinations rather than a column of identical grey glyphs.
+#}
+<nav class="rail" aria-label="Main navigation">
+  <a href="/dashboard" class="rail-brand" data-tip="{{ app_name }}" aria-label="{{ app_name }} home">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V21h13V9.5"/><path d="M10 21v-5.5h4V21"/></svg>
+  </a>
+  <div class="rail-divider"></div>
+
+  <a href="/dashboard" class="rail-item nav-dashboard{% if active_nav == 'dashboard' %} active{% endif %}" data-tip="Dashboard" aria-label="Dashboard">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+  </a>
+
+  {# Communications — Messages, Notifications, Announcements and Alerts grouped under one icon
+     with tabbed sub-navigation (Issue 92): all four are the business's one inbox, so they belong
+     one click apart rather than four separate rail icons. The group renders only when the caller
+     can reach at least one of its tabs. #}
+  {% if nav.group_visible('communications') %}
+  <a href="{{ nav.group_href('communications') }}" class="rail-item nav-communications{% if active_nav in ['messages', 'notifications', 'announcements', 'alerts'] %} active{% endif %}" data-tip="Communications" aria-label="Communications">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 6.5 8.5 6 8.5-6"/></svg>
+  </a>
+  {% endif %}
+
+  {# Widgets — the example module's console. Delete this block with the module. #}
+  {% if nav.visible('widgets') %}
+  <a href="/admin/widgets" class="rail-item{% if active_nav == 'widgets' %} active{% endif %}" data-tip="Widgets" aria-label="Widgets">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>
+  </a>
+  {% endif %}
+
+  {# ── your destinations ──────────────────────────────────────────────────────────────────
+     One block per console, each gated on `nav.visible(key)` with the key declared in
+     `src/core/nav_registry.py`. Never hand-roll the condition: `visible()` resolves the verb
+     *and* the scope tier the destination declares, which is the same pair the route behind it
+     re-checks. A link the caller cannot use is never rendered, and guessing its URL still 403s.
+     Use `nav.group_visible(key)` / `nav.group_href(key)` for a grouped icon. #}
+
+  {% if nav.visible('rbac') %}
+  <a href="/admin/rbac/roles" class="rail-item nav-rbac{% if active_nav == 'rbac' %} active{% endif %}" data-tip="Access control" aria-label="Access control">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 5 6v6c0 4.2 2.9 7.7 7 9 4.1-1.3 7-4.8 7-9V6z"/><path d="m9.2 12.2 2 2 3.6-3.8"/></svg>
+  </a>
+  {% endif %}
+
+  {% if nav.visible('logs') %}
+  <a href="/admin/logs" class="rail-item nav-logs{% if active_nav == 'logs' %} active{% endif %}" data-tip="Application logs" aria-label="Application logs">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-2"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M8 11h8M8 15h5"/></svg>
+  </a>
+  {% endif %}
+
+
+  <div class="rail-spacer"></div>
+
+  {# Account — settings gear (distinct from the person/group marks above). #}
+  <a href="/account/profile" class="rail-item nav-account{% if active_nav == 'account' %} active{% endif %}" data-tip="Account" aria-label="Account">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+  </a>
+  <button type="button" data-signout class="rail-item rail-item--signout" data-tip="Sign out" aria-label="Sign out">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+  </button>
+</nav>

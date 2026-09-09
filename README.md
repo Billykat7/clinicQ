@@ -34,12 +34,12 @@ run the whole line from one dashboard.
 ```text
         +------------------------- ClinicQ queue engine -------------------------+
         |                                                                        |
-  Mobile PWA -------\                                                             |
-  USSD menu ----------> JOIN QUEUE (ticket number, live position, ETA)            |
-  WhatsApp bot -------/                                                           |
-  Walk-in (reception) /                                                           |
+  Mobile PWA ---------|                                                          |
+  USSD menu ----------> JOIN QUEUE (ticket number, live position, ETA)           |
+  WhatsApp bot -------|                                                          |
+  Walk-in (reception) |                                                          |
         |                                                                        |
-  Clinic dashboard --> CALL NEXT --> patient's phone + waiting-room display       |
+  Clinic dashboard --> CALL NEXT --> patient's phone + waiting-room display      |
         +------------------------------------------------------------------------+
             Same queue, same ticket number, no matter which door you came in
 ```

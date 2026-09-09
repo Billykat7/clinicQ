@@ -1,0 +1,33 @@
+{#
+  Tabbed sub-navigation for a grouped admin console (Issue 92).
+
+  The rail groups related consoles under one icon; this bar is how a user moves between the
+  consoles inside a group, exactly like the ``/account/*`` tabs. Each console is still its own
+  full page and route — this is a plain link bar, not a JS panel switcher — so deep links keep
+  working and every tab re-verifies RBAC server-side on its own route.
+
+  Set ``admin_tab_group`` before including this partial. A tab renders only when
+  ``nav.visible(key)`` is true for its registry destination (Issue #104), so a role only ever sees
+  the tabs it can actually open; a group with a single visible tab still renders that one tab.
+
+  Add a branch per group of your own, and add the group itself to ``NAV_GROUPS`` in
+  ``src/core/nav_registry.py`` so the rail icon that opens it exists.
+#}
+<div class="tabs-scroll">
+  <div class="tabs" role="tablist">
+    {% if admin_tab_group == 'communications' %}
+      {% if nav.visible('messages') %}
+      <a class="tab{% if active_nav == 'messages' %} active{% endif %}" href="/admin/messages" role="tab" aria-selected="{{ 'true' if active_nav == 'messages' else 'false' }}">Messages</a>
+      {% endif %}
+      {% if nav.visible('notifications') %}
+      <a class="tab{% if active_nav == 'notifications' %} active{% endif %}" href="/admin/notifications" role="tab" aria-selected="{{ 'true' if active_nav == 'notifications' else 'false' }}">Notifications</a>
+      {% endif %}
+      {% if nav.visible('announcements') %}
+      <a class="tab{% if active_nav == 'announcements' %} active{% endif %}" href="/admin/announcements" role="tab" aria-selected="{{ 'true' if active_nav == 'announcements' else 'false' }}">Announcements</a>
+      {% endif %}
+      {% if nav.visible('alerts') %}
+      <a class="tab{% if active_nav == 'alerts' %} active{% endif %}" href="/admin/alerts" role="tab" aria-selected="{{ 'true' if active_nav == 'alerts' else 'false' }}">Alerts</a>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>

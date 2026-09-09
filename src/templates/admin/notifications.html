@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Notifications</h1>
+  <p class="lead">The delivery viewer for transactional email and SMS — who each message went to,
+  on which channel, which template, and where it stands (queued, sent, delivered, failed or
+  dead-lettered) with the last failure reason. Read-only.</p>
+  {% include "partials/breadcrumbs.html" %}
+</div>
+
+{% set admin_tab_group = 'communications' %}
+{% include "partials/admin_group_tabs.html" %}
+
+{# ── Filters (full-width, collapsible — Issue 93) ── #}
+<div class="filter-bar" data-filter-key="notifications">
+  <div class="filter-bar-head">
+    <button type="button" class="filter-bar-toggle" aria-expanded="true" aria-controls="nt-filter-body">Filters</button>
+    <span class="filter-bar-summary" hidden></span>
+    <div class="filter-bar-actions">
+      <button type="button" class="btn btn-quiet btn-sm filter-clear" hidden>Clear filters</button>
+    </div>
+  </div>
+  <div class="filter-bar-body form-grid" id="nt-filter-body">
+    <div class="field" data-filter data-filter-label="Recipient">
+      <label for="nt-recipient">Recipient</label>
+      <input type="search" id="nt-recipient" placeholder="Filter by recipient…" aria-label="Filter by recipient">
+    </div>
+    <div class="field" data-filter data-filter-label="Status">
+      <label for="nt-status">Status</label>
+      <select data-combobox id="nt-status" aria-label="Filter by status">
+        <option value="">All statuses</option>
+        <option value="queued">queued</option>
+        <option value="sent">sent</option>
+        <option value="delivered">delivered</option>
+        <option value="failed">failed</option>
+        <option value="dead">dead</option>
+        <option value="suppressed">suppressed</option>
+      </select>
+    </div>
+    <div class="field" data-filter data-filter-label="Channel">
+      <label for="nt-channel">Channel</label>
+      <select data-combobox id="nt-channel" aria-label="Filter by channel">
+        <option value="">All channels</option>
+        <option value="email">email</option>
+        <option value="sms">sms</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+{# The list takes the whole content width; the detail opens as a slide-in panel anchored to this
+   block's top edge rather than as a second column beside it. #}
+<div class="split split-full" id="nt-split">
+  {# ── Notification list ── #}
+  <div class="card">
+    <div class="table-wrap table-scroll">
+      <table class="data">
+        <thead><tr><th>Recipient</th><th>Channel</th><th>Template</th><th>Status</th></tr></thead>
+        <tbody id="nt-body"></tbody>
+      </table>
+    </div>
+    <p class="msg msg-muted" id="nt-msg"></p>
+    <div id="nt-pager"></div>
+  </div>
+
+</div>
+
+{# ── Notification detail slide-in (see ``.slideover-inset``): non-modal, level with the list, and
+   scrolling its own body. Read-only, so it has no action foot. ── #}
+<div class="slideover slideover-inset" id="nt-detail" data-anchor="#nt-split">
+  <div class="slideover-panel" role="dialog" aria-modal="false" aria-labelledby="nd-title" tabindex="-1">
+    <div class="slideover-head">
+      <div class="slideover-titles">
+        <p class="detail-eyebrow">Notification</p>
+        <h2 id="nd-title">Delivery detail</h2>
+        <p class="card-sub" id="nd-id"></p>
+      </div>
+      <button type="button" class="btn btn-quiet btn-sm slideover-close" data-slideover-close
+              aria-label="Close notification detail">Close</button>
+    </div>
+
+    <div class="slideover-body">
+      <div class="detail-grid">
+        <div class="detail-row"><span class="detail-key">Recipient</span><span class="detail-val" id="nd-recipient"></span></div>
+        <div class="detail-row"><span class="detail-key">Channel</span><span class="detail-val" id="nd-channel"></span></div>
+        <div class="detail-row"><span class="detail-key">Template</span><span class="detail-val" id="nd-template"></span></div>
+        <div class="detail-row"><span class="detail-key">Subject</span><span class="detail-val" id="nd-subject"></span></div>
+        <div class="detail-row"><span class="detail-key">Status</span><span class="detail-val" id="nd-status"></span></div>
+        <div class="detail-row"><span class="detail-key">Provider</span><span class="detail-val" id="nd-provider"></span></div>
+        <div class="detail-row"><span class="detail-key">Attempts</span><span class="detail-val" id="nd-attempts"></span></div>
+        <div class="detail-row"><span class="detail-key">Created</span><span class="detail-val" id="nd-created"></span></div>
+        <div class="detail-row"><span class="detail-key">Sent</span><span class="detail-val" id="nd-sent"></span></div>
+        <div class="detail-row"><span class="detail-key">Delivered</span><span class="detail-val" id="nd-delivered"></span></div>
+        <div class="detail-row"><span class="detail-key">Failed</span><span class="detail-val" id="nd-failed"></span></div>
+        <div class="detail-row"><span class="detail-key">Next retry</span><span class="detail-val" id="nd-next"></span></div>
+      </div>
+      <h3>Last error</h3>
+      <p id="nd-error" class="rd-desc"></p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/admin-crud.js" defer></script>
+<script src="/static/js/admin-notifications.js" defer></script>
+{% endblock %}

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Account</h1>
+  <p class="lead">Your profile and how you sign in.</p>
+  {% include "partials/breadcrumbs.html" %}
+</div>
+
+<div class="tabs-scroll">
+  <div class="tabs" role="tablist">
+    <a class="tab" href="/account/profile" role="tab" aria-selected="false">Profile</a>
+    <a class="tab active" href="/account/security" role="tab" aria-selected="true">Security</a>
+    <a class="tab" href="/account/notifications" role="tab" aria-selected="false">Notifications</a>
+  </div>
+</div>
+
+<div class="card" id="password-loading-card">
+  <h2>Password</h2>
+  <div id="password-loading" class="msg msg-muted"><span class="spinner" aria-hidden="true"></span> Loading…</div>
+</div>
+
+<!-- Users who already have a password change it in place, re-proving the current one. Shut, the
+     section is only its own bar — the same one the profile page's email change uses. It stays
+     closed until asked for: this page is read far more often than the password is changed, and
+     three password boxes open by default invite the browser to autofill them. -->
+<button type="button" class="section-bar" id="pw-toggle" aria-expanded="false" aria-controls="password-card" hidden>
+  <span>Change password</span>
+  <svg class="chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"
+       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8l4 4 4-4"/></svg>
+</button>
+<div class="card" id="password-card" hidden>
+  <h2>Password</h2>
+  <div id="password-change">
+    <p class="card-sub">Change your password. Your other signed-in sessions are signed out when it changes.</p>
+    <form id="password-form">
+      <div class="field-row cols-3">
+        <div class="field">
+          <label for="pw-current">Current password</label>
+          <input type="password" id="pw-current" name="current_password" autocomplete="current-password" required>
+        </div>
+        <div class="field">
+          <label for="pw-new">New password</label>
+          <input type="password" id="pw-new" name="new_password" minlength="8" maxlength="128" autocomplete="new-password" required>
+          <p class="hint">At least 8 characters.</p>
+        </div>
+        <div class="field">
+          <label for="pw-confirm">Confirm new password</label>
+          <input type="password" id="pw-confirm" minlength="8" maxlength="128" autocomplete="new-password" required>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn">Save new password</button>
+        <button type="button" class="btn btn-quiet" id="pw-cancel">Cancel</button>
+        <span class="msg" id="password-msg" aria-live="polite"></span>
+      </div>
+    </form>
+  </div>
+
+</div>
+
+<!-- OTP/OAuth-only accounts (no password set) get a reset link to set one for the first time.
+     There is nothing to fold away here, so it is a plain card rather than a bar. -->
+<div class="card" id="password-set" hidden>
+  <h2>Password</h2>
+  <p class="card-sub">You sign in without a password. We can email you a secure link to set one.</p>
+  <div class="form-actions">
+    <button type="button" class="btn" id="send-reset-btn">Email me a link to set a password</button>
+    <span class="msg" id="password-set-msg" aria-live="polite"></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Active sessions</h2>
+  <p class="card-sub">Devices currently signed in with your account. Revoke any you don't recognise.</p>
+
+  <div id="sessions-loading" class="msg msg-muted"><span class="spinner" aria-hidden="true"></span> Loading sessions…</div>
+
+  <div class="table-wrap" id="sessions-wrap" hidden>
+    <table class="data">
+      <thead>
+        <tr><th class="col-device">Device</th><th>Sign-in IP</th><th>Last seen</th><th>Expires</th><th></th></tr>
+      </thead>
+      <tbody id="sessions-body"></tbody>
+    </table>
+  </div>
+
+  <div class="form-actions">
+    <button type="button" class="btn btn-danger" id="revoke-others-btn" hidden>Sign out all other sessions</button>
+    <span class="msg" id="sessions-msg" aria-live="polite"></span>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/account-settings.js" defer></script>
+{% endblock %}

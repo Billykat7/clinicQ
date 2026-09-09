@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Account</h1>
+  <p class="lead">Choose how and when we contact you.</p>
+  {% include "partials/breadcrumbs.html" %}
+</div>
+
+<div class="tabs-scroll">
+  <div class="tabs" role="tablist">
+    <a class="tab" href="/account/profile" role="tab" aria-selected="false">Profile</a>
+    <a class="tab" href="/account/security" role="tab" aria-selected="false">Security</a>
+    <a class="tab active" href="/account/notifications" role="tab" aria-selected="true">Notifications</a>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Notification categories</h2>
+  <p class="card-sub">
+    Pick a channel for each kind of message. Essential messages — account &amp; security and
+    financial notices — are always delivered; you can change the channel but not switch them off.
+  </p>
+
+  <div id="prefs-loading" class="msg msg-muted"><span class="spinner" aria-hidden="true"></span> Loading your preferences…</div>
+
+  <form id="prefs-form" hidden>
+    <div class="table-wrap">
+      <table class="data">
+        <thead>
+          <tr><th>Category</th><th>Delivery</th></tr>
+        </thead>
+        <tbody id="prefs-categories"></tbody>
+      </table>
+    </div>
+
+    {# Quiet hours are a different question from which channel each category uses, so the rule
+       marks where one ends and the other begins. #}
+    <hr class="section-rule">
+
+    <h3>Quiet hours</h3>
+    <p class="card-sub">
+      Non-urgent messages that arrive during these hours are held and delivered when quiet hours
+      end — never dropped. Sign-in codes and other time-critical messages always come through.
+    </p>
+    <div class="field-row cols-3">
+      <div class="field">
+        <label for="qh-start">From</label>
+        <input type="time" id="qh-start" name="quiet_hours_start">
+      </div>
+      <div class="field">
+        <label for="qh-end">To</label>
+        <input type="time" id="qh-end" name="quiet_hours_end">
+      </div>
+      <div class="field">
+        <label for="qh-tz">Timezone</label>
+        <input type="text" id="qh-tz" name="timezone" maxlength="64" placeholder="Africa/Johannesburg">
+        <p class="hint">An IANA timezone name, e.g. Africa/Johannesburg.</p>
+      </div>
+    </div>
+    <p class="hint">Leave both times blank to turn quiet hours off.</p>
+
+    <div class="form-actions form-actions-end">
+      <span class="msg" id="prefs-msg" aria-live="polite"></span>
+      <button type="submit" class="btn">Save</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/notification-preferences.js" defer></script>
+{% endblock %}

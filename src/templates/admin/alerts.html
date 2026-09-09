@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{#
+  Alerts console (Issue #132 follow-up) — a staff-authored, one-way broadcast, distinct from the
+  system InAppNotification bell feed (which stays the shell's quick-glance dropdown).
+
+  Inbox / Sent / Drafts / Deleted, each its own URL (Issue #122 list-view/sub-tab convention). An
+  alert has no reply — its detail view is read-only, same shape as Announcements'. "New alert"
+  opens the compose page in a new tab.
+#}
+
+{% set alerts_tab = alerts_tab | default('inbox') %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Alerts</h1>
+  <p class="lead">Urgent, one-way broadcasts to a resolved audience, flagged by severity. Distinct
+  from your notification bell — this is the console for composing and tracking them.</p>
+  {% include "partials/breadcrumbs.html" %}
+</div>
+
+{% set admin_tab_group = 'communications' %}
+{% include "partials/admin_group_tabs.html" %}
+
+<div class="tabs-branch">
+  <div class="tabs-scroll">
+    <div class="tabs tabs-sub" role="tablist">
+      {# Each tab is gated on its own section resource (Issue #145), mirroring the maintenance
+         sub-nav (Issue #143): a role scoped to one tab sees only that tab, while a coarse
+         communications.alerts grant still shows every tab (inheritance). UX only — the route
+         re-checks regardless. #}
+      {% if nav.can_surface('communications.alerts.inbox') %}
+      <a class="tab{% if alerts_tab == 'inbox' %} active{% endif %}" href="/admin/alerts/inbox"
+         role="tab"{% if alerts_tab == 'inbox' %} aria-current="page"{% endif %}>Inbox</a>
+      {% endif %}
+      {% if nav.can_surface('communications.alerts.sent') %}
+      <a class="tab{% if alerts_tab == 'sent' %} active{% endif %}" href="/admin/alerts/sent"
+         role="tab"{% if alerts_tab == 'sent' %} aria-current="page"{% endif %}>Sent</a>
+      {% endif %}
+      {% if nav.can_surface('communications.alerts.drafts') %}
+      <a class="tab{% if alerts_tab == 'drafts' %} active{% endif %}" href="/admin/alerts/drafts"
+         role="tab"{% if alerts_tab == 'drafts' %} aria-current="page"{% endif %}>Drafts</a>
+      {% endif %}
+      {% if nav.can_surface('communications.alerts.deleted') %}
+      <a class="tab{% if alerts_tab == 'deleted' %} active{% endif %}" href="/admin/alerts/deleted"
+         role="tab"{% if alerts_tab == 'deleted' %} aria-current="page"{% endif %}>Deleted</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<span hidden id="alerts-initial-tab" data-tab="{{ alerts_tab }}"></span>
+
+{% if alerts_tab in ('inbox', 'sent', 'deleted') %}
+<div class="split split-full" id="al-split">
+  <div class="card">
+    <div class="toolbar">
+      <span class="spacer"></span>
+      {% if alerts_tab == 'sent' %}
+      <a class="btn btn-sm" href="/admin/alerts/compose" target="_blank" rel="noopener">New alert</a>
+      {% endif %}
+      <button type="button" class="btn btn-quiet btn-sm" id="al-refresh">Refresh</button>
+    </div>
+    <div class="table-wrap table-scroll">
+      <table class="data">
+        <thead><tr><th>Subject</th><th>Severity</th><th>Sent</th><th>Read</th></tr></thead>
+        <tbody id="al-body"></tbody>
+      </table>
+    </div>
+    <p class="msg msg-muted" id="al-msg"></p>
+    <div id="al-pager"></div>
+  </div>
+</div>
+
+<div class="slideover slideover-inset" id="al-detail" data-anchor="#al-split">
+  <div class="slideover-panel" role="dialog" aria-modal="false" aria-labelledby="ald-title" tabindex="-1">
+    <div class="slideover-head">
+      <div class="slideover-titles">
+        <p class="detail-eyebrow">Alert</p>
+        <h2 id="ald-title"></h2>
+        <p class="hint" id="ald-meta"></p>
+      </div>
+      <button type="button" class="btn btn-quiet btn-sm slideover-close" data-slideover-close
+              aria-label="Close alert">Close</button>
+    </div>
+    <div class="slideover-body">
+      <p id="ald-body" class="thread-msg-body"></p>
+    </div>
+    <div class="slideover-foot form-actions">
+      {# Gated on the verb each route enforces, checked against ``src/modules/alerts/router.py``:
+         restore and delete are ``CommunicationsAlertsCreateDep`` (create), mark-read is
+         ``CommunicationsAlertsReadDep`` (read, already required to be on this page — so it stays
+         ungated rather than carrying a gate that can never be false here). #}
+      {% if alerts_tab == 'deleted' %}
+      {% if can('communications.alerts', 'create') %}
+      <button type="button" class="btn btn-sm" id="ald-restore">Restore</button>
+      {% endif %}
+      {% else %}
+      {% if alerts_tab != 'sent' %}
+      <button type="button" class="btn btn-sm" id="ald-mark">Mark read</button>
+      {% endif %}
+      {% if can('communications.alerts', 'create') %}
+      <button type="button" class="btn btn-danger btn-sm" id="ald-delete">Delete</button>
+      {% endif %}
+      {% endif %}
+      <span class="msg" id="ald-msg" aria-live="polite"></span>
+    </div>
+  </div>
+</div>
+
+{% elif alerts_tab == 'drafts' %}
+<div class="card">
+  <div class="toolbar">
+    <p class="card-sub">Your private, unsent alerts. Only you can see, edit, send or discard them.</p>
+    <span class="spacer"></span>
+    <a class="btn btn-sm" href="/admin/alerts/compose" target="_blank" rel="noopener">New alert</a>
+  </div>
+  <div class="table-wrap table-scroll">
+    <table class="data">
+      <thead><tr><th>Subject</th><th>Audience</th><th>Last edited</th></tr></thead>
+      <tbody id="dr-body"></tbody>
+    </table>
+  </div>
+  <p class="msg msg-muted" id="dr-msg"></p>
+</div>
+
+<div class="slideover slideover-inset" id="dr-detail" data-anchor="#dr-body">
+  <div class="slideover-panel" role="dialog" aria-modal="false" aria-labelledby="drd-title" tabindex="-1">
+    <div class="slideover-head">
+      <div class="slideover-titles">
+        <p class="detail-eyebrow">Draft alert</p>
+        <h2 id="drd-title"></h2>
+      </div>
+      <a class="btn btn-quiet btn-sm" id="drd-full-edit" target="_blank" rel="noopener" hidden>Full edit</a>
+      <button type="button" class="btn btn-quiet btn-sm slideover-close" data-slideover-close
+              aria-label="Close draft">Close</button>
+    </div>
+    <div class="slideover-body">
+      <div class="field">
+        <label for="drd-audience">Audience</label>
+        <select id="drd-audience">
+          <option value="">Not set</option>
+          <option value="global">All users (admin)</option>
+          <option value="owner_tenants">My tenants (owner)</option>
+          <option value="property_occupants">Occupants of a property I manage</option>
+          <option value="managed_scope">My managed scope (manager)</option>
+        </select>
+      </div>
+      <div class="field" id="drd-ref-field" hidden>
+        <label for="drd-ref">Property id</label>
+        <input type="text" id="drd-ref" maxlength="36" placeholder="Property id to target">
+      </div>
+      <div class="field">
+        <label for="drd-severity">Severity</label>
+        <select id="drd-severity">
+          <option value="">Not set</option>
+          <option value="info">Info</option>
+          <option value="warning">Warning</option>
+          <option value="critical">Critical</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="drd-subject">Subject</label>
+        <input type="text" id="drd-subject" maxlength="200" placeholder="Alert subject">
+      </div>
+      <div class="field">
+        <label for="drd-body">Message</label>
+        <textarea id="drd-body" rows="5" maxlength="8000" placeholder="Write your alert…"></textarea>
+      </div>
+    </div>
+    <div class="slideover-foot form-actions">
+      {# The draft routes are author-scoped; what a draft is *for* is the send, which
+         requires ``communications.alerts:create``. Editing a draft the caller could never send is
+         not an affordance, so the slideover follows the send gate — the same gate its
+         standalone editor page carries. #}
+      {% if can('communications.alerts', 'create') %}
+      <button type="button" class="btn btn-sm" id="drd-save">Save</button>
+      <button type="button" class="btn btn-sm" id="drd-send">Send</button>
+      <button type="button" class="btn btn-danger btn-sm" id="drd-delete">Delete</button>
+      {% endif %}
+      <span class="msg" id="drd-msg" aria-live="polite"></span>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/admin-crud.js" defer></script>
+<script src="/static/js/admin-alerts.js" defer></script>
+{% endblock %}

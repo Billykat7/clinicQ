@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Unsubscribe · {{ app_name }}</title>
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#ffffff">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="stylesheet" href="/static/css/site.css">
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+{% include "web/partials/topbar.html" %}
+
+<main id="main" class="page legal">
+  <h1>Email preferences</h1>
+
+  {% set labels = {
+    "account": "account & security",
+    "financial": "financial",
+    "applications": "applications",
+    "maintenance": "maintenance",
+    "messages": "messages",
+    "marketing": "marketing"
+  } %}
+  {% set label = labels.get(category, category) %}
+
+  {% if not valid %}
+    {# Generic response for a bad/expired token — reveals nothing about any account. #}
+    <p class="lead">This unsubscribe link is no longer valid.</p>
+    <p>The link may have expired. You can manage all your email preferences by signing in and
+      opening <strong>Account → Notifications</strong>.</p>
+
+  {% elif essential %}
+    <p class="lead">These emails can’t be turned off.</p>
+    <p>{{ label|capitalize }} emails are essential account and security messages, so they’re always
+      delivered. You can still choose whether they arrive by email or SMS from
+      <strong>Account → Notifications</strong> after signing in.</p>
+
+  {% elif done %}
+    <p class="lead">You’ve been unsubscribed.</p>
+    <p>You’ll no longer receive <strong>{{ label }}</strong> emails from {{ app_name }}. Changed your
+      mind? Sign in and re-enable them under <strong>Account → Notifications</strong>.</p>
+
+  {% else %}
+    <p class="lead">Unsubscribe from {{ label }} emails?</p>
+    <p>Confirm below to stop receiving <strong>{{ label }}</strong> emails from {{ app_name }}. This
+      won’t affect essential account, security or financial notices.</p>
+    <form method="post" action="/notifications/unsubscribe">
+      <input type="hidden" name="token" value="{{ token }}">
+      <div class="form-actions">
+        <button type="submit" class="btn">Unsubscribe</button>
+      </div>
+    </form>
+  {% endif %}
+</main>
+
+</body>
+</html>

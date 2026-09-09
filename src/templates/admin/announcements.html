@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{#
+  Announcements console (Issue #132 follow-up — promoted off the old /admin/messages collapsible
+  section into its own console).
+
+  Inbox / Sent / Drafts / Deleted, each its own URL (Issue #122 list-view/sub-tab convention).
+  Inbox/Sent/Deleted share one thread-list + read-only detail shape (an announcement is a one-way
+  broadcast — no reply here, unlike Messages); Drafts is the private compose list, with a
+  quick-edit slideover and a "Full edit" link to a new-tab page. "New announcement" opens the
+  compose page in a new tab rather than an inline slideover.
+#}
+
+{% set announcements_tab = announcements_tab | default('inbox') %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Announcements</h1>
+  <p class="lead">Broadcasts to a resolved audience. Who it reaches is authorised server-side by
+  your role and ownership — an admin can reach everyone, an owner their tenants or an owned
+  property, a manager their managed scope.</p>
+  {% include "partials/breadcrumbs.html" %}
+</div>
+
+{% set admin_tab_group = 'communications' %}
+{% include "partials/admin_group_tabs.html" %}
+
+<div class="tabs-branch">
+  <div class="tabs-scroll">
+    <div class="tabs tabs-sub" role="tablist">
+      {# Each tab is gated on its own section resource (Issue #145), mirroring the maintenance
+         sub-nav (Issue #143): a role scoped to one tab sees only that tab, while a coarse
+         communications.announcements grant still shows every tab (inheritance). UX only — the
+         route re-checks regardless. #}
+      {% if nav.can_surface('communications.announcements.inbox') %}
+      <a class="tab{% if announcements_tab == 'inbox' %} active{% endif %}" href="/admin/announcements/inbox"
+         role="tab"{% if announcements_tab == 'inbox' %} aria-current="page"{% endif %}>Inbox</a>
+      {% endif %}
+      {% if nav.can_surface('communications.announcements.sent') %}
+      <a class="tab{% if announcements_tab == 'sent' %} active{% endif %}" href="/admin/announcements/sent"
+         role="tab"{% if announcements_tab == 'sent' %} aria-current="page"{% endif %}>Sent</a>
+      {% endif %}
+      {% if nav.can_surface('communications.announcements.drafts') %}
+      <a class="tab{% if announcements_tab == 'drafts' %} active{% endif %}" href="/admin/announcements/drafts"
+         role="tab"{% if announcements_tab == 'drafts' %} aria-current="page"{% endif %}>Drafts</a>
+      {% endif %}
+      {% if nav.can_surface('communications.announcements.deleted') %}
+      <a class="tab{% if announcements_tab == 'deleted' %} active{% endif %}" href="/admin/announcements/deleted"
+         role="tab"{% if announcements_tab == 'deleted' %} aria-current="page"{% endif %}>Deleted</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<span hidden id="announcements-initial-tab" data-tab="{{ announcements_tab }}"></span>
+
+{% if announcements_tab in ('inbox', 'sent', 'deleted') %}
+<div class="split split-full" id="an-split">
+  <div class="card">
+    <div class="toolbar">
+      <span class="spacer"></span>
+      {% if announcements_tab == 'sent' %}
+      <a class="btn btn-sm" href="/admin/announcements/compose" target="_blank" rel="noopener">New announcement</a>
+      {% endif %}
+      <button type="button" class="btn btn-quiet btn-sm" id="an-refresh">Refresh</button>
+    </div>
+    <div class="table-wrap table-scroll">
+      <table class="data">
+        <thead><tr><th>Subject</th><th>Sent</th><th>Unread</th></tr></thead>
+        <tbody id="an-body"></tbody>
+      </table>
+    </div>
+    <p class="msg msg-muted" id="an-msg"></p>
+    <div id="an-pager"></div>
+  </div>
+</div>
+
+<div class="slideover slideover-inset" id="an-detail" data-anchor="#an-split">
+  <div class="slideover-panel" role="dialog" aria-modal="false" aria-labelledby="and-title" tabindex="-1">
+    <div class="slideover-head">
+      <div class="slideover-titles">
+        <p class="detail-eyebrow">Announcement</p>
+        <h2 id="and-title"></h2>
+        <p class="hint" id="and-participants"></p>
+      </div>
+      <button type="button" class="btn btn-quiet btn-sm slideover-close" data-slideover-close
+              aria-label="Close announcement">Close</button>
+    </div>
+    <div class="slideover-body">
+      <div class="thread-log" id="and-messages"></div>
+    </div>
+    <div class="slideover-foot form-actions">
+      {# Gated on exactly what the route enforces (``src/modules/messaging/router.py``): deleting or
+         restoring a *shared* announcement thread requires the manager scope, which ``_is_manager``
+         resolves as READ on the coarse ``communications.announcements`` resource. Naming a stronger
+         verb here would hide the control from a caller the route would admit — the mirror of the
+         wrong-resource mistake Issue #155 found. It is not vacuous on this page: the page gates on
+         the *folder* sub-resource, and a grant on a child does not imply one on its parent, so a
+         folder-scoped role reaches the console without the manager scope. Mark-read is
+         participant-scoped with no grant beyond that, so it stays ungated (see the PR's exception
+         list). #}
+      {% if announcements_tab == 'deleted' %}
+      {% if can('communications.announcements', 'read') %}
+      <button type="button" class="btn btn-sm" id="and-restore">Restore</button>
+      {% endif %}
+      {% else %}
+      {% if announcements_tab != 'sent' %}
+      <button type="button" class="btn btn-sm" id="and-mark">Mark read</button>
+      {% endif %}
+      {% if can('communications.announcements', 'read') %}
+      <button type="button" class="btn btn-danger btn-sm" id="and-delete">Delete</button>
+      {% endif %}
+      {% endif %}
+      <span class="msg" id="and-msg" aria-live="polite"></span>
+    </div>
+  </div>
+</div>
+
+{% elif announcements_tab == 'drafts' %}
+<div class="card">
+  <div class="toolbar">
+    <p class="card-sub">Your private, unsent announcements. Only you can see, edit, send or discard them.</p>
+    <span class="spacer"></span>
+    <a class="btn btn-sm" href="/admin/announcements/compose" target="_blank" rel="noopener">New announcement</a>
+  </div>
+  <div class="table-wrap table-scroll">
+    <table class="data">
+      <thead><tr><th>Subject</th><th>Audience</th><th>Last edited</th></tr></thead>
+      <tbody id="dr-body"></tbody>
+    </table>
+  </div>
+  <p class="msg msg-muted" id="dr-msg"></p>
+</div>
+
+<div class="slideover slideover-inset" id="dr-detail" data-anchor="#dr-body">
+  <div class="slideover-panel" role="dialog" aria-modal="false" aria-labelledby="drd-title" tabindex="-1">
+    <div class="slideover-head">
+      <div class="slideover-titles">
+        <p class="detail-eyebrow">Draft announcement</p>
+        <h2 id="drd-title"></h2>
+      </div>
+      <a class="btn btn-quiet btn-sm" id="drd-full-edit" target="_blank" rel="noopener" hidden>Full edit</a>
+      <button type="button" class="btn btn-quiet btn-sm slideover-close" data-slideover-close
+              aria-label="Close draft">Close</button>
+    </div>
+    <div class="slideover-body">
+      <div class="field">
+        <label for="drd-audience">Audience</label>
+        <select id="drd-audience">
+          <option value="">Not set</option>
+          <option value="global">All users (admin)</option>
+          <option value="owner_tenants">My tenants (owner)</option>
+          <option value="property_occupants">Occupants of a property I manage</option>
+          <option value="managed_scope">My managed scope (manager)</option>
+        </select>
+      </div>
+      <div class="field" id="drd-ref-field" hidden>
+        <label for="drd-ref">Property id</label>
+        <input type="text" id="drd-ref" maxlength="36" placeholder="Property id to target">
+      </div>
+      <div class="field">
+        <label for="drd-subject">Subject</label>
+        <input type="text" id="drd-subject" maxlength="200" placeholder="Announcement subject">
+      </div>
+      <div class="field">
+        <label for="drd-body">Message</label>
+        <textarea id="drd-body" rows="5" maxlength="8000" placeholder="Write your announcement…"></textarea>
+      </div>
+    </div>
+    <div class="slideover-foot form-actions">
+      {# The draft routes are author-scoped; what a draft is *for* is the send, which
+         requires ``communications.announcements:read``. Editing a draft the caller could never send is
+         not an affordance, so the slideover follows the send gate — the same gate its
+         standalone editor page carries. #}
+      {% if can('communications.announcements', 'read') %}
+      <button type="button" class="btn btn-sm" id="drd-save">Save</button>
+      <button type="button" class="btn btn-sm" id="drd-send">Send</button>
+      <button type="button" class="btn btn-danger btn-sm" id="drd-delete">Delete</button>
+      {% endif %}
+      <span class="msg" id="drd-msg" aria-live="polite"></span>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/admin-crud.js" defer></script>
+<script src="/static/js/admin-announcements.js" defer></script>
+{% endblock %}

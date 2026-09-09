@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Features · {{ app_name }}</title>
+<meta name="description" content="What ClinicQ does, one line per module.">
+<meta name="theme-color" content="#ffffff">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/site.css">
+{# Read by csrf-htmx.js to mirror the CSRF cookie into X-CSRF-Token. #}
+<meta name="bkp-csrf-cookie" content="{{ settings.csrf_cookie_name }}">
+<script src="/static/js/site.js" defer></script>
+<script src="/static/js/csrf-htmx.js" defer></script>
+<script src="/static/js/login-modal.js" defer></script>
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+{% include "web/partials/topbar.html" %}
+
+<main id="main" class="page">
+  <h1>What {{ app_name }}&nbsp;does</h1>
+  <p class="lead">BK ClinicQ — API and modules</p>
+
+  {# One entry per module you ship. The kernel lists only what it owns; add yours alongside. #}
+  <h2 class="group">Included</h2>
+  <dl class="modules">
+    <div id="accounts">
+      <dt>Accounts &amp; access</dt>
+      <dd>Sign-in with two-factor, email verification and password reset.</dd>
+    </div>
+    <div id="rbac">
+      <dt>Access control</dt>
+      <dd>Roles, permissions and scope tiers an administrator edits in the console — no deploy.</dd>
+    </div>
+    <div id="audit">
+      <dt>Audit trail</dt>
+      <dd>An append-only record of who changed what, searchable by entity, actor and action.</dd>
+    </div>
+    <div id="notifications">
+      <dt>Notifications</dt>
+      <dd>In-app and email notifications, with per-user delivery preferences.</dd>
+    </div>
+    <div id="messaging">
+      <dt>Messages</dt>
+      <dd>Threaded conversations and announcements, with drafts and read state.</dd>
+    </div>
+    <div id="alerts">
+      <dt>Alerts</dt>
+      <dd>Broadcast alerts to a resolved audience, composed as drafts and sent once.</dd>
+    </div>
+    <div id="documents">
+      <dt>Documents</dt>
+      <dd>Document storage with retention, virus scanning and e-signature envelopes.</dd>
+    </div>
+    <div id="widgets">
+      <dt>Widgets</dt>
+      <dd>The worked example module — delete it with <code>make delete-example-module</code>.</dd>
+    </div>
+  </dl>
+</main>
+
+{% include "web/partials/footer.html" %}
+
+{% include "partials/login_modal.html" %}
+
+</body>
+</html>

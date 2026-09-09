@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Account</h1>
+  <p class="lead">Your profile and how you sign in.</p>
+  {% include "partials/breadcrumbs.html" %}
+</div>
+
+<div class="tabs-scroll">
+  <div class="tabs" role="tablist">
+    <a class="tab active" href="/account/profile" role="tab" aria-selected="true">Profile</a>
+    <a class="tab" href="/account/security" role="tab" aria-selected="false">Security</a>
+    <a class="tab" href="/account/notifications" role="tab" aria-selected="false">Notifications</a>
+  </div>
+</div>
+
+{# The picture and the profile fields answer the same question — who you are — so they share a row:
+   the picture narrow on the left, the fields taking the rest. Each keeps its own card and its own
+   request, because an image upload is multipart and must not be able to fail the JSON profile save
+   (or be lost by it — Issue #130). #}
+<div class="split-aside">
+  <div class="card" id="avatar-card">
+    <h2>Profile picture</h2>
+    <p class="card-sub">Shown on your account menu across the app. JPEG, PNG or WebP.</p>
+
+    {# The picture and the control that changes it sit on one line: the thumbnail is what the file
+       picker is about, so reading them apart made the card taller for no reason. With no picture
+       uploaded the same circle stands in with the account's initials, which is what the app shows
+       elsewhere — a placeholder that looks like the thing it replaces, not a sentence about it. #}
+    <div class="avatar-field">
+      <img id="pf-avatar-preview" class="avatar-preview" alt="Your profile picture" hidden>
+      <div class="avatar-initials" id="pf-avatar-initials" aria-hidden="true"></div>
+      <div class="field">
+        <label for="pf-avatar-file">Choose an image</label>
+        <input type="file" id="pf-avatar-file" accept="image/jpeg,image/png,image/webp">
+        <p class="hint">Cropped to a square. Location data in the file is removed.</p>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="button" class="btn" id="pf-avatar-upload" disabled>Save picture</button>
+      <button type="button" class="btn btn-quiet" id="pf-avatar-cancel" hidden>Cancel</button>
+      <button type="button" class="btn btn-danger" id="pf-avatar-remove" hidden>Remove picture</button>
+      <span class="msg" id="pf-avatar-msg" aria-live="polite"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Profile</h2>
+    <p class="card-sub">Update your name and date of birth.</p>
+
+    <div id="profile-loading" class="msg msg-muted"><span class="spinner" aria-hidden="true"></span> Loading your profile…</div>
+
+    <form id="profile-form" hidden>
+      <div class="field-row cols-3">
+        <div class="field">
+          <label for="pf-first-name">First name</label>
+          <input type="text" id="pf-first-name" name="first_name" maxlength="100" autocomplete="given-name">
+        </div>
+        <div class="field">
+          <label for="pf-last-name">Last name</label>
+          <input type="text" id="pf-last-name" name="last_name" maxlength="100" autocomplete="family-name">
+        </div>
+        <div class="field">
+          <label for="pf-dob">Date of birth</label>
+          <input type="date" id="pf-dob" name="date_of_birth" autocomplete="bday">
+        </div>
+      </div>
+      {# The email is read-only here (it changes through the confirmation flow below), so Save sits
+         beside it rather than under a field it cannot edit. The hint sits outside the row so the
+         button lines up with the input itself rather than with the bottom of the caption. #}
+      <div class="field-row field-row-actions">
+        <div class="field">
+          <label for="pf-email">Email</label>
+          <input type="email" id="pf-email" readonly>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn">Save changes</button>
+          <button type="button" class="btn btn-quiet" id="pf-resend-verify" hidden>Resend verification email</button>
+        </div>
+      </div>
+      <p class="hint" id="pf-verify-hint"></p>
+      <span class="msg" id="profile-msg" aria-live="polite"></span>
+    </form>
+  </div>
+</div>
+
+{# Closed on load: changing an address is rare next to reading this page, and an email box beside a
+   password box invites the browser to autofill a sign-in it was never asked for. Shut, the section
+   is only its own bar — the same height and width as the tab bar above, so a closed section reads
+   as one line of the page rather than an empty card. The real submit lives inside the form. #}
+<button type="button" class="section-bar" id="ec-toggle" aria-expanded="false" aria-controls="email-form">
+  <span>Update email</span>
+  <svg class="chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"
+       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8l4 4 4-4"/></svg>
+</button>
+<div class="card" id="email-card" hidden>
+  <h2>Change email</h2>
+  <p class="card-sub">We email a confirmation link to your new address. Your email only changes once you confirm it.</p>
+
+  <form id="email-form" hidden>
+    <div class="field-row cols-3 field-row-actions">
+      <div class="field">
+        <label for="ec-new-email">New email address</label>
+        <input type="email" id="ec-new-email" name="new_email" autocomplete="email" required>
+      </div>
+      <div class="field">
+        <label for="ec-current-password">Current password</label>
+        <input type="password" id="ec-current-password" name="current_password" autocomplete="current-password" required>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn">Send confirmation link</button>
+        <button type="button" class="btn btn-quiet" id="ec-cancel">Cancel</button>
+      </div>
+    </div>
+    {# Outside the row, so the three columns stay level with each other. #}
+    <p class="hint">Your current password is required to confirm it is you.</p>
+    <span class="msg" id="email-msg" aria-live="polite"></span>
+  </form>
+  <p class="msg msg-muted" id="email-no-password" hidden>
+    Set a password on the Security tab before changing your email address.
+  </p>
+</div>
+
+<div class="card">
+  <h2>Account details</h2>
+  <dl class="stat-grid" id="account-meta"></dl>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/account-settings.js" defer></script>
+{% endblock %}

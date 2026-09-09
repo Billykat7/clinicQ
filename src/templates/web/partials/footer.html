@@ -1,0 +1,10 @@
+{# Public front-door footer. The Status link is gated on the same `logs` grant the log console is:
+   an operator sees it, a visitor does not. #}
+<footer class="site-footer">
+  <p>&copy; {{ app_name }}</p>
+  <nav aria-label="Footer">
+    <a href="/privacy">Privacy</a>
+    <a href="/terms">Terms</a>
+    {% if can_view_status %}<a href="/health">Status</a>{% endif %}
+  </nav>
+</footer>

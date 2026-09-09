@@ -1,0 +1,144 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clinicq"
+version = "0.1.0"
+description = "BK ClinicQ — property management API and modules"
+readme = "README.md"
+requires-python = ">=3.14"
+dynamic = ["dependencies"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[project.optional-dependencies]
+# Tooling a contributor needs but the runtime image does not: `pip install -e ".[dev]"`.
+# Everything the app itself needs stays in requirements.txt (see [tool.setuptools.dynamic]).
+dev = ["pre-commit>=4.6.1,<5"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.mypy]
+# Stated rather than inherited from whichever interpreter invoked mypy, so a stray
+# older `python -m mypy` cannot quietly type-check against different stdlib stubs.
+# One of the five places the 3.14 pin lives — see the note on `target-version` below.
+python_version = "3.14"
+
+# APScheduler (the background job scheduler, Issue #38) ships neither type stubs nor a
+# py.typed marker, so its imports are untyped. Scope the allowance to that package rather
+# than relaxing missing-imports globally.
+[[tool.mypy.overrides]]
+module = ["apscheduler.*"]
+ignore_missing_imports = true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Ruff — the single source of truth for linting and formatting.
+#
+# GitHub Actions (`.github/workflows/ci.yml`), `scripts/ci-local.sh`, `make lint`
+# and the pre-commit hooks all invoke bare `ruff check` / `ruff format`, so every
+# one of them reads this section. Never pass rule flags on the command line: that
+# is how CI and a developer's machine start disagreeing.
+#
+# The pinned ruff version lives in requirements.txt; `.pre-commit-config.yaml`
+# repeats it as a `rev:` and `scripts/check-ruff-pin.sh` fails the commit if the
+# two ever drift apart.
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.ruff]
+# Matches the formatter's default and the codebase as it stands, so adopting this
+# config reformatted nothing.
+line-length = 88
+# The one interpreter this project runs on. Five places carry the 3.14 pin and they
+# move together, never one alone:
+#   1. `requires-python` above          4. `[tool.mypy] python_version`
+#   2. `python-version:` in .github/workflows/*.yml
+#   3. `FROM python:3.14-slim` (both stages of infra/docker/Dockerfile)
+#   5. this line
+# There is no older interpreter to stay compatible with, so pyupgrade may modernise
+# freely — nothing it emits can outrun the deployed runtime.
+target-version = "py314"
+# Ruff already skips .git, .venv, build caches and .gitignore'd paths.
+extend-exclude = [".btk"]
+
+[tool.ruff.lint]
+# Deliberately excludes the whitespace, blank-line and indentation families
+# (E1/E2/E3) and line length (E501): `ruff format` owns layout, and enabling both
+# makes them argue. See https://docs.astral.sh/ruff/formatter/#conflicting-lint-rules
+select = [
+    "E4",    # pycodestyle — import placement
+    "E7",    # pycodestyle — statement-level errors (comparisons, lambdas, bare except)
+    "E9",    # pycodestyle — syntax and IO errors
+    "W",     # pycodestyle warnings — trailing whitespace, invalid escapes
+    "F",     # pyflakes — undefined names, unused imports and variables
+    "I",     # isort — import ordering
+    "UP",    # pyupgrade — keep syntax current for target-version
+    "B",     # flake8-bugbear — likely bugs and design problems
+    "C4",    # flake8-comprehensions
+    "SIM",   # flake8-simplify
+    "RET",   # flake8-return
+    "PIE",   # flake8-pie — misc. lint
+    "G",     # flake8-logging-format — no f-strings in log calls
+    "LOG",   # flake8-logging — logger misuse
+    "ASYNC", # flake8-async — blocking calls in async defs
+    "DTZ",   # flake8-datetimez — naive datetimes (see .cursor/rules/timezone-johannesburg.mdc)
+    "T20",   # flake8-print — no stray print() in application code
+    "TID",   # flake8-tidy-imports
+    "PTH",   # flake8-use-pathlib
+    "FA",    # flake8-future-annotations
+    "ICN",   # flake8-import-conventions
+    "INT",   # flake8-gettext
+    "N",     # pep8-naming
+    "RUF",   # ruff-specific rules
+]
+
+# Typographic characters we use on purpose in user-facing copy; without this,
+# RUF001 reports every en dash as a look-alike for a hyphen.
+allowed-confusables = ["–", "—", "’"]
+
+[tool.ruff.lint.per-file-ignores]
+# Operational scripts talk to the developer on stdout — that is their interface.
+"scripts/**" = ["T201"]
+# ``scripts/db`` became an importable package in Issue #169 so ``python -m scripts.db.seed_rbac``
+# works; its pre-existing hyphenated scripts are run by path, never imported, and renaming them
+# would break the runbook lines and shell wrappers that call them.
+"scripts/db/*-*.py" = ["N999"]
+# Alembic generates these; keep them close to what `alembic revision` emits.
+"alembic/versions/*" = ["N999"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection markers are evaluated once at import time by
+# design, so B008 ("function call in default argument") does not apply to them.
+extend-immutable-calls = [
+    "fastapi.Body",
+    "fastapi.Cookie",
+    "fastapi.Depends",
+    "fastapi.File",
+    "fastapi.Form",
+    "fastapi.Header",
+    "fastapi.Path",
+    "fastapi.Query",
+    "fastapi.Security",
+]
+
+[tool.ruff.lint.flake8-tidy-imports]
+# Absolute imports only — `src.core.config`, never `..core.config`.
+ban-relative-imports = "all"
+
+[tool.ruff.lint.isort]
+known-first-party = ["src", "scripts"]
+# Without this, ruff sees the repo's `alembic/` directory and files
+# `from alembic import context` (alembic/env.py) under first-party. It is the
+# third-party library, and it belongs in the same block as SQLAlchemy.
+known-third-party = ["alembic"]
+
+# The formatter runs on defaults (88 columns, double quotes, magic trailing comma).
+# `docstring-code-format` stays off: several module docstrings use reStructuredText
+# `::` literal blocks for S3 key layouts, and the formatter would parse those as
+# Python and rewrite them into something unreadable.

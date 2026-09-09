@@ -1,0 +1,39 @@
+Alembic migration directory for BK ClinicQ.
+
+Database: PostgreSQL with PostGIS (required for geo features). Migrations assume
+PostgreSQL; DATABASE_URL must be a PostgreSQL connection.
+
+Schema
+------
+The platform host runs several products against one PostgreSQL database, so this
+project keeps everything in a schema of its own — named by ``DB_SCHEMA``
+(``src.commons.enums.DbSchema``, ``properties``) — and leaves ``public`` to PostGIS.
+That covers the application tables *and* Alembic's own ``alembic_version``, which
+``env.py`` places there via ``version_table_schema``.
+
+Autogenerate reflects only that schema (``include_schemas`` plus the ``include_name``
+filter in ``env.py``), so a diff can never propose dropping another product's tables.
+
+Layout
+------
+- env.py           -> Alembic environment (uses src.core.config, src.database.models)
+- script.py.mako   -> Template for new revisions; pre-wires the SCHEMA constant
+- versions/        -> Migrations
+                      0001 create the application schema
+                      0002 baseline tables (user, rbac_role, role_permission,
+                           refresh_token)
+
+Note: versions/ is deliberately not a Python package. An ``__init__.py`` here would
+make this directory importable as ``alembic`` and shadow the installed library
+whenever the project root is on PYTHONPATH — which is exactly what the scripts below
+do.
+
+Running
+-------
+Migrations use DATABASE_URL from .env. Run from the project root:
+  ./scripts/db/alembic-upgrade.sh              # upgrade to head
+  ./scripts/db/alembic-revision.sh "message"   # new (empty) revision
+  ./scripts/db/alembic-downgrade.sh -1         # roll back one step
+
+Downgrading to base drops the tables but leaves the schema itself in place; see the
+note in versions/0001_create_app_schema.py.

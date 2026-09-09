@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Home</h1>
+  <p class="lead">The admin hub. Head to your dashboard to get started.</p>
+  {% include "partials/breadcrumbs.html" %}
+</div>
+
+<div class="card">
+  <div class="form-actions">
+    <a class="btn" href="/dashboard">Go to dashboard</a>
+    <a class="btn btn-quiet" href="/account/profile">Account settings</a>
+  </div>
+</div>
+{% endblock %}

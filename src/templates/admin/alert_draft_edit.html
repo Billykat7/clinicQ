@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{#
+  Full-page editor for one alert draft (Issue #132 follow-up). Opened in a new tab from the Drafts
+  quick-edit slider's "Full edit" link. Shares ``admin-draft-edit.js`` with the message and
+  announcement draft editors via the generic ``de-*`` id scheme; ``de-severity`` is the one field
+  this page has that the message editor doesn't.
+#}
+
+{% block content %}
+<div class="page-head">
+  <h1>Edit draft</h1>
+  <p class="lead">A private, unsent alert. Only you can see, edit, send or discard it.</p>
+  {% include "partials/breadcrumbs.html" %}
+</div>
+
+<span hidden id="draft-edit-page" data-draft-id="{{ draft_id }}" data-kind="alert"></span>
+
+<div class="card">
+  <p class="msg" id="de-msg" aria-live="polite"></p>
+  <div class="field">
+    <label for="de-audience">Audience</label>
+    <select id="de-audience">
+      <option value="">Not set</option>
+      <option value="global">All users (admin)</option>
+      <option value="owner_tenants">My tenants (owner)</option>
+      <option value="property_occupants">Occupants of a property I manage</option>
+      <option value="managed_scope">My managed scope (manager)</option>
+    </select>
+  </div>
+  <div class="field" id="de-ref-field" hidden>
+    <label for="de-ref">Property id</label>
+    <input type="text" id="de-ref" maxlength="36" placeholder="Property id to target">
+  </div>
+  <div class="field">
+    <label for="de-severity">Severity</label>
+    <select id="de-severity">
+      <option value="">Not set</option>
+      <option value="info">Info</option>
+      <option value="warning">Warning</option>
+      <option value="critical">Critical</option>
+    </select>
+  </div>
+  <div class="field">
+    <label for="de-subject">Subject</label>
+    <input type="text" id="de-subject" maxlength="200" placeholder="Alert subject">
+  </div>
+  <div class="field">
+    <label for="de-body">Message</label>
+    <textarea id="de-body" rows="10" maxlength="8000" placeholder="Write your alert…"></textarea>
+  </div>
+  <div class="form-actions">
+    {# The draft routes themselves are author-scoped; *sending* an alert is
+       CommunicationsAlertsCreateDep, and a draft the caller cannot send is not worth editing, so
+       the editor's controls follow the send gate. #}
+    {% if can('communications.alerts', 'create') %}
+    <button type="button" class="btn btn-sm" id="de-save">Save</button>
+    <button type="button" class="btn btn-sm" id="de-send">Send</button>
+    <button type="button" class="btn btn-danger btn-sm" id="de-delete">Delete</button>
+    {% endif %}
+    <a class="btn btn-quiet btn-sm" href="/admin/alerts/drafts">Back to Drafts</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/admin-crud.js" defer></script>
+<script src="/static/js/admin-draft-edit.js" defer></script>
+{% endblock %}

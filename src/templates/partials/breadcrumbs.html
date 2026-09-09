@@ -1,0 +1,48 @@
+{#
+  Reusable breadcrumb trail (Issue #118, M20).
+
+  Renders the ``breadcrumbs`` context var — a list of ``{label, href?, current?}`` — beneath the
+  page title. The trail always starts at a home crumb linking to the dashboard, drawn here rather
+  than repeated in every trail: a route (or ``web.context.default_breadcrumbs``) supplies only the
+  part below home. An empty list is therefore still a trail — home, as the current page — while an
+  *absent* ``breadcrumbs`` renders nothing at all, which is how the public pages opt out.
+
+  The last item is the current page (``current: true``), rendered as static text with
+  ``aria-current="page"``; earlier items link. Accessible (``nav[aria-label="Breadcrumb"]`` +
+  ordered list) and truncates gracefully on small screens (see ``.breadcrumbs`` in admin.css).
+
+  The trail draws as one connected pill of arrow-shaped segments: each crumb points into the next,
+  the current page takes a brand-tinted fill and closes the pill. The shape is entirely CSS
+  (``clip-path``) over this plain list, so the markup stays a semantic ordered list for assistive
+  tech — the arrows are decoration, not content.
+#}
+{% macro home_icon() %}
+<svg class="crumb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M4 10.6 12 4l8 6.6"/><path d="M6.5 9.6V20h11V9.6"/><path d="M10 20v-5h4v5"/>
+</svg>
+{% endmacro %}
+
+{% if breadcrumbs is defined %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <ol>
+    {# Home leads every trail. It is the current page only when nothing follows it. #}
+    <li class="breadcrumb-item{% if not breadcrumbs %} is-current{% endif %}">
+      {% if breadcrumbs %}
+      <a href="/dashboard">{{ home_icon() }}<span class="crumb-label">Dashboard</span></a>
+      {% else %}
+      <span aria-current="page">{{ home_icon() }}<span class="crumb-label">Dashboard</span></span>
+      {% endif %}
+    </li>
+    {% for crumb in breadcrumbs %}
+    <li class="breadcrumb-item{% if crumb.current %} is-current{% endif %}">
+      {% if crumb.href and not crumb.current %}
+      <a href="{{ crumb.href }}"><span class="crumb-label">{{ crumb.label }}</span></a>
+      {% else %}
+      <span{% if crumb.current %} aria-current="page"{% endif %}><span class="crumb-label">{{ crumb.label }}</span></span>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+</nav>
+{% endif %}

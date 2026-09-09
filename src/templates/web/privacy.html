@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Privacy notice · {{ app_name }}</title>
+<meta name="description" content="How ClinicQ collects, uses, protects and retains personal information, and how to request access or deletion.">
+<meta name="theme-color" content="#ffffff">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/site.css">
+{# Read by csrf-htmx.js to mirror the CSRF cookie into X-CSRF-Token. #}
+<meta name="bkp-csrf-cookie" content="{{ settings.csrf_cookie_name }}">
+<script src="/static/js/site.js" defer></script>
+<script src="/static/js/csrf-htmx.js" defer></script>
+<script src="/static/js/login-modal.js" defer></script>
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+{% include "web/partials/topbar.html" %}
+
+<main id="main" class="page legal">
+  <h1>Privacy notice</h1>
+  <p class="lead">How {{ app_name }} handles personal information.</p>
+  <p class="legal-updated">Last updated: {{ last_updated }}</p>
+
+  <p class="legal-note">
+    <strong>This is a starting point, not legal advice.</strong> It states what the application
+    actually does — the accounts it stores, the records it keeps, how long it keeps them — so the
+    page is true on day one. Have it reviewed against the law that applies to you before you launch,
+    and update the retention table whenever you add a model that stores personal information.
+  </p>
+
+  <h2>What we collect</h2>
+  <p>
+    An account holds the name, email address and password hash you provide when you register, plus
+    the two-factor secret if you enable it. Signing in records the time and the IP address the
+    request came from.
+  </p>
+
+  <h2>Why we hold it</h2>
+  <p>
+    To identify you, to decide what you are allowed to do, and to keep an auditable record of
+    changes made through the application. Access decisions and administrative changes are recorded
+    in an append-only audit trail.
+  </p>
+
+  <h2>How long we keep it</h2>
+  <table class="legal-table">
+    <thead><tr><th>Record</th><th>Retained</th></tr></thead>
+    <tbody>
+      <tr><td>Account profile</td><td>While the account exists</td></tr>
+      <tr><td>Sign-in sessions (refresh tokens)</td><td>Until they expire or are revoked</td></tr>
+      <tr><td>Audit events</td><td>Append-only; not deleted by ordinary use</td></tr>
+      <tr><td>Application logs</td><td>Per the retention set on the log store</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Your rights</h2>
+  <p>
+    You may ask what is held about you, ask for it to be corrected, and ask for it to be deleted
+    where no legal obligation requires it to be kept. Contact the operator of this deployment.
+  </p>
+</main>
+
+{% include "web/partials/footer.html" %}
+
+{% include "partials/login_modal.html" %}
+
+</body>
+</html>
