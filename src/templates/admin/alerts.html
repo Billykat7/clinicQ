@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
 {#
-  Alerts console (Issue #132 follow-up) — a staff-authored, one-way broadcast, distinct from the
+  Alerts console (Issue #132 follow-up): a staff-authored, one-way broadcast, distinct from the
   system InAppNotification bell feed (which stays the shell's quick-glance dropdown).
 
   Inbox / Sent / Drafts / Deleted, each its own URL (Issue #122 list-view/sub-tab convention). An
-  alert has no reply — its detail view is read-only, same shape as Announcements'. "New alert"
+  alert has no reply; its detail view is read-only, same shape as Announcements'. "New alert"
   opens the compose page in a new tab.
 #}
 
@@ -15,7 +15,7 @@
 <div class="page-head">
   <h1>Alerts</h1>
   <p class="lead">Urgent, one-way broadcasts to a resolved audience, flagged by severity. Distinct
-  from your notification bell — this is the console for composing and tracking them.</p>
+  from your notification bell; this is the console for composing and tracking them.</p>
   {% include "partials/breadcrumbs.html" %}
 </div>
 
@@ -27,7 +27,7 @@
     <div class="tabs tabs-sub" role="tablist">
       {# Each tab is gated on its own section resource (Issue #145), mirroring the maintenance
          sub-nav (Issue #143): a role scoped to one tab sees only that tab, while a coarse
-         communications.alerts grant still shows every tab (inheritance). UX only — the route
+         communications.alerts grant still shows every tab (inheritance). UX only: the route
          re-checks regardless. #}
       {% if nav.can_surface('communications.alerts.inbox') %}
       <a class="tab{% if alerts_tab == 'inbox' %} active{% endif %}" href="/admin/alerts/inbox"
@@ -89,7 +89,7 @@
     <div class="slideover-foot form-actions">
       {# Gated on the verb each route enforces, checked against ``src/modules/alerts/router.py``:
          restore and delete are ``CommunicationsAlertsCreateDep`` (create), mark-read is
-         ``CommunicationsAlertsReadDep`` (read, already required to be on this page — so it stays
+         ``CommunicationsAlertsReadDep`` (read, already required to be on this page, so it stays
          ungated rather than carrying a gate that can never be false here). #}
       {% if alerts_tab == 'deleted' %}
       {% if can('communications.alerts', 'create') %}
@@ -171,7 +171,7 @@
     <div class="slideover-foot form-actions">
       {# The draft routes are author-scoped; what a draft is *for* is the send, which
          requires ``communications.alerts:create``. Editing a draft the caller could never send is
-         not an affordance, so the slideover follows the send gate — the same gate its
+         not an affordance, so the slideover follows the send gate: the same gate its
          standalone editor page carries. #}
       {% if can('communications.alerts', 'create') %}
       <button type="button" class="btn btn-sm" id="drd-save">Save</button>

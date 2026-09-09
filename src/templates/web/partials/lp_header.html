@@ -4,9 +4,9 @@
    Two variables shape it, both optional and both set with `{% set %}` by the including page
    before the include:
 
-   * `landing_page` — true only on `/`. The primary nav points at in-page anchors there and at
+   * `landing_page`: true only on `/`. The primary nav points at in-page anchors there and at
      `/#anchor` everywhere else, so the same bar works on a page that has no such sections.
-   * `can_view_internals` — from `public_page_context`; gates the Delivery link, because the
+   * `can_view_internals`: from `public_page_context`; gates the Delivery link, because the
      section it jumps to is itself gated (see `web/index.html`).
 
    Requires `landing.css` (after `site.css`) and `theme.js` on the including page. No inline

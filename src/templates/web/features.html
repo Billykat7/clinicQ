@@ -3,14 +3,14 @@
   section, rendered by :func:`src.web.routes.features_page` with
   :func:`~src.web.context.public_page_context`.
 
-  Same design system as `/` — `landing.css`, the `lp-` classes, the shared
-  `web/partials/lp_header.html` / `lp_footer.html` chrome — so moving between the front door and
+  Same design system as `/` (`landing.css`, the `lp-` classes, the shared
+  `web/partials/lp_header.html` / `lp_footer.html` chrome), so moving between the front door and
   this page is one continuous surface rather than two sites. `landing_page` is deliberately not
   set: the shared header and footer then point their in-page anchors back at `/#anchor`.
 
   Same two constraints as the landing page: **CSP** (`script-src 'self'`, `style-src 'self'
   'nonce-…'`) means no inline handlers and no `style="…"`, and the page **must render without a
-  database** — `public_page_context` degrades to the signed-out shell on any DB error.
+  database**: `public_page_context` degrades to the signed-out shell on any DB error.
 
   The product scope below is public. What the platform kernel actually ships *today* is internal
   build state, so it is gated on `can_view_internals` (see `src/web/context.py`) exactly as the
@@ -97,9 +97,9 @@
       <div class="lp-f"><span class="lp-ic" aria-hidden="true">🔔</span><b>Notifications that arrive</b><p>Push, SMS or WhatsApp, with quiet hours, opt-outs, and hard per-clinic cost caps so a clinic can never be surprised by a bill.</p></div>
       <div class="lp-f"><span class="lp-ic" aria-hidden="true">🗓️</span><b>Scheduled appointments</b><p>Booked slots that convert into a live ticket automatically at the right moment, with a reminder the day before.</p></div>
       <div class="lp-f"><span class="lp-ic" aria-hidden="true">🚗</span><b>Virtual waiting room</b><p>Wait nearby instead of on a bench. You are called forward accounting for the travel time you said you need.</p></div>
-      <div class="lp-f"><span class="lp-ic" aria-hidden="true">👨‍👩‍👧</span><b>Book for a dependant</b><p>One household, one smartphone: a parent for a child, a daughter for her mother — with the consent recorded.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">👨‍👩‍👧</span><b>Book for a dependant</b><p>One household, one smartphone: a parent for a child, a daughter for her mother, with the consent recorded.</p></div>
       <div class="lp-f"><span class="lp-ic" aria-hidden="true">💊</span><b>Chronic medication reminders</b><p>Recurring collection nudges with a one-keypress join, for the queue you have to stand in every month.</p></div>
-      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🌍</span><b>Five languages</b><p>English, isiZulu, isiXhosa, Afrikaans and Sesotho — across menus, messages and the spoken call-out.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🌍</span><b>Five languages</b><p>English, isiZulu, isiXhosa, Afrikaans and Sesotho, across menus, messages and the spoken call-out.</p></div>
     </div>
   </section>
 
@@ -116,10 +116,10 @@
       <div class="lp-f"><span class="lp-ic" aria-hidden="true">🖥️</span><b>One dashboard</b><p>Every active queue live, with one very large Call Next and an honest offline state rather than a stale one.</p></div>
       <div class="lp-f"><span class="lp-ic" aria-hidden="true">🚶</span><b>Walk-ins in ten seconds</b><p>The same sequence as a remote join, into the same fair queue, with a printable stub and an optional SMS.</p></div>
       <div class="lp-f"><span class="lp-ic" aria-hidden="true">🏥</span><b>Multi-room queues</b><p>Triage → doctor → pharmacy, with transfers that keep the visit intact instead of starting it over.</p></div>
-      <div class="lp-f"><span class="lp-ic" aria-hidden="true">⚖️</span><b>Audited priority overrides</b><p>Bump a visibly unwell patient in two taps — with a reason code and a permanent trail, so a queue jump is never invisible.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">⚖️</span><b>Audited priority overrides</b><p>Bump a visibly unwell patient in two taps, with a reason code and a permanent trail, so a queue jump is never invisible.</p></div>
       <div class="lp-f"><span class="lp-ic" aria-hidden="true">📺</span><b>Waiting-room board</b><p>Number, time, privacy-gated name, an audio call-out, and unattended recovery after load-shedding.</p></div>
       <div class="lp-f"><span class="lp-ic" aria-hidden="true">⚙️</span><b>Self-service settings</b><p>Hours, holidays, closures, queues, services, staff and display mode. No developer, no support ticket.</p></div>
-      <div class="lp-f"><span class="lp-ic" aria-hidden="true">📊</span><b>Reports that sell themselves</b><p>Wait times, no-show rate, channel mix and a busiest-hour heatmap — the numbers a manager takes to their district.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">📊</span><b>Reports that sell themselves</b><p>Wait times, no-show rate, channel mix and a busiest-hour heatmap: the numbers a manager takes to their district.</p></div>
       <div class="lp-f"><span class="lp-ic" aria-hidden="true">💬</span><b>Post-visit feedback</b><p>One question, one tap: a service-quality number that means something because everyone answers it.</p></div>
     </div>
   </section>
@@ -136,12 +136,12 @@
     <div class="lp-features">
       <div class="lp-f"><span class="lp-ic" aria-hidden="true">🔐</span><b>RBAC &amp; multi-tenancy</b><p>Roles and scope tiers an administrator edits in the console. A clinic can never read another clinic's data, and cross-site access returns 404, not 403.</p></div>
       <div class="lp-f"><span class="lp-ic" aria-hidden="true">🛡️</span><b>Privacy by default</b><p>Every new clinic starts number-only on the board. Names and reasons are opt-in, consent-gated and audited.</p></div>
-      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🧹</span><b>Retention &amp; purge</b><p>Reason text and visit notes are deleted automatically after a short window — with a test that proves they are gone.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🧹</span><b>Retention &amp; purge</b><p>Reason text and visit notes are deleted automatically after a short window, with a test that proves they are gone.</p></div>
       <div class="lp-f"><span class="lp-ic" aria-hidden="true">📜</span><b>Tamper-evident audit</b><p>A hash-chained, append-only log: a retrospective edit is detectable rather than merely discouraged.</p></div>
       <div class="lp-f"><span class="lp-ic" aria-hidden="true">📤</span><b>Access &amp; erasure</b><p>A patient can ask what is held about them and have it deleted. POPIA rights, built rather than promised.</p></div>
       <div class="lp-f"><span class="lp-ic" aria-hidden="true">🏛️</span><b>District dashboards</b><p>Anonymised area-level wait trends with small-cell suppression, for health-department planning.</p></div>
       <div class="lp-f"><span class="lp-ic" aria-hidden="true">🔌</span><b>Offline &amp; load-shedding</b><p>The board recovers unattended and the dashboard says so out loud when it is stale, because the power will go out.</p></div>
-      <div class="lp-f"><span class="lp-ic" aria-hidden="true">♿</span><b>Accessibility</b><p>Large type, high contrast, audio call-outs and keyboard operation — a waiting room is not a design showcase.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">♿</span><b>Accessibility</b><p>Large type, high contrast, audio call-outs and keyboard operation; a waiting room is not a design showcase.</p></div>
     </div>
 
     <div class="lp-callout">
@@ -154,26 +154,26 @@
 
   {# ── Kernel state (operator-only) ─────────────────────────────
      What the platform underneath ships *today*, as opposed to the specified scope above. That
-     distinction is internal build state — it says which of the features above are still ahead —
+     distinction is internal build state (it says which of the features above are still ahead),
      so it is gated on the same operator grant as the delivery plan on `/`. #}
   {% if can_view_internals %}
   <section class="lp-section lp-wrap" id="kernel" data-reveal>
     <div class="lp-eyebrow">Platform kernel <span class="lp-eyebrow-tag">Internal</span></div>
     <h2 class="lp-title">What the application ships today</h2>
     <p class="lp-sub">
-      The scope above is the product. This is the kernel it is being built on — the modules that
+      The scope above is the product. This is the kernel it is being built on: the modules that
       are in the repository now, behind the sign-in.
     </p>
 
     <div class="lp-features">
       <div class="lp-f"><span class="lp-ic" aria-hidden="true">🔑</span><b>Accounts &amp; access</b><p>Sign-in with two-factor, email verification and password reset.</p></div>
-      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🔐</span><b>Access control</b><p>Roles, permissions and scope tiers an administrator edits in the console — no deploy.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🔐</span><b>Access control</b><p>Roles, permissions and scope tiers an administrator edits in the console: no deploy.</p></div>
       <div class="lp-f"><span class="lp-ic" aria-hidden="true">📜</span><b>Audit trail</b><p>An append-only record of who changed what, searchable by entity, actor and action.</p></div>
       <div class="lp-f"><span class="lp-ic" aria-hidden="true">🔔</span><b>Notifications</b><p>In-app and email notifications, with per-user delivery preferences.</p></div>
       <div class="lp-f"><span class="lp-ic" aria-hidden="true">✉️</span><b>Messages</b><p>Threaded conversations and announcements, with drafts and read state.</p></div>
       <div class="lp-f"><span class="lp-ic" aria-hidden="true">📣</span><b>Alerts</b><p>Broadcast alerts to a resolved audience, composed as drafts and sent once.</p></div>
       <div class="lp-f"><span class="lp-ic" aria-hidden="true">📁</span><b>Documents</b><p>Document storage with retention, virus scanning and e-signature envelopes.</p></div>
-      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🧩</span><b>Widgets</b><p>The worked example module — delete it with <code>make delete-example-module</code>.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🧩</span><b>Widgets</b><p>The worked example module: delete it with <code>make delete-example-module</code>.</p></div>
     </div>
   </section>
   {% endif %}

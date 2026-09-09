@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-head">
   <h1>Notifications</h1>
-  <p class="lead">The delivery viewer for transactional email and SMS — who each message went to,
+  <p class="lead">The delivery viewer for transactional email and SMS: who each message went to,
   on which channel, which template, and where it stands (queued, sent, delivered, failed or
   dead-lettered) with the last failure reason. Read-only.</p>
   {% include "partials/breadcrumbs.html" %}
@@ -12,7 +12,7 @@
 {% set admin_tab_group = 'communications' %}
 {% include "partials/admin_group_tabs.html" %}
 
-{# ── Filters (full-width, collapsible — Issue 93) ── #}
+{# ── Filters (full-width, collapsible; Issue 93) ── #}
 <div class="filter-bar" data-filter-key="notifications">
   <div class="filter-bar-head">
     <button type="button" class="filter-bar-toggle" aria-expanded="true" aria-controls="nt-filter-body">Filters</button>

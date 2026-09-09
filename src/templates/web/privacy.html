@@ -1,16 +1,16 @@
 {#
   Public privacy notice (`/privacy`), rendered by :func:`src.web.routes.privacy_page`.
 
-  POPIA — the Protection of Personal Information Act 4 of 2013 — is the law this page is written
+  POPIA (the Protection of Personal Information Act 4 of 2013) is the law this page is written
   against, because a queue in a clinic becomes health information (POPIA's *special personal
   information*, s26) the moment it carries a name. The notice is structured as s18 asks: who is
   processing, what, why, on what justification, who else sees it, for how long, and how a data
   subject exercises the rights in Chapter 3.
 
   Same design system and same constraints as the rest of the front door: `landing.css` and the
-  shared `lp_header` / `lp_footer` partials, no inline styles or handlers (CSP), and no DB session
-  — `public_page_context` gives config-only context, so the notice stays reachable during an
-  outage. `last_updated` comes from `LEGAL_PAGES_LAST_UPDATED` in `src/web/routes.py`, a single
+  shared `lp_header` / `lp_footer` partials, no inline styles or handlers (CSP), and no DB
+  session: `public_page_context` gives config-only context, so the notice stays reachable during
+  an outage. `last_updated` comes from `LEGAL_PAGES_LAST_UPDATED` in `src/web/routes.py`, a single
   source shared with `/terms`, and is rendered visibly so a stale notice is obvious.
 
   Keep the retention table honest: whenever a model that stores personal information is added,
@@ -89,7 +89,7 @@
         <div class="lp-callout">
           <b>Read this first.</b> {{ app_name }} is a final-year BSc IT capstone project at
           Richfield Graduate Institute of Technology. It is not yet operating in a live clinic, and
-          the screens on this site carry generated, illustrative data — no real patient
+          the screens on this site carry generated, illustrative data: no real patient
           information. This notice describes how the system is designed to handle personal
           information, so that it is accurate on the day the first clinic goes live. It is
           <strong>not legal advice</strong>: it must be reviewed by a suitably qualified person,
@@ -101,8 +101,8 @@
       <section id="who">
         <h2>Who processes your information</h2>
         <p>
-          POPIA distinguishes the <dfn>responsible party</dfn> — who decides why and how personal
-          information is processed — from the <dfn>operator</dfn>, who processes it on the
+          POPIA distinguishes the <dfn>responsible party</dfn> (who decides why and how personal
+          information is processed) from the <dfn>operator</dfn>, who processes it on the
           responsible party's behalf. {{ app_name }} is both, in different places:
         </p>
         <ul>
@@ -114,7 +114,7 @@
             instructions and to POPIA's security requirements (sections 20 and 21).
           </li>
           <li>
-            <strong>{{ app_name }} is the responsible party</strong> for the account itself — the
+            <strong>{{ app_name }} is the responsible party</strong> for the account itself: the
             details you give when you register, your channel and notification preferences, your
             sign-in sessions, and the technical logs that keep the platform secure and available.
           </li>
@@ -125,7 +125,7 @@
         </p>
         <dl class="lp-defs">
           <dt>Responsible party (platform)</dt>
-          <dd>{{ app_name }} — Richfield Graduate Institute of Technology, BSc IT capstone project, South Africa</dd>
+          <dd>{{ app_name }}, Richfield Graduate Institute of Technology, BSc IT capstone project, South Africa</dd>
           <dt>Information Officer</dt>
           <dd>To be appointed and registered with the Information Regulator before the first clinic goes live, as sections 55 and 56 require.</dd>
           <dt>Contact for privacy questions</dt>
@@ -141,11 +141,11 @@
         </p>
         <ul>
           <li><strong>Who you are.</strong> Your name and the mobile number or email address you register with. A date of birth only where a clinic needs it to distinguish two people with the same name.</li>
-          <li><strong>How you reached us.</strong> The channel you used and its identifier — your MSISDN for USSD and SMS, your WhatsApp number, a push token for the app.</li>
+          <li><strong>How you reached us.</strong> The channel you used and its identifier: your MSISDN for USSD and SMS, your WhatsApp number, a push token for the app.</li>
           <li><strong>Your place in the queue.</strong> Your ticket number, the clinic, the room or service, the times you joined, were called and were seen, and the outcome (seen, transferred, no-show).</li>
           <li><strong>Why you are here, if you choose to say.</strong> A free-text reason or a visit note recorded by staff. This is optional, it is never shown on the waiting-room screen, and it is deleted automatically on a short retention window.</li>
           <li><strong>Where you are, if you allow it.</strong> Your device's approximate location, used at the moment you search for a nearby clinic. We do not track your location in the background, and we do not keep a location history.</li>
-          <li><strong>Consent records.</strong> What you agreed to, when, through which channel, and when you withdrew it — including consent given by a parent or guardian on a dependant's behalf.</li>
+          <li><strong>Consent records.</strong> What you agreed to, when, through which channel, and when you withdrew it, including consent given by a parent or guardian on a dependant's behalf.</li>
           <li><strong>Technical records.</strong> Your IP address, device and browser details, sign-in times, and application logs. These keep the service secure and let us investigate faults and abuse.</li>
           <li><strong>Staff account information.</strong> For clinic staff and administrators: name, work email address, role and permission assignments, and an audit record of the administrative changes they make.</li>
         </ul>
@@ -168,7 +168,7 @@
           <li>
             <strong>We keep as little of it as possible.</strong> A ticket number in a queue is not
             in itself health information. A reason for the visit, a triage priority or a visit note
-            is — so those fields are optional, restricted to the staff who need them, excluded from
+            is. So those fields are optional, restricted to the staff who need them, excluded from
             the public display, and purged automatically.
           </li>
           <li>
@@ -189,8 +189,8 @@
         <p>
           Section 34 of POPIA prohibits processing the personal information of a child except on
           one of the grounds in section 35, including the prior consent of a competent person.
-          {{ app_name }} supports booking on someone else's behalf — a parent for a child, an adult
-          child for an elderly parent — and treats that as a consent event in its own right: who
+          {{ app_name }} supports booking on someone else's behalf (a parent for a child, an adult
+          child for an elderly parent) and treats that as a consent event in its own right: who
           gave it, for whom, when, and through which channel. A proxy booking can be revoked, and
           the dependant's information is visible only to the person who holds that consent and to
           the treating clinic.
@@ -208,13 +208,13 @@
               <tr><th scope="col">Purpose</th><th scope="col">Justification under POPIA</th></tr>
             </thead>
             <tbody>
-              <tr><td>Placing you in a queue and telling you when it is your turn</td><td>Performance of the service you asked for — s11(1)(b)</td></tr>
-              <tr><td>Showing a ticket number, or a consented name, on the waiting-room screen</td><td>Consent — s11(1)(a), and s27(1)(a) where it is health information</td></tr>
-              <tr><td>Finding clinics near you</td><td>Consent to use your device location — s11(1)(a)</td></tr>
-              <tr><td>Sending you queue notifications and appointment reminders</td><td>Performance of the service — s11(1)(b)</td></tr>
-              <tr><td>Recording who changed what, in an audit trail</td><td>Legal obligation and our legitimate interest in an accountable system — s11(1)(c) and s11(1)(f)</td></tr>
-              <tr><td>Keeping the service secure, available and free of abuse</td><td>Legitimate interests — s11(1)(f)</td></tr>
-              <tr><td>Anonymised wait-time statistics for clinic and district planning</td><td>Once aggregated and de-identified, it is no longer personal information — s6(1)(b)</td></tr>
+              <tr><td>Placing you in a queue and telling you when it is your turn</td><td>Performance of the service you asked for (s11(1)(b))</td></tr>
+              <tr><td>Showing a ticket number, or a consented name, on the waiting-room screen</td><td>Consent: s11(1)(a), and s27(1)(a) where it is health information</td></tr>
+              <tr><td>Finding clinics near you</td><td>Consent to use your device location (s11(1)(a))</td></tr>
+              <tr><td>Sending you queue notifications and appointment reminders</td><td>Performance of the service (s11(1)(b))</td></tr>
+              <tr><td>Recording who changed what, in an audit trail</td><td>Legal obligation and our legitimate interest in an accountable system (s11(1)(c) and s11(1)(f))</td></tr>
+              <tr><td>Keeping the service secure, available and free of abuse</td><td>Legitimate interests (s11(1)(f))</td></tr>
+              <tr><td>Anonymised wait-time statistics for clinic and district planning</td><td>Once aggregated and de-identified, it is no longer personal information (s6(1)(b))</td></tr>
             </tbody>
           </table>
         </div>
@@ -244,8 +244,8 @@
         <h2>Sending it outside South Africa</h2>
         <p>
           Section 72 restricts transferring personal information out of the Republic. Our
-          preference is to host and process in South Africa. Where a provider — a messaging or
-          cloud service — necessarily processes information abroad, we rely on one of the section
+          preference is to host and process in South Africa. Where a provider (a messaging or
+          cloud service) necessarily processes information abroad, we rely on one of the section
           72 grounds: a law or binding agreement in the destination country that provides an
           adequate, comparable level of protection, or your consent, or that the transfer is
           necessary to perform the service you asked for. We will tell you which, on request.
@@ -292,7 +292,7 @@
               <tr><td>Notification delivery records</td><td>Long enough to investigate a failed delivery, then deleted</td></tr>
               <tr><td>Audit events</td><td>Append-only; retained as the accountability record and not deleted by ordinary use</td></tr>
               <tr><td>Application and access logs</td><td>Per the retention configured on the log store</td></tr>
-              <tr><td>Anonymised, aggregated statistics</td><td>Indefinitely — they are no longer personal information</td></tr>
+              <tr><td>Anonymised, aggregated statistics</td><td>Indefinitely: they are no longer personal information</td></tr>
             </tbody>
           </table>
         </div>
@@ -306,20 +306,20 @@
         <h2>Your rights</h2>
         <p>Chapter 3 of POPIA gives you the right to:</p>
         <ul>
-          <li><strong>Be told</strong> that we hold information about you, and what it is — sections 23 and 24.</li>
+          <li><strong>Be told</strong> that we hold information about you, and what it is (sections 23 and 24).</li>
           <li><strong>Ask for a copy</strong> of it, in a usable form. We export what we hold about you.</li>
           <li><strong>Have it corrected</strong> if it is inaccurate, irrelevant, excessive, out of date, incomplete, misleading, or obtained unlawfully.</li>
-          <li><strong>Have it deleted or destroyed</strong> where we no longer have a lawful reason to keep it. Some records — the audit trail, and clinical records the clinic must keep by law — cannot be erased on request; we will say so and explain why.</li>
-          <li><strong>Object</strong> to processing we base on legitimate interests, on reasonable grounds — section 11(3).</li>
+          <li><strong>Have it deleted or destroyed</strong> where we no longer have a lawful reason to keep it. Some records (the audit trail, and clinical records the clinic must keep by law) cannot be erased on request; we will say so and explain why.</li>
+          <li><strong>Object</strong> to processing we base on legitimate interests, on reasonable grounds (section 11(3)).</li>
           <li><strong>Withdraw consent</strong> at any time, without affecting what was lawfully done before you withdrew it.</li>
-          <li><strong>Not be subject</strong> to a decision with legal consequences based solely on automated processing — section 71.</li>
-          <li><strong>Complain</strong> to the Information Regulator, and to institute civil proceedings — sections 74 and 99.</li>
+          <li><strong>Not be subject</strong> to a decision with legal consequences based solely on automated processing (section 71).</li>
+          <li><strong>Complain</strong> to the Information Regulator, and to institute civil proceedings (sections 74 and 99).</li>
         </ul>
         <p>
           To exercise any of these, contact the Information Officer. A request for access or
           correction may be made on the form prescribed under the POPIA regulations. We do not
           charge for a first access request, we answer within the period the Act allows, and we
-          verify your identity first — so that nobody else can use these rights to reach your
+          verify your identity first, so that nobody else can use these rights to reach your
           records.
         </p>
       </section>
@@ -358,7 +358,7 @@
       <section id="complaints">
         <h2>Complaints</h2>
         <p>
-          Please raise a concern with us first — most are a misunderstanding we can fix quickly. If
+          Please raise a concern with us first; most are a misunderstanding we can fix quickly. If
           you are not satisfied, you may complain to the Information Regulator:
         </p>
         <dl class="lp-defs">

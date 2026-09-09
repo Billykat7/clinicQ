@@ -5,7 +5,7 @@
   between the theme toggle and the profile button. The bell is hidden until notification-center.js
   confirms a signed-in session (like the avatar), then revealed and wired.
 
-  The dropdown is adaptive (a full-width sheet on small screens, an anchored panel on desktop —
+  The dropdown is adaptive (a full-width sheet on small screens, an anchored panel on desktop;
   CSS only) and reuses the profile-menu tokens. No inline scripts/handlers or styles (CSP
   ``script-src 'self'`` preserved); previews are filled with textContent by the JS, never innerHTML,
   so a message/notification body is shown verbatim and never interpreted as markup.

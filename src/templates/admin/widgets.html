@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {#
-  The example module's console — a server-rendered list, deliberately the plainest thing that
+  The example module's console: a server-rendered list, deliberately the plainest thing that
   works. Two details are the point:
 
   * every action button is wrapped in `can(resource, verb)`, so a reader never sees a control that
@@ -9,7 +9,7 @@
   * the empty state says *why* it is empty, which for a scoped caller is usually "nothing is
     assigned to you" rather than "nothing exists".
 
-  Replace it with whatever your module needs — `admin-crud.js` drives the richer consoles.
+  Replace it with whatever your module needs; `admin-crud.js` drives the richer consoles.
 #}
 
 {% block content %}

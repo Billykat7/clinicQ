@@ -4,7 +4,7 @@
   Single source of truth so the form is identical wherever it appears (public
   home page and the admin shell). Behaviour lives in login-modal.js; which
   buttons show is driven at runtime by GET /api/v1/auth/config. OAuth is not
-  offered — BK ClinicQ auth is email OTP + password only.
+  offered: BK ClinicQ auth is email OTP + password only.
 #}
 <style nonce="{{ request.state.csp_nonce }}">
   .modal-backdrop {

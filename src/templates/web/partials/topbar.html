@@ -1,7 +1,7 @@
 {# Public front-door topbar: the wordmark, and the one affordance that changes with auth state.
 
    Rendered by every page under `web/`, all of which build their context with
-   `public_page_context` — so `is_authenticated` is resolved through a short-lived session that
+   `public_page_context`, so `is_authenticated` is resolved through a short-lived session that
    degrades to the signed-out shell if the database is unavailable, and this bar renders either way.
 #}
 <header class="site-topbar">

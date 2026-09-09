@@ -1,7 +1,7 @@
 {#
   Reusable navigation cards (Issue #118, M20).
 
-  Renders the ``nav_cards`` context var — a list of ``{title, description?, href, icon?}`` — as a
+  Renders the ``nav_cards`` context var (a list of ``{title, description?, href, icon?}``) as a
   responsive grid of clickable "direction cards" that move between related views (list → detail →
   sub-section). The server decides which cards to show (RBAC-gate each destination with ``can(...)``
   before adding it), so this partial only draws what it is given. ``icon`` selects a leading glyph;

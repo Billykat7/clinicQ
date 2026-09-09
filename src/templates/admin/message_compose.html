@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 
 {#
-  Compose a new message, opened from "New message" (Issue #132 follow-up — Messages previously had
+  Compose a new message, opened from "New message" (Issue #132 follow-up: Messages previously had
   no compose page, unlike Announcements/Alerts). A message thread is always anchored
   to a record (a unit, lease, work order or application), not a free-form audience, so this page
-  collects the anchor instead of picking recipients directly — access still follows the record.
+  collects the anchor instead of picking recipients directly; access still follows the record.
   Sending opens (or reuses) that anchor's thread and posts the first message in one step; there is
   no "save as draft" here since a draft needs a destination and an anchor-not-yet-a-thread has none
   (unlike a reply or announcement draft, which the Drafts tab already supports).
@@ -13,8 +13,8 @@
 {% block content %}
 <div class="page-head">
   <h1>New message</h1>
-  <p class="lead">Start a conversation about a record you manage. Its participants — the unit's
-  tenant, a lease's tenant and owner, a work order's assigned vendor — are derived from the record
+  <p class="lead">Start a conversation about a record you manage. Its participants (the unit's
+  tenant, a lease's tenant and owner, a work order's assigned vendor) are derived from the record
   itself, so pick what the conversation is about.</p>
   {% include "partials/breadcrumbs.html" %}
 </div>
@@ -45,8 +45,8 @@
   <div class="form-actions">
     {# Matches the gate this issue put on the page route itself: opening a thread posts the first
        message, and ``communications.messages:create`` is what the messaging module requires to
-       send one. (``open_thread`` itself is participant/manager-scoped — see the PR's exception
-       list — so this gate is the send's, not the open's.) #}
+       send one. (``open_thread`` itself is participant/manager-scoped, see the PR's exception
+       list, so this gate is the send's, not the open's.) #}
     {% if can('communications.messages', 'create') %}
     <button type="button" class="btn btn-sm" id="mc-send">Start conversation</button>
     {% endif %}

@@ -8,7 +8,7 @@
 </div>
 
 {# Each section is its own URL (/admin/rbac/roles|permissions|users); the tabs are links, and
-   the server marks the active one — so a tab is bookmarkable and survives a refresh. #}
+   the server marks the active one, so a tab is bookmarkable and survives a refresh. #}
 {% set rbac_tab = rbac_initial_tab | default('roles') %}
 <div class="tabs-scroll">
   <div class="tabs" role="tablist">
@@ -17,7 +17,7 @@
     <a class="tab{% if rbac_tab == 'permissions' %} active{% endif %}" id="tab-permissions" data-tab="permissions"
        href="/admin/rbac/permissions" role="tab"{% if rbac_tab == 'permissions' %} aria-current="page"{% endif %}>Permissions</a>
     {# Unlike the other four tabs, Users enforces a separate ``users`` resource (a pre-existing
-       quirk of the enum-era tree, carried forward by REPORTS_SHELL_MANIFEST — ``users``'s parent
+       quirk of the enum-era tree, carried forward by REPORTS_SHELL_MANIFEST: ``users``'s parent
        is ``reports``, not
        ``rbac``: ``list_users``/``create_user``/etc. all depend on ``Users*Dep``, never
        ``Rbac*Dep``), so the tab needs its own gate rather than inheriting the console's ``rbac``
@@ -53,7 +53,7 @@
     <button type="button" class="btn btn-danger btn-sm" id="roles-bulk-delete" aria-disabled="true" disabled>Delete</button>
     {% endif %}
     {# Every other console's "New X" gates on its own resource's CREATE (New property/tenant/
-       vendor) — this one didn't, an inconsistency Issue #155 found and fixed. #}
+       vendor); this one didn't, an inconsistency Issue #155 found and fixed. #}
     {% if can('rbac', 'create', 'business') %}
     <button type="button" class="btn btn-sm" id="new-role-btn">New role</button>
     {% endif %}
@@ -110,7 +110,7 @@
           <ul class="inherits-list" id="rd-inherits-list"></ul>
           <div class="inherits-add">
             <select id="rd-inherits-select" aria-label="Role to inherit"></select>
-            {# Adding a parent role is ``PUT /roles/{name}/inherits`` — RbacUpdateDep. #}
+            {# Adding a parent role is ``PUT /roles/{name}/inherits``, RbacUpdateDep. #}
             {% if can('rbac', 'update', 'business') %}
             <button type="button" class="btn btn-quiet btn-sm" id="rd-inherits-add">Add</button>
             {% endif %}
@@ -118,7 +118,7 @@
           <span class="msg" id="rd-inherits-msg" aria-live="polite"></span>
         </div>
         {# Effective access (Issue #173): what this role actually reaches, on **both** axes of the
-           grant — the verb and the scope tier — for every resource it reaches at all. The quick
+           grant (the verb and the scope tier), for every resource it reaches at all. The quick
            view used to answer "what can this role do" with half the answer: a role holding
            ``properties:READ`` reaches three properties or all four hundred depending on a field
            the console never showed. Read-only here; the grid is where a tier is authored. #}
@@ -170,7 +170,7 @@
 <section class="tab-panel" id="panel-permissions" role="tabpanel" hidden>
   {# Banner/filtering for the matrix (Issue #119): the role selector, a resource search and a
      grant-state filter read as one control surface. Filtering is client-side over the loaded
-     matrix — the permission grid is a per-role editor, so paging/bulk-delete/quick-view are not
+     matrix: the permission grid is a per-role editor, so paging/bulk-delete/quick-view are not
      meaningful here (the M22 resource expansion, Issue #125, extends this). #}
   <div class="toolbar toolbar-filters">
     <label for="perm-role" class="msg msg-muted toolbar-label">Role</label>
@@ -182,7 +182,7 @@
       <option value="inherited">Inherited only</option>
       <option value="none">No access</option>
       {# Issue #176 (M29): the pruning worklist. "Granted here, and nothing has used it in the
-         threshold window" — the one filter that turns "which of these forty grants can I remove?"
+         threshold window": the one filter that turns "which of these forty grants can I remove?"
          from nerve into evidence. The label's day count and the collection-start caveat beside it
          are both filled in from the API payload, never hardcoded here. #}
       <option value="unused" id="perm-state-unused">Granted, never used</option>
@@ -192,7 +192,7 @@
        to the filter is what stops a young window being misread as evidence of disuse. #}
     <span class="msg msg-muted" id="perm-usage-since" hidden></span>
     <span class="spacer"></span>
-    {# Matrix ⇄ JSON (Issue #161, M28): two views over the *same* role_permission rows — the
+    {# Matrix ⇄ JSON (Issue #161, M28): two views over the *same* role_permission rows: the
        visual editor and the raw policy document, the pattern IAM's own console offers. The JSON
        tab is the export/import surface too: copy a role between environments by copying its
        document. #}
@@ -201,7 +201,7 @@
       <button type="button" class="btn btn-quiet btn-sm" id="perm-view-json" aria-pressed="false">JSON</button>
     </div>
     {# Both write the same rows through ``PUT /roles/{name}/permissions`` and
-       ``PUT /roles/{name}/policy`` — one gate, since one is the other's bulk form (Issue #161). The
+       ``PUT /roles/{name}/policy``: one gate, since one is the other's bulk form (Issue #161). The
        Matrix/JSON *view* toggle above stays ungated: it changes nothing. #}
     {% if can('rbac', 'update', 'business') %}
     <button type="button" class="btn btn-sm" id="perm-save">Save matrix</button>
@@ -218,7 +218,7 @@
     </div>
     <div id="perm-json-view" hidden>
       <p class="card-sub">
-        One statement per grant, exactly as stored — <code>scope</code> included, so a document
+        One statement per grant, exactly as stored, <code>scope</code> included, so a document
         copied to another environment carries its breadth with it. Omitting a statement revokes
         that grant; omitting <code>scope</code> on a statement leaves that grant's breadth alone.
       </p>
@@ -243,7 +243,7 @@
     <span class="bulk-count" id="users-selected" aria-live="polite"></span>
     <button type="button" class="btn btn-danger btn-sm" id="users-bulk-delete" aria-disabled="true" disabled>Delete</button>
     {% endif %}
-    {# Same inconsistency as "New role" above — Issue #155 found and fixed. #}
+    {# Same inconsistency as "New role" above; Issue #155 found and fixed. #}
     {% if can('users', 'create', 'business') %}
     <button type="button" class="btn btn-sm" id="new-user-btn">New user</button>
     {% endif %}
@@ -305,7 +305,7 @@
         <div class="field">
           <label for="ud-role">Role (group)</label>
           <select data-combobox id="ud-role"></select>
-          <p class="hint">A user's role is their access group — it decides what they can see and do.</p>
+          <p class="hint">A user's role is their access group: it decides what they can see and do.</p>
         </div>
         {# Multi-role, scoped & time-boxed assignments (Issue #136). The "Role (group)" above is the
            user's single *unscoped* role; here an operator can grant additional roles limited to one
@@ -346,7 +346,7 @@
         <button type="button" class="btn btn-sm" id="ud-save">Save changes</button>
         <button type="button" class="btn btn-quiet btn-sm" id="ud-resend" hidden>Resend activation</button>
         {% endif %}
-        {# Same inconsistency as "rd-delete" above — Issue #155 found and fixed. #}
+        {# Same inconsistency as "rd-delete" above; Issue #155 found and fixed. #}
         {% if can('users', 'delete', 'business') %}
         <button type="button" class="btn btn-danger btn-sm" id="ud-delete">Delete user</button>
         {% endif %}
@@ -395,7 +395,7 @@
     <div class="card-head">
       <div>
         <h1 class="card-title">Permission audit trail</h1>
-        <p class="card-sub">Every RBAC grant and revoke — who changed what, and when.</p>
+        <p class="card-sub">Every RBAC grant and revoke: who changed what, and when.</p>
       </div>
     </div>
     <div class="toolbar toolbar-filters">
@@ -438,13 +438,13 @@
    permissions. Every mutation is rbac-gated and audited; system rows are read-only. ── #}
 <section class="tab-panel" id="panel-catalog" role="tabpanel" hidden>
   {# Catalog sub-tabs (Issue #141 follow-up). Each is its own URL under /admin/rbac/catalog, so a
-     section is bookmarkable and survives a refresh — the same link-bar pattern as the RBAC tabs
+     section is bookmarkable and survives a refresh: the same link-bar pattern as the RBAC tabs
      above and the grouped-console tabs; the server marks the active one and only its panel renders. #}
   {% set catalog_sub = catalog_initial_sub | default('resources') %}
   {# The intro is its own header block, disconnected from the tabbed card below (standard block gap). #}
   <div class="catalog-intro">
     <h1 class="card-title">Catalog</h1>
-    <p class="card-sub">Resources, actions and permissions — editable data, no deploy needed.</p>
+    <p class="card-sub">Resources, actions and permissions: editable data, no deploy needed.</p>
   </div>
   <div class="card" id="catalog-card">
     <div class="tabs-scroll">
@@ -546,7 +546,7 @@
 
     {# The caller's verdicts for the JS-rendered catalog rows (Issue #168, M28). A JS renderer
        cannot carry a Jinja gate, so the server stamps them here once and ``admin-crud.js``'s
-       ``BKPAdmin.verdicts()`` reads them — the generalisation of the ad-hoc ``data-can-*``
+       ``BKPAdmin.verdicts()`` reads them: the generalisation of the ad-hoc ``data-can-*``
        attributes ``invoices.html`` and ``lease_templates.html`` had been using. UX only: every
        route re-checks the grant regardless. #}
     <span hidden id="catalog-verdicts"
@@ -556,7 +556,7 @@
     <div class="catalog-section" id="catalog-panel-nav-gates"{% if catalog_sub != 'nav-gates' %} hidden{% endif %}>
       <h2 class="section-title">Nav gates</h2>
       <p class="card-sub">Re-point an already-shipped sidebar icon or console tab to a different
-        resource, verb or named action — and set how wide a grant it needs (its scope tier) — with
+        resource, verb or named action, and set how wide a grant it needs (its scope tier), with
         no deploy needed. A surface's label/icon/position stays code-declared; only which permission
         it checks, and how far that permission must reach, are editable here. <strong>Business</strong>
         marks a whole-business back-office surface: a caller whose grant on that resource is scoped
@@ -595,7 +595,7 @@
           <option value="business">business</option>
           <option value="own">own</option>
         </select>
-        {# ``PATCH /nav-gates/{surface}`` is RbacUpdateDep, not create — re-pointing an existing
+        {# ``PATCH /nav-gates/{surface}`` is RbacUpdateDep, not create: re-pointing an existing
            surface's gate, never minting one. #}
         {% if can('rbac', 'update', 'business') %}
         <button type="submit" class="btn btn-primary">Re-gate</button>
@@ -621,7 +621,7 @@
   </div>
 
   {# ── Catalog quick view: a resource's ancestor/descendant tree, or (for an action, a permission,
-     or a nav gate) the same tree centred on whatever resource it touches. Read-only, non-modal —
+     or a nav gate) the same tree centred on whatever resource it touches. Read-only, non-modal:
      the same slide-in pattern as the role detail panel above, just with a tree instead of a form. ── #}
   <div class="slideover slideover-inset" id="catalog-quickview" data-anchor="#catalog-card">
     <div class="slideover-panel" role="dialog" aria-modal="false" aria-labelledby="qv-title" tabindex="-1">

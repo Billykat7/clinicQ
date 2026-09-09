@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
 {#
-  Announcements console (Issue #132 follow-up — promoted off the old /admin/messages collapsible
+  Announcements console (Issue #132 follow-up: promoted off the old /admin/messages collapsible
   section into its own console).
 
   Inbox / Sent / Drafts / Deleted, each its own URL (Issue #122 list-view/sub-tab convention).
   Inbox/Sent/Deleted share one thread-list + read-only detail shape (an announcement is a one-way
-  broadcast — no reply here, unlike Messages); Drafts is the private compose list, with a
+  broadcast, with no reply here, unlike Messages); Drafts is the private compose list, with a
   quick-edit slideover and a "Full edit" link to a new-tab page. "New announcement" opens the
   compose page in a new tab rather than an inline slideover.
 #}
@@ -17,7 +17,7 @@
 <div class="page-head">
   <h1>Announcements</h1>
   <p class="lead">Broadcasts to a resolved audience. Who it reaches is authorised server-side by
-  your role and ownership — an admin can reach everyone, an owner their tenants or an owned
+  your role and ownership: an admin can reach everyone, an owner their tenants or an owned
   property, a manager their managed scope.</p>
   {% include "partials/breadcrumbs.html" %}
 </div>
@@ -30,7 +30,7 @@
     <div class="tabs tabs-sub" role="tablist">
       {# Each tab is gated on its own section resource (Issue #145), mirroring the maintenance
          sub-nav (Issue #143): a role scoped to one tab sees only that tab, while a coarse
-         communications.announcements grant still shows every tab (inheritance). UX only — the
+         communications.announcements grant still shows every tab (inheritance). UX only: the
          route re-checks regardless. #}
       {% if nav.can_surface('communications.announcements.inbox') %}
       <a class="tab{% if announcements_tab == 'inbox' %} active{% endif %}" href="/admin/announcements/inbox"
@@ -93,7 +93,7 @@
       {# Gated on exactly what the route enforces (``src/modules/messaging/router.py``): deleting or
          restoring a *shared* announcement thread requires the manager scope, which ``_is_manager``
          resolves as READ on the coarse ``communications.announcements`` resource. Naming a stronger
-         verb here would hide the control from a caller the route would admit — the mirror of the
+         verb here would hide the control from a caller the route would admit: the mirror of the
          wrong-resource mistake Issue #155 found. It is not vacuous on this page: the page gates on
          the *folder* sub-resource, and a grant on a child does not imply one on its parent, so a
          folder-scoped role reaches the console without the manager scope. Mark-read is
@@ -170,7 +170,7 @@
     <div class="slideover-foot form-actions">
       {# The draft routes are author-scoped; what a draft is *for* is the send, which
          requires ``communications.announcements:read``. Editing a draft the caller could never send is
-         not an affordance, so the slideover follows the send gate — the same gate its
+         not an affordance, so the slideover follows the send gate: the same gate its
          standalone editor page carries. #}
       {% if can('communications.announcements', 'read') %}
       <button type="button" class="btn btn-sm" id="drd-save">Save</button>

@@ -42,7 +42,7 @@
   <div class="form-actions">
     {# Composing an announcement is authorised per *audience* by
        ``src.modules.messaging.audience`` rather than by a flat verb, so the closest
-       honest gate for the surface is READ on the resource the console itself gates on —
+       honest gate for the surface is READ on the resource the console itself gates on:
        the same check ``_is_manager`` makes. The GLOBAL audience has its own named action
        (``broadcast_global``, Issue #160), enforced inside the send path. #}
     {% if can('communications.announcements', 'read') %}

@@ -5,7 +5,7 @@
   declarative nav registry (Issue #104): ``nav.visible(key)`` evaluates the caller's
   effective grants against ``src/core/nav_registry.py``, and grouped rail icons read
   ``nav.group_visible(key)`` / ``nav.group_href(key)``. A user only ever sees the
-  destinations their role can reach — a link they cannot use is never rendered, and
+  destinations their role can reach: a link they cannot use is never rendered, and
   guessing its URL returns 403 (see routes.py). Change a grant in the RBAC admin and
   the rail follows with no template edit.
 
@@ -24,7 +24,7 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
   </a>
 
-  {# Communications — Messages, Notifications, Announcements and Alerts grouped under one icon
+  {# Communications: Messages, Notifications, Announcements and Alerts grouped under one icon
      with tabbed sub-navigation (Issue 92): all four are the business's one inbox, so they belong
      one click apart rather than four separate rail icons. The group renders only when the caller
      can reach at least one of its tabs. #}
@@ -34,7 +34,7 @@
   </a>
   {% endif %}
 
-  {# Widgets — the example module's console. Delete this block with the module. #}
+  {# Widgets: the example module's console. Delete this block with the module. #}
   {% if nav.visible('widgets') %}
   <a href="/admin/widgets" class="rail-item{% if active_nav == 'widgets' %} active{% endif %}" data-tip="Widgets" aria-label="Widgets">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>
@@ -63,7 +63,7 @@
 
   <div class="rail-spacer"></div>
 
-  {# Account — settings gear (distinct from the person/group marks above). #}
+  {# Account: settings gear (distinct from the person/group marks above). #}
   <a href="/account/profile" class="rail-item nav-account{% if active_nav == 'account' %} active{% endif %}" data-tip="Account" aria-label="Account">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
   </a>

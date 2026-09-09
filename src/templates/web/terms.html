@@ -2,7 +2,7 @@
   Public terms of service (`/terms`), rendered by :func:`src.web.routes.terms_page`.
 
   Written for South African law, because that is where the product runs: the Electronic
-  Communications and Transactions Act 25 of 2002 (s43 — what a supplier must disclose on a
+  Communications and Transactions Act 25 of 2002 (s43: what a supplier must disclose on a
   website), the Consumer Protection Act 68 of 2008 (which limits how far liability may be excluded
   and forbids burying a risk in the fine print), and POPIA for anything about personal information,
   which lives in the `/privacy` notice rather than being restated here.
@@ -11,8 +11,8 @@
   product must never be mistaken for a way to get emergency help.
 
   Same design system and same constraints as the rest of the front door: `landing.css` and the
-  shared `lp_header` / `lp_footer` partials, no inline styles or handlers (CSP), and no DB session
-  — so the terms stay reachable during an outage. `last_updated` is shared with `/privacy` through
+  shared `lp_header` / `lp_footer` partials, no inline styles or handlers (CSP), and no DB
+  session, so the terms stay reachable during an outage. `last_updated` is shared with `/privacy` through
   `LEGAL_PAGES_LAST_UPDATED` in `src/web/routes.py`.
 #}
 <!DOCTYPE html>
@@ -50,7 +50,7 @@
     <div class="lp-eyebrow">Legal · South Africa</div>
     <h1>Terms of service</h1>
     <p class="lp-lede">
-      The terms on which {{ app_name }} is provided — to you as a patient, and to the clinic whose
+      The terms on which {{ app_name }} is provided: to you as a patient, and to the clinic whose
       queue you join. Written for South African law, and meant to be read.
     </p>
     <p class="lp-updated">Last updated: {{ last_updated }}</p>
@@ -105,8 +105,8 @@
           <b>Read this first.</b> {{ app_name }} is a final-year BSc IT capstone project at
           Richfield Graduate Institute of Technology, and is not yet operating in a live clinic.
           These terms describe how the service is intended to be provided. They are
-          <strong>not legal advice</strong>, and must be reviewed by a suitably qualified person —
-          and completed with the deployment's own supplier details — before any real patient uses
+          <strong>not legal advice</strong>. They must be reviewed by a suitably qualified person,
+          and completed with the deployment's own supplier details, before any real patient uses
           the service.
         </div>
       </section>
@@ -132,7 +132,7 @@
         <h2>What the service does</h2>
         <ul>
           <li>Helps you find clinics near you, with their sector, opening status and current queue length.</li>
-          <li>Lets you take a place in a clinic's queue — from the app, over USSD, on WhatsApp, on the web, at the kiosk, or at reception.</li>
+          <li>Lets you take a place in a clinic's queue: from the app, over USSD, on WhatsApp, on the web, at the kiosk, or at reception.</li>
           <li>Shows you your position and an estimated wait, and notifies you as your turn approaches.</li>
           <li>Shows your ticket number on the clinic's waiting-room screen, and your name only where you have consented and the clinic has enabled it.</li>
           <li>Gives the clinic a dashboard to run the queue, and reports on how it performed.</li>
@@ -161,7 +161,7 @@
       <section id="account">
         <h2>Your account</h2>
         <ul>
-          <li>Give accurate details, and keep your mobile number and email address current — that is how we reach you when it is your turn.</li>
+          <li>Give accurate details, and keep your mobile number and email address current; that is how we reach you when it is your turn.</li>
           <li>You are responsible for what happens under your account, and for keeping your password, one-time codes and two-factor device secure.</li>
           <li>Do not share your account or let someone else use it. Tell the operator promptly if you think it has been used without your permission.</li>
           <li>If you register on a shared or borrowed phone, sign out when you are done.</li>
@@ -171,7 +171,7 @@
       <section id="proxy">
         <h2>Booking for someone else</h2>
         <p>
-          You may join a queue on behalf of a dependant — a child, or an adult who has asked you to.
+          You may join a queue on behalf of a dependant: a child, or an adult who has asked you to.
           When you do, you confirm that you are entitled to act for that person and to give the
           consents the service records. For a child, that means you are the parent, guardian or
           other competent person. You can revoke a proxy arrangement at any time, and so can the
@@ -186,7 +186,7 @@
           <li>Take places in queues you do not intend to use, or take multiple places for the same visit.</li>
           <li>Impersonate another person, or join a queue for someone who has not asked you to.</li>
           <li>Try to reach records, clinics or accounts you have not been granted access to, or probe, scan or test the service's security without written permission.</li>
-          <li>Interfere with the service or its infrastructure — including automated scraping, flooding the messaging channels, or anything that degrades it for others.</li>
+          <li>Interfere with the service or its infrastructure, including automated scraping, flooding the messaging channels, or anything that degrades it for others.</li>
           <li>Use the service to break the law, to harass anyone, or to send unsolicited messages.</li>
         </ul>
         <p>
@@ -214,11 +214,11 @@
         <h2>Terms for clinics</h2>
         <p>If your clinic uses {{ app_name }}, it additionally agrees that it will:</p>
         <ul>
-          <li>Give accurate clinic details — hours, closures, services and location — and keep them current, since patients travel on them.</li>
+          <li>Give accurate clinic details (hours, closures, services and location) and keep them current, since patients travel on them.</li>
           <li>Use the queue fairly, and record a reason for every priority override.</li>
           <li>Keep the waiting-room display in number-only mode unless it has recorded each affected patient's consent to show more.</li>
           <li>Give each staff member only the access their role requires, and remove access when they leave.</li>
-          <li>Remain the responsible party for its patients' personal information under POPIA, and use {{ app_name }} as its operator under a written agreement — see the <a href="/privacy">privacy notice</a>.</li>
+          <li>Remain the responsible party for its patients' personal information under POPIA, and use {{ app_name }} as its operator under a written agreement; see the <a href="/privacy">privacy notice</a>.</li>
           <li>Not use the service, or its reports, in a way that discriminates against patients or misrepresents its waiting times.</li>
         </ul>
       </section>
@@ -226,8 +226,8 @@
       <section id="privacy">
         <h2>Personal information</h2>
         <p>
-          How we collect, use, share, protect and delete personal information — and the rights you
-          have under the Protection of Personal Information Act 4 of 2013 — is set out in the
+          How we collect, use, share, protect and delete personal information, and the rights you
+          have under the Protection of Personal Information Act 4 of 2013, is set out in the
           <a href="/privacy">privacy notice</a>, which forms part of these terms. In short: every
           clinic starts number-only, names on the screen require your consent, the reason for your
           visit is never displayed and is purged automatically, and you can ask what we hold and
@@ -253,7 +253,7 @@
         <h2>Liability</h2>
         <p>
           Nothing in these terms limits or excludes any liability that cannot lawfully be limited or
-          excluded — including under the Consumer Protection Act 68 of 2008 — or any liability for
+          excluded (including under the Consumer Protection Act 68 of 2008) or any liability for
           death or personal injury caused by our negligence, or for fraud.
         </p>
         <p>
@@ -270,7 +270,7 @@
         <h2>Suspension and ending access</h2>
         <p>
           You may stop using the service at any time, and you may ask for your account to be
-          deleted — see the <a href="/privacy">privacy notice</a> for what happens to your
+          deleted; see the <a href="/privacy">privacy notice</a> for what happens to your
           information when you do.
         </p>
         <p>
@@ -293,7 +293,7 @@
         <h2>Governing law and disputes</h2>
         <p>
           These terms are governed by the law of the Republic of South Africa, and the South African
-          courts have jurisdiction. Please raise a complaint with us first — most are resolved
+          courts have jurisdiction. Please raise a complaint with us first; most are resolved
           quickly. Nothing here prevents you from approaching the Information Regulator about
           personal information, a consumer body about a consumer complaint, or a court.
         </p>
@@ -308,7 +308,7 @@
         </p>
         <dl class="lp-defs">
           <dt>Service</dt>
-          <dd>{{ app_name }} — clinic discovery and digital queue management</dd>
+          <dd>{{ app_name }}: clinic discovery and digital queue management</dd>
           <dt>Provided by</dt>
           <dd>A BSc IT capstone project team, Richfield Graduate Institute of Technology (Distance Learning), South Africa</dd>
           <dt>Registration and physical address</dt>

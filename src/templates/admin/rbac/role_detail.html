@@ -36,7 +36,7 @@
 <div class="card" id="role-effective-access" data-role="{{ role.name }}">
   <h2>Effective access</h2>
   <p class="card-sub">
-    What a holder of this role actually reaches, after role and resource-tree inheritance —
+    What a holder of this role actually reaches, after role and resource-tree inheritance:
     the verb <em>and</em> how wide it goes. Edit either in
     <a href="/admin/rbac/permissions">Permissions</a>.
     Expand a row's <em>Why</em> to see which grant decided it: a grant cascaded from a parent
@@ -77,7 +77,7 @@
   <h2>Property assignments</h2>
   <p class="card-sub">
     The properties this role's holders were assigned. A grant at
-    <span class="scope-tag">assigned properties</span> reaches exactly these — and nothing at all
+    <span class="scope-tag">assigned properties</span> reaches exactly these, and nothing at all
     when the list is empty. Assignments are added and removed on a user's own page.
   </p>
   {% if property_assignments %}
@@ -98,7 +98,7 @@
   {% else %}
   <p class="msg msg-muted">
     Nobody holding this role is assigned a property. Add one from
-    <a href="/admin/rbac/users">Users</a> — pick the holder, then add a role assignment with scope
+    <a href="/admin/rbac/users">Users</a>: pick the holder, then add a role assignment with scope
     type <code>property</code>.
   </p>
   {% endif %}
@@ -111,7 +111,7 @@
 {% endblock %}
 
 {% block scripts %}
-{# The explainer only ever renders what /admin/rbac/simulate returns — no permission resolution
+{# The explainer only ever renders what /admin/rbac/simulate returns: no permission resolution
    in the browser (Issue #175). csrf-htmx.js (loaded by the shell) supplies the write headers. #}
 <script src="/static/js/rbac-explainer.js" defer></script>
 {% endblock %}

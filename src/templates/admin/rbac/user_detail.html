@@ -7,7 +7,7 @@
   canonical ``/admin/rbac/users/{id}`` route from the quick-view "Open full" link and the list
   "open full" icon (Issue #117). No inline styles or handlers (CSP unchanged).
 
-  Issue #175 (M29) adds the two panels that answer the question support actually gets — "why can
+  Issue #175 (M29) adds the two panels that answer the question support actually gets: "why can
   this person not see their lease?": **Effective access**, the union of the user's active
   assignments with the contributing role per resource, and **Role assignments**, every assignment
   including the expired and scoped ones, shown as inactive rather than omitted.
@@ -39,7 +39,7 @@
   <h2>Effective access</h2>
   <p class="card-sub">
     The union of this user's <strong>active</strong> role assignments, resolved exactly as a request
-    resolves it — role inheritance, the resource tree, deny-beats-allow, and the scope tier. The
+    resolves it: role inheritance, the resource tree, deny-beats-allow, and the scope tier. The
     shell renders from <code>{{ user.role }}</code> alone; a second, assigned role widens what the
     API allows without changing that.
   </p>
@@ -50,7 +50,7 @@
   <h2>Role assignments</h2>
   <p class="card-sub">
     Every assignment, active or not. An expired or scoped one is listed as inactive rather than
-    hidden — an assignment that has silently vanished from this page looks exactly like one that was
+    hidden: an assignment that has silently vanished from this page looks exactly like one that was
     never granted, which is the opposite of the answer a support question needs.
   </p>
   <div id="ud-assignments-body"></div>

@@ -20,7 +20,7 @@
 
   Two audiences, one page. Everything above `#delivery` is the *product*, and is public.
   The tracked-issue count, the milestone roadmap, the six delivery lanes and the anti-blocking
-  rule are the *project* — unshipped work, internal sequencing and who owns which surface — and
+  rule are the *project* (unshipped work, internal sequencing and who owns which surface), and
   render only for a caller holding the operator grant `can_view_internals` resolves
   (`logs:READ` at `business`; see `src/web/context.py`). The nav and footer links into those
   sections carry the same gate, so a visitor is never offered an anchor that is not on their page.
@@ -372,7 +372,7 @@ nearly your turn.</div>
   <section class="lp-section lp-wrap" id="features" data-reveal>
     <div class="lp-eyebrow">Scope</div>
     <h2 class="lp-title">What we are building</h2>
-    {# The tracked-issue count is internal delivery information — it names how much of what
+    {# The tracked-issue count is internal delivery information: it names how much of what
        follows is still unbuilt. An operator gets it; a visitor gets the product sentence
        instead, so the section never opens on a bare heading. #}
     {% if can_view_internals %}
