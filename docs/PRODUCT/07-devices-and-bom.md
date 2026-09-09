@@ -1,9 +1,9 @@
 # 07 - Devices to buy - cheapest first
 
 ClinicQ needs far less hardware than ElimuKadi (no cards/readers) or
-UmojaNet (no radios/dishes) - the whole product is software plus **one
+UmojaNet (no radios/dishes): the whole product is software plus **one
 screen per clinic**. Global retail prices (AliExpress/Amazon/manufacturer store listings, Aug 2026
-planning numbers) - add South African import VAT/duty where relevant; always re-check live prices before
+planning numbers): add South African import VAT/duty where relevant; always re-check live prices before
 ordering.
 
 ## Waiting-room display monitor - ranked cheapest first
@@ -45,7 +45,7 @@ hardware spend: **under $100**, often **$0** if a spare screen is already on-sit
 | Clinic has a spare TV/monitor and a working PC | **$0-100** (just the signage box, maybe a UPS) |
 | Clinic has neither | **$250-450** (screen + signage box + reused/cheap PC + UPS) |
 
-This is the **lowest hardware bar of the three shortlisted-and-elaborated capstone directions** - see the
+This is the **lowest hardware bar of the three shortlisted-and-elaborated capstone directions**; see the
 earlier team comparison of [effort/spend across the shortlist](../PROJECTS/Top_6_Final_Year_Project_Ideas.md)
 - because there is no card stock, no NFC readers, and no radio/networking gear to buy.
 

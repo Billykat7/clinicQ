@@ -1,6 +1,6 @@
 # 05 - Clinic dashboard: call-next, per-room queues, walk-in intake, reporting
 
-The dashboard is where reception, nurses, and the clinic manager actually run the day - every other
+The dashboard is where reception, nurses, and the clinic manager actually run the day: every other
 surface (patient app, USSD, WhatsApp, display monitor) is downstream of actions taken here.
 
 ## Dashboard views by role
@@ -46,9 +46,9 @@ sequenceDiagram
 ## Walk-in intake and reordering
 
 - **Add walk-in**: name/initials (optional phone number for notifications), reason (optional, private
-  note vs public comment - see [04](04-display-monitor.md)), joins the same sequence as remote tickets.
+  note vs public comment; see [04](04-display-monitor.md)), joins the same sequence as remote tickets.
 - **Manual reorder**: staff can drag a ticket up the queue for genuine clinical priority (visibly unwell,
-  elderly, emergency) - every reorder is logged with the staff member's id and a reason code, for
+  elderly, emergency); every reorder is logged with the staff member's id and a reason code, for
   audit/accountability (this is the human-override valve that keeps the "one fair queue" rule in
   [03](03-booking-and-queue.md) workable in the real world).
 

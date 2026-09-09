@@ -1,7 +1,7 @@
 # 12 - Upscaling journey - 24 months
 
 Grow **clinic by clinic within one metro first**, then expand geographically and add channel/feature
-depth - never oversell support capacity ahead of the small team, mirroring the discipline used in
+depth; never oversell support capacity ahead of the small team, mirroring the discipline used in
 ElimuKadi and UmojaNet.
 
 ## Coverage stages
@@ -43,7 +43,7 @@ document use **ClinicQ**.
 
 <div class="callout">Spend first on **reliable notifications and accurate wait estimates**, second on
 **onboarding/support capacity**, third on **a second metro**, and only then on the medical-aid/payment
-filter or district-wide deals - the same "prove the unit, then replicate" discipline as
+filter or district-wide deals, the same "prove the unit, then replicate" discipline as
 ElimuKadi's and UmojaNet's growth
 plans.</div>
 
@@ -52,7 +52,7 @@ plans.</div>
 - **Verified medical-aid/payment filter** ([02](02-discovery-and-geolocation.md)) as a premium directory
   feature once a handful of private clinics and schemes are willing to keep the data current.
 - **Scheduled appointments** (not just walk-in/remote-join queueing) once clinics want a hybrid
-  booking+queue model - see [03](03-booking-and-queue.md).
+  booking+queue model; see [03](03-booking-and-queue.md).
 - **Multi-site/practice-group reporting add-on** once 3+ clinics under one manager want a combined view.
 - **Public discovery advertising/placement** (clearly labelled, never affecting wait-order or medical
   priority) once the discovery surface ([02](02-discovery-and-geolocation.md)) has real metro-wide traffic.

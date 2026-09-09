@@ -167,4 +167,4 @@ see [`docs/PLAN/IMPLEMENTATION_PLAN.md`](../PLAN/IMPLEMENTATION_PLAN.md) and
 
 ## License
 
-Not yet decided - pick one (e.g. MIT or Apache-2.0) when the repository is actually created.
+Not yet decided: pick one (e.g. MIT or Apache-2.0) when the repository is actually created.

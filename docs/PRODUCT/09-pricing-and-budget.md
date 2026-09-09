@@ -33,7 +33,7 @@ live rate).
 | District rollout (10+ clinics) | **R25,000 - 70,000** | **$1,400 - 3,900** | Only after Phase 0-1 proves the model - see [12-upscaling-24-months.md](12-upscaling-24-months.md) |
 
 This is **dramatically cheaper to start** than ElimuKadi (card stock +
-NFC readers) or UmojaNet (Starlink + radios) - the entire capex is one
+NFC readers) or UmojaNet (Starlink + radios): the entire capex is one
 small always-on box and maybe a screen.
 
 ## Break-even sketch (one clinic)

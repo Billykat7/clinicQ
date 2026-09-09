@@ -29,7 +29,7 @@ sequenceDiagram
 ```
 
 **Estimated wait** starts as a simple rolling average (`average service time last N tickets x position in
-queue`), shown as a range (e.g. "~15-25 min") rather than a false-precision single number - this mirrors
+queue`), shown as a range (e.g. "~15-25 min") rather than a false-precision single number; this mirrors
 how well-run real-world queue systems (bank branches, DMV-style services) set expectations honestly.
 
 ## Walk-in intake (reception side)
@@ -48,13 +48,13 @@ sequenceDiagram
 ```
 
 **One queue, not two.** A common failure mode in simple queue apps is a separate "online" line that jumps
-ahead of the physical line (or vice versa) - ClinicQ deliberately keeps **one sequence per
+ahead of the physical line (or vice versa). ClinicQ deliberately keeps **one sequence per
 clinic/room/service**, fair by arrival order regardless of channel, with staff able to manually reorder
 for genuine triage/priority cases (elderly, visibly unwell, emergency) at their discretion.
 
 ## Multi-room / multi-service queues
 
-Most clinics are not one single line - a patient might queue once for **triage/vitals**, then again for
+Most clinics are not one single line: a patient might queue once for **triage/vitals**, then again for
 the **doctor**, then again for the **pharmacy window**. ClinicQ models this as **multiple named queues
 per clinic**, and a patient can be moved from one to the next by staff without re-joining from scratch:
 

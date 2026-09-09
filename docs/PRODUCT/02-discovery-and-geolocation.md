@@ -39,7 +39,7 @@ never changes automatically.
 ## Payment / medical-aid filter (Phase 2 enhancement, private only)
 
 **Not in the MVP.** Once a private clinic's onboarding form captures which payment types and medical aid
-schemes it accepts, the discovery filter can narrow results further - **but only within "Private"**,
+schemes it accepts, the discovery filter can narrow results further, **but only within "Private"**,
 since public clinics operate on a different funding model entirely and do not take medical aid billing at
 the point of care in the same way.
 
@@ -63,7 +63,7 @@ flowchart LR
 integration project (each scheme has its own switch/API), and is easy to get wrong in a way that sends a
 patient to the wrong clinic. Shipping a simple, honest, **self-reported** directory tag first (with a
 clear "confirm with the clinic" disclaimer) gets 80% of the value at a fraction of the engineering and
-compliance cost - full integration is a realistic Stage 2+ item, see
+compliance cost. Full integration is a realistic Stage 2+ item; see
 [12-upscaling-24-months.md](12-upscaling-24-months.md).
 
 ## Data captured (discovery side)

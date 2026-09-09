@@ -3,7 +3,7 @@
 South Africa's phone landscape is split between smartphone-with-data users, feature-phone/no-data users,
 and near-universal WhatsApp adoption on whatever phone people have. ClinicQ's discovery and queue engine
 ([02](02-discovery-and-geolocation.md), [03](03-booking-and-queue.md)) is exposed through **four
-channels**, all calling the same underlying API - no channel gets special features the others lack in
+channels**, all calling the same underlying API: no channel gets special features the others lack in
 terms of the core "find a clinic, get a ticket, get notified" loop.
 
 ## Channel comparison
@@ -52,7 +52,7 @@ Reply 9 to cancel.
 ```
 
 USSD sessions are short-lived and stateless between taps, so the API keeps **session state server-side**
-keyed by the USSD session id, replaying the current menu step on each request - the same idempotent,
+keyed by the USSD session id, replaying the current menu step on each request: the same idempotent,
 short-request pattern used for UmojaNet's captive portal.
 
 ## WhatsApp bot flow (sketch)
@@ -90,7 +90,7 @@ land, fall back to SMS rather than leaving the patient with no notification at a
 Same reasoning as ElimuKadi and UmojaNet: one
 FastAPI + htmx codebase serves the PWA and the web app; USSD and WhatsApp are thin adapters calling the
 same `/api/*` routes ([13](13-tech-implementation.md#5-api--route-surface-sketch)). A native app is a
-later option only if patients strongly prefer an App Store presence for trust - the backend already
+later option only if patients strongly prefer an App Store presence for trust; the backend already
 exposes JSON for that future client.
 
 Markdown: this is [06-channels-app-ussd-whatsapp-web.md](06-channels-app-ussd-whatsapp-web.md).

@@ -7,8 +7,8 @@
 > rollout; those stay parked as expansion brands and are not used anywhere in the codebase.
 
 **Idea:** find a nearby clinic (public or private, later filterable by accepted medical aid/cash/card
-under private), join its digital queue before you even leave home - from a **mobile PWA, USSD menu,
-WhatsApp bot, or plain web app** - and watch your ticket number count down on the clinic's own
+under private), join its digital queue before you even leave home (from a **mobile PWA, USSD menu,
+WhatsApp bot, or plain web app**) and watch your ticket number count down on the clinic's own
 waiting-room **display monitor**, while staff run the whole line from one **dashboard**.
 
 > Capstone shortlist origin: [docs/PROJECTS](../PROJECTS/index.html#clinic-queue) (was **ClinicQueue**)
@@ -50,7 +50,7 @@ waiting-room **display monitor**, while staff run the whole line from one **dash
 **Browse:** open [`index.html`](index.html) - tabbed UI (inactive tabs are hidden via `[hidden]`), with
 live-rendered **Mermaid** diagrams (discovery/geo sequence, queue-join sequence, display-monitor flow,
 dashboard call-next sequence, 90-day Gantt, growth gates, device wiring, positioning quadrant) via
-mermaid.js - same source as the fenced ```mermaid blocks in [02](02-discovery-and-geolocation.md),
+mermaid.js, the same source as the fenced ```mermaid blocks in [02](02-discovery-and-geolocation.md),
 [03](03-booking-and-queue.md), [04](04-display-monitor.md), [05](05-clinic-dashboard.md),
 [06](06-channels-app-ussd-whatsapp-web.md), [08](08-topology.md), [10](10-business-plan.md),
 [11](11-marketing.md), [12](12-upscaling-24-months.md), [13](13-tech-implementation.md), and

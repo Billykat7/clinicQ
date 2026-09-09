@@ -33,13 +33,13 @@ small capstone-sized team to build, debug, and support than an API plus a separa
 Server-Sent Events (SSE) or short htmx polling intervals keep the display board and dashboard "live" feel
 without a heavier WebSocket layer. If a richer native mobile client is ever needed
 (see [06-channels-app-ussd-whatsapp-web.md](06-channels-app-ussd-whatsapp-web.md)), the same FastAPI
-backend already exposes JSON under `/api/*` - the same pattern used in
+backend already exposes JSON under `/api/*`, the same pattern used in
 ElimuKadi's and UmojaNet's stacks.
 
 ## 2. Repository layout (suggested)
 
 See [REPO_README.md](REPO_README.md) for the suggested repo name and a ready-to-use project README (no
-code or remote repository created yet - docs only, per project scope).
+code or remote repository created yet; docs only, per project scope).
 
 ```text
 clinicq/
@@ -199,7 +199,7 @@ Quantities needed of each **device type**, matching the coverage stages in
 | Small UPS/battery backup | 0-1 | 1-3 | 3-10 | 10-30 |
 | Thermal ticket printer (optional) | 0-1 | 0-3 | 2-8 | 5-20 |
 
-These are planning quantities, not exact bills of materials - always confirm with a real site check (see
+These are planning quantities, not exact bills of materials; always confirm with a real site check (see
 [07-devices-and-bom.md](07-devices-and-bom.md) for model-level pricing).
 
 ## 8. How the connections are done (physical + logical)
@@ -243,7 +243,7 @@ flowchart TB
 - Mount the display box behind or beside the screen, out of casual reach, with its `site_id`/URL
   configured once and never touched again (kiosk auto-launch on boot).
 - Keep a small UPS on the display box so short outages (load-shedding) don't blank the waiting-room
-  screen mid-queue - the dashboard should show a clear "reconnecting" state rather than silently freezing
+  screen mid-queue; the dashboard should show a clear "reconnecting" state rather than silently freezing
   (see [08-topology.md](08-topology.md#resilience-internet-outage-at-a-clinic)).
 - Never store patient health-adjacent comment text ([04](04-display-monitor.md)) longer than necessary -
   purge `reason_text`/`visit_notes` on a short retention window after the visit is marked done, per POPIA

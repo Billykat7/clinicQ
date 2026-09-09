@@ -27,7 +27,7 @@ gantt
    the display monitor ([04](04-display-monitor.md)) before enabling anything beyond number-only mode.
 2. **Days 1-17**: sign one pilot clinic (a busy public clinic or a private GP practice with a visible
    waiting-room queue problem), set up the display box on an existing screen, run **dashboard +
-   number-only display only** first - staff still call names verbally, the board just shows numbers.
+   number-only display only** first: staff still call names verbally; the board just shows numbers.
 3. **Days 18-41**: switch on **remote join** via the PWA and WhatsApp bot so patients can get a ticket
    before arriving; watch adoption (target 30%+ of daily tickets joined remotely within the first month).
 4. **Days 42-55**: add **USSD** for feature-phone/no-data patients, closing the accessibility gap.
@@ -51,7 +51,7 @@ gantt
 
 <div class="callout">Sell the pilot on **shorter time physically spent in the waiting room + fewer
 "where am I in the line?" interruptions to reception** first; let the clinic discover the reporting and
-multi-channel reach as a bonus once the core queue is trusted - the same "lead with the pain point, not
+multi-channel reach as a bonus once the core queue is trusted, the same "lead with the pain point, not
 the tech" ordering used in ElimuKadi's marketing.</div>
 
 Markdown: this is [10-business-plan.md](10-business-plan.md).

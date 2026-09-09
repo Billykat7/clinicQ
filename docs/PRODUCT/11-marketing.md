@@ -1,6 +1,6 @@
 # 11 - How to market this to clinics
 
-Clinics buy on **manager trust + reception pain relief + patient satisfaction**, in that order - not on
+Clinics buy on **manager trust + reception pain relief + patient satisfaction**, in that order, not on
 "PostGIS" or "USSD gateway" jargon.
 
 ## Who to approach first
@@ -36,7 +36,7 @@ the operational win before any commercial or privacy conversation is needed.
   to several clinics at once.
 - **Referral incentive**: 1 month free subscription for a clinic that refers a signed sister clinic/branch.
 - **Honest live demo**: bring a tablet + a spare monitor to a practice meeting, simulate a few tickets
-  live - concrete demos beat slide decks for this audience, same lesson as
+  live; concrete demos beat slide decks for this audience, same lesson as
   ElimuKadi's marketing.
 
 ## What NOT to lead with
@@ -44,7 +44,7 @@ the operational win before any commercial or privacy conversation is needed.
 - Do not open with "geo-location," "PostGIS," or technical channel names (USSD/API) - lead with **"your
   patients queue from their phone, your waiting room runs itself."**
 - Do not overpromise the medical-aid filter ([02](02-discovery-and-geolocation.md)) as live/verified on
-  day one - it is an honest, self-reported directory tag, not a claims check; be explicit about this to
+  day one: it is an honest, self-reported directory tag, not a claims check; be explicit about this to
   avoid a clinic manager's disappointment later.
 - Do not push name/comment display modes ([04](04-display-monitor.md)) as a default - offer number-only
   first and let the clinic explicitly opt into more, framing privacy as a *feature*, not a limitation,

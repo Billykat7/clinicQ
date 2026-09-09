@@ -20,10 +20,10 @@ menu before you even leave home, and watch your position count down on the clini
 
 - **Not a full hospital information system (HIS/EMR).** No diagnosis coding, no pharmacy dispensing, no
   lab-result storage in the MVP. ClinicQ is a **queue and discovery layer** in front of whatever clinic
-  system already exists (or none at all, for the many clinics still running paper files) - see
+  system already exists (or none at all, for the many clinics still running paper files); see
   [14-benchmark.md](14-benchmark.md).
 - **Not a medical-aid claims/switching platform.** The "accepts medical aid X / cash / card" filter
-  ([02](02-discovery-and-geolocation.md)) is a **directory attribute**, not a claims integration - no
+  ([02](02-discovery-and-geolocation.md)) is a **directory attribute**, not a claims integration: no
   member verification, no billing codes, in the MVP.
 - **Not a triage or telehealth product.** The optional comment field on a queue ticket
   ([04](04-display-monitor.md)) is a short **free-text reason for visit** for staff convenience, not a
@@ -63,11 +63,11 @@ menu before you even leave home, and watch your position count down on the clini
 Docker.**
 
 One Python codebase renders the patient-facing discovery/queue pages, the clinic dashboard, and the
-display-monitor signage page - FastAPI serves Jinja2 templates and htmx swaps fragments in place (queue
+display-monitor signage page: FastAPI serves Jinja2 templates and htmx swaps fragments in place (queue
 position ticks down live, the dashboard's call-next button updates the display screen) without a
 separate JS build. PostGIS powers the "clinics near me" geo-search
 ([02](02-discovery-and-geolocation.md)). USSD and WhatsApp are additional **channels** into the same
-booking/queue API, not separate systems - see [06](06-channels-app-ussd-whatsapp-web.md) and
+booking/queue API, not separate systems; see [06](06-channels-app-ussd-whatsapp-web.md) and
 [13-tech-implementation.md](13-tech-implementation.md).
 
 ## Quick answers
@@ -108,7 +108,7 @@ booking/queue API, not separate systems - see [06](06-channels-app-ussd-whatsapp
 **Browse:** open [`index.html`](index.html) - tabbed UI (inactive tabs are hidden via `[hidden]`), with
 live-rendered **Mermaid** diagrams (discovery/geo sequence, queue-join sequence, display-monitor flow,
 dashboard call-next sequence, 90-day Gantt, growth gates, device wiring, positioning quadrant) via
-mermaid.js - same source as the fenced ```mermaid blocks in the numbered docs, which GitHub also renders
+mermaid.js, the same source as the fenced ```mermaid blocks in the numbered docs, which GitHub also renders
 natively.
 
 ## Mental model (one queue, four doors in)

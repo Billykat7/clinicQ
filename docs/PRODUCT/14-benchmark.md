@@ -2,7 +2,7 @@
 
 Retail and government services abroad have run digital queue-management systems for over a decade
 (Qminder, Qless, Wavetec); healthcare-specific queueing and e-referral systems exist in the UK, US, and EU
-too. **Most South African clinics, especially public ones, still run paper-and-shout queues** - that gap
+too. **Most South African clinics, especially public ones, still run paper-and-shout queues**: that gap
 is exactly what ClinicQ targets, in the same spirit as
 ElimuKadi targeting the school-card gap and
 UmojaNet targeting the community-Wi-Fi gap.
@@ -25,10 +25,10 @@ UmojaNet targeting the community-Wi-Fi gap.
   are typically priced and packaged for retail/corporate use cases, not sized or priced for a public
   primary-care clinic.
 - **Private GP practices** often have practice-management software (billing, scheduling) but **not** a
-  patient-facing discovery-and-queue layer - ClinicQ's discovery module ([02](02-discovery-and-geolocation.md))
+  patient-facing discovery-and-queue layer; ClinicQ's discovery module ([02](02-discovery-and-geolocation.md))
   is closer to a "Google Maps for clinics with a live queue attached" than a practice-management system.
 - **Multi-channel access (USSD)** is largely absent from global queue vendors, who assume smartphone +
-  app as the default - a gap that matters a great deal in the South African/regional market, where
+  app as the default, a gap that matters a great deal in the South African/regional market, where
   feature-phone and low-data usage remains significant.
 
 ## Extra features worth adding to ClinicQ's roadmap (in rough priority order)
@@ -82,7 +82,7 @@ quadrantChart
 ```
 
 <div class="callout">Win by being the **first affordable, multi-channel (app + USSD + WhatsApp),
-geo-aware discovery-and-queue layer** for clinics in South Africa and the wider region - a category that
+geo-aware discovery-and-queue layer** for clinics in South Africa and the wider region, a category that
 exists at retail/corporate scale and in a handful of national health systems abroad, but not yet at
 ordinary public/private-clinic scale locally.</div>
 
