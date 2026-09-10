@@ -149,6 +149,8 @@ activemq-data/
 
 # Environments
 .env
+# The template is tracked even when a global gitignore hides `.env.*` files.
+!.env.example
 .envrc
 .venv
 env/

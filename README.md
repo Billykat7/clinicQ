@@ -145,8 +145,8 @@ see the [workload split](docs/TEAM/WORKLOAD_SPLIT.md#1-the-six-roles).
 
 ## Getting started
 
-You need **Python 3.14**, **Docker** and **make**. From a fresh clone, five commands take you from
-nothing to a running app:
+You need **Python 3.14**, **Docker** (with Compose 2.24 or newer) and **make**. From a fresh clone,
+five commands take you from nothing to a running app:
 
 1. Create the virtual environment and install the dependencies:
 
@@ -154,14 +154,14 @@ nothing to a running app:
    python3.14 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
    ```
 
-2. Point the app at the local database. The values match the database container's defaults in
-   `infra/docker/docker-compose.db.yml`; the full `.env.example` arrives with Issues 2 and 12:
+2. Point the app at the local stack. `.env.example` holds `DATABASE_URL` and `REDIS_URL`, matching
+   the compose defaults; every other setting has a development default (Issue 12 fills in the rest):
 
    ```bash
-   printf 'DATABASE_URL=postgresql://btk_user:change-me@localhost:5432/btk\n' > .env
+   cp .env.example .env
    ```
 
-3. Start PostgreSQL with PostGIS:
+3. Start PostgreSQL 18 with PostGIS, and Redis. The command returns once both health checks pass:
 
    ```bash
    make db-up
@@ -181,6 +181,7 @@ nothing to a running app:
 
 Then open `http://127.0.0.1:8000` for the landing page, `http://127.0.0.1:8000/docs` for the API, and
 `http://127.0.0.1:8000/health/ready`, which should report the database and migrations as `ok`.
+After the first time, `make dev` does steps 3 and 5 in one go.
 
 **To sign in**, seed the roles and a development admin, then sign in as `admin@btk.com` with the
 password you chose:
@@ -190,17 +191,55 @@ make seed-rbac && ./scripts/db/seed-dev-user.sh --password 'choose-a-password'
 ```
 
 If something is already using a port: `DB_PORT=5433 make db-up` starts the database on another port
-(put the same port in `DATABASE_URL`), and `make run PORT=8001` moves the app. Set `DATABASE_URL`
-itself rather than the separate `DB_HOST` / `DB_USER` / `DB_PASSWORD` / `DB_NAME` settings: those are
-only combined into a URL when `DATABASE_URL` is not a plain `postgresql://` URL, so on their own they
-are ignored. If you pass `--email` to the seed script, use a real-looking domain: the sign-in API
-rejects reserved ones such as `.local`.
+(put the same port in `DATABASE_URL`), `REDIS_PORT` does the same for Redis (and `REDIS_URL`), and
+`make run PORT=8001` moves the app. To keep a port for every `make` target, put `DB_PORT=5433` (and
+`REDIS_PORT`, `HTTP_PORT`) in `infra/docker/.env` instead: it is git-ignored and Compose reads it on
+every command. Set `DATABASE_URL` itself rather than the separate `DB_HOST` / `DB_USER` /
+`DB_PASSWORD` / `DB_NAME` settings: those are only combined into a URL when `DATABASE_URL` is not a
+plain `postgresql://` URL, so on their own they are ignored. If you pass `--email` to the seed
+script, use a real-looking domain: the sign-in API rejects reserved ones such as `.local`.
+
+### The local Docker stack
+
+`infra/docker/docker-compose.yml` is one compose project, `clinicq`. It includes the database and
+Redis from `infra/docker/docker-compose.db.yml` and adds the API container behind nginx:
+
+| Service | Image | On the host | Data |
+|---------|-------|-------------|------|
+| `db` | `postgis/postgis:18-3.6` (PostgreSQL 18, PostGIS 3.6) | `127.0.0.1:5432` (`DB_PORT`) | volume `clinicq_pgdata` |
+| `redis` | `redis:8-alpine` | `127.0.0.1:6379` (`REDIS_PORT`) | volume `clinicq_redisdata` |
+| `app` + `nginx` | built from `infra/docker/Dockerfile` | `http://localhost:8000` (`HTTP_PORT`) | |
+
+- `make db-up` / `make db-down` start and stop `db` and `redis` (from `infra/docker`, plain
+  `docker compose up -d db redis` does the same). Stopping keeps the data; it is in the volumes.
+- `make docker-up` runs everything in containers, API included. The container is given the same
+  `DATABASE_URL` and `REDIS_URL` as `.env.example` with the host changed to `db` and `redis`, and
+  `make migrate-up` from the host migrates the same database.
+- **Wipe and recreate from scratch** (deletes all local data in both volumes):
+
+  ```bash
+  make db-reset
+  ```
+
+  It runs `down -v --remove-orphans` on the compose project, then `make db-up`. Follow it with
+  `make migrate-up`.
+- **Coming from PostgreSQL 16:** the stack used to run `postgis/postgis:16-3.4` as a project named
+  `clinicq-db`, whose data PostgreSQL 18 cannot open. The new stack starts in a new, empty volume and
+  leaves the old one alone. Local data is rebuilt by `make migrate-up` and the seeds, so once you
+  have nothing to keep, remove the old container and volume with `docker compose -p clinicq-db down -v`.
+  Until you do, the old container restarts with Docker and holds port 5432, so `make db-up` reports
+  the port as taken.
+- **Apple Silicon:** `postgis/postgis` publishes amd64 images only, so the compose file asks for
+  `linux/amd64` and Docker Desktop runs it under emulation. It works; the first start is slower.
 
 **Before every push**, run the same gate CI runs:
 
 ```bash
 make check
 ```
+
+`make check-compose` adds a smoke test of this stack (PostGIS and Redis answer, `/health/live` is
+up), in a separate compose project on other ports so it never touches your local data.
 
 Until the CI and security issues land, 24 of the kernel's guard tests fail in `make test`, because
 the files they inspect do not exist yet: `.github/workflows/` (Issue 9), `.gitleaks.toml` (Issue 7) and
