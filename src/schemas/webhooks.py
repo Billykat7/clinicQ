@@ -23,15 +23,20 @@ class StripeWebhookAck(BaseModel):
 
     received: bool = True
     outcome: str
+    #: The gateway's own id for the event, echoed back so an operator can find it in the logs.
+    event_id: str
 
 
 class PaystackWebhookAck(BaseModel):
     """The acknowledgement returned for a verified Paystack webhook (Issue #79).
 
     Same contract as :class:`StripeWebhookAck`; see there for the meaning of ``outcome``.
+    ``event_id`` is the de-duplication key the gateway module derives, ``<event type>:<reference>``,
+    because a Paystack envelope carries no id of its own.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     received: bool = True
     outcome: str
+    event_id: str

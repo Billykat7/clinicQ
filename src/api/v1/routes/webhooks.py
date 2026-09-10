@@ -142,6 +142,6 @@ async def paystack_webhook(
     ack = PaystackWebhookAck(
         received=True,
         outcome=processed.outcome,
-        idempotency_key=processed.idempotency_key,
+        event_id=processed.event_id,
     )
     return JSONResponse(status_code=status.HTTP_200_OK, content=ack.model_dump())

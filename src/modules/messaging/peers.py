@@ -67,4 +67,6 @@ def ensure_can_reach(db: Session, user_id: str, other_user_id: str) -> None:
     The server-side gate a resolved recipient is validated against before a peer thread is opened.
     """
     if not can_reach(db, user_id, other_user_id):
-        raise PeerNotReachableError(other_user_id)
+        # No argument on purpose: the refusal must say nothing about the recipient, or the negative
+        # case would leak who exists and where they live.
+        raise PeerNotReachableError()
