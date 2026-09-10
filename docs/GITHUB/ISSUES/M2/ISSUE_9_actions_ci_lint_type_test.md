@@ -28,7 +28,7 @@ the team never rations pull requests to save minutes.
 ## Scope
 
 - `.github/workflows/ci.yml` running ruff, mypy and pytest on pull requests to `main`
-- PostgreSQL 18 + PostGIS and Redis service containers wired to the test settings
+- PostgreSQL 18 + PostGIS and Redis service containers wired to the test settings, using the images the dev stack pins (`postgis/postgis:18-3.6` and `redis:8-alpine`, decision 4); `tests/unit/platform/test_dev_stack_compose.py` fails if the workflow's PostgreSQL image differs from the compose file's
 - `timeout-minutes` on every job, dependency caching for `uv`, ruff and mypy
 - Concurrency group with `cancel-in-progress` so superseded pushes stop early
 - A published test summary and coverage comment on the pull request

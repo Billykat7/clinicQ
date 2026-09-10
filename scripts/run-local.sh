@@ -1,26 +1,22 @@
 #!/usr/bin/env bash
-# Start local PostgreSQL/PostGIS for development.
-# Usage: ./scripts/run-local.sh   (ensure .env exists from .env.example)
+# Start the local PostgreSQL/PostGIS and Redis containers, wait until both are healthy, and print
+# the next steps. `make db-up` does the same without the checklist; `make dev` also runs the API.
+# Usage: ./scripts/run-local.sh   (ensure .env exists: cp .env.example .env)
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 if [[ ! -f .env ]]; then
-  echo "No .env found. Copy .env.example to .env and set DATABASE_URL (and SECRET_KEY if required)."
+  echo "No .env found. Copy .env.example to .env (cp .env.example .env) and adjust ports if needed."
   exit 1
 fi
 
-COMPOSE_DB=(docker compose -f infra/docker/docker-compose.db.yml --project-directory infra/docker)
+COMPOSE=(docker compose -f infra/docker/docker-compose.yml --project-directory infra/docker)
 
-echo "Starting PostgreSQL/PostGIS..."
-"${COMPOSE_DB[@]}" up -d postgres
+echo "Starting PostgreSQL/PostGIS and Redis (waits for both health checks)..."
+"${COMPOSE[@]}" up -d --wait db redis
 
-echo "Waiting for Postgres..."
-until "${COMPOSE_DB[@]}" exec -T postgres pg_isready -U "${DB_USER:-btk_user}" -d "${DB_NAME:-btk}"; do
-  sleep 1
-done
-
-echo "Database is ready. Next steps:"
+echo "Database and Redis are ready. Next steps:"
 echo "  ./scripts/db/alembic-upgrade.sh"
 echo "  ./scripts/db/seed-dev-user.sh   # optional dev admin"
 echo "  make run                        # or: make docker-up"

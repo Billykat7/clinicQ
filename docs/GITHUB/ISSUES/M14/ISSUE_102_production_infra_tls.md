@@ -27,7 +27,7 @@ nothing is reachable that does not need to be.
 ## Scope
 
 - Production VPS provisioning with a documented, repeatable setup
-- Managed PostgreSQL with PostGIS, and managed Redis, in the closest region
+- Managed PostgreSQL 18 with PostGIS 3.6 (decision 4, the versions the dev stack and CI run), and managed Redis, in the closest region
 - Domain, DNS and automated TLS certificate renewal
 - Reverse proxy with rate limiting, request-size limits and sensible timeouts
 - Firewall rules exposing only what is required, with database access closed to the public internet

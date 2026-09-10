@@ -72,7 +72,7 @@ Places where the specs and the repository disagree. None blocks sprint 1, but ea
 | 1 | Background jobs | `arq` workers | APScheduler with a PostgreSQL advisory lock (`src/core/scheduler.py`), already running the notification retry and retention sweeps | 36, 43, 63, 81, 82, 85, 88, 91, 95, 99 |
 | 2 | Styling | Tailwind, compiled | Hand-written CSS design tokens (`site.css`, `admin.css`, `landing.css`) with light and dark themes | 5 and every UI issue |
 | 3 | Packaging and layout (**decided in Issue 1**) | `uv` and `uv sync`; an `app/` package | `requirements.txt` with setuptools (`pyproject.toml`); a `src/` package. **Kept as is**: see the note below the table | 1, 7, 9 |
-| 4 | PostgreSQL version | 18 | `postgis/postgis:16-3.4` in `infra/docker/docker-compose.db.yml` | 2, 3, 9, 102 |
+| 4 | PostgreSQL version (**decided in Issue 2**) | 18 | `postgis/postgis:16-3.4` in `infra/docker/docker-compose.db.yml`. **Now `postgis/postgis:18-3.6`**: see the note below the table | 2, 3, 9, 102 |
 | 5 | Database sessions | Async everywhere | Both; most kernel routes use the sync `get_db` | 3 and every new module |
 | 6 | Seeding roles and grants | By migration | By module manifests and `make seed-rbac` (idempotent) | 18 |
 | 7 | Database topology | A production database of its own | A schema (`clinicq`) in a shared platform database, which `scripts/db/backup.sh` assumes | 102, 103 |
@@ -83,6 +83,15 @@ Places where the specs and the repository disagree. None blocks sprint 1, but ea
 assumes them, and moving to `uv` or to an `app/` package would be a repository-wide change with no
 feature behind it. Revisit only as a team decision in its own issue; until then, specs that mention
 `uv`, `uv sync`, `uv run` or `app/` mean the equivalents in the *Where code goes* table above.
+
+**Decision 4, recorded in Issue 2:** PostgreSQL **18** with PostGIS **3.6**, as the specs say. The
+dev stack runs `postgis/postgis:18-3.6`, which is the same major and minor versions as the shared
+platform database (PostgreSQL 18.6, PostGIS 3.6.4 when this was decided), so a query that works on a
+laptop works where the product is deployed. Staying on 16 would have meant developing against a
+version nothing else runs, and losing what 18 adds (a native `uuidv7()` among them). The image is
+written once, in `infra/docker/docker-compose.db.yml`; CI (Issue 9) must use the same image for its
+service container, and `tests/unit/platform/test_dev_stack_compose.py` fails if a compose file or
+workflow brings in a second PostgreSQL version.
 
 ## Planning inconsistencies found
 

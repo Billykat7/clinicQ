@@ -9,7 +9,7 @@
 | **Owner** | E, DevOps/QA (backup: F, Data & Research) |
 | **Area** | Infra / Foundation |
 | **Estimate** | 1 day |
-| **Status** | Planned |
+| **Status** | In progress (branch `Issue/2/docker-dev-stack`) |
 | **Depends on** | [Issue 1](../M1/ISSUE_1_repo_scaffold_app_factory.md): Repository scaffold, Python 3.14 + FastAPI app factory, typed settings |
 | **Unblocks** | [Issue 3](../M1/ISSUE_3_sqlalchemy_alembic_baseline.md): Async SQLAlchemy 2.x + Alembic baseline (PostGIS extension enabled)<br>[Issue 43](../M6/ISSUE_43_recall_noshow_timers.md): Recall timers and automatic no-show transitions (`arq` jobs) |
 
@@ -20,13 +20,13 @@ must be available with one command so nobody spends a sprint installing a spatia
 
 ## Starting point
 
-- `infra/docker/docker-compose.db.yml` (`make db-up`) already runs PostGIS, and `infra/docker/docker-compose.yml` runs the full stack (`make docker-up`).
-- The compose image is `postgis/postgis:16-3.4`; the spec asks for PostgreSQL 18. Upgrade the image or amend the spec; see [open decisions](../README.md#open-decisions).
+- `infra/docker/docker-compose.db.yml` (`make db-up`) already runs PostGIS, and `infra/docker/docker-compose.yml` runs the API behind nginx (`make docker-up`), with the database outside it.
+- The compose image was `postgis/postgis:16-3.4` while the spec asks for PostgreSQL 18. **Decided in this issue** (decision 4 in [open decisions](../README.md#open-decisions)): PostgreSQL 18 with PostGIS 3.6 (`postgis/postgis:18-3.6`), the versions the shared platform database runs. PostgreSQL 18 images keep their data under `/var/lib/postgresql`, so the volume mount moves too.
 - Redis is only in the production compose file today, and there is no tracked `.env.example` yet (Issue 12 owns the full file; this issue adds the two URLs).
 
 ## Scope
 
-- `infra/docker-compose.yml` with `db` (PostgreSQL 18 + PostGIS), `redis`, and an optional `api` service
+- `infra/docker/docker-compose.yml` with `db` (PostgreSQL 18 + PostGIS), `redis`, and an optional `api` service (`app` behind nginx); `db` and `redis` are defined once, in `infra/docker/docker-compose.db.yml`, which it includes
 - Named volumes so data survives a restart, and a documented reset command
 - Health checks on `db` and `redis` so the API waits for a ready database
 - `.env.example` entries for `DATABASE_URL` and `REDIS_URL` pointing at the compose services
@@ -49,17 +49,20 @@ must be available with one command so nobody spends a sprint installing a spatia
 
 ## How to verify
 
-1. `make db-up`, then `psql $DATABASE_URL -c 'SELECT postgis_version();'` returns a version.
-2. `docker compose -f infra/docker/docker-compose.yml config` prints no warnings.
-3. Stop and start the stack: data seeded before the restart is still there.
+1. `cp .env.example .env && make db-up`, then `psql $DATABASE_URL -c 'SELECT postgis_version();'` returns a version (without `psql` on the host: `docker compose -f infra/docker/docker-compose.yml --project-directory infra/docker exec db psql -U btk_user -d btk -c 'SELECT postgis_version();'`).
+2. `docker compose -f infra/docker/docker-compose.yml --project-directory infra/docker config` prints no warnings.
+3. Stop and start the stack (`make db-down && make db-up`): data seeded before the restart is still there.
+4. `make db-reset` wipes both volumes and brings up an empty stack.
 
 ## Files touched
 
 - `infra/docker/docker-compose.db.yml`
 - `infra/docker/docker-compose.yml`
-- `.env.example`
+- `.env.example` (and `.gitignore`, so the template is tracked)
 - `Makefile`
-- `README.md`
+- `scripts/dev.sh`, `scripts/run-local.sh`, `scripts/ci-local.sh` (compose smoke test)
+- `tests/unit/platform/test_dev_stack_compose.py`
+- `README.md`, `docs/GITHUB/ISSUES/README.md` (decision 4)
 
 ---
 

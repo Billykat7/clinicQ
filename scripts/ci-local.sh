@@ -12,7 +12,8 @@
 #   --install         pip install -r requirements.txt (and pip-audit) before running checks
 #   --fix             run ruff check --fix and ruff format (fix in place), then run checks
 #   --no-docker       skip Docker build and Trivy (run only quality + tests)
-#   --compose         after Docker/Trivy, run docker compose up, hit /health, then down (smoke test)
+#   --compose         after Docker/Trivy, bring the full compose stack up in its own project,
+#                     hit /health, check PostGIS and Redis, then tear it down (smoke test)
 #   --skip-pip-audit  skip pip-audit (otherwise warn-only; never fails the script)
 #   --skip-trivy      skip Trivy (otherwise warn-only; never fails the script)
 #   --skip-secret-scan  skip gitleaks (otherwise FAILS the script on a finding)
@@ -73,7 +74,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --install         pip install -r requirements.txt (and pip-audit) before running checks"
       echo "  --fix             ruff check --fix and ruff format (fix in place), then run checks"
       echo "  --no-docker       skip Docker build and Trivy (quality + tests only)"
-      echo "  --compose         after Docker, run docker compose up → /health → down (smoke test)"
+      echo "  --compose         after Docker, compose up → /health → PostGIS + Redis → down (smoke test)"
       echo "  --skip-pip-audit  skip pip-audit (otherwise warn-only; never fails the script)"
       echo "  --skip-trivy      skip Trivy (otherwise warn-only; never fails the script)"
       echo "  --skip-secret-scan  skip gitleaks (otherwise FAILS the script on a finding)"
@@ -329,7 +330,7 @@ fi
 # ─── STEP 4 (optional): Docker Compose smoke test ───
 if $COMPOSE; then
   echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-  echo -e "${YELLOW}STEP 4: Docker Compose smoke test (up → /health → down)${NC}"
+  echo -e "${YELLOW}STEP 4: Docker Compose smoke test (up → /health → PostGIS + Redis → down)${NC}"
   echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
   echo ""
 
@@ -339,52 +340,72 @@ if $COMPOSE; then
     exit 1
   fi
 
-  # Prefer Compose V2 plugin; fall back to docker-compose binary.
-  if docker compose version &>/dev/null; then
-    COMPOSE=(docker compose -f "$COMPOSE_FILE" --project-directory infra/docker)
-  elif command -v docker-compose &>/dev/null; then
-    COMPOSE=(docker-compose -f "$COMPOSE_FILE" --project-directory infra/docker)
-  else
-    echo -e "${RED}❌ docker compose / docker-compose not found${NC}"
+  # Compose v2 only: the stack uses `include`, an optional env_file and `--wait`, none of which the
+  # legacy docker-compose v1 binary understands.
+  if ! docker compose version &>/dev/null; then
+    echo -e "${RED}❌ docker compose (v2) not found${NC}"
     exit 1
   fi
 
-  echo "==> ${COMPOSE[*]} down -v (cleanup)"
-  "${COMPOSE[@]}" down -v 2>/dev/null || true
-  echo "==> ${COMPOSE[*]} up -d --build"
-  if ! "${COMPOSE[@]}" up -d --build; then
-    echo -e "${RED}❌ Docker Compose up failed${NC}"
-    "${COMPOSE[@]}" down -v 2>/dev/null || true
+  # Its own project name and host ports, so the smoke test never touches the developer's stack:
+  # `down -v` on the dev project (`clinicq`) would wipe the local database, and a running dev stack
+  # holds the default ports. Override with SMOKE_HTTP_PORT / SMOKE_DB_PORT / SMOKE_REDIS_PORT.
+  SMOKE_HTTP_PORT="${SMOKE_HTTP_PORT:-18000}"
+  SMOKE_COMPOSE=(env HTTP_PORT="$SMOKE_HTTP_PORT" DB_PORT="${SMOKE_DB_PORT:-15432}"
+    REDIS_PORT="${SMOKE_REDIS_PORT:-16379}"
+    docker compose -p clinicq-smoke -f "$COMPOSE_FILE" --project-directory infra/docker)
+
+  smoke_fail() {
+    echo -e "${RED}❌ $1${NC}"
+    "${SMOKE_COMPOSE[@]}" logs --tail=30 || true
+    "${SMOKE_COMPOSE[@]}" down -v 2>/dev/null || true
     exit 1
+  }
+
+  echo "==> docker compose -p clinicq-smoke down -v (cleanup)"
+  "${SMOKE_COMPOSE[@]}" down -v 2>/dev/null || true
+  # --wait returns once db and redis are healthy and the app's liveness probe passes.
+  echo "==> docker compose -p clinicq-smoke up -d --build --wait"
+  if ! "${SMOKE_COMPOSE[@]}" up -d --build --wait --wait-timeout 180; then
+    smoke_fail "Docker Compose up failed (a service never became healthy)"
   fi
 
-  # Liveness only: /health/live is dependency-free, so this smoke passes without
-  # applying migrations (readiness /health would 503 until `alembic upgrade head`).
-  echo "==> Waiting for app /health/live (max 60s)..."
+  # Liveness only, through nginx: /health/live is dependency-free, so this smoke passes without
+  # applying migrations (readiness /health/ready would 503 until `alembic upgrade head`).
+  echo "==> Waiting for app /health/live on :${SMOKE_HTTP_PORT} (max 60s)..."
   MAX_WAIT=60
   ELAPSED=0
   HEALTH_OK=false
   while [ $ELAPSED -lt $MAX_WAIT ]; do
-    if curl -sf http://localhost:8000/health/live >/dev/null 2>&1; then
+    if curl -sf "http://localhost:${SMOKE_HTTP_PORT}/health/live" >/dev/null 2>&1; then
       HEALTH_OK=true
       break
     fi
     sleep 3
     ELAPSED=$((ELAPSED + 3))
   done
-
-  if $HEALTH_OK; then
-    echo -e "${GREEN}✅ /health/live returned 200${NC}"
-    COMPOSE_PASSED=true
-  else
-    echo -e "${RED}❌ /health/live not reachable within ${MAX_WAIT}s${NC}"
-    "${COMPOSE[@]}" logs --tail=30
-    "${COMPOSE[@]}" down -v 2>/dev/null || true
-    exit 1
+  if ! $HEALTH_OK; then
+    smoke_fail "/health/live not reachable within ${MAX_WAIT}s"
   fi
+  echo -e "${GREEN}✅ /health/live returned 200${NC}"
 
-  echo "==> ${COMPOSE[*]} down -v"
-  "${COMPOSE[@]}" down -v 2>/dev/null || true
+  # What the dev stack promises (Issue 2): PostGIS answers in the compose database, on the
+  # PostgreSQL version decision 4 chose, and Redis answers PING.
+  echo "==> PostgreSQL and PostGIS versions in the compose database"
+  # shellcheck disable=SC2016  # $POSTGRES_USER / $POSTGRES_DB expand inside the container
+  if ! "${SMOKE_COMPOSE[@]}" exec -T db sh -c \
+    'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA -c "SHOW server_version" -c "SELECT postgis_version()"'; then
+    smoke_fail "SELECT postgis_version() failed in the compose database"
+  fi
+  echo "==> Redis PING"
+  if ! "${SMOKE_COMPOSE[@]}" exec -T redis redis-cli ping | grep -q PONG; then
+    smoke_fail "Redis did not answer PING"
+  fi
+  echo -e "${GREEN}✅ PostGIS and Redis answered${NC}"
+  COMPOSE_PASSED=true
+
+  echo "==> docker compose -p clinicq-smoke down -v"
+  "${SMOKE_COMPOSE[@]}" down -v 2>/dev/null || true
   echo ""
   echo -e "${GREEN}✅ Docker Compose smoke test passed${NC}"
   echo ""

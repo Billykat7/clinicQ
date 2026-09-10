@@ -1,34 +1,70 @@
-# Local PostgreSQL + PostGIS for BK ClinicQ development.
-# Usage from repo root (after copying .env.example → .env):
-#   docker compose -f infra/docker/docker-compose.db.yml --project-directory infra/docker up -d
-# Or: make db-up
+# Backing services for BK ClinicQ development: PostgreSQL 18 + PostGIS 3.6 and Redis 8.
 #
-# Native app / migrations: set DB_HOST=localhost in .env.
-# App in Docker (make docker-up): set DB_HOST=host.docker.internal in .env.
+# From repo root (after `cp .env.example .env`):
+#   make db-up        start both and wait until their health checks pass
+#   make db-down      stop them (data is kept in named volumes)
+#   make db-reset     wipe both volumes and start again from scratch
+#
+# infra/docker/docker-compose.yml includes this file, so the services are defined once and the
+# Makefile always drives the full file: `docker compose up -d db redis` starts only these two, and
+# `make docker-up` adds the API container. Both files use the project name `clinicq`, so the
+# containers and volumes are the same whichever file started them.
+#
+# Host ports are bound to 127.0.0.1: the password is a development default and Redis has none, so
+# neither is reachable from the network. Override with DB_PORT / REDIS_PORT when a port is taken
+# (and put the same port in DATABASE_URL / REDIS_URL in .env).
 
-name: clinicq-db
+name: clinicq
 
 services:
-  postgres:
-    image: postgis/postgis:16-3.4
-    ports:
-      - "${DB_PORT:-5432}:5432"
+  db:
+    # Decision 4 (docs/GITHUB/ISSUES/README.md#open-decisions): PostgreSQL 18 with PostGIS 3.6, the
+    # same major and minor versions as the shared platform database. CI must use this same image;
+    # tests/unit/platform/test_dev_stack_compose.py fails if a second version appears.
+    image: postgis/postgis:18-3.6
+    # postgis/postgis is published for linux/amd64 only. Naming the platform lets Apple Silicon run
+    # it under emulation instead of failing to pull with "no matching manifest for linux/arm64".
+    platform: linux/amd64
     environment:
       POSTGRES_USER: ${DB_USER:-btk_user}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-change-me}
       POSTGRES_DB: ${DB_NAME:-btk}
+    ports:
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
-      - clinicq_pgdata:/var/lib/postgresql/data
+      # PostgreSQL 18 images keep PGDATA in /var/lib/postgresql/18/docker and declare the volume at
+      # /var/lib/postgresql. With a mount at the pre-18 path (/var/lib/postgresql/data) the
+      # entrypoint refuses to start at all, even on an empty volume, so the path moved with the tag.
+      - pgdata:/var/lib/postgresql
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${DB_USER:-btk_user} -d ${DB_NAME:-btk}",
-        ]
-      interval: 15s
+      # Over TCP, not the Unix socket: on first boot the entrypoint runs a socket-only server while
+      # it installs PostGIS, and a socket check would call that temporary server ready.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 60s
+      start_interval: 1s
+    restart: unless-stopped
+
+  redis:
+    # Same major version as the production rate-limit store (docker-compose.prod.yml).
+    image: redis:8-alpine
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      # Redis's default snapshotting writes to /data, so queued work survives a restart.
+      - redisdata:/data
+    healthcheck:
+      # Match the reply: redis-cli exits 0 on error replies too (e.g. LOADING while it reads a snapshot).
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+      start_interval: 1s
     restart: unless-stopped
 
 volumes:
-  clinicq_pgdata:
+  pgdata:
+  redisdata:
