@@ -1,11 +1,11 @@
-# 08 - System & network topology
+# 08: System & network topology
 
 Start with one clinic on its existing internet connection, then grow to many clinics reporting into one
-shared platform - the same site-by-site growth model as
+shared platform, the same site-by-site growth model as
 ElimuKadi's topology, but even lighter since there's no edge reader firmware to
 maintain, just a browser-based signage box and dashboard.
 
-## Phase 0 - one clinic, one display, one dashboard
+## Phase 0: one clinic, one display, one dashboard
 
 ```mermaid
 flowchart LR
@@ -19,9 +19,9 @@ flowchart LR
 Unlike ElimuKadi or
 UmojaNet, ClinicQ's API is **cloud-hosted from
 day one** (even for a single pilot clinic) since there's no local edge hardware that needs an on-site
-gateway to function - a dashboard and a display box are just browser clients of a normal web API.
+gateway to function: a dashboard and a display box are just browser clients of a normal web API.
 
-## Phase 1 - a few clinics, shared backend
+## Phase 1: a few clinics, shared backend
 
 ```mermaid
 flowchart TB
@@ -41,7 +41,7 @@ flowchart TB
   API --> NOTIF[SMS/push/WhatsApp notifications]
 ```
 
-## Phase 2 - metro-wide discovery + many clinics
+## Phase 2: metro-wide discovery + many clinics
 
 ```mermaid
 flowchart TB
@@ -84,7 +84,7 @@ sequenceDiagram
 
 A short outage degrades the **notification** and **remote discovery** experience (patients can't newly
 join or get notified) but does not stop the clinic from running its physical queue verbally in the
-meantime - a deliberately low-stakes failure mode compared to a payment-carrying system.
+meantime, a deliberately low-stakes failure mode compared to a payment-carrying system.
 
 ## Pros & cons
 

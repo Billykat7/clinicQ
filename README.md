@@ -34,12 +34,12 @@ run the whole line from one dashboard.
 ```text
         +------------------------- ClinicQ queue engine -------------------------+
         |                                                                        |
-  Mobile PWA -------\                                                             |
-  USSD menu ----------> JOIN QUEUE (ticket number, live position, ETA)            |
-  WhatsApp bot -------/                                                           |
-  Walk-in (reception) /                                                           |
+  Mobile PWA ---------|                                                          |
+  USSD menu ----------> JOIN QUEUE (ticket number, live position, ETA)           |
+  WhatsApp bot -------|                                                          |
+  Walk-in (reception) |                                                          |
         |                                                                        |
-  Clinic dashboard --> CALL NEXT --> patient's phone + waiting-room display       |
+  Clinic dashboard --> CALL NEXT --> patient's phone + waiting-room display      |
         +------------------------------------------------------------------------+
             Same queue, same ticket number, no matter which door you came in
 ```
@@ -92,7 +92,7 @@ anonymised district-level dashboards for health-department planning.
 | ORM / migrations | **SQLAlchemy 2.x (async)** + **Alembic** |
 | Cache / jobs | **Redis** + `arq` |
 | Channels | USSD gateway (Africa's Talking-class) · WhatsApp Business Cloud API · SMS · Web Push |
-| Packaging / infra | **uv** · **Docker Compose** · **GitHub Actions** |
+| Packaging / infra | **pip** + `requirements.txt` · **Docker Compose** · **GitHub Actions** |
 
 One Python codebase renders the patient pages, the clinic dashboard and the display board. For a
 six-person team that is the difference between one thing to debug and three, and the `/api/*` surface
@@ -145,29 +145,66 @@ see the [workload split](docs/TEAM/WORKLOAD_SPLIT.md#1-the-six-roles).
 
 ## Getting started
 
-> The application code is not written yet; M1 creates it. These are the commands the repository will
-> support from the end of sprint 1.
+You need **Python 3.14**, **Docker** and **make**. From a fresh clone, five commands take you from
+nothing to a running app:
+
+1. Create the virtual environment and install the dependencies:
+
+   ```bash
+   python3.14 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+   ```
+
+2. Point the app at the local database. The values match the database container's defaults in
+   `infra/docker/docker-compose.db.yml`; the full `.env.example` arrives with Issues 2 and 12:
+
+   ```bash
+   printf 'DATABASE_URL=postgresql://btk_user:change-me@localhost:5432/btk\n' > .env
+   ```
+
+3. Start PostgreSQL with PostGIS:
+
+   ```bash
+   make db-up
+   ```
+
+4. Create the schema (the `clinicq` schema, with PostGIS enabled):
+
+   ```bash
+   make migrate-up
+   ```
+
+5. Run the app with auto-reload:
+
+   ```bash
+   make run
+   ```
+
+Then open `http://127.0.0.1:8000` for the landing page, `http://127.0.0.1:8000/docs` for the API, and
+`http://127.0.0.1:8000/health/ready`, which should report the database and migrations as `ok`.
+
+**To sign in**, seed the roles and a development admin, then sign in as `admin@btk.com` with the
+password you chose:
 
 ```bash
-uv sync
-cp .env.example .env
-docker compose -f infra/docker-compose.yml up -d db redis
-uv run alembic upgrade head
-uv run scripts/seed_dev_data.py
-uv run uvicorn app.main:app --reload --port 8000
+make seed-rbac && ./scripts/db/seed-dev-user.sh --password 'choose-a-password'
 ```
 
-Then open:
+If something is already using a port: `DB_PORT=5433 make db-up` starts the database on another port
+(put the same port in `DATABASE_URL`), and `make run PORT=8001` moves the app. Set `DATABASE_URL`
+itself rather than the separate `DB_HOST` / `DB_USER` / `DB_PASSWORD` / `DB_NAME` settings: those are
+only combined into a URL when `DATABASE_URL` is not a plain `postgresql://` URL, so on their own they
+are ignored. If you pass `--email` to the seed script, use a real-looking domain: the sign-in API
+rejects reserved ones such as `.local`.
 
-- `http://localhost:8000/discover` - find a clinic
-- `http://localhost:8000/dashboard/1` - clinic dashboard
-- `http://localhost:8000/display/1` - waiting-room board
-
-Before every push:
+**Before every push**, run the same gate CI runs:
 
 ```bash
-./scripts/ci-local.sh
+make check
 ```
+
+Until the CI and security issues land, 24 of the kernel's guard tests fail in `make test`, because
+the files they inspect do not exist yet: `.github/workflows/` (Issue 9), `.gitleaks.toml` (Issue 7) and
+`docs/SECURITY/`. Everything else must be green.
 
 ## Contributing (team workflow)
 

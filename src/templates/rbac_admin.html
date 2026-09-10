@@ -1,0 +1,649 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Access control</h1>
+  <p class="lead">Roles, the per-resource permission matrix, and user role assignment.</p>
+  {% include "partials/breadcrumbs.html" %}
+</div>
+
+{# Each section is its own URL (/admin/rbac/roles|permissions|users); the tabs are links, and
+   the server marks the active one, so a tab is bookmarkable and survives a refresh. #}
+{% set rbac_tab = rbac_initial_tab | default('roles') %}
+<div class="tabs-scroll">
+  <div class="tabs" role="tablist">
+    <a class="tab{% if rbac_tab == 'roles' %} active{% endif %}" id="tab-roles" data-tab="roles"
+       href="/admin/rbac/roles" role="tab"{% if rbac_tab == 'roles' %} aria-current="page"{% endif %}>Roles</a>
+    <a class="tab{% if rbac_tab == 'permissions' %} active{% endif %}" id="tab-permissions" data-tab="permissions"
+       href="/admin/rbac/permissions" role="tab"{% if rbac_tab == 'permissions' %} aria-current="page"{% endif %}>Permissions</a>
+    {# Unlike the other four tabs, Users enforces a separate ``users`` resource (a pre-existing
+       quirk of the enum-era tree, carried forward by REPORTS_SHELL_MANIFEST: ``users``'s parent
+       is ``reports``, not
+       ``rbac``: ``list_users``/``create_user``/etc. all depend on ``Users*Dep``, never
+       ``Rbac*Dep``), so the tab needs its own gate rather than inheriting the console's ``rbac``
+       one (Issue #155: a role with ``rbac`` read but no ``users`` grant used to see this tab and
+       403 on every call it made from inside it). #}
+    {% if can('users', 'read', 'business') %}
+    <a class="tab{% if rbac_tab == 'users' %} active{% endif %}" id="tab-users" data-tab="users"
+       href="/admin/rbac/users" role="tab"{% if rbac_tab == 'users' %} aria-current="page"{% endif %}>Users</a>
+    {% endif %}
+    <a class="tab{% if rbac_tab == 'audit' %} active{% endif %}" id="tab-audit" data-tab="audit"
+       href="/admin/rbac/audit" role="tab"{% if rbac_tab == 'audit' %} aria-current="page"{% endif %}>Audit</a>
+    <a class="tab{% if rbac_tab == 'catalog' %} active{% endif %}" id="tab-catalog" data-tab="catalog"
+       href="/admin/rbac/catalog/resources" role="tab"{% if rbac_tab == 'catalog' %} aria-current="page"{% endif %}>Catalog</a>
+  </div>
+</div>
+
+{# The active section for the page JS (which loads only that section's data). #}
+<span hidden id="rbac-initial-tab" data-tab="{{ rbac_tab }}"></span>
+
+{# ── Roles ── #}
+<section class="tab-panel" id="panel-roles" role="tabpanel" hidden>
+  <div class="toolbar toolbar-filters">
+    <input type="search" id="roles-search" placeholder="Search roles…" aria-label="Search roles">
+    <select data-combobox id="roles-system-filter" aria-label="Filter roles by type">
+      <option value="all">All roles</option>
+      <option value="system">System only</option>
+      <option value="custom">Custom only</option>
+    </select>
+    <button type="button" class="btn btn-quiet btn-sm toolbar-clear" id="roles-clear" hidden>Clear filters</button>
+    <span class="spacer"></span>
+    {% if can('rbac', 'delete', 'business') %}
+    <span class="bulk-count" id="roles-selected" aria-live="polite"></span>
+    <button type="button" class="btn btn-danger btn-sm" id="roles-bulk-delete" aria-disabled="true" disabled>Delete</button>
+    {% endif %}
+    {# Every other console's "New X" gates on its own resource's CREATE (New property/tenant/
+       vendor); this one didn't, an inconsistency Issue #155 found and fixed. #}
+    {% if can('rbac', 'create', 'business') %}
+    <button type="button" class="btn btn-sm" id="new-role-btn">New role</button>
+    {% endif %}
+  </div>
+
+  {# The list takes the whole content width; the detail opens as a slide-in panel anchored to
+     this block's top edge rather than as a second column beside it. #}
+  <div class="split split-full" id="roles-split">
+    <div class="card">
+      <div class="table-wrap table-scroll">
+        <table class="data">
+          <thead><tr>
+            {% if can('rbac', 'delete', 'business') %}
+            <th class="col-check"><input type="checkbox" class="select-all" aria-label="Select all roles"></th>
+            {% endif %}
+            <th data-sort-key="name">Role</th>
+            <th data-sort-key="users">Users</th>
+            <th data-sort-key="grants">Grants</th>
+            <th class="col-actions">Actions</th>
+          </tr></thead>
+          <tbody id="roles-body"></tbody>
+        </table>
+      </div>
+      <p class="msg msg-muted" id="roles-msg"></p>
+      <div id="roles-pager"></div>
+    </div>
+
+  </div>
+
+  {# ── Role detail slide-in (see ``.slideover-inset``): non-modal, level with the list. It stays
+     inside this tab panel so switching tabs hides it with the tab it belongs to. ── #}
+  <div class="slideover slideover-inset" id="role-detail" data-anchor="#roles-split">
+    <div class="slideover-panel" role="dialog" aria-modal="false" aria-labelledby="rd-name" tabindex="-1">
+      <div class="slideover-head">
+        <div class="slideover-titles">
+          <p class="detail-eyebrow">Role</p>
+          <h2 id="rd-name"></h2>
+          <p class="card-sub" id="rd-system"></p>
+        </div>
+        <button type="button" class="btn btn-quiet btn-sm slideover-close" data-slideover-close
+                aria-label="Close role detail">Close</button>
+      </div>
+
+      <div class="slideover-body">
+        <div class="field">
+          <label for="rd-description">Description</label>
+          <textarea id="rd-description" rows="3" maxlength="500"></textarea>
+        </div>
+        {# Role inheritance (Issue #135): the roles this role inherits grants from. The union over
+           the closure resolves with deny-beats-allow; a cell inherited via a parent role is marked
+           distinctly in the permissions grid. #}
+        <div class="field" id="rd-inherits-field">
+          <label>Inherits from</label>
+          <ul class="inherits-list" id="rd-inherits-list"></ul>
+          <div class="inherits-add">
+            <select id="rd-inherits-select" aria-label="Role to inherit"></select>
+            {# Adding a parent role is ``PUT /roles/{name}/inherits``, RbacUpdateDep. #}
+            {% if can('rbac', 'update', 'business') %}
+            <button type="button" class="btn btn-quiet btn-sm" id="rd-inherits-add">Add</button>
+            {% endif %}
+          </div>
+          <span class="msg" id="rd-inherits-msg" aria-live="polite"></span>
+        </div>
+        {# Effective access (Issue #173): what this role actually reaches, on **both** axes of the
+           grant (the verb and the scope tier), for every resource it reaches at all. The quick
+           view used to answer "what can this role do" with half the answer: a role holding
+           ``properties:READ`` reaches three properties or all four hundred depending on a field
+           the console never showed. Read-only here; the grid is where a tier is authored. #}
+        <div class="field" id="rd-access-field">
+          <label>Effective access</label>
+          <ul class="access-list" id="rd-access-list"></ul>
+          <p class="hint">Verb and breadth, after inheritance. Edit either in the Permissions grid.</p>
+        </div>
+      </div>
+
+      <div class="slideover-foot form-actions">
+        {% if can('rbac', 'update', 'business') %}
+        <button type="button" class="btn btn-sm" id="rd-save">Save</button>
+        <button type="button" class="btn btn-quiet btn-sm" id="rd-edit-perms">Edit permissions</button>
+        {% endif %}
+        {# Properties/Tenants/Vendors each gate their single-row Delete with can(); this one
+           didn't, an inconsistency Issue #155 found and fixed. #}
+        {% if can('rbac', 'delete', 'business') %}
+        <button type="button" class="btn btn-danger btn-sm" id="rd-delete" hidden>Delete role</button>
+        {% endif %}
+        <span class="msg" id="rd-msg" aria-live="polite"></span>
+      </div>
+    </div>
+  </div>
+
+  {# New-role inline form #}
+  {% if can('rbac', 'create', 'business') %}
+  <div class="card" id="new-role-card" hidden>
+    <h2>New role</h2>
+    <div class="field">
+      <label for="nr-name">Name</label>
+      <input type="text" id="nr-name" placeholder="e.g. property_manager" maxlength="50">
+      <p class="hint">Lowercase letters, digits and underscore; must start with a letter.</p>
+    </div>
+    <div class="field">
+      <label for="nr-description">Description</label>
+      <input type="text" id="nr-description" maxlength="500">
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn btn-sm" id="nr-create">Create role</button>
+      <button type="button" class="btn btn-quiet btn-sm" id="nr-cancel">Cancel</button>
+      <span class="msg" id="nr-msg" aria-live="polite"></span>
+    </div>
+  </div>
+  {% endif %}
+</section>
+
+{# ── Permissions ── #}
+<section class="tab-panel" id="panel-permissions" role="tabpanel" hidden>
+  {# Banner/filtering for the matrix (Issue #119): the role selector, a resource search and a
+     grant-state filter read as one control surface. Filtering is client-side over the loaded
+     matrix: the permission grid is a per-role editor, so paging/bulk-delete/quick-view are not
+     meaningful here (the M22 resource expansion, Issue #125, extends this). #}
+  <div class="toolbar toolbar-filters">
+    <label for="perm-role" class="msg msg-muted toolbar-label">Role</label>
+    <select data-combobox id="perm-role" aria-label="Role to edit permissions for"></select>
+    <input type="search" id="perm-search" placeholder="Filter resources…" aria-label="Filter permission resources by name">
+    <select data-combobox id="perm-state-filter" aria-label="Filter permission resources by grant state">
+      <option value="all">All resources</option>
+      <option value="granted">Granted here</option>
+      <option value="inherited">Inherited only</option>
+      <option value="none">No access</option>
+      {# Issue #176 (M29): the pruning worklist. "Granted here, and nothing has used it in the
+         threshold window": the one filter that turns "which of these forty grants can I remove?"
+         from nerve into evidence. The label's day count and the collection-start caveat beside it
+         are both filled in from the API payload, never hardcoded here. #}
+      <option value="unused" id="perm-state-unused">Granted, never used</option>
+    </select>
+    <button type="button" class="btn btn-quiet btn-sm toolbar-clear" id="perm-clear" hidden>Clear filters</button>
+    {# A grant can read "never used" simply because collection started last Tuesday. Saying so next
+       to the filter is what stops a young window being misread as evidence of disuse. #}
+    <span class="msg msg-muted" id="perm-usage-since" hidden></span>
+    <span class="spacer"></span>
+    {# Matrix ⇄ JSON (Issue #161, M28): two views over the *same* role_permission rows: the
+       visual editor and the raw policy document, the pattern IAM's own console offers. The JSON
+       tab is the export/import surface too: copy a role between environments by copying its
+       document. #}
+    <div role="group" aria-label="Permission editor view">
+      <button type="button" class="btn btn-sm" id="perm-view-matrix" aria-pressed="true">Matrix</button>
+      <button type="button" class="btn btn-quiet btn-sm" id="perm-view-json" aria-pressed="false">JSON</button>
+    </div>
+    {# Both write the same rows through ``PUT /roles/{name}/permissions`` and
+       ``PUT /roles/{name}/policy``: one gate, since one is the other's bulk form (Issue #161). The
+       Matrix/JSON *view* toggle above stays ungated: it changes nothing. #}
+    {% if can('rbac', 'update', 'business') %}
+    <button type="button" class="btn btn-sm" id="perm-save">Save matrix</button>
+    <button type="button" class="btn btn-sm" id="perm-json-save" hidden>Save policy</button>
+    {% endif %}
+  </div>
+  <div class="card">
+    <div id="perm-loading" class="msg msg-muted" hidden><span class="spinner" aria-hidden="true"></span> Loading…</div>
+    <div class="table-wrap" id="perm-matrix-view">
+      <table class="matrix">
+        <thead><tr><th>Resource</th><th>Granted verb, effect and breadth</th><th>Effective</th><th>Last used</th></tr></thead>
+        <tbody id="perm-body"></tbody>
+      </table>
+    </div>
+    <div id="perm-json-view" hidden>
+      <p class="card-sub">
+        One statement per grant, exactly as stored, <code>scope</code> included, so a document
+        copied to another environment carries its breadth with it. Omitting a statement revokes
+        that grant; omitting <code>scope</code> on a statement leaves that grant's breadth alone.
+      </p>
+      <textarea id="perm-json" rows="20" spellcheck="false"
+                aria-label="Role policy document (JSON)"
+                class="policy-editor"></textarea>
+    </div>
+    <p class="msg" id="perm-msg" aria-live="polite"></p>
+  </div>
+</section>
+
+{# ── Users ── #}
+<section class="tab-panel" id="panel-users" role="tabpanel" hidden>
+  <div class="toolbar toolbar-filters">
+    <input type="search" id="users-search" placeholder="Search by email…" aria-label="Search users">
+    <select data-combobox id="users-role-filter" aria-label="Filter users by role">
+      <option value="">All roles</option>
+    </select>
+    <button type="button" class="btn btn-quiet btn-sm toolbar-clear" id="users-clear" hidden>Clear filters</button>
+    <span class="spacer"></span>
+    {% if can('users', 'delete', 'business') %}
+    <span class="bulk-count" id="users-selected" aria-live="polite"></span>
+    <button type="button" class="btn btn-danger btn-sm" id="users-bulk-delete" aria-disabled="true" disabled>Delete</button>
+    {% endif %}
+    {# Same inconsistency as "New role" above; Issue #155 found and fixed. #}
+    {% if can('users', 'create', 'business') %}
+    <button type="button" class="btn btn-sm" id="new-user-btn">New user</button>
+    {% endif %}
+  </div>
+
+  {# The list takes the whole content width; the detail opens as a slide-in panel anchored to
+     this block's top edge rather than as a second column beside it. #}
+  <div class="split split-full" id="users-split">
+    <div class="card">
+      <div class="table-wrap table-scroll">
+        <table class="data">
+          <thead><tr>
+            {% if can('users', 'delete', 'business') %}
+            <th class="col-check"><input type="checkbox" class="select-all" aria-label="Select all users"></th>
+            {% endif %}
+            <th data-sort-key="email">Email</th>
+            <th data-sort-key="role">Role</th>
+            <th data-sort-key="status">Status</th>
+            <th class="col-actions">Actions</th>
+          </tr></thead>
+          <tbody id="users-body"></tbody>
+        </table>
+      </div>
+      <p class="msg msg-muted" id="users-msg"></p>
+      <div id="users-pager"></div>
+    </div>
+
+  </div>
+
+  {# ── User detail slide-in (see ``.slideover-inset``): non-modal, level with the list. It stays
+     inside this tab panel so switching tabs hides it with the tab it belongs to. ── #}
+  <div class="slideover slideover-inset" id="user-detail" data-anchor="#users-split">
+    <div class="slideover-panel" role="dialog" aria-modal="false" aria-labelledby="ud-email" tabindex="-1">
+      <div class="slideover-head">
+        <div class="slideover-titles">
+          <p class="detail-eyebrow">User</p>
+          <h2 id="ud-email"></h2>
+          <p class="card-sub" id="ud-id"></p>
+        </div>
+        <button type="button" class="btn btn-quiet btn-sm slideover-close" data-slideover-close
+                aria-label="Close user detail">Close</button>
+      </div>
+
+      <div class="slideover-body">
+        <div class="field-row">
+          <div class="field">
+            <label for="ud-first">First name</label>
+            <input type="text" id="ud-first" maxlength="100">
+          </div>
+          <div class="field">
+            <label for="ud-last">Last name</label>
+            <input type="text" id="ud-last" maxlength="100">
+          </div>
+        </div>
+        <div class="field">
+          <label for="ud-email-in">Email</label>
+          <input type="email" id="ud-email-in" maxlength="255">
+        </div>
+        <div class="field">
+          <label for="ud-role">Role (group)</label>
+          <select data-combobox id="ud-role"></select>
+          <p class="hint">A user's role is their access group: it decides what they can see and do.</p>
+        </div>
+        {# Multi-role, scoped & time-boxed assignments (Issue #136). The "Role (group)" above is the
+           user's single *unscoped* role; here an operator can grant additional roles limited to one
+           instance (scope) and/or until a date (expiry). Unscoped assignments apply globally as
+           before; a scoped one only applies within its scope; an expired one grants nothing. #}
+        <div class="field" id="ud-assignments-field">
+          <label>Role assignments</label>
+          <ul class="assignments-list" id="ud-assignments-list"></ul>
+          <div class="assignments-add">
+            <select id="ud-asg-role" aria-label="Role to assign"></select>
+            <input type="text" id="ud-asg-scope-type" maxlength="32" placeholder="scope type (optional)" aria-label="Scope type">
+            {# The plain scope-id text box is the general-purpose fallback for any scope_type; when
+               scope_type is exactly "property" the JS swaps it for the picker below instead (Issue
+               #147), so a manager/agent's property scope is a real property id, not a typo-prone
+               free-text guess. Both write the same underlying value the submit handler reads. #}
+            <input type="text" id="ud-asg-scope-id" maxlength="64" placeholder="scope id (optional)" aria-label="Scope id">
+            <div class="ac" data-ac-source="properties" id="ud-asg-property-picker" hidden>
+              <input type="text" class="ac-input" id="ud-asg-property-in" autocomplete="off" role="combobox"
+                     aria-expanded="false" aria-autocomplete="list" placeholder="Search properties…">
+              <input type="hidden" class="ac-value" id="ud-asg-property-id">
+              <ul class="ac-menu" role="listbox" hidden></ul>
+            </div>
+            <input type="datetime-local" id="ud-asg-expires" aria-label="Expires at (optional)">
+            {# A role assignment is an RBAC write, not a user edit: ``POST /users/{id}/roles``. #}
+            {% if can('rbac', 'update', 'business') %}
+            <button type="button" class="btn btn-quiet btn-sm" id="ud-asg-add">Add</button>
+            {% endif %}
+          </div>
+          <p class="hint">Leave scope and expiry empty for a normal, permanent role. A scoped role
+            applies only to that instance; an expired one grants nothing. Set scope type to
+            "property" to pick from a search instead of typing an id.</p>
+          <span class="msg" id="ud-asg-msg" aria-live="polite"></span>
+        </div>
+      </div>
+
+      <div class="slideover-foot form-actions">
+        {% if can('users', 'update', 'business') %}
+        <button type="button" class="btn btn-sm" id="ud-save">Save changes</button>
+        <button type="button" class="btn btn-quiet btn-sm" id="ud-resend" hidden>Resend activation</button>
+        {% endif %}
+        {# Same inconsistency as "rd-delete" above; Issue #155 found and fixed. #}
+        {% if can('users', 'delete', 'business') %}
+        <button type="button" class="btn btn-danger btn-sm" id="ud-delete">Delete user</button>
+        {% endif %}
+        <span class="msg" id="ud-msg" aria-live="polite"></span>
+      </div>
+    </div>
+  </div>
+
+  {# New-user inline form #}
+  {% if can('users', 'create', 'business') %}
+  <div class="card" id="new-user-card" hidden>
+    <h2>New user</h2>
+    <div class="field-row">
+      <div class="field">
+        <label for="nu-first">First name</label>
+        <input type="text" id="nu-first" maxlength="100">
+      </div>
+      <div class="field">
+        <label for="nu-last">Last name</label>
+        <input type="text" id="nu-last" maxlength="100">
+      </div>
+    </div>
+    <div class="field">
+      <label for="nu-email">Email</label>
+      <input type="email" id="nu-email" maxlength="255" placeholder="name@example.com">
+    </div>
+    <div class="field">
+      <label for="nu-role">Role (group)</label>
+      <select data-combobox id="nu-role"></select>
+    </div>
+    <div class="field">
+      <label><input type="checkbox" id="nu-activation" checked> Send an activation email so they can set a password</label>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn btn-sm" id="nu-create">Create user</button>
+      <button type="button" class="btn btn-quiet btn-sm" id="nu-cancel">Cancel</button>
+      <span class="msg" id="nu-msg" aria-live="polite"></span>
+    </div>
+  </div>
+  {% endif %}
+</section>
+
+{# ── Audit trail (Issue #138): a read-only, rbac-gated log of grant/revoke changes. ── #}
+<section class="tab-panel" id="panel-audit" role="tabpanel" hidden>
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <h1 class="card-title">Permission audit trail</h1>
+        <p class="card-sub">Every RBAC grant and revoke: who changed what, and when.</p>
+      </div>
+    </div>
+    <div class="toolbar toolbar-filters">
+      <input type="search" id="audit-actor" placeholder="Filter by actor…" aria-label="Filter by actor">
+      <select id="audit-target-type" aria-label="Filter by target type">
+        <option value="">All targets</option>
+        <option value="role_permission">role_permission</option>
+        <option value="role_hierarchy">role_hierarchy</option>
+        <option value="user_role">user_role</option>
+        <option value="resource">resource</option>
+        <option value="action">action</option>
+        <option value="permission">permission</option>
+      </select>
+      <select id="audit-action" aria-label="Filter by action">
+        <option value="">All actions</option>
+        <option value="grant">grant</option>
+        <option value="revoke">revoke</option>
+      </select>
+    </div>
+    <div class="table-wrap table-scroll">
+      <table class="data" id="audit-table">
+        <thead>
+          <tr>
+            <th scope="col">When</th>
+            <th scope="col">Actor</th>
+            <th scope="col">Action</th>
+            <th scope="col">Target</th>
+            <th scope="col">Before → After</th>
+          </tr>
+        </thead>
+        <tbody id="audit-body"></tbody>
+      </table>
+    </div>
+    <div id="audit-pager"></div>
+    <span class="msg" id="audit-msg" aria-live="polite"></span>
+  </div>
+</section>
+
+{# ── Catalog (Issue #141): manage the resource tree, action catalog and (resource, action)
+   permissions. Every mutation is rbac-gated and audited; system rows are read-only. ── #}
+<section class="tab-panel" id="panel-catalog" role="tabpanel" hidden>
+  {# Catalog sub-tabs (Issue #141 follow-up). Each is its own URL under /admin/rbac/catalog, so a
+     section is bookmarkable and survives a refresh: the same link-bar pattern as the RBAC tabs
+     above and the grouped-console tabs; the server marks the active one and only its panel renders. #}
+  {% set catalog_sub = catalog_initial_sub | default('resources') %}
+  {# The intro is its own header block, disconnected from the tabbed card below (standard block gap). #}
+  <div class="catalog-intro">
+    <h1 class="card-title">Catalog</h1>
+    <p class="card-sub">Resources, actions and permissions: editable data, no deploy needed.</p>
+  </div>
+  <div class="card" id="catalog-card">
+    <div class="tabs-scroll">
+      <div class="tabs" role="tablist">
+        <a class="tab{% if catalog_sub == 'resources' %} active{% endif %}" href="/admin/rbac/catalog/resources"
+           role="tab" aria-selected="{{ 'true' if catalog_sub == 'resources' else 'false' }}">Resources</a>
+        <a class="tab{% if catalog_sub == 'actions' %} active{% endif %}" href="/admin/rbac/catalog/actions"
+           role="tab" aria-selected="{{ 'true' if catalog_sub == 'actions' else 'false' }}">Actions</a>
+        <a class="tab{% if catalog_sub == 'permissions' %} active{% endif %}" href="/admin/rbac/catalog/permissions"
+           role="tab" aria-selected="{{ 'true' if catalog_sub == 'permissions' else 'false' }}">Permissions</a>
+        <a class="tab{% if catalog_sub == 'nav-gates' %} active{% endif %}" href="/admin/rbac/catalog/nav-gates"
+           role="tab" aria-selected="{{ 'true' if catalog_sub == 'nav-gates' else 'false' }}">Nav gates</a>
+      </div>
+    </div>
+
+    <div class="catalog-section" id="catalog-panel-resources"{% if catalog_sub != 'resources' %} hidden{% endif %}>
+      <h2 class="section-title">Resources</h2>
+      <form class="toolbar toolbar-filters" id="catalog-resource-form" autocomplete="off">
+        <input type="text" id="cat-res-key" placeholder="key (e.g. reports.custom)" aria-label="Resource key" required>
+        <input type="text" id="cat-res-name" placeholder="Name" aria-label="Resource name" required>
+        <div class="ac" data-ac-source="rbac-resources">
+          <input type="text" class="ac-input" id="cat-res-parent-in" autocomplete="off" role="combobox"
+                 aria-expanded="false" aria-autocomplete="list" placeholder="parent key (optional)">
+          <input type="hidden" class="ac-value" id="cat-res-parent">
+          <ul class="ac-menu" role="listbox" hidden></ul>
+        </div>
+        {% if can('rbac', 'create', 'business') %}
+        <button type="submit" class="btn btn-primary">Add resource</button>
+        {% endif %}
+      </form>
+      <div class="table-wrap table-scroll">
+        <table class="data" id="catalog-resources">
+          <thead><tr>
+            <th scope="col" data-sort-key="key">Key</th>
+            <th scope="col" data-sort-key="name">Name</th>
+            <th scope="col" data-sort-key="parent">Parent</th>
+            <th scope="col" data-sort-key="system">System</th>
+            <th scope="col" class="col-view"></th>
+            <th scope="col" data-col="actions"></th>
+          </tr></thead>
+          <tbody id="catalog-resources-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="catalog-section" id="catalog-panel-actions"{% if catalog_sub != 'actions' %} hidden{% endif %}>
+      <h2 class="section-title">Actions</h2>
+      <form class="toolbar toolbar-filters" id="catalog-action-form" autocomplete="off">
+        <input type="text" id="cat-act-key" placeholder="key (e.g. sign)" aria-label="Action key" required>
+        <input type="text" id="cat-act-name" placeholder="Name" aria-label="Action name" required>
+        {% if can('rbac', 'create', 'business') %}
+        <button type="submit" class="btn btn-primary">Add action</button>
+        {% endif %}
+      </form>
+      <div class="table-wrap table-scroll">
+        <table class="data" id="catalog-actions">
+          <thead><tr>
+            <th scope="col" data-sort-key="key">Key</th>
+            <th scope="col" data-sort-key="name">Name</th>
+            <th scope="col" data-sort-key="system">System</th>
+            <th scope="col" class="col-view"></th>
+            <th scope="col" data-col="actions"></th>
+          </tr></thead>
+          <tbody id="catalog-actions-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="catalog-section" id="catalog-panel-permissions"{% if catalog_sub != 'permissions' %} hidden{% endif %}>
+      <h2 class="section-title">Permissions</h2>
+      <form class="toolbar toolbar-filters" id="catalog-permission-form" autocomplete="off">
+        <div class="ac" data-ac-source="rbac-resources">
+          <input type="text" class="ac-input" id="cat-perm-resource-in" autocomplete="off" role="combobox"
+                 aria-expanded="false" aria-autocomplete="list" placeholder="resource key">
+          <input type="hidden" class="ac-value" id="cat-perm-resource">
+          <ul class="ac-menu" role="listbox" hidden></ul>
+        </div>
+        <div class="ac" data-ac-source="rbac-actions">
+          <input type="text" class="ac-input" id="cat-perm-action-in" autocomplete="off" role="combobox"
+                 aria-expanded="false" aria-autocomplete="list" placeholder="action key">
+          <input type="hidden" class="ac-value" id="cat-perm-action">
+          <ul class="ac-menu" role="listbox" hidden></ul>
+        </div>
+        {% if can('rbac', 'create', 'business') %}
+        <button type="submit" class="btn btn-primary">Add permission</button>
+        {% endif %}
+      </form>
+      <div class="table-wrap table-scroll">
+        <table class="data" id="catalog-permissions">
+          <thead><tr>
+            <th scope="col" data-sort-key="key">Permission</th>
+            <th scope="col" class="col-view"></th>
+            <th scope="col" data-col="actions"></th>
+          </tr></thead>
+          <tbody id="catalog-permissions-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    {# The caller's verdicts for the JS-rendered catalog rows (Issue #168, M28). A JS renderer
+       cannot carry a Jinja gate, so the server stamps them here once and ``admin-crud.js``'s
+       ``BKPAdmin.verdicts()`` reads them: the generalisation of the ad-hoc ``data-can-*``
+       attributes ``invoices.html`` and ``lease_templates.html`` had been using. UX only: every
+       route re-checks the grant regardless. #}
+    <span hidden id="catalog-verdicts"
+          data-can-update="{{ 'true' if can('rbac', 'update', 'business') else 'false' }}"
+          data-can-delete="{{ 'true' if can('rbac', 'delete', 'business') else 'false' }}"></span>
+
+    <div class="catalog-section" id="catalog-panel-nav-gates"{% if catalog_sub != 'nav-gates' %} hidden{% endif %}>
+      <h2 class="section-title">Nav gates</h2>
+      <p class="card-sub">Re-point an already-shipped sidebar icon or console tab to a different
+        resource, verb or named action, and set how wide a grant it needs (its scope tier), with
+        no deploy needed. A surface's label/icon/position stays code-declared; only which permission
+        it checks, and how far that permission must reach, are editable here. <strong>Business</strong>
+        marks a whole-business back-office surface: a caller whose grant on that resource is scoped
+        to their own rows is refused. <strong>Own</strong> marks a surface that is itself a
+        first-person view, so either tier opens it. Leave the tier blank to keep the current one.</p>
+      <form class="toolbar toolbar-filters" id="catalog-nav-gate-form" autocomplete="off">
+        <div class="ac" data-ac-source="rbac-nav-surfaces">
+          <input type="text" class="ac-input" id="cat-gate-surface-in" autocomplete="off" role="combobox"
+                 aria-expanded="false" aria-autocomplete="list" placeholder="surface key (e.g. reports)">
+          <input type="hidden" class="ac-value" id="cat-gate-surface">
+          <ul class="ac-menu" role="listbox" hidden></ul>
+        </div>
+        <div class="ac" data-ac-source="rbac-resources">
+          <input type="text" class="ac-input" id="cat-gate-resource-in" autocomplete="off" role="combobox"
+                 aria-expanded="false" aria-autocomplete="list" placeholder="resource key">
+          <input type="hidden" class="ac-value" id="cat-gate-resource">
+          <ul class="ac-menu" role="listbox" hidden></ul>
+        </div>
+        <select data-combobox id="cat-gate-verb" aria-label="Verb">
+          <option value="">— verb —</option>
+          <option value="read">read</option>
+          <option value="create">create</option>
+          <option value="update">update</option>
+          <option value="delete">delete</option>
+        </select>
+        <div class="ac" data-ac-source="rbac-actions">
+          <input type="text" class="ac-input" id="cat-gate-action-in" autocomplete="off" role="combobox"
+                 aria-expanded="false" aria-autocomplete="list" placeholder="or: named action">
+          <input type="hidden" class="ac-value" id="cat-gate-action">
+          <ul class="ac-menu" role="listbox" hidden></ul>
+        </div>
+        {# The gate's second axis (Issue #165): the scope tier a caller's grant must reach. Blank
+           keeps whatever the surface carries today, so a resource/verb re-gate never moves it. #}
+        <select data-combobox id="cat-gate-scope" aria-label="Scope tier">
+          <option value="">— scope (unchanged) —</option>
+          <option value="business">business</option>
+          <option value="own">own</option>
+        </select>
+        {# ``PATCH /nav-gates/{surface}`` is RbacUpdateDep, not create: re-pointing an existing
+           surface's gate, never minting one. #}
+        {% if can('rbac', 'update', 'business') %}
+        <button type="submit" class="btn btn-primary">Re-gate</button>
+        {% endif %}
+      </form>
+      <div class="table-wrap table-scroll">
+        <table class="data" id="catalog-nav-gates">
+          <thead><tr>
+            <th scope="col" data-sort-key="surface">Surface</th>
+            <th scope="col" data-sort-key="label">Label</th>
+            <th scope="col" data-sort-key="gate">Gate</th>
+            <th scope="col" data-sort-key="scope">Scope</th>
+            <th scope="col" data-sort-key="default">Default</th>
+            <th scope="col" class="col-view"></th>
+            <th scope="col" data-col="actions"></th>
+          </tr></thead>
+          <tbody id="catalog-nav-gates-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <span class="msg" id="catalog-msg" aria-live="polite"></span>
+  </div>
+
+  {# ── Catalog quick view: a resource's ancestor/descendant tree, or (for an action, a permission,
+     or a nav gate) the same tree centred on whatever resource it touches. Read-only, non-modal:
+     the same slide-in pattern as the role detail panel above, just with a tree instead of a form. ── #}
+  <div class="slideover slideover-inset" id="catalog-quickview" data-anchor="#catalog-card">
+    <div class="slideover-panel" role="dialog" aria-modal="false" aria-labelledby="qv-title" tabindex="-1">
+      <div class="slideover-head">
+        <div class="slideover-titles">
+          <p class="detail-eyebrow" id="qv-eyebrow">Resource</p>
+          <h2 id="qv-title"></h2>
+          <p class="card-sub" id="qv-sub"></p>
+        </div>
+        <button type="button" class="btn btn-quiet btn-sm slideover-close" data-slideover-close
+                aria-label="Close quick view">Close</button>
+      </div>
+      <div class="slideover-body">
+        <div id="qv-tree"></div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/admin-crud.js" defer></script>
+<script src="/static/js/admin-autocomplete.js" defer></script>
+<script src="/static/js/rbac-admin.js" defer></script>
+{% endblock %}

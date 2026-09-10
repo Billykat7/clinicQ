@@ -1,0 +1,32 @@
+{#
+  Notification centre (Issue #113): the shell bell, its unread badge, and the preview dropdown.
+
+  Placement: this partial renders the bell button; base.html includes it in ``.auth-corner``
+  between the theme toggle and the profile button. The bell is hidden until notification-center.js
+  confirms a signed-in session (like the avatar), then revealed and wired.
+
+  The dropdown is adaptive (a full-width sheet on small screens, an anchored panel on desktop;
+  CSS only) and reuses the profile-menu tokens. No inline scripts/handlers or styles (CSP
+  ``script-src 'self'`` preserved); previews are filled with textContent by the JS, never innerHTML,
+  so a message/notification body is shown verbatim and never interpreted as markup.
+#}
+<button type="button" class="bell-btn" id="notif-bell" aria-haspopup="dialog" aria-expanded="false"
+        aria-label="Notifications" hidden>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+  </svg>
+  <span class="bell-badge" id="notif-badge" hidden aria-hidden="true"></span>
+</button>
+
+<div class="notif-backdrop" id="notif-backdrop" role="dialog" aria-modal="true"
+     aria-label="Notifications" aria-hidden="true">
+  <div class="notif-panel" role="document">
+    <div class="notif-head">
+      <h2 class="notif-title">Notifications</h2>
+      <button type="button" class="notif-readall" id="notif-readall">Mark all read</button>
+    </div>
+    <ul class="notif-list" id="notif-list"></ul>
+    <p class="notif-empty" id="notif-empty" hidden>You're all caught up.</p>
+  </div>
+</div>

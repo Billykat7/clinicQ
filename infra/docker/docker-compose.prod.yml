@@ -1,0 +1,122 @@
+# BK ClinicQ app-only production compose — the file CD deploys (Issue 13).
+#
+# Edge nginx, wildcard TLS, and subdomain routing live in the gateway (infra) repo —
+# do not overlay docker-compose.https.yml or bind host ports 80/443.
+#
+# The compose project name must be unique per product on the shared platform host:
+# each sibling product on the same runner has its own `btk-<slug>` project, so this
+# stack is `btk-clinicq`. Reusing another product's project name would adopt — and
+# then recreate — that product's containers on the next deploy.
+#
+# Required .env keys (CD writes these via gateway write-prod-env.sh):
+#   IMAGE=ghcr.io/<org>/clinicq:{tag}
+#   APP_PORT=8011
+#   DB_SCHEMA=clinicq
+#   DOMAIN=clinicq.bkatalayi.com
+#   PROJECT_SLUG=clinicq
+#   TRUST_PROXY_HEADERS=true
+#   GATEWAY_COMPOSE_DIR=/opt/btk/gateway   # gateway deploy root; source of the edge cert
+#                                          # mount below (the canonical env writer sets it).
+#
+# Deploy (on server, /opt/btk/clinicq):
+#   docker compose -f infra/docker/docker-compose.prod.yml --project-directory . up -d
+#
+# Lint before deploy:
+#   /opt/btk/gateway/scripts/cd/lint-product-compose.sh infra/docker/docker-compose.prod.yml
+#
+# See docs/CICD/CICD-PIPELINES.md and infra docs/ARCHITECTURE/project-onboarding-runbook.md
+
+name: btk-clinicq
+
+services:
+  app:
+    image: ${IMAGE:?Set IMAGE to a full image ref (e.g. ghcr.io/org/clinicq:v1.2.3)}
+    restart: unless-stopped
+    env_file:
+      - .env
+    healthcheck:
+      # Liveness probe: /health/live is dependency-free, so a DB/S3 outage never
+      # restart-loops the container (readiness is polled externally against /health/ready;
+      # /health itself is the uniform liveness heartbeat — see docs/CICD/UPTIME-MONITORING.md).
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    # Report edge TLS expiry in /health so the gateway can surface it (it can't read the
+    # edge PEMs itself). Same source the edge nginx bind-mounts and renders as
+    # ssl_certificate: <gateway>/infra/nginx/certs/<FQDN>/fullchain.pem. GATEWAY_COMPOSE_DIR
+    # is the gateway deploy root, written into this product's .env by the canonical env
+    # writer (falls back to the standard /opt/btk/gateway layout). Only the PUBLIC
+    # fullchain.pem for THIS domain is mounted — never a private key, never a sibling's
+    # cert. Before the FQDN's cert is first issued the file is absent; the probe then just
+    # omits the cert block (health is unaffected).
+    volumes:
+      - ${GATEWAY_COMPOSE_DIR:-/opt/btk/gateway}/infra/nginx/certs/${DOMAIN}/fullchain.pem:/etc/edge-cert/fullchain.pem:ro
+    environment:
+      TLS_CERT_PATH: /etc/edge-cert/fullchain.pem
+    ports:
+      - "127.0.0.1:${APP_PORT:-8011}:8000"
+    # Bound one product's footprint on the shared platform host so a runaway
+    # worker can't starve sibling products. `docker compose up` (Compose v2)
+    # honours these deploy limits without Swarm.
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 256M
+    stop_grace_period: 30s
+
+  # Shared rate-limit store (Issue #179, M30) — behind the `ratelimit` profile, so
+  # `docker compose up -d` starts the app alone exactly as before and a single-worker deployment
+  # never runs it. Turn it on together with the two settings that use it:
+  #
+  #   docker compose -f infra/docker/docker-compose.prod.yml --project-directory . \
+  #     --profile ratelimit up -d
+  #   # and in .env:  RATE_LIMIT_BACKEND=redis
+  #   #               RATE_LIMIT_REDIS_URL=redis://ratelimit-store:6379/0
+  #
+  # Bound to the compose network only — never published to the host. The store holds nothing but
+  # counters keyed by IP and email hash prefix (`clinicq:rl:*`), all of which expire with their
+  # window, so it is deliberately **not** persisted: losing it costs at most one window's counting,
+  # and an AOF/RDB file would be one more place per-IP data lives at rest.
+  ratelimit-store:
+    image: redis:8-alpine
+    profiles: ["ratelimit"]
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 96M
+
+  # One-shot schema + catalog step (Issue #169, M28). Not part of `up`: it sits behind the
+  # `migrate` profile, so `docker compose up -d` starts the app alone, exactly as before.
+  #
+  # Migrations stay operator-run — the Dockerfile says so in as many words, and running them at
+  # container start would race every replica. What this service changes is that the *two* steps a
+  # deploy needs are now one command in the repo rather than two lines in a runbook:
+  #
+  #   docker compose -f infra/docker/docker-compose.prod.yml --project-directory . \
+  #     --profile migrate run --rm migrate
+  #
+  # Idempotent and safe to re-run: `alembic upgrade head` no-ops at head, and the seed is
+  # insert/update-only (an admin-added resource or re-gate survives it).
+  migrate:
+    image: ${IMAGE:?Set IMAGE to a full image ref (e.g. ghcr.io/org/clinicq:v1.2.3)}
+    profiles: ["migrate"]
+    restart: "no"
+    env_file:
+      - .env
+    command:
+      - sh
+      - -c
+      - "alembic upgrade head && python -m scripts.db.seed_rbac"

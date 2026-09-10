@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Application logs</h1>
+  <p class="lead">Structured logs written to S3, by level, path and date (Africa/Johannesburg).</p>
+  {% include "partials/breadcrumbs.html" %}
+</div>
+
+<div class="card">
+  <div class="toolbar">
+    <select data-combobox id="log-level" aria-label="Log level">
+      <option value="all">All levels</option>
+      <option value="info">Info</option>
+      <option value="warning">Warning</option>
+      <option value="error">Error</option>
+    </select>
+    <select data-combobox id="log-path" aria-label="Source">
+      <option value="">All sources</option>
+      <option value="api">API</option>
+      <option value="web">Web</option>
+      <option value="worker">Worker</option>
+    </select>
+    <input type="date" id="log-date"
+           value="{{ '%04d-%02d-%02d' | format(logs_default_year, logs_default_month, logs_default_day) }}"
+           aria-label="Date">
+    <input type="search" id="log-keyword" placeholder="Keyword in body…" aria-label="Keyword">
+    <button type="button" class="btn btn-sm" id="log-refresh">Search</button>
+  </div>
+  <p class="msg msg-muted" id="log-meta"></p>
+</div>
+
+{# ── Full-width log list; the detail opens in a slide-over (Issue 95) ── #}
+<div class="card">
+  <div id="log-loading" class="msg msg-muted" hidden><span class="spinner" aria-hidden="true"></span> Loading…</div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Object</th><th>Level</th><th>Size</th><th>Modified</th></tr></thead>
+      <tbody id="log-list"></tbody>
+    </table>
+  </div>
+  <p class="msg" id="log-list-msg" aria-live="polite"></p>
+  <div id="log-pager"></div>
+</div>
+
+{# ── Slide-over detail (reusable .slideover component) ── #}
+<div class="slideover" id="log-detail">
+  <div class="slideover-backdrop" data-slideover-close></div>
+  <div class="slideover-panel" role="dialog" aria-modal="true" aria-labelledby="log-object-title" tabindex="-1">
+    <div class="slideover-head log-detail-head">
+      <div class="log-detail-titles">
+        <span class="log-detail-eyebrow">
+          Log file
+          <span class="badge badge-muted" id="log-object-level" hidden></span>
+        </span>
+        <h2 id="log-object-title">Log contents</h2>
+        <p class="log-detail-key" id="log-object-key" title=""></p>
+      </div>
+      <button type="button" class="btn btn-quiet btn-sm slideover-close" data-slideover-close aria-label="Close log detail">Close</button>
+    </div>
+    <div class="slideover-body">
+      <pre class="log-body" id="log-object-body" hidden></pre>
+      <p class="msg" id="log-object-msg" aria-live="polite"></p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/admin-crud.js" defer></script>
+<script src="/static/js/logs-app.js" defer></script>
+{% endblock %}

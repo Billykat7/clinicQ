@@ -1,9 +1,17 @@
 # Milestone 7: Clinic Dashboard
 
-**Status:** 📋 planned · **Phase:** Semester 2 · Sprint 8–9 · **Suggested tag:** `v0.7.0`
-**Primary owner:** Frontend (Clinic) Dev
-**Depends on:** M6 (M3 for roles)
-**Blocks:** M14 pilot; staff cannot run a clinic without it
+> **In short:** The screen reception and nurses keep open all day: every queue live, one big Call Next, walk-ins in seconds, and honest offline states.
+
+| | |
+|---|---|
+| **Status** | 📋 Planned |
+| **Sprints** | 8–9 (weeks 15–18), semester 2. The sprint plan spreads its issues over sprints 3–11: some start early against stubs and some are scheduled after this window, which moves the milestone's close (and its tag) to sprint 11 (see the table) |
+| **Release tag** | `v0.7.0` |
+| **Primary owner** | D, Frontend/Clinic |
+| **Who does the work** | D: 8 issues (see each issue for the backup) |
+| **Issues** | 48–55 (8 issues, about 18 person-days of estimates) |
+| **Depends on** | [M6](M6_queue_engine_core.md) ([M3](M3_identity_auth_rbac.md) for roles) |
+| **Blocks** | [M14](M14_production_pilot_golive.md) pilot; staff cannot run a clinic without it |
 
 ## Goal
 
@@ -34,16 +42,50 @@ paper list. Three design commitments come from that:
 
 ## Issues
 
-| # | Title |
-|---|-------|
-| 48 | Dashboard shell, role-aware navigation and site switcher |
-| 49 | Front-desk board: all active queues, live via SSE with polling fallback |
-| 50 | Call next, recall, mark done and no-show actions |
-| 51 | Walk-in intake form and printable ticket stub |
-| 52 | Drag-to-reorder with reason codes and inline audit trail |
-| 53 | Nurse/doctor room view and private visit notes |
-| 54 | Clinic manager settings UI (profile, hours, display mode, staff, services) |
-| 55 | Reconnect/offline states and dashboard interaction tests |
+| # | Issue | Owner | Estimate | Sprint | Needs first (this milestone) |
+|---|-------|-------|----------|--------|------------------------------|
+| [48](../ISSUES/M7/ISSUE_48_dashboard_shell_role_nav.md) | Dashboard shell, role-aware navigation and site switcher | D | 2 days | 3 | nothing |
+| [49](../ISSUES/M7/ISSUE_49_front_desk_board_live.md) | Front-desk board: all active queues, live via SSE with polling fallback | D | 3 days | 6 | [48](../ISSUES/M7/ISSUE_48_dashboard_shell_role_nav.md) |
+| [50](../ISSUES/M7/ISSUE_50_call_next_actions.md) | Call next, recall, mark done and no-show actions | D | 2 days | 7 | [49](../ISSUES/M7/ISSUE_49_front_desk_board_live.md) |
+| [51](../ISSUES/M7/ISSUE_51_walkin_intake_ticket_stub.md) | Walk-in intake form and printable ticket stub | D | 2 days | 7 | [49](../ISSUES/M7/ISSUE_49_front_desk_board_live.md) |
+| [52](../ISSUES/M7/ISSUE_52_reorder_ui_audit_trail.md) | Drag-to-reorder with reason codes and inline audit trail | D | 2 days | 8 | nothing |
+| [53](../ISSUES/M7/ISSUE_53_nurse_room_view_visit_notes.md) | Nurse/doctor room view and private visit notes | D | 2 days | 8 | [48](../ISSUES/M7/ISSUE_48_dashboard_shell_role_nav.md) |
+| [54](../ISSUES/M7/ISSUE_54_manager_settings_ui.md) | Clinic manager settings UI (profile, hours, display mode, staff, services) | D | 3 days | 9 | nothing |
+| [55](../ISSUES/M7/ISSUE_55_dashboard_offline_tests.md) | Reconnect/offline states and dashboard interaction tests | D | 2 days | 11 | [49](../ISSUES/M7/ISSUE_49_front_desk_board_live.md), [50](../ISSUES/M7/ISSUE_50_call_next_actions.md) |
+
+## Order of work
+
+Arrows point from an issue to the issues that need it. Start with the ones on the left; anything not connected by an arrow can run in parallel.
+
+```mermaid
+flowchart LR
+    I48["48: Dashboard shell, role-aware…"]
+    I49["49: Front-desk board: all active…"]
+    I50["50: Call next, recall, mark done and…"]
+    I51["51: Walk-in intake form and printable…"]
+    I52["52: Drag-to-reorder with reason codes…"]
+    I53["53: Nurse/doctor room view and…"]
+    I54["54: Clinic manager settings UI…"]
+    I55["55: Reconnect/offline states and…"]
+    I48 --> I49
+    I49 --> I50
+    I49 --> I51
+    I48 --> I53
+    I49 --> I55
+    I50 --> I55
+```
+
+**Start here:** [Issue 48](../ISSUES/M7/ISSUE_48_dashboard_shell_role_nav.md), [Issue 52](../ISSUES/M7/ISSUE_52_reorder_ui_audit_trail.md), [Issue 54](../ISSUES/M7/ISSUE_54_manager_settings_ui.md).
+
+**Needed from other milestones** (merged, or stubbed by agreement, before the issues that use them start):
+
+- [Issue 18](../ISSUES/M3/ISSUE_18_rbac_roles_enforcement.md) (M3): RBAC model, seeded roles and enforcement dependencies; needed by 48
+- [Issue 24](../ISSUES/M4/ISSUE_24_opening_hours_closures.md) (M4): Opening hours, holiday calendar and temporary-closure broadcast; needed by 54
+- [Issue 27](../ISSUES/M4/ISSUE_27_display_privacy_settings.md) (M4): Display and privacy settings per site; needed by 54
+- [Issue 28](../ISSUES/M4/ISSUE_28_staff_site_room_assignment.md) (M4): Staff-to-site and room assignment; needed by 48, 53, 54
+- [Issue 40](../ISSUES/M6/ISSUE_40_join_queue_service_api.md) (M6): Join-queue service and API (all channels), with abuse guards; needed by 49, 51
+- [Issue 41](../ISSUES/M6/ISSUE_41_ticket_lifecycle_state_machine.md) (M6): Ticket lifecycle state machine and illegal-transition rejection; needed by 50
+- [Issue 46](../ISSUES/M6/ISSUE_46_priority_override_audit.md) (M6): Clinical priority override with reason codes and audit trail; needed by 52
 
 ## Exit criteria
 
@@ -54,6 +96,14 @@ paper list. Three design commitments come from that:
 - [ ] Private visit notes are never rendered on any public surface, proven by a test
 - [ ] Every reorder shows who did it and why, without leaving the board
 
+## Demo at the end of the milestone
+
+What the team shows at the sprint review to prove the milestone is done:
+
+- A receptionist issues a walk-in in under 10 seconds and calls the next patient; a second browser sees it within 2 seconds.
+- A nurse sees only their own room.
+- The network is pulled: the dashboard says so, then recovers without a refresh.
+
 ---
 
-**Navigation:** [GitHub docs index](../README.md) · [Implementation plan](../../PLAN/IMPLEMENTATION_PLAN.md) · [Workload split](../../TEAM/WORKLOAD_SPLIT.md) · [Issues](../ISSUES/M7/)
+**Navigation:** [GitHub docs index](../README.md) · [How to read a milestone](README.md) · [Implementation plan](../../PLAN/IMPLEMENTATION_PLAN.md) · [Workload split](../../TEAM/WORKLOAD_SPLIT.md) · [Issues](../ISSUES/M7/)

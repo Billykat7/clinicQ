@@ -1,0 +1,60 @@
+# Local platform compose: product nginx + app (joins gateway edge nginx).
+#
+# Traffic path:
+#   browser → infra edge :80 (clinicq.btk.localhost)
+#          → this nginx on 127.0.0.1:APP_PORT
+#          → app:8000 (compose DNS)
+#
+# Do NOT overlay docker-compose.https.yml — gateway owns host :80 / TLS.
+# Prerequisite: infra ./scripts/run-local-platform.sh
+#
+#   ./scripts/run-local-platform.sh
+#
+# See: infra docs/ARCHITECTURE/local-platform.md
+
+name: btk-clinicq
+
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
+      target: runtime
+      args:
+        BUILDKIT_INLINE_CACHE: "1"
+    image: ${IMAGE:-clinicq:local-platform}
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # Host Postgres is published on the Mac/Linux host — not container localhost.
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-true}
+      DOMAIN: ${DOMAIN:-clinicq.btk.localhost}
+      PROJECT_SLUG: ${PROJECT_SLUG:-clinicq}
+      APP_PORT: ${APP_PORT:-8011}
+      DB_SCHEMA: ${DB_SCHEMA:-clinicq}
+    healthcheck:
+      # Liveness probe: /health/live is dependency-free, so a DB/S3 outage never
+      # restart-loops the container (readiness is polled externally against /health/ready).
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    expose:
+      - "8000"
+    stop_grace_period: 30s
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${APP_PORT:-8011}:80"
+    volumes:
+      - ../nginx/platform.conf:/etc/nginx/nginx.conf:ro
+    restart: unless-stopped

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{#
+  Full-page editor for one announcement draft (Issue #132 follow-up). Opened in a new tab from the
+  Drafts quick-edit slider's "Full edit" link. Shares ``admin-draft-edit.js`` with the message and
+  alert draft editors via the generic ``de-*`` id scheme.
+#}
+
+{% block content %}
+<div class="page-head">
+  <h1>Edit draft</h1>
+  <p class="lead">A private, unsent announcement. Only you can see, edit, send or discard it.</p>
+  {% include "partials/breadcrumbs.html" %}
+</div>
+
+<span hidden id="draft-edit-page" data-draft-id="{{ draft_id }}" data-kind="announcement"></span>
+
+<div class="card">
+  <p class="msg" id="de-msg" aria-live="polite"></p>
+  <div class="field">
+    <label for="de-audience">Audience</label>
+    <select id="de-audience">
+      <option value="">Not set</option>
+      <option value="global">All users (admin)</option>
+      <option value="owner_tenants">My tenants (owner)</option>
+      <option value="property_occupants">Occupants of a property I manage</option>
+      <option value="managed_scope">My managed scope (manager)</option>
+    </select>
+  </div>
+  <div class="field" id="de-ref-field" hidden>
+    <label for="de-ref">Property id</label>
+    <input type="text" id="de-ref" maxlength="36" placeholder="Property id to target">
+  </div>
+  <div class="field">
+    <label for="de-subject">Subject</label>
+    <input type="text" id="de-subject" maxlength="200" placeholder="Announcement subject">
+  </div>
+  <div class="field">
+    <label for="de-body">Message</label>
+    <textarea id="de-body" rows="10" maxlength="8000" placeholder="Write your announcement…"></textarea>
+  </div>
+  <div class="form-actions">
+    {# Composing an announcement is authorised per *audience* by
+       ``src.modules.messaging.audience`` rather than by a flat verb, so the closest
+       honest gate for the surface is READ on the resource the console itself gates on:
+       the same check ``_is_manager`` makes. The GLOBAL audience has its own named action
+       (``broadcast_global``, Issue #160), enforced inside the send path. #}
+    {% if can('communications.announcements', 'read') %}
+    <button type="button" class="btn btn-sm" id="de-save">Save</button>
+    <button type="button" class="btn btn-sm" id="de-send">Send</button>
+    <button type="button" class="btn btn-danger btn-sm" id="de-delete">Delete</button>
+    {% endif %}
+    <a class="btn btn-quiet btn-sm" href="/admin/announcements/drafts">Back to Drafts</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/admin-crud.js" defer></script>
+<script src="/static/js/admin-draft-edit.js" defer></script>
+{% endblock %}

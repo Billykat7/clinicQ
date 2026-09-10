@@ -1,0 +1,20 @@
+# scripts/
+
+Scripts for **BK ClinicQ**.
+
+- **`run-mypy.sh`** – used by the pre-commit `mypy` hook; runs `.venv/bin/mypy` (falling back to `venv/`, then a bare `mypy` on `PATH` with a warning) so the type check always resolves the project's pinned Python 3.14 environment, even from a GUI git client or a shell where the venv was never activated.
+- **`ci-local.sh`** – local pre-push/pre-tag gate: code quality (ruff, mypy), **pip-audit**, tests (pytest), Docker build, and **Trivy**. pip-audit and Trivy are **local-only** (not on GitHub Actions). Smoke is **Actions → Smoke**. Use before pushing to **preserve your monthly Actions quota**. From repo root: `./scripts/ci-local.sh`. Options: `--install` (pip install deps first), `--fix` (ruff `--fix` and format in place), `--no-docker` (skip Docker build and Trivy), `--compose` (after Docker, run `docker compose up` → hit `/health` → `down` as a local smoke test).
+- **`run-local.sh`** – start PostgreSQL/PostGIS via `infra/docker/docker-compose.db.yml` and print next steps (migrations, seed, run). Requires a `.env` in the repo root.
+- **`run-local-platform.sh`** – join the local BK Platform platform: migrate the product schema on the shared DB `btk`, run app-only on `127.0.0.1:<app_port>`, register → **live**. Prerequisite: `cd ../infra && ./scripts/run-local-platform.sh`.
+- **`gh_sync_docs.py`** – create **and update** GitHub milestones and issues from `docs/GITHUB/MILESTONES/*.md` and `docs/GITHUB/ISSUES/M*/ISSUE_*.md` (`--dry-run`, `--milestone M4`). Preferred over the create-only helper.
+- **`gh_sync_issues.py`** – legacy create-only helper using the `gh` CLI (`--dry-run`, `--milestone M4`). See [docs/GITHUB/README.md](../docs/GITHUB/README.md).
+- **`db/alembic-upgrade.sh`**, **`db/alembic-downgrade.sh`**, **`db/alembic-revision.sh`** – Alembic migration helpers (activate `.venv` automatically).
+- **`db/seed-dev-user.sh`** – idempotent dev/admin user bootstrap in the configured PostgreSQL schema.
+- **`cd/create-hetzner-server.sh`** – create a Hetzner Cloud server via API and print its public IP; requires `HETZNER_API_TOKEN` in env.
+- **`cd/setup-server.sh`**, **`cd/server-initial-setup.sh`**, **`cd/server_setup.sh`** – provision a fresh Ubuntu/Debian host: system updates, Docker, base packages, and the Actions runner as a systemd service when `GITHUB_RUNNER_TOKEN` is set (see [docs/GITHUB/RUNNER/README.md](../docs/GITHUB/RUNNER/README.md)).
+- **`cd/write-prod-env.sh`** – legacy helper (refuses unless `BTK_ALLOW_LEGACY_WRITE_PROD_ENV=1`). **Production CD** uses `/opt/btk/gateway/scripts/cd/write-prod-env.sh` via infra `cd-product.yml`.
+- **`cd/free-http-ports-before-compose.sh`** – **retired** (exits 1). It would free host 80/443 and take down the gateway's edge nginx.
+- **`cd/prune-old-app-images.sh`** – after a successful deploy, remove local GHCR app images whose semver tag is **strictly older** than the deployed tag; skips images still used by running containers. Production CD runs the gateway prune script instead.
+- **`deploy/install-argocd.sh`**, **`install-fluxcd.sh`**, **`install-gitops.sh`** – optional GitOps installers; not used by the current gateway-based CD.
+- Product TLS/certbot hooks were removed — the gateway owns HTTPS for the public domain.
+- Add other one-off or dev scripts here.

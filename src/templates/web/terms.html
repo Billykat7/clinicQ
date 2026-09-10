@@ -1,0 +1,331 @@
+{#
+  Public terms of service (`/terms`), rendered by :func:`src.web.routes.terms_page`.
+
+  Written for South African law, because that is where the product runs: the Electronic
+  Communications and Transactions Act 25 of 2002 (s43: what a supplier must disclose on a
+  website), the Consumer Protection Act 68 of 2008 (which limits how far liability may be excluded
+  and forbids burying a risk in the fine print), and POPIA for anything about personal information,
+  which lives in the `/privacy` notice rather than being restated here.
+
+  The clause that matters most is `#emergency`, and it is placed first for that reason: a queue
+  product must never be mistaken for a way to get emergency help.
+
+  Same design system and same constraints as the rest of the front door: `landing.css` and the
+  shared `lp_header` / `lp_footer` partials, no inline styles or handlers (CSP), and no DB
+  session, so the terms stay reachable during an outage. `last_updated` is shared with `/privacy` through
+  `LEGAL_PAGES_LAST_UPDATED` in `src/web/routes.py`.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Terms of service · {{ app_name }}</title>
+<meta name="description" content="The terms on which ClinicQ is provided to patients and to clinics in South Africa, including what the service is not: it is not an emergency service and it is not medical advice.">
+<meta name="theme-color" content="#0f6e56">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/site.css">
+<link rel="stylesheet" href="/static/css/landing.css">
+{# Read by csrf-htmx.js to mirror the CSRF cookie into X-CSRF-Token. #}
+<meta name="bkp-csrf-cookie" content="{{ settings.csrf_cookie_name }}">
+{# Applies the saved light/dark choice before first paint (no flash); render-blocking, not deferred. #}
+<script src="/static/js/theme.js"></script>
+<script src="/static/js/site.js" defer></script>
+<script src="/static/js/landing.js" defer></script>
+<script src="/static/js/csrf-htmx.js" defer></script>
+<script src="/static/js/login-modal.js" defer></script>
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+{% include "web/partials/lp_header.html" %}
+
+<main id="main" class="lp-main">
+
+  <div class="lp-wrap lp-page-head">
+    <div class="lp-eyebrow">Legal · South Africa</div>
+    <h1>Terms of service</h1>
+    <p class="lp-lede">
+      The terms on which {{ app_name }} is provided: to you as a patient, and to the clinic whose
+      queue you join. Written for South African law, and meant to be read.
+    </p>
+    <p class="lp-updated">Last updated: {{ last_updated }}</p>
+  </div>
+
+  <div class="lp-wrap lp-doc-grid">
+
+    <aside class="lp-toc" aria-label="On this page">
+      <h2>On this page</h2>
+      <nav>
+        <a href="#emergency">Not an emergency service</a>
+        <a href="#status">Project status</a>
+        <a href="#who">Who these terms are between</a>
+        <a href="#service">What the service does</a>
+        <a href="#estimates">Queue positions and estimates</a>
+        <a href="#account">Your account</a>
+        <a href="#proxy">Booking for someone else</a>
+        <a href="#use">Acceptable use</a>
+        <a href="#messages">Messages and charges</a>
+        <a href="#clinics">Terms for clinics</a>
+        <a href="#privacy">Personal information</a>
+        <a href="#availability">Availability</a>
+        <a href="#liability">Liability</a>
+        <a href="#ending">Suspension and ending access</a>
+        <a href="#changes">Changes to these terms</a>
+        <a href="#law">Governing law and disputes</a>
+        <a href="#supplier">Supplier information</a>
+      </nav>
+    </aside>
+
+    <article class="lp-doc">
+
+      <section id="emergency">
+        <h2>Not an emergency service</h2>
+        <div class="lp-callout is-danger">
+          <b>If this is an emergency, do not use {{ app_name }}.</b> Go to your nearest emergency
+          department, or call <strong>10177</strong> for an ambulance or <strong>112</strong> from a
+          mobile phone. {{ app_name }} manages a queue. It does not triage you, it does not assess
+          how urgent your condition is, and no one is watching it for people who need help now.
+          Joining a queue is not a request for emergency care and will not be treated as one.
+        </div>
+        <p>
+          {{ app_name }} also does not provide medical advice, diagnosis or treatment. Nothing in
+          the application is a substitute for the judgement of a healthcare professional. If your
+          condition changes while you are waiting, tell a staff member at the clinic.
+        </p>
+      </section>
+
+      <section id="status">
+        <h2>Project status</h2>
+        <div class="lp-callout">
+          <b>Read this first.</b> {{ app_name }} is a final-year BSc IT capstone project at
+          Richfield Graduate Institute of Technology, and is not yet operating in a live clinic.
+          These terms describe how the service is intended to be provided. They are
+          <strong>not legal advice</strong>. They must be reviewed by a suitably qualified person,
+          and completed with the deployment's own supplier details, before any real patient uses
+          the service.
+        </div>
+      </section>
+
+      <section id="who">
+        <h2>Who these terms are between</h2>
+        <p>
+          These terms are an agreement between you and the operator of this {{ app_name }}
+          deployment. They cover your use of the application, the USSD and WhatsApp channels, the
+          self-service kiosk and this website.
+        </p>
+        <p>
+          <strong>They are not an agreement about your healthcare.</strong> Your care is provided
+          by the clinic, on the clinic's terms and under its professional and legal duties.
+          {{ app_name }} carries your place in its queue; it does not treat you, and it does not
+          decide who the clinic sees or in what order beyond running the order the clinic
+          configures.
+        </p>
+        <p>By using the service you agree to these terms. If you do not agree, do not use it.</p>
+      </section>
+
+      <section id="service">
+        <h2>What the service does</h2>
+        <ul>
+          <li>Helps you find clinics near you, with their sector, opening status and current queue length.</li>
+          <li>Lets you take a place in a clinic's queue: from the app, over USSD, on WhatsApp, on the web, at the kiosk, or at reception.</li>
+          <li>Shows you your position and an estimated wait, and notifies you as your turn approaches.</li>
+          <li>Shows your ticket number on the clinic's waiting-room screen, and your name only where you have consented and the clinic has enabled it.</li>
+          <li>Gives the clinic a dashboard to run the queue, and reports on how it performed.</li>
+        </ul>
+        <p>
+          A place in a queue is not an appointment, and it is not a promise that you will be seen.
+          A clinic may close early, run out of capacity, or reprioritise for clinical reasons.
+        </p>
+      </section>
+
+      <section id="estimates">
+        <h2>Queue positions and estimates</h2>
+        <p>
+          Waiting times shown in the application are <strong>estimates</strong>, calculated from how
+          quickly the clinic is currently working. They will change, sometimes sharply. Clinical
+          need comes first: staff can and will move a patient ahead of you, and each such override
+          is recorded with a reason.
+        </p>
+        <p>
+          Do not rely on an estimate for anything that would harm you if it were wrong. Give
+          yourself margin, and follow whatever the clinic tells you in person over what the
+          application shows.
+        </p>
+      </section>
+
+      <section id="account">
+        <h2>Your account</h2>
+        <ul>
+          <li>Give accurate details, and keep your mobile number and email address current; that is how we reach you when it is your turn.</li>
+          <li>You are responsible for what happens under your account, and for keeping your password, one-time codes and two-factor device secure.</li>
+          <li>Do not share your account or let someone else use it. Tell the operator promptly if you think it has been used without your permission.</li>
+          <li>If you register on a shared or borrowed phone, sign out when you are done.</li>
+        </ul>
+      </section>
+
+      <section id="proxy">
+        <h2>Booking for someone else</h2>
+        <p>
+          You may join a queue on behalf of a dependant: a child, or an adult who has asked you to.
+          When you do, you confirm that you are entitled to act for that person and to give the
+          consents the service records. For a child, that means you are the parent, guardian or
+          other competent person. You can revoke a proxy arrangement at any time, and so can the
+          person you booked for.
+        </p>
+      </section>
+
+      <section id="use">
+        <h2>Acceptable use</h2>
+        <p>Do not:</p>
+        <ul>
+          <li>Take places in queues you do not intend to use, or take multiple places for the same visit.</li>
+          <li>Impersonate another person, or join a queue for someone who has not asked you to.</li>
+          <li>Try to reach records, clinics or accounts you have not been granted access to, or probe, scan or test the service's security without written permission.</li>
+          <li>Interfere with the service or its infrastructure, including automated scraping, flooding the messaging channels, or anything that degrades it for others.</li>
+          <li>Use the service to break the law, to harass anyone, or to send unsolicited messages.</li>
+        </ul>
+        <p>
+          Security researchers are welcome: report a vulnerability to the operator rather than
+          exploiting it, and give us a reasonable chance to fix it before disclosing it.
+        </p>
+      </section>
+
+      <section id="messages">
+        <h2>Messages and charges</h2>
+        <p>
+          The service is free for patients to use. Your mobile network's own charges still apply:
+          USSD session fees, data, and any charges for messages you send. We do not control those
+          and we cannot refund them.
+        </p>
+        <p>
+          Messages depend on networks and third-party providers, so delivery cannot be guaranteed.
+          Do not treat the absence of a message as confirmation that it is not yet your turn. You
+          can change which messages you receive, or turn them off, in your notification
+          preferences; essential service messages about your current ticket may still be sent.
+        </p>
+      </section>
+
+      <section id="clinics">
+        <h2>Terms for clinics</h2>
+        <p>If your clinic uses {{ app_name }}, it additionally agrees that it will:</p>
+        <ul>
+          <li>Give accurate clinic details (hours, closures, services and location) and keep them current, since patients travel on them.</li>
+          <li>Use the queue fairly, and record a reason for every priority override.</li>
+          <li>Keep the waiting-room display in number-only mode unless it has recorded each affected patient's consent to show more.</li>
+          <li>Give each staff member only the access their role requires, and remove access when they leave.</li>
+          <li>Remain the responsible party for its patients' personal information under POPIA, and use {{ app_name }} as its operator under a written agreement; see the <a href="/privacy">privacy notice</a>.</li>
+          <li>Not use the service, or its reports, in a way that discriminates against patients or misrepresents its waiting times.</li>
+        </ul>
+      </section>
+
+      <section id="privacy">
+        <h2>Personal information</h2>
+        <p>
+          How we collect, use, share, protect and delete personal information, and the rights you
+          have under the Protection of Personal Information Act 4 of 2013, is set out in the
+          <a href="/privacy">privacy notice</a>, which forms part of these terms. In short: every
+          clinic starts number-only, names on the screen require your consent, the reason for your
+          visit is never displayed and is purged automatically, and you can ask what we hold and
+          have it deleted.
+        </p>
+      </section>
+
+      <section id="availability">
+        <h2>Availability</h2>
+        <p>
+          We aim to keep the service running, but it is provided as it stands. It may be
+          unavailable for planned maintenance, or because of a fault, a network failure, or a power
+          interruption. The clinic's own paper fallback continues to work when the service does
+          not, and the waiting-room screen recovers on its own once power returns.
+        </p>
+        <p>
+          We may change, add or withdraw features. If a change materially reduces what the service
+          does for you, we will tell you in the application before it takes effect.
+        </p>
+      </section>
+
+      <section id="liability">
+        <h2>Liability</h2>
+        <p>
+          Nothing in these terms limits or excludes any liability that cannot lawfully be limited or
+          excluded (including under the Consumer Protection Act 68 of 2008) or any liability for
+          death or personal injury caused by our negligence, or for fraud.
+        </p>
+        <p>
+          Subject to that, and to the fullest extent the law allows, we are not liable for loss you
+          suffer because a wait estimate was inaccurate, a notification was late or never arrived,
+          the service was unavailable, or a clinic's published details were wrong. We are not
+          responsible for the care a clinic provides, for a clinic's decisions about who it sees and
+          when, or for the acts of the mobile networks and messaging providers the service depends
+          on.
+        </p>
+      </section>
+
+      <section id="ending">
+        <h2>Suspension and ending access</h2>
+        <p>
+          You may stop using the service at any time, and you may ask for your account to be
+          deleted; see the <a href="/privacy">privacy notice</a> for what happens to your
+          information when you do.
+        </p>
+        <p>
+          We may suspend or end access to an account that breaches these terms, that puts the
+          service or its users at risk, or that we are required by law to suspend. Where it is
+          reasonable to do so we will tell you first and give you a chance to put it right.
+        </p>
+      </section>
+
+      <section id="changes">
+        <h2>Changes to these terms</h2>
+        <p>
+          When these terms change, we update the date at the top of this page. A change that
+          materially affects your rights is announced in the application before it takes effect;
+          continuing to use the service after that means you accept the updated terms.
+        </p>
+      </section>
+
+      <section id="law">
+        <h2>Governing law and disputes</h2>
+        <p>
+          These terms are governed by the law of the Republic of South Africa, and the South African
+          courts have jurisdiction. Please raise a complaint with us first; most are resolved
+          quickly. Nothing here prevents you from approaching the Information Regulator about
+          personal information, a consumer body about a consumer complaint, or a court.
+        </p>
+      </section>
+
+      <section id="supplier">
+        <h2>Supplier information</h2>
+        <p>
+          Section 43 of the Electronic Communications and Transactions Act 25 of 2002 requires a
+          supplier offering goods or services over an electronic transaction to publish its
+          details. For this deployment:
+        </p>
+        <dl class="lp-defs">
+          <dt>Service</dt>
+          <dd>{{ app_name }}: clinic discovery and digital queue management</dd>
+          <dt>Provided by</dt>
+          <dd>A BSc IT capstone project team, Richfield Graduate Institute of Technology (Distance Learning), South Africa</dd>
+          <dt>Registration and physical address</dt>
+          <dd>Published here before the service is offered commercially.</dd>
+          <dt>Contact</dt>
+          <dd>The operator of this deployment. Deployment-specific contact details are published here before go-live.</dd>
+        </dl>
+      </section>
+
+    </article>
+  </div>
+
+</main>
+
+{% include "web/partials/lp_footer.html" %}
+
+{% include "partials/login_modal.html" %}
+
+</body>
+</html>

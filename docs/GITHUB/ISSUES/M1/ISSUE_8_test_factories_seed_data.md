@@ -1,17 +1,29 @@
 # Issue 8: Test factories and `seed_dev_data.py` demo dataset
 
-**Area:** Backend / Quality
-**Milestone:** M1 - Foundation & Local CI
-**Owner role:** DevOps/QA Lead
-**Depends on:** Issues 3, 4
-**Estimate:** 2 days
-**Status:** Planned
+> **In short:** A believable demo world on every laptop: real Gauteng and KZN clinics with queues and a day of ticket history, created by one idempotent command.
+
+| | |
+|---|---|
+| **Milestone** | [M1: Foundation & Local CI](../../MILESTONES/M1_foundation_local_ci.md) |
+| **Sprint** | 2 (weeks 3–4) |
+| **Owner** | E, DevOps/QA (backup: F, Data & Research) |
+| **Area** | Backend / Quality |
+| **Estimate** | 2 days |
+| **Status** | Planned |
+| **Depends on** | [Issue 3](../M1/ISSUE_3_sqlalchemy_alembic_baseline.md): Async SQLAlchemy 2.x + Alembic baseline (PostGIS extension enabled)<br>[Issue 4](../M1/ISSUE_4_shared_kernel_enums_time_errors.md): Shared kernel: enums, error envelope, IDs, Africa/Johannesburg datetimes |
+| **Unblocks** | [Issue 9](../M2/ISSUE_9_actions_ci_lint_type_test.md): GitHub Actions CI: lint, type-check, test with PostGIS + Redis services |
 
 ## Context
 
 Every teammate needs a believable clinic, queue and ticket to develop against, and every test needs
 to build one in a line. A shared factory and seed script prevents six private copies of `create_test_clinic()`
 and gives the demo a dataset that looks real on screen.
+
+## Starting point
+
+- `tests/conftest.py` exists; there are no factories yet.
+- The kernel's seeding lives in `scripts/db/seed-dev-user.py` (one dev user) and `scripts/db/seed_rbac.py` (`make seed-rbac`). Follow the same pattern for `seed_dev_data.py`.
+- Sites, queues and tickets do not exist until Issues 23, 25 and 39, so build the factories for them as those land, or against agreed stubs.
 
 ## Scope
 
@@ -20,6 +32,11 @@ and gives the demo a dataset that looks real on screen.
 - Seeded tickets spread across the day so wait-time estimates and the heatmap have something to show
 - A seeded staff account per role, with credentials printed by the script
 - Idempotent seeding: re-running updates rather than duplicating
+
+## Out of scope
+
+- Production data or real patient records, ever.
+- The area and suburb dataset (Issue 34).
 
 ## Acceptance criteria
 
@@ -30,14 +47,20 @@ and gives the demo a dataset that looks real on screen.
 - [ ] Seeded credentials are clearly marked as development-only and refuse to run against production
 - [ ] At least one seeded clinic has enough ticket history for a non-trivial wait estimate
 
+## How to verify
+
+1. Run the seed script twice on a fresh database: the second run creates no duplicates.
+2. Point the script at a production `DATABASE_URL`: it refuses to run.
+3. Open the discovery map (once Issue 33 lands): seeded clinics sit at their real coordinates.
+
 ## Files touched
 
 - `tests/factories.py`
-- `scripts/seed_dev_data.py`
 - `tests/conftest.py`
+- `scripts/db/seed_dev_data.py`
 
 ---
 
-**Refs:** [M1 milestone](../../MILESTONES/M1_foundation_local_ci.md) · [product docs](../../../PRODUCT/13-tech-implementation.md) · [workload split](../../../TEAM/WORKLOAD_SPLIT.md)
+**Refs:** [M1 milestone](../../MILESTONES/M1_foundation_local_ci.md) · [product docs](../../../PRODUCT/13-tech-implementation.md) · [workload split](../../../TEAM/WORKLOAD_SPLIT.md) · [how to read this spec](../README.md)
 
 Closes #8

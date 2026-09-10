@@ -1,9 +1,17 @@
 # Milestone 1: Foundation & Local CI
 
-**Status:** 📋 planned · **Phase:** Semester 1 · Sprint 1–2 · **Suggested tag:** `v0.1.0`
-**Primary owner:** DevOps/QA Lead (primary) · Backend Lead (support)
-**Depends on:** None
-**Blocks:** Everything. No other milestone can start until the skeleton, database and test harness exist.
+> **In short:** A running, tested, empty application that six people can work in without stepping on each other.
+
+| | |
+|---|---|
+| **Status** | 🚧 In progress |
+| **Sprints** | 1–2 (weeks 1–4), semester 1 |
+| **Release tag** | `v0.1.0` |
+| **Primary owner** | E, DevOps/QA (primary) · A, Backend Lead (support) |
+| **Who does the work** | E: 5 issues · A: 2 issues · C: 1 issue (see each issue for the backup) |
+| **Issues** | 1–8 (8 issues, about 12 person-days of estimates) |
+| **Depends on** | None |
+| **Blocks** | Everything. No other milestone can start until the skeleton, database and test harness exist. |
 
 ## Goal
 
@@ -34,16 +42,43 @@ and **timezone discipline** (all business datetimes are `Africa/Johannesburg`, s
 
 ## Issues
 
-| # | Title |
-|---|-------|
-| 1 | Repository scaffold, Python 3.14 + FastAPI app factory, typed settings |
-| 2 | Docker Compose dev stack: PostgreSQL 18 + PostGIS, Redis, API |
-| 3 | Async SQLAlchemy 2.x + Alembic baseline (PostGIS extension enabled) |
-| 4 | Shared kernel: enums, error envelope, IDs, Africa/Johannesburg datetimes |
-| 5 | Base UI shell: Jinja2 layout, Tailwind build, htmx + Alpine wiring |
-| 6 | Structured logging, request-context middleware, health & readiness probes |
-| 7 | `ci-local.sh` harness (ruff, mypy, pytest, docker build) + pre-commit |
-| 8 | Test factories and `seed_dev_data.py` demo dataset |
+| # | Issue | Owner | Estimate | Sprint | Needs first (this milestone) |
+|---|-------|-------|----------|--------|------------------------------|
+| [1](../ISSUES/M1/ISSUE_1_repo_scaffold_app_factory.md) | Repository scaffold, Python 3.14 + FastAPI app factory, typed settings | E | 2 days | 1 | nothing |
+| [2](../ISSUES/M1/ISSUE_2_docker_dev_stack_postgis_redis.md) | Docker Compose dev stack: PostgreSQL 18 + PostGIS, Redis, API | E | 1 day | 1 | [1](../ISSUES/M1/ISSUE_1_repo_scaffold_app_factory.md) |
+| [3](../ISSUES/M1/ISSUE_3_sqlalchemy_alembic_baseline.md) | Async SQLAlchemy 2.x + Alembic baseline (PostGIS extension enabled) | A | 2 days | 1 | [2](../ISSUES/M1/ISSUE_2_docker_dev_stack_postgis_redis.md) |
+| [4](../ISSUES/M1/ISSUE_4_shared_kernel_enums_time_errors.md) | Shared kernel: enums, error envelope, IDs, Africa/Johannesburg datetimes | A | 1 day | 1 | [1](../ISSUES/M1/ISSUE_1_repo_scaffold_app_factory.md) |
+| [5](../ISSUES/M1/ISSUE_5_base_ui_shell_tailwind_htmx.md) | Base UI shell: Jinja2 layout, Tailwind build, htmx + Alpine wiring | C | 2 days | 1 | [1](../ISSUES/M1/ISSUE_1_repo_scaffold_app_factory.md) |
+| [6](../ISSUES/M1/ISSUE_6_logging_request_context_health.md) | Structured logging, request-context middleware, health & readiness probes | E | 1 day | 1 | [1](../ISSUES/M1/ISSUE_1_repo_scaffold_app_factory.md) |
+| [7](../ISSUES/M1/ISSUE_7_ci_local_harness_precommit.md) | `ci-local.sh` harness (ruff, mypy, pytest, docker build) + pre-commit | E | 1 day | 2 | [1](../ISSUES/M1/ISSUE_1_repo_scaffold_app_factory.md), [3](../ISSUES/M1/ISSUE_3_sqlalchemy_alembic_baseline.md) |
+| [8](../ISSUES/M1/ISSUE_8_test_factories_seed_data.md) | Test factories and `seed_dev_data.py` demo dataset | E | 2 days | 2 | [3](../ISSUES/M1/ISSUE_3_sqlalchemy_alembic_baseline.md), [4](../ISSUES/M1/ISSUE_4_shared_kernel_enums_time_errors.md) |
+
+## Order of work
+
+Arrows point from an issue to the issues that need it. Start with the ones on the left; anything not connected by an arrow can run in parallel.
+
+```mermaid
+flowchart LR
+    I1["1: Repository scaffold, Python 3.14…"]
+    I2["2: Docker Compose dev stack…"]
+    I3["3: Async SQLAlchemy 2.x + Alembic…"]
+    I4["4: Shared kernel: enums, error…"]
+    I5["5: Base UI shell: Jinja2 layout…"]
+    I6["6: Structured logging…"]
+    I7["7: ci-local.sh harness (ruff, mypy…"]
+    I8["8: Test factories and…"]
+    I1 --> I2
+    I2 --> I3
+    I1 --> I4
+    I1 --> I5
+    I1 --> I6
+    I1 --> I7
+    I3 --> I7
+    I3 --> I8
+    I4 --> I8
+```
+
+**Start here:** [Issue 1](../ISSUES/M1/ISSUE_1_repo_scaffold_app_factory.md).
 
 ## Exit criteria
 
@@ -54,6 +89,14 @@ and **timezone discipline** (all business datetimes are `Africa/Johannesburg`, s
 - [ ] `uv run scripts/seed_dev_data.py` produces at least 5 clinics with real coordinates, 3 queues each, and 20 tickets
 - [ ] Every business datetime helper returns `Africa/Johannesburg`; no naive datetimes pass the lint rule
 
+## Demo at the end of the milestone
+
+What the team shows at the sprint review to prove the milestone is done:
+
+- A teammate who has not seen the repo clones it, starts the database and app with the documented commands, and opens `/health`.
+- `make check` runs green on their laptop.
+- The seed script fills a fresh database with demo clinics.
+
 ---
 
-**Navigation:** [GitHub docs index](../README.md) · [Implementation plan](../../PLAN/IMPLEMENTATION_PLAN.md) · [Workload split](../../TEAM/WORKLOAD_SPLIT.md) · [Issues](../ISSUES/M1/)
+**Navigation:** [GitHub docs index](../README.md) · [How to read a milestone](README.md) · [Implementation plan](../../PLAN/IMPLEMENTATION_PLAN.md) · [Workload split](../../TEAM/WORKLOAD_SPLIT.md) · [Issues](../ISSUES/M1/)

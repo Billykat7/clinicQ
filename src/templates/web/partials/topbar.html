@@ -1,0 +1,17 @@
+{# Public front-door topbar: the wordmark, and the one affordance that changes with auth state.
+
+   Rendered by every page under `web/`, all of which build their context with
+   `public_page_context`, so `is_authenticated` is resolved through a short-lived session that
+   degrades to the signed-out shell if the database is unavailable, and this bar renders either way.
+#}
+<header class="site-topbar">
+  <a class="site-brand" href="/">{{ app_name }}</a>
+  <nav class="site-topbar-links" aria-label="Primary">
+    <a href="/features">Features</a>
+    {% if is_authenticated %}
+    <a class="btn btn-sm" href="/dashboard">Dashboard</a>
+    {% else %}
+    <button type="button" class="btn btn-sm" data-open-signin>Sign in</button>
+    {% endif %}
+  </nav>
+</header>

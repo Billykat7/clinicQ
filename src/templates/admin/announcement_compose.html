@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{#
+  Compose a new announcement, opened in a new tab from "New announcement" (Issue #132 follow-up:
+  previously an inline slideover on /admin/messages). Send posts immediately; Save as draft keeps
+  it private until you come back to it (on the Drafts tab). Ids are the generic ``cc-*`` scheme
+  ``admin-compose.js`` shares with the alert composer.
+#}
+
+{% block content %}
+<div class="page-head">
+  <h1>New announcement</h1>
+  <p class="lead">Broadcast to a resolved audience. Who it reaches is authorised server-side by
+  your role and ownership.</p>
+  {% include "partials/breadcrumbs.html" %}
+</div>
+
+<span hidden id="compose-page" data-kind="announcement"></span>
+
+<div class="card">
+  <p class="msg" id="cc-msg" aria-live="polite"></p>
+  <div class="field">
+    <label for="cc-audience">Audience</label>
+    <select id="cc-audience">
+      <option value="global">All users (admin)</option>
+      <option value="owner_tenants">My tenants (owner)</option>
+      <option value="property_occupants">Occupants of a property I manage</option>
+      <option value="managed_scope">My managed scope (manager)</option>
+    </select>
+  </div>
+  <div class="field" id="cc-ref-field" hidden>
+    <label for="cc-ref">Property id</label>
+    <input type="text" id="cc-ref" maxlength="36" placeholder="Property id to target">
+  </div>
+  <div class="field">
+    <label for="cc-subject">Subject</label>
+    <input type="text" id="cc-subject" maxlength="200" placeholder="Announcement subject">
+  </div>
+  <div class="field">
+    <label for="cc-body">Message</label>
+    <textarea id="cc-body" rows="8" maxlength="8000" placeholder="Write your announcement…"></textarea>
+  </div>
+  <div class="form-actions">
+    {# Composing an announcement is authorised per *audience* by
+       ``src.modules.messaging.audience`` rather than by a flat verb, so the closest
+       honest gate for the surface is READ on the resource the console itself gates on:
+       the same check ``_is_manager`` makes. The GLOBAL audience has its own named action
+       (``broadcast_global``, Issue #160), enforced inside the send path. #}
+    {% if can('communications.announcements', 'read') %}
+    <button type="button" class="btn btn-sm" id="cc-send">Send announcement</button>
+    <button type="button" class="btn btn-quiet btn-sm" id="cc-save">Save as draft</button>
+    {% endif %}
+    <a class="btn btn-quiet btn-sm" href="/admin/announcements/sent">Back to Announcements</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/admin-crud.js" defer></script>
+<script src="/static/js/admin-compose.js" defer></script>
+{% endblock %}

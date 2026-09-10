@@ -1,0 +1,34 @@
+# Local PostgreSQL + PostGIS for BK ClinicQ development.
+# Usage from repo root (after copying .env.example → .env):
+#   docker compose -f infra/docker/docker-compose.db.yml --project-directory infra/docker up -d
+# Or: make db-up
+#
+# Native app / migrations: set DB_HOST=localhost in .env.
+# App in Docker (make docker-up): set DB_HOST=host.docker.internal in .env.
+
+name: clinicq-db
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: ${DB_USER:-btk_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-change-me}
+      POSTGRES_DB: ${DB_NAME:-btk}
+    volumes:
+      - clinicq_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DB_USER:-btk_user} -d ${DB_NAME:-btk}",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  clinicq_pgdata:

@@ -1,0 +1,206 @@
+{#
+  Public features page (`/features`): the long form of the landing page's "What we are building"
+  section, rendered by :func:`src.web.routes.features_page` with
+  :func:`~src.web.context.public_page_context`.
+
+  Same design system as `/` (`landing.css`, the `lp-` classes, the shared
+  `web/partials/lp_header.html` / `lp_footer.html` chrome), so moving between the front door and
+  this page is one continuous surface rather than two sites. `landing_page` is deliberately not
+  set: the shared header and footer then point their in-page anchors back at `/#anchor`.
+
+  Same two constraints as the landing page: **CSP** (`script-src 'self'`, `style-src 'self'
+  'nonce-…'`) means no inline handlers and no `style="…"`, and the page **must render without a
+  database**: `public_page_context` degrades to the signed-out shell on any DB error.
+
+  The product scope below is public. What the platform kernel actually ships *today* is internal
+  build state, so it is gated on `can_view_internals` (see `src/web/context.py`) exactly as the
+  delivery plan on `/` is.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Features · {{ app_name }}</title>
+<meta name="description" content="What ClinicQ does for patients, for clinic staff and for the platform underneath: discovery, four ways to join one queue, a clinic dashboard, a waiting-room board, and privacy that is on by default.">
+<meta name="theme-color" content="#0f6e56">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/site.css">
+<link rel="stylesheet" href="/static/css/landing.css">
+{# Read by csrf-htmx.js to mirror the CSRF cookie into X-CSRF-Token. #}
+<meta name="bkp-csrf-cookie" content="{{ settings.csrf_cookie_name }}">
+{# Applies the saved light/dark choice before first paint (no flash); render-blocking, not deferred. #}
+<script src="/static/js/theme.js"></script>
+<script src="/static/js/site.js" defer></script>
+<script src="/static/js/landing.js" defer></script>
+<script src="/static/js/csrf-htmx.js" defer></script>
+<script src="/static/js/login-modal.js" defer></script>
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+{% include "web/partials/lp_header.html" %}
+
+<main id="main" class="lp-main">
+
+  <div class="lp-wrap lp-page-head">
+    <div class="lp-eyebrow">Features</div>
+    <h1>What {{ app_name }}&nbsp;does</h1>
+    <p class="lp-lede">
+      One queue per clinic room, four ways to join it, and a waiting-room screen that counts it
+      down. Everything below is <strong>specified with acceptance criteria</strong>; the
+      screenshots on the front door are illustrative and carry no real patient data.
+    </p>
+    <div class="lp-hero-cta">
+      <a class="lp-btn" href="/#screens">
+        See the screens
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="13 6 19 12 13 18"/></svg>
+      </a>
+      <a class="lp-btn lp-btn-quiet" href="/#different">Why it's different</a>
+    </div>
+  </div>
+
+  {# ── The four doors ───────────────────────────────────────── #}
+  <section class="lp-section lp-wrap" id="channels" data-reveal>
+    <div class="lp-eyebrow">Four doors, one queue</div>
+    <h2 class="lp-title">However you join, you take the same place in line</h2>
+    <p class="lp-sub">
+      The channel is only a way in. A ticket taken over USSD on a twenty-year-old handset sits in
+      exactly the same queue, in exactly the same order, as one taken in the app.
+    </p>
+
+    <div class="lp-features">
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">📱</span><b>App &amp; web</b><p>An installable PWA and a plain web page: search, join, and watch your position move in real time.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">☎️</span><b>USSD, no data</b><p>A numbered menu on any handset. No smartphone, no airtime for data, no app to install.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">💬</span><b>WhatsApp</b><p>A short conversation that ends in a ticket number, on the app most people already have open.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🧾</span><b>Walk in</b><p>Reception adds you in about ten seconds, or you scan the QR at the door yourself.</p></div>
+    </div>
+  </section>
+
+  {# ── Patients ─────────────────────────────────────────────── #}
+  <section class="lp-section lp-wrap" id="patients" data-reveal>
+    <div class="lp-eyebrow">For patients</div>
+    <h2 class="lp-title">Hold your place without holding the wall up</h2>
+    <p class="lp-sub">
+      A morning off work should not be the price of a twenty-minute consultation. Join before you
+      leave home, and wait where you would rather wait.
+    </p>
+
+    <div class="lp-features">
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">📍</span><b>Clinic discovery</b><p>Radius search over PostGIS with a public / private / all toggle, live queue length, open-now status, and both a map and a list.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🎟️</span><b>Join from anywhere</b><p>A ticket number and a live position before you leave home, from the app, USSD, WhatsApp or the web.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">⏱️</span><b>An honest estimate</b><p>Your wait is projected from how fast the room is actually moving today, and it updates as it changes.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🔔</span><b>Notifications that arrive</b><p>Push, SMS or WhatsApp, with quiet hours, opt-outs, and hard per-clinic cost caps so a clinic can never be surprised by a bill.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🗓️</span><b>Scheduled appointments</b><p>Booked slots that convert into a live ticket automatically at the right moment, with a reminder the day before.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🚗</span><b>Virtual waiting room</b><p>Wait nearby instead of on a bench. You are called forward accounting for the travel time you said you need.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">👨‍👩‍👧</span><b>Book for a dependant</b><p>One household, one smartphone: a parent for a child, a daughter for her mother, with the consent recorded.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">💊</span><b>Chronic medication reminders</b><p>Recurring collection nudges with a one-keypress join, for the queue you have to stand in every month.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🌍</span><b>Five languages</b><p>English, isiZulu, isiXhosa, Afrikaans and Sesotho, across menus, messages and the spoken call-out.</p></div>
+    </div>
+  </section>
+
+  {# ── Staff ────────────────────────────────────────────────── #}
+  <section class="lp-section lp-wrap" id="staff" data-reveal>
+    <div class="lp-eyebrow">For clinic staff</div>
+    <h2 class="lp-title">The whole line, from one screen</h2>
+    <p class="lp-sub">
+      Built for a front desk on a Monday morning: one very large button, no training day, and a
+      screen that tells the truth when the connection drops.
+    </p>
+
+    <div class="lp-features">
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🖥️</span><b>One dashboard</b><p>Every active queue live, with one very large Call Next and an honest offline state rather than a stale one.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🚶</span><b>Walk-ins in ten seconds</b><p>The same sequence as a remote join, into the same fair queue, with a printable stub and an optional SMS.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🏥</span><b>Multi-room queues</b><p>Triage → doctor → pharmacy, with transfers that keep the visit intact instead of starting it over.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">⚖️</span><b>Audited priority overrides</b><p>Bump a visibly unwell patient in two taps, with a reason code and a permanent trail, so a queue jump is never invisible.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">📺</span><b>Waiting-room board</b><p>Number, time, privacy-gated name, an audio call-out, and unattended recovery after load-shedding.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">⚙️</span><b>Self-service settings</b><p>Hours, holidays, closures, queues, services, staff and display mode. No developer, no support ticket.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">📊</span><b>Reports that sell themselves</b><p>Wait times, no-show rate, channel mix and a busiest-hour heatmap: the numbers a manager takes to their district.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">💬</span><b>Post-visit feedback</b><p>One question, one tap: a service-quality number that means something because everyone answers it.</p></div>
+    </div>
+  </section>
+
+  {# ── Platform ─────────────────────────────────────────────── #}
+  <section class="lp-section lp-wrap" id="platform" data-reveal>
+    <div class="lp-eyebrow">Platform, privacy &amp; compliance</div>
+    <h2 class="lp-title">Privacy is the default, not a setting someone remembers</h2>
+    <p class="lp-sub">
+      A queue in a clinic is health information the moment it carries a name. Every new clinic
+      starts number-only, and every widening of that is a recorded, revocable choice.
+    </p>
+
+    <div class="lp-features">
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🔐</span><b>RBAC &amp; multi-tenancy</b><p>Roles and scope tiers an administrator edits in the console. A clinic can never read another clinic's data, and cross-site access returns 404, not 403.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🛡️</span><b>Privacy by default</b><p>Every new clinic starts number-only on the board. Names and reasons are opt-in, consent-gated and audited.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🧹</span><b>Retention &amp; purge</b><p>Reason text and visit notes are deleted automatically after a short window, with a test that proves they are gone.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">📜</span><b>Tamper-evident audit</b><p>A hash-chained, append-only log: a retrospective edit is detectable rather than merely discouraged.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">📤</span><b>Access &amp; erasure</b><p>A patient can ask what is held about them and have it deleted. POPIA rights, built rather than promised.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🏛️</span><b>District dashboards</b><p>Anonymised area-level wait trends with small-cell suppression, for health-department planning.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🔌</span><b>Offline &amp; load-shedding</b><p>The board recovers unattended and the dashboard says so out loud when it is stale, because the power will go out.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">♿</span><b>Accessibility</b><p>Large type, high contrast, audio call-outs and keyboard operation; a waiting room is not a design showcase.</p></div>
+    </div>
+
+    <div class="lp-callout">
+      <b>Privacy modes on the board.</b> A clinic chooses one of three: number only, number plus a
+      first name and last initial, or number plus full name. The first is the default, the other
+      two require recorded patient consent, and the reason a patient is here is never displayed.
+      Read the <a href="/privacy">privacy notice</a> for what is held, why, and for how long.
+    </div>
+  </section>
+
+  {# ── Kernel state (operator-only) ─────────────────────────────
+     What the platform underneath ships *today*, as opposed to the specified scope above. That
+     distinction is internal build state (it says which of the features above are still ahead),
+     so it is gated on the same operator grant as the delivery plan on `/`. #}
+  {% if can_view_internals %}
+  <section class="lp-section lp-wrap" id="kernel" data-reveal>
+    <div class="lp-eyebrow">Platform kernel <span class="lp-eyebrow-tag">Internal</span></div>
+    <h2 class="lp-title">What the application ships today</h2>
+    <p class="lp-sub">
+      The scope above is the product. This is the kernel it is being built on: the modules that
+      are in the repository now, behind the sign-in.
+    </p>
+
+    <div class="lp-features">
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🔑</span><b>Accounts &amp; access</b><p>Sign-in with two-factor, email verification and password reset.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🔐</span><b>Access control</b><p>Roles, permissions and scope tiers an administrator edits in the console: no deploy.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">📜</span><b>Audit trail</b><p>An append-only record of who changed what, searchable by entity, actor and action.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🔔</span><b>Notifications</b><p>In-app and email notifications, with per-user delivery preferences.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">✉️</span><b>Messages</b><p>Threaded conversations and announcements, with drafts and read state.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">📣</span><b>Alerts</b><p>Broadcast alerts to a resolved audience, composed as drafts and sent once.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">📁</span><b>Documents</b><p>Document storage with retention, virus scanning and e-signature envelopes.</p></div>
+      <div class="lp-f"><span class="lp-ic" aria-hidden="true">🧩</span><b>Widgets</b><p>The worked example module: delete it with <code>make delete-example-module</code>.</p></div>
+    </div>
+  </section>
+  {% endif %}
+
+  {# ── Closing call to action ───────────────────────────────── #}
+  <div class="lp-wrap">
+    <div class="lp-final" data-reveal>
+      <h2>One queue, whichever door you came in</h2>
+      <p>
+        Take a look at the screens, or sign in to the console.
+      </p>
+      <div class="lp-final-cta">
+        <a class="lp-btn" href="/#screens">See the screens</a>
+        {% if is_authenticated %}
+        <a class="lp-btn lp-btn-ghost" href="/dashboard">Go to the dashboard</a>
+        {% else %}
+        <button type="button" class="lp-btn lp-btn-ghost" data-open-signin>Sign in</button>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</main>
+
+{% include "web/partials/lp_footer.html" %}
+
+{% include "partials/login_modal.html" %}
+
+</body>
+</html>

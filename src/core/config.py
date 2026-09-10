@@ -1,0 +1,951 @@
+"""Application settings (mirrors the Dikima ``src/core/config`` pattern)."""
+
+from __future__ import annotations
+
+from functools import lru_cache
+from pathlib import Path
+
+from pydantic import AliasChoices, Field, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine.url import make_url
+
+from src.commons.enums import (
+    AppEnvironment,
+    DbSchema,
+    DocumentScannerKind,
+    EsignProviderKind,
+    LogLevel,
+    RateLimitBackendKind,
+    S3LogPath,
+    SmsProviderKind,
+)
+
+# Default JWT secret shipped for local development only. The production guard
+# below refuses to boot outside development when this value is still in use.
+_DEFAULT_JWT_SECRET = "clinicq-dev-secret-change-me-min-32-chars"
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    app_name: str = Field(
+        default="BK ClinicQ", description="Application name (env: APP_NAME)"
+    )
+    version: str = Field(
+        default="0.1.0",
+        validation_alias=AliasChoices("VERSION", "APP_VERSION"),
+        description="Application version (env: VERSION; APP_VERSION accepted as alias)",
+    )
+    environment: AppEnvironment = Field(
+        default=AppEnvironment.DEVELOPMENT,
+        description="Runtime environment (env: ENVIRONMENT)",
+    )
+    log_level: str = Field(default="INFO", description="Log level (env: LOG_LEVEL)")
+
+    # Edge TLS certificate whose expiry is reported in the health body so the infra
+    # gateway can surface it (the gateway can't read the edge PEMs — only its nginx
+    # mounts them, see infra alembic 0012). In production this is set by the compose file
+    # to ``/etc/edge-cert/fullchain.pem`` — a read-only mount of the same public chain the
+    # edge nginx renders as ``ssl_certificate``
+    # (``<gateway>/infra/nginx/certs/<DOMAIN>/fullchain.pem``). Unset → the health body
+    # simply omits the ``cert`` block; nothing else changes.
+    tls_cert_path: Path | None = Field(
+        default=None,
+        validation_alias=AliasChoices("TLS_CERT_PATH", "CERT_PATH"),
+        description="PEM cert whose expiry is reported in /health (env: TLS_CERT_PATH; CERT_PATH accepted as alias). Unset → no cert block.",
+    )
+
+    # S3 structured logging (audit/troubleshooting). Console is always active; the
+    # S3 handler is only attached when AWS_S3_LOGGING_ENABLED=true and a bucket is set.
+    aws_s3_logging_enabled: bool = Field(
+        default=False,
+        description="Upload structured logs to S3 (env: AWS_S3_LOGGING_ENABLED)",
+    )
+
+    aws_s3_bucket: str = Field(
+        default="",
+        description="S3 bucket for structured logs (env: AWS_S3_BUCKET)",
+    )
+
+    aws_s3_region: str = Field(
+        default="af-south-1",
+        validation_alias=AliasChoices("AWS_S3_REGION", "AWS_REGION"),
+        description="AWS region for S3 (env: AWS_S3_REGION; AWS_REGION accepted as alias)",
+    )
+
+    aws_s3_log_path: S3LogPath = Field(
+        default=S3LogPath.API,
+        description="Log path segment for the S3 key: api or web (env: AWS_S3_LOG_PATH)",
+    )
+
+    aws_s3_log_level: LogLevel = Field(
+        default=LogLevel.WARNING,
+        description="Minimum level uploaded to S3 (env: AWS_S3_LOG_LEVEL)",
+    )
+
+    # Explicit credentials from .env; when set, boto3 uses these instead of its default
+    # chain (SSO/profile/instance role).
+    aws_access_key_id: str = Field(
+        default="",
+        description="AWS access key ID (env: AWS_ACCESS_KEY_ID)",
+    )
+
+    aws_secret_access_key: str = Field(
+        default="",
+        description="AWS secret access key (env: AWS_SECRET_ACCESS_KEY)",
+    )
+
+    # SSL verification for AWS/S3. Set false in DEV behind a proxy or with self-signed certs.
+    aws_ssl_cert_enabled: bool = Field(
+        default=True,
+        description="Verify SSL certificates for AWS/S3 (env: AWS_SSL_CERT_ENABLED)",
+    )
+    # Honor X-Forwarded-For when resolving the client IP (rate-limit keys, the session audit
+    # trail and request logs all read one resolver — src.core.client_ip). Off by default and
+    # deliberately so: with no proxy in front, the whole header is client-supplied, and defaulting
+    # this on would turn an attacker-controlled string into an authorization input for every such
+    # deployment (Issue #179).
+    trust_proxy_headers: bool = Field(
+        default=False,
+        description="Trust X-Forwarded-For for client IP (env: TRUST_PROXY_HEADERS)",
+    )
+    # How many trusted proxies sit in front of the app. X-Forwarded-For is append-only and
+    # client-supplied at the *left*: our nginx uses $proxy_add_x_forwarded_for, which appends the
+    # address it actually saw, so the trustworthy element is the Nth from the *right*. One hop
+    # (nginx facing the internet) is the shipped topology; raise it to 2 if a trusted CDN sits in
+    # front of nginx. Only read when ``trust_proxy_headers`` is on.
+    trusted_proxy_hops: int = Field(
+        default=1,
+        ge=1,
+        le=8,
+        description="Trusted reverse-proxy hops in front of the app (env: TRUSTED_PROXY_HOPS)",
+    )
+
+    # Database (PostgreSQL/PostGIS). Set DATABASE_URL, or DB_USER/DB_PASSWORD/DB_HOST/DB_NAME.
+    database_url: str = Field(
+        default="postgresql://localhost/btk",
+        description="PostgreSQL URL (env: DATABASE_URL), or built from DB_USER/DB_PASSWORD/DB_HOST/DB_NAME",
+    )
+    db_user: str = Field(
+        default="", description="DB user (env: DB_USER). Used to build DATABASE_URL."
+    )
+    db_password: str = Field(
+        default="",
+        description="DB password (env: DB_PASSWORD). Used to build DATABASE_URL.",
+    )
+    db_host: str = Field(
+        default="",
+        description="DB host derived from DATABASE_URL (DB_HOST env is ignored when URL is set)",
+    )
+    db_name: str = Field(
+        default="",
+        description="DB name derived from DATABASE_URL (DB_NAME env is ignored when URL is set)",
+    )
+    db_opts: str = Field(
+        default="", description="Optional query string for DB URL (env: DB_OPTS)."
+    )
+    db_schema: DbSchema = Field(
+        default=DbSchema.CLINICQ,
+        description="PostgreSQL schema for application tables (env: DB_SCHEMA)",
+    )
+
+    # Async request-path database (Issue #81). The request path runs on the asyncio event loop,
+    # so it uses an async SQLAlchemy engine over asyncpg driven by ``database_url_async`` below —
+    # the same host/database as ``database_url`` with the driver swapped. The **synchronous**
+    # ``database_url`` engine stays the one Alembic, cron, the CLI and scripts use unchanged. The
+    # pool and timeout knobs are the async pool's, set deliberately rather than left to defaults so
+    # a slow or contended database fails fast instead of pinning the loop (see docs/CICD/ASYNC-DB.md).
+    db_async_driver: str = Field(
+        default="asyncpg",
+        description=(
+            "SQLAlchemy async driver for the request-path engine, used to build "
+            "database_url_async from database_url (env: DB_ASYNC_DRIVER)."
+        ),
+    )
+    db_async_pool_size: int = Field(
+        default=5,
+        ge=1,
+        description="Async engine connection-pool size (env: DB_ASYNC_POOL_SIZE).",
+    )
+    db_async_max_overflow: int = Field(
+        default=10,
+        ge=0,
+        description=(
+            "Async engine connections allowed beyond the pool size under burst "
+            "(env: DB_ASYNC_MAX_OVERFLOW)."
+        ),
+    )
+    db_pool_timeout_seconds: int = Field(
+        default=30,
+        ge=1,
+        description=(
+            "Seconds a request waits for a free async connection before failing rather than "
+            "queueing forever (env: DB_POOL_TIMEOUT_SECONDS)."
+        ),
+    )
+    db_statement_timeout_seconds: int = Field(
+        default=30,
+        ge=0,
+        description=(
+            "PostgreSQL statement_timeout applied to async connections; a runaway query is "
+            "cancelled instead of holding a loop worker. 0 disables "
+            "(env: DB_STATEMENT_TIMEOUT_SECONDS)."
+        ),
+    )
+    db_lock_timeout_seconds: int = Field(
+        default=10,
+        ge=0,
+        description=(
+            "PostgreSQL lock_timeout applied to async connections; a blocked lock acquisition "
+            "fails fast rather than stalling. 0 disables (env: DB_LOCK_TIMEOUT_SECONDS)."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def build_database_url_from_components(self) -> Settings:
+        """If DB_HOST and DB_NAME are set, build database_url from DB_USER, DB_PASSWORD, DB_HOST, DB_NAME, DB_OPTS."""
+        if not self.db_host or not self.db_name:
+            return self
+        # Avoid overwriting an explicit literal URL (e.g. no ${VAR} in it)
+        if "${" not in self.database_url and self.database_url.startswith("postgresql"):
+            return self
+        from urllib.parse import quote_plus
+
+        user = quote_plus(self.db_user) if self.db_user else ""
+        password = quote_plus(self.db_password) if self.db_password else ""
+        auth = f"{user}:{password}@" if user or password else ""
+        opts = (self.db_opts or "").strip()
+        if opts and not opts.startswith("?"):
+            opts = "?" + opts
+        self.database_url = f"postgresql://{auth}{self.db_host}/{self.db_name}{opts}"
+        return self
+
+    @model_validator(mode="after")
+    def sync_db_parts_from_database_url(self) -> Settings:
+        """Align db_host/db_name with DATABASE_URL so tooling never shows stale DB_* parts."""
+        u = make_url(self.database_url)
+        self.db_host = u.host or ""
+        self.db_name = u.database or ""
+        return self
+
+    # Auth / security core
+    auth_enabled: bool = Field(
+        default=True,
+        description="Enable authentication dependencies (env: AUTH_ENABLED)",
+    )
+    jwt_secret: str = Field(
+        default=_DEFAULT_JWT_SECRET,
+        min_length=32,
+        description="HS256 signing secret (env: JWT_SECRET)",
+    )
+    jwt_algorithm: str = Field(
+        default="HS256",
+        description="JWT signing algorithm (env: JWT_ALGORITHM)",
+    )
+    bcrypt_rounds: int = Field(
+        default=12,
+        ge=4,
+        le=15,
+        description=(
+            "bcrypt cost factor for password hashing (env: BCRYPT_ROUNDS). The default 12 is a "
+            "deliberate work factor; it may be lowered (e.g. 4) only in development/tests to keep "
+            "bcrypt-heavy suites fast — a production guard forbids < 12 outside development."
+        ),
+    )
+    field_encryption_key: str = Field(
+        default="",
+        description=(
+            "Secret used to derive the Fernet key that encrypts personal fields at rest "
+            "(e.g. a government ID number). When empty, the key is derived from JWT_SECRET so "
+            "development and tests need no extra config (env: FIELD_ENCRYPTION_KEY)."
+        ),
+    )
+    field_encryption_keys: str = Field(
+        default="",
+        description=(
+            "Comma-separated field-encryption secrets, newest first, for zero-downtime key "
+            "rotation (Issue #78). When set it fully specifies the key list: new data is "
+            "encrypted with the first (primary) key, and every listed key is tried on decrypt "
+            "so ciphertext under a retired key still reads during migration. When empty the "
+            "app falls back to the single FIELD_ENCRYPTION_KEY / JWT_SECRET key "
+            "(env: FIELD_ENCRYPTION_KEYS). See docs/CICD/KEY-ROTATION.md."
+        ),
+    )
+    jwt_access_expire_minutes: int = Field(
+        default=15,
+        ge=1,
+        description="Access token lifetime in minutes (env: JWT_ACCESS_EXPIRE_MINUTES)",
+    )
+    refresh_token_expire_days: int = Field(
+        default=7,
+        ge=1,
+        description="Refresh token lifetime in days (env: REFRESH_TOKEN_EXPIRE_DAYS)",
+    )
+
+    # Typed-token link lifetimes (activation / password reset emails)
+    activation_link_expire_hours: int = Field(
+        default=48,
+        ge=1,
+        description="Activation link validity in hours (env: ACTIVATION_LINK_EXPIRE_HOURS)",
+    )
+    password_reset_link_expire_hours: int = Field(
+        default=2,
+        ge=1,
+        description="Password reset link validity in hours (env: PASSWORD_RESET_LINK_EXPIRE_HOURS)",
+    )
+    email_change_link_expire_hours: int = Field(
+        default=2,
+        ge=1,
+        description=(
+            "Email-change confirmation link validity in hours "
+            "(env: EMAIL_CHANGE_LINK_EXPIRE_HOURS)"
+        ),
+    )
+    verification_resend_cooldown_minutes: int = Field(
+        default=5,
+        ge=1,
+        description=(
+            "Minimum minutes between verification-email resends per user "
+            "(env: VERIFICATION_RESEND_COOLDOWN_MINUTES)"
+        ),
+    )
+
+    # Signup / self-registration (feature flag)
+    signup_enabled: bool = Field(
+        default=False,
+        description="Enable self-registration signup + activation (env: SIGNUP_ENABLED)",
+    )
+
+    # Sign-in method feature flags
+    auth_otp_login_enabled: bool = Field(
+        default=True,
+        description="Enable OTP email sign-in endpoints (env: AUTH_OTP_LOGIN_ENABLED)",
+    )
+    auth_password_login_enabled: bool = Field(
+        default=True,
+        description="Enable password sign-in endpoint (env: AUTH_PASSWORD_LOGIN_ENABLED)",
+    )
+
+    # OTP (email sign-in). Codes live in a short-TTL in-memory store, rate-limited.
+    otp_ttl_minutes: int = Field(
+        default=10,
+        ge=1,
+        description="OTP validity in minutes (env: OTP_TTL_MINUTES)",
+    )
+    otp_length: int = Field(
+        default=6,
+        ge=4,
+        le=8,
+        description="OTP code length in digits (env: OTP_LENGTH)",
+    )
+    otp_rate_limit_per_email: int = Field(
+        default=5,
+        ge=1,
+        description="Max OTP requests per email per window (env: OTP_RATE_LIMIT_PER_EMAIL)",
+    )
+    otp_rate_limit_per_ip: int = Field(
+        default=20,
+        ge=1,
+        description="Max OTP requests per IP per window (env: OTP_RATE_LIMIT_PER_IP)",
+    )
+    otp_rate_limit_window_minutes: int = Field(
+        default=15,
+        ge=1,
+        description="OTP rate-limit window in minutes (env: OTP_RATE_LIMIT_WINDOW_MINUTES)",
+    )
+
+    # Password sign-in (M17 — Issue #101). The password-login fallback authenticates on a
+    # single request (no OTP round-trip), so it needs its own brute-force / credential-stuffing
+    # brake: a per-email budget stops guessing one account's password and a wider per-IP budget
+    # stops spraying one password across many accounts. Both share one window (default 15 min).
+    password_login_rate_limit_per_email: int = Field(
+        default=10,
+        ge=1,
+        description="Max password sign-in attempts per email per window (env: PASSWORD_LOGIN_RATE_LIMIT_PER_EMAIL)",
+    )
+    password_login_rate_limit_per_ip: int = Field(
+        default=30,
+        ge=1,
+        description="Max password sign-in attempts per IP per window (env: PASSWORD_LOGIN_RATE_LIMIT_PER_IP)",
+    )
+    password_login_rate_limit_window_seconds: int = Field(
+        default=900,
+        ge=1,
+        description="Password sign-in rate-limit window in seconds (env: PASSWORD_LOGIN_RATE_LIMIT_WINDOW_SECONDS)",
+    )
+
+    # Rate-limiter state (M30 — Issue #179, pen-test F-02). ``memory`` keeps the sliding windows
+    # process-local, which is exactly today's behaviour and the default, so a single-worker dev run
+    # needs nothing new. ``redis`` shares one window across every worker and instance. The limiter
+    # degrades back to the in-process window when the shared store is unreachable and logs it once
+    # per outage — a limiter that takes the site down when Redis blinks is a worse outcome than the
+    # abuse it prevents.
+    rate_limit_backend: RateLimitBackendKind = Field(
+        default=RateLimitBackendKind.MEMORY,
+        description="Where rate-limit windows live: memory or redis (env: RATE_LIMIT_BACKEND)",
+    )
+
+    rate_limit_redis_url: str = Field(
+        default="",
+        description="Redis URL for the shared rate-limit store (env: RATE_LIMIT_REDIS_URL)",
+    )
+    # Signed download-link minting (M30 — Issue #179). Loose on purpose: a person opening
+    # documents one at a time never approaches it, a script enumerating a subject's files does.
+    signed_link_mint_rate_limit_per_ip: int = Field(
+        default=60,
+        ge=1,
+        description="Max signed download links minted per IP per window (env: SIGNED_LINK_MINT_RATE_LIMIT_PER_IP)",
+    )
+    signed_link_mint_rate_limit_window_seconds: int = Field(
+        default=60,
+        ge=1,
+        description="Signed-link mint rate-limit window in seconds (env: SIGNED_LINK_MINT_RATE_LIMIT_WINDOW_SECONDS)",
+    )
+
+    rate_limit_redis_timeout_seconds: float = Field(
+        default=0.25,
+        gt=0,
+        le=5,
+        description=(
+            "Socket timeout for the shared rate-limit store, in seconds "
+            "(env: RATE_LIMIT_REDIS_TIMEOUT_SECONDS). Deliberately short: the limiter is on the "
+            "hot path of every sign-in, so a slow store must degrade fast, not queue requests."
+        ),
+    )
+    # Session lifetime policy (optional server-enforced caps on refresh sessions)
+    session_absolute_max_days: int | None = Field(
+        default=None,
+        description=(
+            "If set, refresh sessions older than this many days from session_started_at "
+            "require sign-in again (env: SESSION_ABSOLUTE_MAX_DAYS). None disables."
+        ),
+    )
+    session_server_idle_timeout_minutes: int | None = Field(
+        default=None,
+        ge=1,
+        le=10080,
+        description=(
+            "If set, revoke a refresh session when last_seen_at is older than this many "
+            "minutes (server-enforced idle). None disables "
+            "(env: SESSION_SERVER_IDLE_TIMEOUT_MINUTES)."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def session_absolute_max_days_positive_when_set(self) -> Settings:
+        """Absolute max, when set, must be at least one day."""
+        if (
+            self.session_absolute_max_days is not None
+            and self.session_absolute_max_days < 1
+        ):
+            raise ValueError("SESSION_ABSOLUTE_MAX_DAYS must be >= 1 when set")
+        return self
+
+    # Email transport (stdlib smtplib + STARTTLS). When SMTP_HOST is unset the app logs
+    # the activation link instead of sending (development fallback).
+    smtp_host: str = Field(
+        default="",
+        description="SMTP server host for transactional email (env: SMTP_HOST)",
+    )
+    smtp_port: int = Field(
+        default=587,
+        ge=1,
+        le=65535,
+        description="SMTP server port (env: SMTP_PORT)",
+    )
+    smtp_use_tls: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("SMTP_USE_TLS", "SMTP_TLS"),
+        description="Use STARTTLS for SMTP (env: SMTP_USE_TLS; SMTP_TLS accepted as alias)",
+    )
+    smtp_user: str = Field(
+        default="",
+        description="SMTP username (env: SMTP_USER)",
+    )
+    smtp_password: str = Field(
+        default="",
+        description="SMTP password (env: SMTP_PASSWORD)",
+    )
+    smtp_from_email: str = Field(
+        default="noreply@clinicq.bkatalayi.com",
+        description="Default From address for transactional email (env: SMTP_FROM_EMAIL)",
+    )
+
+    @model_validator(mode="after")
+    def strip_smtp_credentials(self) -> Settings:
+        """Trim accidental whitespace/newlines from pasted SMTP secrets so auth matches."""
+        self.smtp_host = (self.smtp_host or "").strip()
+        self.smtp_user = (self.smtp_user or "").strip()
+        self.smtp_password = (self.smtp_password or "").strip()
+        self.smtp_from_email = (self.smtp_from_email or "").strip()
+        return self
+
+    # Notification service (Issue #67) — one service for transactional email + SMS with
+    # delivery status. Email reuses the SMTP transport above; SMS sits behind a pluggable
+    # provider interface (see ``src.modules.notifications.sms``).
+    sms_provider: SmsProviderKind = Field(
+        default=SmsProviderKind.LOGGING,
+        description=(
+            "SMS provider backing the SMS channel (env: SMS_PROVIDER). 'logging' logs and "
+            "returns a synthetic id so the app runs without an SMS account; 'fake' is the "
+            "in-memory test double."
+        ),
+    )
+
+    sms_from: str = Field(
+        default="",
+        description="Sender id / from-number for outbound SMS (env: SMS_FROM).",
+    )
+
+    notification_max_attempts: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description=(
+            "How many delivery attempts a notification gets before it is dead-lettered "
+            "(env: NOTIFICATION_MAX_ATTEMPTS)."
+        ),
+    )
+
+    notification_retry_base_seconds: int = Field(
+        default=60,
+        ge=1,
+        le=3600,
+        description=(
+            "Base seconds for exponential backoff between delivery retries — the wait before "
+            "attempt n is base * 2**(n-1) (env: NOTIFICATION_RETRY_BASE_SECONDS)."
+        ),
+    )
+
+    notification_retry_interval_minutes: int = Field(
+        default=5,
+        ge=1,
+        le=1440,
+        description=(
+            "How often the notification retry sweep runs to re-attempt due failures "
+            "(env: NOTIFICATION_RETRY_INTERVAL_MINUTES)."
+        ),
+    )
+
+    notification_webhook_secret: str = Field(
+        default="",
+        description=(
+            "Shared secret a delivery-status webhook must present in the "
+            "'X-Webhook-Secret' header before a provider callback is accepted. When unset, "
+            "the webhook endpoint is disabled (env: NOTIFICATION_WEBHOOK_SECRET)."
+        ),
+    )
+
+    # Notification preferences (Issue #72). ``public_base_url`` is the externally reachable origin
+    # (e.g. ``https://clinicq.bkatalayi.com``) used to build absolute links in mail that is sent
+    # outside a request — chiefly the login-free unsubscribe link and its ``List-Unsubscribe``
+    # header. When unset (development), the header is omitted rather than pointing at a wrong host.
+    public_base_url: str = Field(
+        default="",
+        description=(
+            "Externally reachable base URL for links in outbound mail, e.g. "
+            "'https://clinicq.bkatalayi.com' (env: PUBLIC_BASE_URL). When unset, the "
+            "List-Unsubscribe header is omitted."
+        ),
+    )
+    unsubscribe_link_expire_days: int = Field(
+        default=365,
+        ge=1,
+        le=3650,
+        description=(
+            "How long a login-free unsubscribe link stays valid, in days — long-lived because "
+            "email lingers in inboxes (env: UNSUBSCRIBE_LINK_EXPIRE_DAYS)."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def strip_public_base_url(self) -> Settings:
+        """Trim whitespace and a trailing slash so link building can concatenate paths safely."""
+        self.public_base_url = (self.public_base_url or "").strip().rstrip("/")
+        return self
+
+    # Browser session cookies (httpOnly access + refresh; non-httpOnly CSRF for double-submit)
+    access_token_cookie_name: str = Field(
+        default="bk_clinicq_access_token",
+        description="httpOnly cookie carrying the JWT access token (env: ACCESS_TOKEN_COOKIE_NAME)",
+    )
+    refresh_token_cookie_name: str = Field(
+        default="bk_clinicq_refresh_token",
+        description="httpOnly cookie carrying the opaque refresh token (env: REFRESH_TOKEN_COOKIE_NAME)",
+    )
+    csrf_cookie_name: str = Field(
+        default="bk_clinicq_csrf",
+        description="Non-httpOnly CSRF cookie for double-submit (env: CSRF_COOKIE_NAME)",
+    )
+
+    # Profile pictures (M23 — Issue #130). An avatar is small by definition, so the cap is far
+    # below the document/attachment ones: an upload larger than this is a mistake or an attack,
+    # not a photo. Uploads are re-encoded to a square WEBP of avatar_max_dimension_px on a side,
+    # which strips EXIF (including GPS) and normalises every stored file to one format. The bytes
+    # live in private storage under avatar_storage_dir and are served only from the opaque,
+    # unguessable key recorded on the user row — never a path built from a user id or email.
+    avatar_max_bytes: int = Field(
+        default=5 * 1024 * 1024,
+        ge=1,
+        description="Max accepted profile-picture upload size in bytes (env: AVATAR_MAX_BYTES)",
+    )
+    avatar_storage_dir: str = Field(
+        default="var/avatars",
+        description="Filesystem base dir for stored profile pictures (env: AVATAR_STORAGE_DIR)",
+    )
+    avatar_max_dimension_px: int = Field(
+        default=512,
+        ge=32,
+        le=2048,
+        description=(
+            "Side length in pixels of the stored square avatar; larger uploads are "
+            "centre-cropped and downscaled to it (env: AVATAR_MAX_DIMENSION_PX)"
+        ),
+    )
+    avatar_cache_max_age_seconds: int = Field(
+        default=86400,
+        ge=0,
+        description=(
+            "Cache-Control max-age for a served avatar. Safe to cache because a replacement "
+            "gets a new key (and so a new URL) (env: AVATAR_CACHE_MAX_AGE_SECONDS)"
+        ),
+    )
+
+    # Unified document storage service (M11 — Issue #70). One bounded context behind which tenant,
+    # application, lease and maintenance attachments are consolidated: a single ``document`` record
+    # (polymorphic owner, type, storage key, SHA-256 checksum, retention class, virus-scan status).
+    # Bytes live in private storage under document_storage_dir (never a public URL) and are only ever
+    # handed out via a short-lived signed link (document_link_expire_seconds). The size cap is
+    # enforced from the declared Content-Length before the body is read into memory (and again while
+    # reading), so an oversized upload is rejected before it is buffered. Ingest scans the raw bytes
+    # (document_scanner) and refuses an infected upload; the checksum is verified again on download.
+    document_max_bytes: int = Field(
+        default=25 * 1024 * 1024,
+        ge=1,
+        description="Max accepted document upload size in bytes (env: DOCUMENT_MAX_BYTES)",
+    )
+
+    document_storage_dir: str = Field(
+        default="var/documents",
+        description="Filesystem base dir for stored documents (env: DOCUMENT_STORAGE_DIR)",
+    )
+
+    document_link_expire_seconds: int = Field(
+        default=300,
+        ge=1,
+        description="Lifetime of a signed document download link in seconds (env: DOCUMENT_LINK_EXPIRE_SECONDS)",
+    )
+
+    document_virus_scan_enabled: bool = Field(
+        default=True,
+        description=(
+            "Scan document bytes for malware on ingest (env: DOCUMENT_VIRUS_SCAN_ENABLED). When "
+            "false, ingest records the scan as 'skipped' and stores the bytes unscanned."
+        ),
+    )
+
+    document_scanner: DocumentScannerKind = Field(
+        default=DocumentScannerKind.EICAR,
+        description=(
+            "Virus scanner backing document ingest (env: DOCUMENT_SCANNER). 'eicar' flags the "
+            "industry-standard EICAR test file and passes everything else so the app runs without "
+            "an antivirus daemon; 'fake' is the in-memory test double."
+        ),
+    )
+
+    document_retention_sweep_hour: int = Field(
+        default=3,
+        ge=0,
+        le=23,
+        description=(
+            "Hour of day (Africa/Johannesburg, 0-23) the daily document retention sweep runs, "
+            "purging expired documents and recording each deletion (env: "
+            "DOCUMENT_RETENTION_SWEEP_HOUR)."
+        ),
+    )
+
+    # E-signature integration (M11 — Issue #71). A generated lease/addendum is sent for signature
+    # through a pluggable provider (esign_provider) behind an interface, its envelope status tracked,
+    # and the executed document plus its certificate of completion retained on the unified document
+    # store. The provider webhook is verified with an HMAC-SHA256 signature over the raw request body
+    # keyed on esign_webhook_secret (a credential — never logged), and is idempotent on replay. When
+    # esign_enabled is false the flow is off and a lease is signed on paper; the webhook endpoint
+    # 404s unless a secret is configured, so the shared secret is never revealed.
+    esign_enabled: bool = Field(
+        default=True,
+        description=(
+            "Enable the e-signature signing flow (env: ESIGN_ENABLED). When false, leases are "
+            "signed on paper and the send endpoints are unavailable."
+        ),
+    )
+
+    esign_provider: EsignProviderKind = Field(
+        default=EsignProviderKind.LOCAL,
+        description=(
+            "E-signature provider backing the signing flow (env: ESIGN_PROVIDER). 'local' is a "
+            "self-contained provider that runs the whole flow without an external account; 'fake' "
+            "is the in-memory test double."
+        ),
+    )
+
+    esign_webhook_secret: str = Field(
+        default="",
+        description=(
+            "Shared secret the provider signs its webhooks with, verified as an HMAC-SHA256 of the "
+            "raw request body (env: ESIGN_WEBHOOK_SECRET). A credential — never logged. When empty "
+            "the webhook endpoint 404s, so the endpoint's existence is not revealed."
+        ),
+    )
+
+    esign_envelope_expire_days: int = Field(
+        default=14,
+        ge=1,
+        le=365,
+        description=(
+            "Days a signing request stays open before it is considered expired (env: "
+            "ESIGN_ENVELOPE_EXPIRE_DAYS); stamped on the envelope's expires_at when it is sent."
+        ),
+    )
+
+    # Background jobs (APScheduler). One process-wide scheduler runs the sweeps registered in
+    # ``src.core.scheduler`` on the application timezone. Each sweep elects a single runner across
+    # instances with a PostgreSQL advisory lock and is independently idempotent, so a missed run
+    # catches up without doing anything twice. Turn the scheduler off when several local processes
+    # share one database, or the sweeps contend for no reason.
+    scheduler_enabled: bool = Field(
+        default=True,
+        description=(
+            "Start the background job scheduler on app startup "
+            "(env: SCHEDULER_ENABLED). Set false to disable all scheduled jobs."
+        ),
+    )
+
+    # Grant usage telemetry (M29 — Issue #176). ``permission_audit_log`` records every grant
+    # *change*; nothing recorded a grant's *use*, so nobody could distinguish a load-bearing grant
+    # from one copied into a role during a migration years ago — and the only safe move with any
+    # grant was to leave it alone. Collection happens at the three ``ensure_*`` chokepoints, on an
+    # allow only, into an in-process buffer that an APScheduler job flushes on an interval. It is
+    # **advisory data for pruning decisions, never an audit trail**: a buffer lost on shutdown is
+    # acceptable, and the UI must never present it as a record of what happened.
+    permission_usage_enabled: bool = Field(
+        default=True,
+        description=(
+            "Record which grants are actually exercised, for the unused-grant pruning worklist. "
+            "On by default; a deployment that does not want it should not have to patch code "
+            "(env: PERMISSION_USAGE_ENABLED)."
+        ),
+    )
+
+    permission_usage_flush_minutes: int = Field(
+        default=5,
+        ge=1,
+        le=1440,
+        description=(
+            "How often the buffered grant-usage hits are flushed to permission_usage. Longer "
+            "windows coalesce more and lose more on shutdown; both are acceptable for advisory "
+            "data (env: PERMISSION_USAGE_FLUSH_MINUTES)."
+        ),
+    )
+
+    #: How long a grant may go unused before the console's pruning worklist offers it up. 90 days is
+    #: the IAM Access Advisor convention and long enough to survive a quarterly business cycle.
+    permission_usage_unused_days: int = Field(
+        default=90,
+        ge=1,
+        le=3650,
+        description=(
+            "The 'granted, never used in N days' worklist threshold shown on the permissions "
+            "matrix (env: PERMISSION_USAGE_UNUSED_DAYS)."
+        ),
+    )
+
+    # Stripe payment gateway (M12 — Issue #76). Stripe collects card money; the lease ledger stays
+    # the source of truth and Stripe is reconciled *into* it. Off by default so a deployment without
+    # keys behaves exactly as before (manual capture only). The three keys are secrets read from the
+    # environment and never logged; the non-production guard below refuses a live secret key outside
+    # production so a test environment can never move real money.
+    stripe_enabled: bool = Field(
+        default=False,
+        description="Enable the Stripe payment gateway and its webhook (env: STRIPE_ENABLED).",
+    )
+
+    stripe_secret_key: str = Field(
+        default="",
+        description=(
+            "Stripe secret API key (sk_test_… / sk_live_…); server-side only, never logged "
+            "(env: STRIPE_SECRET_KEY)."
+        ),
+    )
+
+    stripe_publishable_key: str = Field(
+        default="",
+        description=(
+            "Stripe publishable key (pk_test_… / pk_live_…) handed to the client to confirm a "
+            "PaymentIntent (env: STRIPE_PUBLISHABLE_KEY)."
+        ),
+    )
+
+    stripe_webhook_secret: str = Field(
+        default="",
+        description=(
+            "Signing secret (whsec_…) used to verify webhook signatures; never logged "
+            "(env: STRIPE_WEBHOOK_SECRET)."
+        ),
+    )
+
+    # Paystack payment gateway (M12 — Issue #79). Paystack gives tenants in South Africa and the
+    # wider African market (ZAR/NGN) a local card and bank-transfer rail alongside Stripe; as with
+    # Stripe the lease ledger stays the source of truth and Paystack is reconciled *into* it. Off by
+    # default so a deployment without keys behaves exactly as before (manual capture only). Paystack
+    # uses the **secret key** both to authenticate API calls and to sign webhooks (HMAC SHA512), so
+    # there is no separate webhook secret; the non-production guard below refuses a live secret key
+    # outside production so a test environment can never move real money. Keys are never logged.
+    paystack_enabled: bool = Field(
+        default=False,
+        description="Enable the Paystack payment gateway and its webhook (env: PAYSTACK_ENABLED).",
+    )
+
+    paystack_secret_key: str = Field(
+        default="",
+        description=(
+            "Paystack secret API key (sk_test_… / sk_live_…); server-side only, never logged. Also "
+            "the HMAC-SHA512 webhook signing key (env: PAYSTACK_SECRET_KEY)."
+        ),
+    )
+
+    paystack_public_key: str = Field(
+        default="",
+        description=(
+            "Paystack public key (pk_test_… / pk_live_…) handed to the client to open the checkout "
+            "(env: PAYSTACK_PUBLIC_KEY)."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate_stripe_configuration(self) -> Settings:
+        """Require keys when Stripe is on, and forbid a live secret key outside production.
+
+        Two rules keep the gateway safe:
+
+        * When ``STRIPE_ENABLED`` is true the secret and webhook-signing keys must be present —
+          an enabled gateway with no keys would accept unsigned webhooks or fail every charge.
+        * A **live** secret key (``sk_live_``) may be used only in production, so every non-production
+          environment necessarily runs Stripe in test mode and can never move real money.
+        """
+        if self.stripe_enabled and not (
+            self.stripe_secret_key and self.stripe_webhook_secret
+        ):
+            raise ValueError(
+                "STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET must be set when STRIPE_ENABLED "
+                "is true."
+            )
+        if (
+            self.stripe_secret_key.startswith("sk_live_")
+            and self.environment != AppEnvironment.PRODUCTION
+        ):
+            raise ValueError(
+                "A live Stripe secret key (sk_live_…) may only be used in production; use a test "
+                "key (sk_test_…) outside production."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_paystack_configuration(self) -> Settings:
+        """Require the secret key when Paystack is on, and forbid a live key outside production.
+
+        Two rules keep the gateway safe, mirroring the Stripe guard:
+
+        * When ``PAYSTACK_ENABLED`` is true the secret key must be present — it authenticates every
+          API call and signs (verifies) every webhook, so an enabled gateway without it would accept
+          unsigned webhooks or fail every charge.
+        * A **live** secret key (``sk_live_``) may be used only in production, so every non-production
+          environment necessarily runs Paystack in test mode and can never move real money.
+        """
+        if self.paystack_enabled and not self.paystack_secret_key:
+            raise ValueError(
+                "PAYSTACK_SECRET_KEY must be set when PAYSTACK_ENABLED is true."
+            )
+        if (
+            self.paystack_secret_key.startswith("sk_live_")
+            and self.environment != AppEnvironment.PRODUCTION
+        ):
+            raise ValueError(
+                "A live Paystack secret key (sk_live_…) may only be used in production; use a test "
+                "key (sk_test_…) outside production."
+            )
+        return self
+
+    @property
+    def database_url_async(self) -> str:
+        """The request-path async DSN: ``database_url`` with an async driver (Issue #81).
+
+        Swaps the DBAPI driver on the existing URL so the async engine talks to the *same*
+        database as the synchronous one — PostgreSQL over ``db_async_driver`` (asyncpg) in every
+        real deployment, and ``aiosqlite`` for the in-memory SQLite used by tests — without
+        duplicating host/credential settings. The synchronous ``database_url`` is left untouched
+        for Alembic, cron, the CLI and scripts.
+        """
+        url = make_url(self.database_url)
+        backend = url.get_backend_name()
+        if backend == "sqlite":
+            return url.set(drivername="sqlite+aiosqlite").render_as_string(
+                hide_password=False
+            )
+        return url.set(drivername=f"{backend}+{self.db_async_driver}").render_as_string(
+            hide_password=False
+        )
+
+    @property
+    def is_development(self) -> bool:
+        return self.environment == AppEnvironment.DEVELOPMENT
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment == AppEnvironment.PRODUCTION
+
+    @property
+    def s3_environment(self) -> str:
+        """Short environment name used in the S3 key prefix: dev / uat / prod."""
+        mapping = {
+            AppEnvironment.DEVELOPMENT: "dev",
+            AppEnvironment.STAGING: "uat",
+            AppEnvironment.PRODUCTION: "prod",
+        }
+        return mapping.get(self.environment, "dev")
+
+    @model_validator(mode="after")
+    def reject_default_jwt_secret_outside_development(self) -> Settings:
+        """Fail fast if the shipped default JWT secret is used outside development."""
+        if (
+            self.environment != AppEnvironment.DEVELOPMENT
+            and self.jwt_secret == _DEFAULT_JWT_SECRET
+        ):
+            raise ValueError(
+                "JWT_SECRET must be set to a secure value outside development. "
+                "Do not use the default secret."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def reject_weak_bcrypt_outside_development(self) -> Settings:
+        """Fail fast if a bcrypt cost below 12 is configured outside development.
+
+        A low cost is a legitimate speed-up for local/CI test runs (bcrypt dominates the
+        auth suites), but must never reach staging or production, where 12 is the floor.
+        """
+        if self.environment != AppEnvironment.DEVELOPMENT and self.bcrypt_rounds < 12:
+            raise ValueError(
+                "BCRYPT_ROUNDS must be >= 12 outside development. "
+                "A lower cost is only for development/test speed."
+            )
+        return self
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{#
+  The signed-in landing page.
+
+  The kernel version shows the caller's name and the destinations their own grants make reachable:
+  `nav.visible(key)` per card, so a role that cannot open a console never sees a tile that links
+  into it. That gating is the part worth keeping when you fill this page in: a dashboard is the one
+  screen that tempts you to render a figure "just to show something", and a figure resolved without
+  a scope is how one caller's numbers end up on another's screen.
+
+  To make it yours: pass aggregates in from `web/routes.dashboard`, each one resolved through a
+  scoped service (`src.core.scope.resolve_scope`), and render them as stat tiles above the cards.
+#}
+
+{% block content %}
+<div class="page-head">
+  <h1>Dashboard</h1>
+  <p class="lead">
+    {% if display_name %}Welcome back, {{ display_name }}.{% else %}Welcome to {{ app_name }}.{% endif %}
+  </p>
+  {% include "partials/breadcrumbs.html" %}
+</div>
+
+<div class="card">
+  <h2>Where to go</h2>
+  <p class="card-sub">Everything your access opens. Ask an administrator if something you expect is missing.</p>
+  <div class="nav-cards">
+    {% if nav.visible('widgets') %}
+    <a class="nav-card" href="/admin/widgets">
+      <span class="nav-card-body">
+        <span class="nav-card-title">Widgets</span>
+        <span class="nav-card-desc">The example module: records you can list, create and archive.</span>
+      </span>
+    </a>
+    {% endif %}
+    {% if nav.visible('messages') %}
+    <a class="nav-card" href="/admin/messages/inbox">
+      <span class="nav-card-body">
+        <span class="nav-card-title">Messages</span>
+        <span class="nav-card-desc">Conversations you take part in.</span>
+      </span>
+    </a>
+    {% endif %}
+    {% if nav.visible('announcements') %}
+    <a class="nav-card" href="/admin/announcements/sent">
+      <span class="nav-card-body">
+        <span class="nav-card-title">Announcements</span>
+        <span class="nav-card-desc">What has been sent to everyone, and what is still a draft.</span>
+      </span>
+    </a>
+    {% endif %}
+    {% if nav.visible('alerts') %}
+    <a class="nav-card" href="/admin/alerts/sent">
+      <span class="nav-card-body">
+        <span class="nav-card-title">Alerts</span>
+        <span class="nav-card-desc">Broadcast alerts and their drafts.</span>
+      </span>
+    </a>
+    {% endif %}
+    {% if nav.visible('notifications') %}
+    <a class="nav-card" href="/admin/notifications">
+      <span class="nav-card-body">
+        <span class="nav-card-title">Notifications</span>
+        <span class="nav-card-desc">Delivery of every email and SMS the app sent.</span>
+      </span>
+    </a>
+    {% endif %}
+    {% if nav.visible('rbac') %}
+    <a class="nav-card" href="/admin/rbac/roles">
+      <span class="nav-card-body">
+        <span class="nav-card-title">Access control</span>
+        <span class="nav-card-desc">Roles, permissions and who holds what.</span>
+      </span>
+    </a>
+    {% endif %}
+    {% if nav.visible('logs') %}
+    <a class="nav-card" href="/admin/logs">
+      <span class="nav-card-body">
+        <span class="nav-card-title">Application logs</span>
+        <span class="nav-card-desc">Search the running application's logs.</span>
+      </span>
+    </a>
+    {% endif %}
+    <a class="nav-card" href="/account/profile">
+      <span class="nav-card-body">
+        <span class="nav-card-title">Account</span>
+        <span class="nav-card-desc">Your profile, password and two-factor settings.</span>
+      </span>
+    </a>
+  </div>
+</div>
+{% endblock %}

@@ -1,17 +1,31 @@
 # Issue 60: Audio chime and multi-language text-to-speech call announcements
 
-**Area:** Frontend / Display
-**Milestone:** M8 - Waiting-room Display Monitor
-**Owner role:** Frontend (Clinic) Dev
-**Depends on:** Issues 57, 26
-**Estimate:** 2 days
-**Status:** Planned
+> **In short:** When a number is called, the room hears a chime and the number and room spoken in the clinic's language, never a patient's name.
+
+| | |
+|---|---|
+| **Milestone** | [M8: Waiting-room Display Monitor](../../MILESTONES/M8_display_monitor.md) |
+| **Sprint** | 10 (weeks 19–20) |
+| **Owner** | D, Frontend/Clinic (backup: C, Frontend/Patient) |
+| **Area** | Frontend / Display |
+| **Estimate** | 2 days |
+| **Status** | Planned |
+| **Depends on** | [Issue 26](../M4/ISSUE_26_services_catalogue_service_times.md): Services catalogue with expected service times<br>[Issue 57](../M8/ISSUE_57_board_sse_channel.md): SSE live update channel with reconnect, backoff and heartbeat |
+| **Unblocks** | No other issue waits on this one. |
+
+> **Note:** This issue depends on Issue 26 (the services catalogue), which looks like a typo for Issue 27 (display settings, which holds `board_language` and `announce_audio`). It also reads the projection from Issue 58, which is not listed. Confirm and correct the dependency list.
 
 ## Context
 
 Patients look at their phones. A number that only ever appears silently on a screen gets missed, the
 ticket is recalled, and the queue slows down. A chime plus a spoken announcement in the clinic's own
 language is the single cheapest way to cut missed calls.
+
+## Starting point
+
+- Browser speech (`speechSynthesis`) with pre-recorded number clips as a fallback; the clips live under `src/static/audio/`.
+- Announcements read the same projection as the screen (Issue 58), so a name is never available to speak.
+- F sources and checks the translations (Issue 77).
 
 ## Scope
 
@@ -20,6 +34,10 @@ language is the single cheapest way to cut missed calls.
 - Language selectable per site (English, isiZulu, isiXhosa, Afrikaans, Sesotho)
 - Announcement queueing so simultaneous calls are spoken in order, never overlapped
 - Announcements never speak a patient name: number and room only, regardless of display mode
+
+## Out of scope
+
+- The translation framework (Issue 77).
 
 ## Acceptance criteria
 
@@ -30,14 +48,20 @@ language is the single cheapest way to cut missed calls.
 - [ ] Audio can be muted per site without disabling the visual highlight
 - [ ] A browser without speech support falls back to pre-rendered number audio
 
+## How to verify
+
+1. Call two tickets at once: two announcements, one after the other.
+2. Set the site language to isiZulu: a fluent speaker on the team confirms it is understandable, and says so in the PR.
+3. Mute audio for the site: the visual highlight still happens.
+
 ## Files touched
 
-- `app/static/js/announce.js`
-- `app/static/audio/`
-- `app/services/board_projection.py`
+- `src/static/js/board-announce.js`
+- `src/static/audio/`
+- `src/modules/display/projection.py`
 
 ---
 
-**Refs:** [M8 milestone](../../MILESTONES/M8_display_monitor.md) · [product docs](../../../PRODUCT/04-display-monitor.md) · [workload split](../../../TEAM/WORKLOAD_SPLIT.md)
+**Refs:** [M8 milestone](../../MILESTONES/M8_display_monitor.md) · [product docs](../../../PRODUCT/04-display-monitor.md) · [workload split](../../../TEAM/WORKLOAD_SPLIT.md) · [how to read this spec](../README.md)
 
 Closes #60

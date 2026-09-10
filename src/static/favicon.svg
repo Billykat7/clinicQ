@@ -1,0 +1,11 @@
+<!--
+  BK ClinicQ favicon — the brand mark from the landing header: the discovery lens over a
+  ticket number, on the brand green. Referenced by every template's <link rel="icon">.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="ClinicQ">
+  <rect width="32" height="32" rx="8" fill="#0f6e56"/>
+  <g fill="none" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round">
+    <circle cx="14" cy="14" r="6.5"/>
+    <line x1="19.2" y1="19.2" x2="24" y2="24"/>
+  </g>
+</svg>

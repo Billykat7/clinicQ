@@ -1,0 +1,2224 @@
+/**
+ * BK ClinicQ — admin dashboard shell (Issue 9).
+ *
+ * The signed-in surface: a fixed icon rail on the left, a slim top bar with the
+ * account menu, and a centred content column. Reuses the design tokens from
+ * site.css (brand green, DM Sans, warm off-white), so it follows light/dark with
+ * the rest of the app (Issue 97). Ported in spirit from the `maps` admin shell,
+ * rebuilt on the BK ClinicQ tokens.
+ */
+
+/* ── Layout ─────────────────────────────────────────────────── */
+
+:root {
+  --rail: 3.75rem;
+  --z-rail: 30;
+  --z-modal: 100;
+  --z-toast: 110;
+}
+
+body.app {
+  min-height: 100dvh;
+  display: block;
+  padding: 0 0 0 var(--rail);
+  /* The public site styles a launcher tile as ``.app`` (centred, pointer cursor,
+     transparent). The signed-in shell reuses ``body.app``, so those tile rules leak
+     onto the whole page — reset them here so headings read left-aligned on a normal
+     cursor over the off-white shell. */
+  text-align: left;
+  cursor: auto;
+  background: var(--bg);
+  border-radius: 0;
+}
+body.app.app--no-rail { padding-left: 0; }
+
+.app-main {
+  width: 100%;
+  /* Data-dense consoles (tables, split list/detail) should use the width on big monitors
+     instead of floating in a narrow 90rem column with large empty side margins (Issue 89).
+     Grow with the viewport up to a generous bound: ~96vw keeps a small breathing margin on
+     1440–1920 screens, and the 120rem ceiling stops an ultrawide from stretching a line of
+     text to an unreadable length. Below ~1500px the intrinsic 100% width is the limiter, so
+     laptop / tablet / mobile keep their existing full-bleed layout unchanged. ``width: 100%``
+     always bounds the element to its container (viewport minus the icon rail), so ``96vw``
+     can never cause page-level horizontal scroll. Prose / marketing pages render through
+     site.css (``.page`` / ``.legal``), not ``.app-main``, so their comfortable reading
+     measure is untouched. */
+  max-width: min(96vw, 120rem);
+  margin-inline: auto;
+  padding: clamp(1.25rem, 3vw, 2.25rem) clamp(1.25rem, 3.5vw, 3rem) 4rem;
+}
+/* The auth corner (theme, bell, avatar) is fixed over the top-right. On a wide screen the page
+   head clears it on its own; on a narrow one the title runs underneath, so reserve its height. */
+@media (max-width: 40rem) {
+  .app-main { padding-top: 3.75rem; }
+}
+
+.page-head { margin-bottom: 1.75rem; }
+.page-head h1 { font-size: clamp(1.5rem, 1.2rem + 1.6vw, 2rem); }
+.page-head .lead { margin-top: .4rem; color: var(--muted); }
+
+/* ── Icon rail ──────────────────────────────────────────────── */
+
+.rail {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: var(--rail);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .15rem;
+  padding: .6rem 0;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  z-index: var(--z-rail);
+}
+
+.rail-brand {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 11px;
+  background: var(--brand);
+  color: var(--on-brand);
+  box-shadow: var(--shadow-icon);
+  margin-bottom: .35rem;
+}
+.rail-brand svg { width: 1.2rem; height: 1.2rem; }
+
+.rail-divider { width: 55%; height: 1px; background: var(--line); margin: .25rem 0; }
+.rail-spacer { flex: 1; }
+
+.rail-item {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  /* Each destination carries its own hue via --nav (set per class below); it is
+     muted at rest so the rail stays calm, and comes to full strength on hover/active. */
+  --nav: var(--brand);
+  color: color-mix(in srgb, var(--nav) 42%, var(--muted));
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.rail-item svg { width: 1.3rem; height: 1.3rem; }
+.rail-item:hover {
+  background: color-mix(in srgb, var(--nav) 13%, transparent);
+  color: var(--nav);
+}
+.rail-item.active {
+  background: color-mix(in srgb, var(--nav) 17%, transparent);
+  color: var(--nav);
+}
+/* Left accent bar on the active destination, in that destination's hue. */
+.rail-item.active::before {
+  content: "";
+  position: absolute;
+  left: -0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 1.35rem;
+  border-radius: 0 3px 3px 0;
+  background: var(--nav);
+}
+
+/* Per-destination hues — distinct but all mid-saturation so the rail reads as a set. */
+.nav-dashboard  { --nav: #0f6e56; }
+.nav-reports    { --nav: #2563eb; }
+.nav-portal     { --nav: #0d9488; }
+.nav-owner      { --nav: #b45309; }
+.nav-jobs       { --nav: #ea580c; }
+.nav-properties { --nav: #4f46e5; }
+.nav-tenants    { --nav: #7c3aed; }
+/* Leasing / Maintenance / Communications are grouped rail destinations (Issue 92) — one hue
+   per group icon, shared by every tab inside it via admin_group_tabs.html. */
+.nav-leasing    { --nav: #0891b2; }
+.nav-maintenance { --nav: #ca8a04; }
+.nav-communications { --nav: #0284c7; }
+.nav-rbac       { --nav: #dc2626; }
+.nav-logs       { --nav: #475569; }
+.nav-account    { --nav: #64748b; }
+
+.rail-item--signout { --nav: var(--danger-ink); }
+.rail-item--signout:hover { background: var(--danger-soft); color: var(--danger-ink); }
+
+/* Rail tooltips */
+.rail-item[data-tip]::after,
+.rail-brand[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: calc(100% + .6rem);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: .3rem .6rem;
+  border-radius: 7px;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: .75rem;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .12s ease .2s;
+  box-shadow: var(--shadow);
+  z-index: 200;
+}
+.rail-item[data-tip]:hover::after,
+.rail-brand[data-tip]:hover::after { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .rail-item[data-tip]::after, .rail-brand[data-tip]::after { transition: none; }
+}
+
+/* ── Auth controls (top-right) ──────────────────────────────── */
+
+.auth-corner {
+  position: fixed;
+  top: max(.6rem, env(safe-area-inset-top, 0px));
+  right: max(1rem, env(safe-area-inset-right, 0px));
+  z-index: var(--z-rail);
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.avatar-btn {
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  border: 0;
+  border-radius: 50%;
+  background: var(--brand);
+  color: var(--on-brand);
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-icon);
+  overflow: hidden;
+}
+.avatar-btn img { width: 100%; height: 100%; object-fit: cover; }
+.avatar-btn[hidden], .btn[hidden] { display: none; }
+
+/* Theme toggle (Issue 97): a quiet round icon button in the top corner. The icon shows the
+   theme you would switch *to* — a moon in light, a sun in dark — following both the OS
+   preference and an explicit override. */
+.theme-toggle {
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease, background .15s ease;
+}
+.theme-toggle:hover { color: var(--brand-deep); border-color: var(--brand); background: var(--bg-soft); }
+.theme-toggle svg { width: 1.2rem; height: 1.2rem; }
+/* Default (light): show the moon. Dark (by choice or OS) shows the sun. */
+.theme-icon-sun { display: none; }
+.theme-icon-moon { display: block; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-icon-sun { display: block; }
+  :root:not([data-theme="light"]) .theme-icon-moon { display: none; }
+}
+:root[data-theme="dark"] .theme-icon-sun { display: block; }
+:root[data-theme="dark"] .theme-icon-moon { display: none; }
+:root[data-theme="light"] .theme-icon-sun { display: none; }
+:root[data-theme="light"] .theme-icon-moon { display: block; }
+
+/* User menu (dropdown card) */
+.user-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 3.5rem 1rem 1rem;
+  background: rgba(26, 30, 36, .28);
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity .2s ease, visibility .2s ease;
+}
+.user-menu-backdrop.open { visibility: visible; opacity: 1; }
+
+.user-menu {
+  width: min(20rem, 100%);
+  padding: 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow-menu);
+  transform: translateY(-8px);
+  transition: transform .2s ease;
+}
+.user-menu-backdrop.open .user-menu { transform: translateY(0); }
+.user-menu-head { display: flex; align-items: center; gap: .8rem; margin-bottom: 1rem; }
+.user-menu-avatar {
+  display: grid; place-items: center;
+  width: 2.75rem; height: 2.75rem;
+  border-radius: 50%;
+  background: var(--brand); color: var(--on-brand); font-weight: 600;
+  flex: none; overflow: hidden;
+}
+.user-menu-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.user-menu-name { font-weight: 600; }
+.user-menu-email { font-size: .8125rem; color: var(--muted); word-break: break-all; }
+.user-menu ul { border-top: 1px solid var(--line); padding-top: .4rem; }
+.user-menu li a, .user-menu li button {
+  display: flex; align-items: center; gap: .7rem;
+  width: 100%;
+  padding: .55rem .6rem;
+  border: 0; background: none;
+  border-radius: 9px;
+  font: inherit; color: var(--ink);
+  text-align: left; cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.user-menu li a:hover, .user-menu li button:hover { background: var(--brand-soft); color: var(--brand-deep); }
+.user-menu li svg { width: 1.15rem; height: 1.15rem; flex: none; color: var(--muted); }
+.user-menu .signout:hover { background: var(--danger-soft); color: var(--danger-ink); }
+.user-menu .signout:hover svg { color: var(--danger-ink); }
+
+/* Notification bell (Issue 113): a quiet round icon button matching the theme toggle, sat between
+   it and the profile button, carrying an unread-count badge. */
+.bell-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease, background .15s ease;
+}
+.bell-btn:hover { color: var(--brand-deep); border-color: var(--brand); background: var(--bg-soft); }
+.bell-btn[hidden] { display: none; }
+.bell-btn svg { width: 1.2rem; height: 1.2rem; }
+.bell-badge {
+  position: absolute;
+  top: -2px; right: -2px;
+  min-width: 1.1rem; height: 1.1rem;
+  padding: 0 .3rem;
+  display: grid; place-items: center;
+  border-radius: 999px;
+  background: var(--danger, #d64545); color: #fff;
+  font-size: .7rem; font-weight: 700; line-height: 1;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.bell-badge[hidden] { display: none; }
+
+/* Notification centre dropdown — reuses the profile-menu backdrop; adaptive: an anchored panel on
+   desktop, a full-width bottom sheet on small screens. */
+.notif-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 3.5rem 1rem 1rem;
+  background: rgba(26, 30, 36, .28);
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity .2s ease, visibility .2s ease;
+}
+.notif-backdrop.open { visibility: visible; opacity: 1; }
+.notif-panel {
+  width: min(24rem, 100%);
+  max-height: min(32rem, 80vh);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow-menu);
+  transform: translateY(-8px);
+  transition: transform .2s ease;
+  overflow: hidden;
+}
+.notif-backdrop.open .notif-panel { transform: translateY(0); }
+.notif-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: .5rem;
+  padding: 1rem 1.1rem .6rem;
+  border-bottom: 1px solid var(--line);
+}
+.notif-title { font-size: 1rem; font-weight: 600; margin: 0; }
+.notif-readall {
+  border: 0; background: none; padding: .2rem .3rem;
+  font: inherit; font-size: .8125rem; color: var(--brand-deep);
+  cursor: pointer; border-radius: 6px;
+}
+.notif-readall:hover { background: var(--brand-soft); }
+.notif-list { list-style: none; margin: 0; padding: .3rem; overflow-y: auto; }
+.notif-empty { padding: 1.5rem 1.1rem; color: var(--muted); text-align: center; margin: 0; }
+.notif-item {
+  display: flex; align-items: flex-start; gap: .5rem;
+  padding: .2rem .3rem;
+  border-radius: 10px;
+}
+.notif-item:hover { background: var(--bg-soft); }
+.notif-item-main {
+  display: flex; flex-direction: column; gap: .1rem;
+  flex: 1 1 auto; min-width: 0;
+  padding: .5rem .5rem;
+  color: var(--ink); text-decoration: none;
+  border-radius: 8px;
+}
+.notif-item-title { font-weight: 600; font-size: .875rem; }
+.notif-item-unread .notif-item-title { position: relative; }
+.notif-item-unread .notif-item-title::before {
+  content: ""; display: inline-block;
+  width: .5rem; height: .5rem; margin-right: .4rem;
+  border-radius: 50%; background: var(--brand);
+  vertical-align: middle;
+}
+.notif-item-snippet {
+  font-size: .8125rem; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.notif-item-meta { font-size: .75rem; color: var(--muted); }
+.notif-item-toggle {
+  flex: none; align-self: center;
+  border: 0; background: none; padding: .3rem .4rem;
+  font: inherit; font-size: .75rem; color: var(--muted);
+  cursor: pointer; border-radius: 6px;
+}
+.notif-item-toggle:hover { background: var(--brand-soft); color: var(--brand-deep); }
+
+/* Small screens: dock the panel as a full-width bottom sheet. */
+@media (max-width: 640px) {
+  .notif-backdrop { align-items: flex-end; justify-content: center; padding: 0; }
+  .notif-panel {
+    width: 100%;
+    max-height: 80vh;
+    border-radius: 18px 18px 0 0;
+    transform: translateY(100%);
+  }
+  .notif-backdrop.open .notif-panel { transform: translateY(0); }
+}
+
+/* ── Cards & panels ─────────────────────────────────────────── */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: clamp(1.25rem, 2.5vw, 1.75rem);
+  box-shadow: 0 1px 2px rgba(26, 30, 36, .04), 0 6px 16px rgba(26, 30, 36, .04);
+}
+/* One consistent gap between stacked blocks, whatever the mix of cards and splits. */
+.card + .card,
+.split + .card,
+.card + .split,
+.split + .split { margin-top: 1.5rem; }
+/* …but the two cards inside a split are grid columns, not a vertical stack — their
+   spacing comes from the grid gap, so no top margin (which would drop the 2nd card and
+   leave the columns unlevel). */
+.split > .card + .card { margin-top: 0; }
+/* Headings/subtitles style the same whether at the card root or nested in a detail panel. */
+.card h2 { font-size: 1.125rem; margin-bottom: .35rem; }
+.card-sub { color: var(--muted); font-size: .9rem; margin-bottom: 1.1rem; }
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1rem;
+}
+.stat {
+  padding: 1.1rem 1.2rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.stat .num { font-size: 1.75rem; font-weight: 600; letter-spacing: -.02em; }
+.stat .label { color: var(--muted); font-size: .85rem; margin-top: .1rem; }
+/* A stat rendered as a link (Issue #94 — the whole tile drills into its console) reads as
+   clickable: it lifts on hover and shows a clear keyboard-focus ring, in light and dark. */
+a.stat {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+a.stat:hover { border-color: var(--brand); box-shadow: 0 6px 18px rgba(0, 0, 0, .08); transform: translateY(-2px); }
+a.stat:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 1rem;
+}
+.tile {
+  display: flex; gap: .85rem; align-items: flex-start;
+  padding: 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.tile:hover { border-color: var(--brand); box-shadow: var(--shadow); transform: translateY(-1px); }
+.tile .tile-icon {
+  display: grid; place-items: center;
+  width: 2.4rem; height: 2.4rem; flex: none;
+  border-radius: 11px;
+  background: var(--brand-tint); color: var(--brand-deep);
+}
+.tile .tile-icon svg { width: 1.25rem; height: 1.25rem; }
+.tile h3 { font-size: .975rem; font-weight: 600; }
+.tile p { font-size: .85rem; color: var(--muted); margin-top: .1rem; }
+
+/* ── Forms ──────────────────────────────────────────────────── */
+
+.field { margin-bottom: 1rem; }
+.field label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: .3rem; }
+/* One control appearance for every text-like field, wherever it lives (form field,
+   toolbar, in-table select, autocomplete) — so a date / select / search / input never
+   looks different from one page to the next. */
+.field input, .field select, .field textarea,
+.toolbar input, .toolbar select,
+.channel-select, .ac-input, .cell-input {
+  min-height: 2.6rem;
+  padding: .5rem .8rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  font: inherit; color: var(--ink);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.field input, .field select, .field textarea { width: 100%; }
+.field input:hover, .field select:hover, .field textarea:hover,
+.toolbar input:hover, .toolbar select:hover,
+.channel-select:hover, .ac-input:hover, .cell-input:hover {
+  border-color: color-mix(in srgb, var(--line) 45%, var(--muted));
+}
+.field input:focus, .field select:focus, .field textarea:focus,
+.toolbar input:focus, .toolbar select:focus,
+.channel-select:focus, .ac-input:focus, .cell-input:focus {
+  outline: none; border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+/* A plain in-table edit field (catalog resource/action name), same appearance as ``.channel-select``. */
+.cell-input { min-width: 10rem; }
+/* Checkboxes/radios are controls, not text fields: one uniform compact size, brand
+   accent, sitting inline with their label text. */
+.field input[type="checkbox"],
+.field input[type="radio"] {
+  width: 1.05rem; height: 1.05rem;
+  min-height: 0; flex: none;
+  margin: 0 .55rem 0 0; padding: 0;
+  accent-color: var(--brand);
+  cursor: pointer;
+  vertical-align: -.14em;
+}
+.field label:has(> input[type="checkbox"]),
+.field label:has(> input[type="radio"]) {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 0;
+  color: var(--ink);
+  font-size: .95rem;
+}
+/* Field groups divide a row evenly and fill it — two fields are halves (col-6), three are
+   thirds (col-4) — so a form never leaves dead space on one side. ``minmax(0,1fr)`` lets a
+   long value shrink instead of overflowing the column. */
+.field-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; align-items: start; }
+.field-row.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.field-row.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* An author ``display`` beats the UA's ``[hidden] { display: none }``, so a conditional row
+   (e.g. the complex unit counts, shown only for a complex) would stay on screen with the
+   attribute set. Collapse it explicitly. */
+.field-row[hidden] { display: none; }
+.field .hint { font-size: .8rem; color: var(--muted); margin-top: .3rem; }
+
+/* A form that should fill the whole width of a wide card: fields flow into as many equal
+   columns as fit (each ~16rem min), so a full-width inline create form is never a narrow
+   stack with empty space beside it. ``.span-all`` makes one field take the whole row. */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 1rem 1.25rem;
+  align-items: start;
+}
+.form-grid > .field { margin-bottom: 0; }
+.form-grid > .span-all { grid-column: 1 / -1; }
+
+/* In-table select (e.g. the notification delivery channel) — appearance shared above. */
+.channel-select { min-width: 8.5rem; }
+/* A bare select in a toolbar sizes to its content by default, which leaves a cramped little
+   box; give toolbar/standalone selects a sensible minimum so options are readable. The enhanced
+   combobox (Issue #108) inherits the same footprint so a filter row reads evenly whether a page's
+   controls are native selects or upgraded ones. */
+.toolbar select, .toolbar .cbx { min-width: 12rem; }
+/* In a form field a select fills the field width; the combobox that replaces it does the same, so
+   a stack of fields (input, select, combobox) all share one clean left/right edge. */
+.field .cbx { width: 100%; }
+
+/* ── Autocomplete / combobox ────────────────────────────────── */
+
+.ac { position: relative; }
+.ac-menu {
+  position: absolute;
+  left: 0; right: 0; top: calc(100% + .35rem);
+  z-index: 40;
+  margin: 0; padding: .3rem;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-menu);
+  max-height: 16rem;
+  overflow-y: auto;
+}
+.ac-opt {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .5rem .6rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.ac-opt:hover, .ac-opt.active { background: var(--brand-soft); }
+.ac-lab { color: var(--ink); }
+.ac-opt.active .ac-lab { color: var(--brand-deep); }
+.ac-sub { color: var(--muted); font-size: .8rem; white-space: nowrap; }
+.ac-empty { padding: .5rem .6rem; color: var(--muted); font-size: .85rem; }
+/* Chevron toggle — makes the widget read as a dropdown you can open, not just a text box.
+   Clicking it browses every available option. ``.ac .ac-input`` (not bare ``.ac-input``) so
+   it outranks the ``.field input`` control rule and the chevron never overlaps the text. */
+.ac .ac-input { padding-right: 2.3rem; }
+.ac-toggle {
+  position: absolute;
+  right: .3rem; top: 0;
+  height: 100%;
+  display: grid; place-items: center;
+  width: 2rem;
+  border: 0; background: none;
+  color: var(--muted); cursor: pointer;
+}
+.ac-toggle svg { width: 1.15rem; height: 1.15rem; transition: transform .15s ease; }
+.ac.ac-open .ac-toggle svg { transform: rotate(180deg); }
+.ac-toggle:hover { color: var(--ink); }
+@media (prefers-reduced-motion: reduce) { .ac-toggle svg { transition: none; } }
+/* Autocomplete input sitting next to an inline action button. */
+.ac-row { display: flex; align-items: center; gap: .6rem; }
+.ac-row > .ac { flex: 1; }
+.ac-row > .btn { flex: none; }
+
+/* ── Combobox (fixed-choice select, Issue #108) ──────────────────
+   The accessible dropdown that ``combobox.js`` builds around a native ``<select>`` (kept in the
+   DOM, ``display:none``, as the form value + change source). It shares the field control look and
+   the autocomplete's anchored menu, so every select across the consoles reads and behaves the
+   same — opening *below* the field, never over it. Single- and multi-select (chips) variants. */
+.cbx { position: relative; }
+.cbx-native { display: none; }
+.cbx-control {
+  display: flex; align-items: center; flex-wrap: wrap; gap: .35rem;
+  min-height: 2.6rem; padding: .3rem 2.3rem .3rem .55rem;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface); cursor: text;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.cbx-control:hover { border-color: color-mix(in srgb, var(--line) 45%, var(--muted)); }
+.cbx.cbx-open .cbx-control,
+.cbx-control:focus-within {
+  outline: none; border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+.cbx-input {
+  flex: 1 1 6rem; min-width: 4rem;
+  border: 0; background: none; padding: .2rem .25rem;
+  font: inherit; color: var(--ink); outline: none;
+}
+.cbx-toggle {
+  position: absolute; right: .3rem; top: 0; height: 100%;
+  display: grid; place-items: center; width: 2rem;
+  border: 0; background: none; color: var(--muted); cursor: pointer;
+}
+.cbx-toggle svg { width: 1.15rem; height: 1.15rem; transition: transform .15s ease; }
+.cbx.cbx-open .cbx-toggle svg { transform: rotate(180deg); }
+.cbx-toggle:hover { color: var(--ink); }
+@media (prefers-reduced-motion: reduce) { .cbx-toggle svg { transition: none; } }
+/* Chips flow inline before the filter input (multi-select). */
+.cbx-chips { display: contents; }
+.cbx-chip {
+  display: inline-flex; align-items: center; gap: .25rem;
+  padding: .12rem .2rem .12rem .5rem; border-radius: 999px;
+  background: var(--brand-soft); color: var(--brand-deep); font-size: .85rem;
+}
+.cbx-chip-x {
+  display: grid; place-items: center; width: 1.15rem; height: 1.15rem;
+  border: 0; border-radius: 999px; background: none; color: inherit; cursor: pointer;
+}
+.cbx-chip-x svg { width: .8rem; height: .8rem; }
+.cbx-chip-x:hover { background: color-mix(in srgb, var(--brand-deep) 18%, transparent); }
+/* The listbox — anchored below the control (never overlapping), matching the autocomplete menu. */
+.cbx-menu {
+  position: absolute; left: 0; right: 0; top: calc(100% + .35rem);
+  z-index: 40; margin: 0; padding: .3rem; list-style: none;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: var(--shadow-menu); max-height: 16rem; overflow-y: auto;
+}
+.cbx-opt {
+  display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+  padding: .5rem .6rem; border-radius: 8px; cursor: pointer;
+}
+.cbx-opt:hover, .cbx-opt.active { background: var(--brand-soft); }
+.cbx-opt.active .cbx-opt-lab { color: var(--brand-deep); }
+.cbx-opt[aria-selected="true"] { font-weight: 500; }
+.cbx-opt[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+.cbx-opt-tick { color: var(--brand-deep); font-size: .95rem; }
+.cbx-empty { padding: .5rem .6rem; color: var(--muted); font-size: .85rem; }
+
+/* Profile picture: the preview thumbnail sits beside its caption (Issue 59; upload #130).
+   Sized larger than the shell avatar so the user can actually judge the crop before saving. */
+.avatar-field { display: flex; align-items: center; gap: .75rem; margin-bottom: .8rem; }
+.avatar-field input { flex: 1; }
+.avatar-preview {
+  width: 88px; height: 88px; flex: 0 0 auto;
+  border-radius: 50%; object-fit: cover;
+  border: 1px solid var(--line); background: var(--surface);
+}
+.avatar-preview[hidden] { display: none; }
+/* The "no picture yet" caption that stands in for the thumbnail. */
+.avatar-empty { color: var(--muted); font-size: .85rem; }
+.avatar-empty[hidden] { display: none; }
+
+.form-actions { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin-top: .4rem; }
+/* A single Save closing a long section reads better at the end of the line than under its first
+   field; the message beside it is pushed along with it. */
+.form-actions-end { justify-content: flex-end; }
+/* An action that belongs to the field beside it rather than to the form as a whole: the row's last
+   column is the button, level with the inputs rather than under their labels. The fields drop their
+   standing bottom margin first — otherwise the row is taller than the field, and aligning to the
+   row's end drops the button below the input it belongs to. */
+.field-row-actions > .field { margin-bottom: 0; }
+.field-row-actions > .form-actions { align-self: end; margin-top: 0; }
+.field-row-actions > .form-actions .btn { min-height: 2.6rem; }
+
+/* A rule between two questions inside one card (notification categories vs quiet hours). */
+.section-rule { border: 0; border-top: 1px solid var(--line); margin: 1.75rem 0 1.5rem; }
+
+/* A whole section reduced to the bar that opens it — same height, width and corner as the tab bar,
+   so a closed section reads as one line of the page rather than an empty card. Its own submit
+   lives inside the section it opens; this is only the way in. */
+.section-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  width: 100%; min-height: 2.5rem;
+  /* The same gap the cards and bars around it keep, so a closed section sits in the page's
+     rhythm rather than crowding whatever it follows. */
+  margin: 1.5rem 0;
+  padding: 0 1.15rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--ink); font: inherit; font-weight: 500; text-align: left;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.section-bar:hover { background: var(--brand-soft); color: var(--brand-deep); }
+.section-bar .chev { width: 1.15rem; height: 1.15rem; flex: none; color: var(--muted); transition: transform .2s ease; }
+.section-bar.is-open .chev { transform: rotate(180deg); }
+.section-bar.is-open { margin-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+/* The first thing in the content column has the page head's gap above it already. */
+.page-head + .section-bar, .tabs-scroll + .section-bar { margin-top: 0; }
+/* The card the bar opens joins onto it rather than floating below. */
+.section-bar.is-open + .card { border-top-left-radius: 0; border-top-right-radius: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .section-bar, .section-bar .chev { transition: none; }
+}
+
+/* The initials circle standing in for an unset profile picture — same size and shape as the
+   thumbnail it replaces, so the card doesn't change height when one is uploaded. */
+.avatar-initials {
+  display: grid; place-items: center;
+  width: 88px; height: 88px; flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--brand-soft); color: var(--brand-deep);
+  font-size: 1.75rem; font-weight: 600; letter-spacing: .02em;
+  user-select: none;
+}
+.avatar-initials[hidden] { display: none; }
+/* The picker sits beside the picture rather than under it. */
+.avatar-field > .field { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
+  min-height: var(--tap);
+  padding: 0 1.2rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--brand); color: var(--on-brand);
+  font: inherit; font-size: .9375rem; font-weight: 500;
+  cursor: pointer;
+  transition: background .15s ease, box-shadow .15s ease, border-color .15s ease, color .15s ease;
+}
+.btn:hover { background: var(--brand-hover); box-shadow: var(--shadow-icon); }
+.btn:disabled { opacity: .6; cursor: not-allowed; box-shadow: none; }
+.btn-quiet { background: var(--surface); color: var(--ink); border-color: var(--line); }
+.btn-quiet:hover { background: var(--surface); border-color: var(--brand); color: var(--brand-deep); box-shadow: none; }
+.btn-danger { background: var(--danger); color: var(--on-danger); }
+.btn-danger:hover { background: var(--danger-deep); box-shadow: none; }
+.btn-sm { min-height: 2.1rem; padding: 0 .85rem; font-size: .85rem; }
+/* An icon-only button (e.g. the View eye) — square, with the glyph centred. */
+.btn-icon { padding: 0; width: 2.1rem; }
+.btn-icon svg { width: 1.15rem; height: 1.15rem; }
+/* A View + Download pair sits inline and wraps cleanly on a narrow row. */
+.doc-actions { display: inline-flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+
+/* ── Tables ─────────────────────────────────────────────────── */
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; }
+table.data { width: 100%; border-collapse: collapse; font-size: .9rem; }
+table.data th, table.data td { text-align: left; padding: .7rem .85rem; border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
+table.data th { font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 500; background: var(--bg); }
+table.data tbody tr:last-child td { border-bottom: 0; }
+table.data tbody tr { cursor: pointer; transition: background .12s ease; }
+table.data tbody tr:hover { background: var(--brand-soft); }
+table.data tbody tr.selected { background: var(--brand-tint); }
+
+/* ── Sortable column headers (Issue 115) ────────────────────── */
+
+/* A sortable header wraps its label in a quiet, full-cell button so the whole cell is one
+   keyboard target; the caret is invisible until the column is hovered (a hint that it sorts),
+   faint on hover, and solid brand once active — pointing up for ascending, down for descending.
+   `aria-sort` on the th carries the same state to assistive tech. */
+th[data-sort-key] { padding: 0; }
+.th-sort {
+  display: inline-flex; align-items: center; gap: .35rem;
+  width: 100%; padding: .7rem .85rem;
+  border: 0; background: none; cursor: pointer;
+  font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit;
+  text-align: left;
+}
+.th-sort:hover { color: var(--ink); }
+.th-sort:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; border-radius: 6px; }
+.th-caret { display: inline-flex; color: var(--muted); opacity: 0; transition: opacity .12s ease; }
+.th-caret svg { display: block; }
+.th-sort:hover .th-caret { opacity: .45; }
+th.is-sorted .th-caret { opacity: 1; color: var(--brand); }
+/* Show a single chevron once the column is active: up for ascending, down for descending. */
+th.is-sorted .th-caret svg path:last-child { display: none; }
+th.is-sorted.is-desc .th-caret svg path:first-child { display: none; }
+th.is-sorted.is-desc .th-caret svg path:last-child { display: block; }
+@media (prefers-reduced-motion: reduce) { .th-caret { transition: none; } }
+
+/* ── Bulk selection (Issue 116) ─────────────────────────────── */
+
+/* A narrow leading checkbox column (header select-all + per-row select). The cell hugs its
+   checkbox so it doesn't steal width from the data columns. */
+th.col-check, td.col-check {
+  width: 1%; white-space: nowrap; text-align: center;
+  padding-left: .6rem; padding-right: .6rem;
+}
+.col-check input { width: 1rem; height: 1rem; cursor: pointer; accent-color: var(--brand); }
+/* The live "N selected" count beside the banner Delete button. */
+.bulk-count { color: var(--muted); font-size: .85rem; }
+
+.badge {
+  display: inline-flex; align-items: center; gap: .3rem;
+  padding: .15rem .55rem;
+  border-radius: 999px;
+  font-size: .75rem; font-weight: 500;
+  background: var(--bg-soft); color: var(--muted);
+}
+.badge-ok { background: var(--brand-soft); color: var(--brand-deep); }
+.badge-warn { background: var(--warn-bg); color: var(--warn-ink); }
+.badge-muted { background: var(--bg-soft); color: var(--muted); }
+.badge-current { background: var(--brand); color: var(--on-brand); }
+
+/* ── Tabs ───────────────────────────────────────────────────── */
+
+/* A segmented control built from the same parts as the breadcrumb trail: one pill, segments
+   divided by a hairline of the container's own background, rounded ends from clipping the
+   overflow. Tabs are peers rather than a path, so they keep square joins — the arrows in the
+   trail mean "came from here", which would be a lie between sibling consoles.
+
+   The old underline marked the active tab with a 2px rule and a colour shift, which is easy to
+   miss on a page full of headings and buttons. Here the active tab is a solid brand fill: the one
+   filled thing in the bar, legible at a glance and without relying on colour alone (its weight
+   changes too). The bar scrolls rather than wrapping, since a wrapped pill has no clean shape.
+
+   The bar spans the content width, like the filter bar under it, so the page reads as a stack of
+   full-width bands rather than a short pill floating above them. ``width: max-content`` with
+   ``min-width: 100%`` is what makes both halves of that true: the bar fills the width when the
+   tabs fit, and grows past it (so the scroller scrolls) when they don't. */
+.tabs-scroll { overflow-x: auto; scrollbar-width: none; margin-bottom: 1.5rem; }
+.tabs-scroll::-webkit-scrollbar { display: none; }
+.tabs {
+  display: flex;
+  gap: 1px; /* the hairline between segments */
+  background: var(--line);
+  /* The same corner as the filter bar and the cards below it — now that the bar spans their width,
+     a pill's fully-round ends would be the one thing in the stack that doesn't line up. */
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  width: max-content;
+  min-width: 100%;
+  margin-bottom: 1.5rem;
+}
+/* Inside a scroller the gap belongs to the scroller, so the bar doesn't add a second one. */
+.tabs-scroll > .tabs { margin-bottom: 0; }
+.tab {
+  display: inline-flex; align-items: center; justify-content: center;
+  /* Share the spare width, growing from each label's own size rather than to a uniform slot, so a
+     short tab beside a long one doesn't end up mostly padding. ``white-space: nowrap`` keeps the
+     automatic minimum at the label's width, so a crowded bar overflows into the scroller instead
+     of crushing its labels. */
+  flex: 1 1 auto;
+  min-height: 2.5rem;
+  padding: 0 1.15rem;
+  border: 0;
+  background: var(--surface);
+  color: var(--muted); font: inherit; font-weight: 500;
+  text-decoration: none; white-space: nowrap;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.tab:hover { background: var(--brand-soft); color: var(--brand-deep); }
+.tab.active,
+.tab.active:hover { background: var(--brand); color: var(--on-brand); font-weight: 600; }
+.tab-panel[hidden] { display: none; }
+/* A card used as a tab panel (e.g. the statement's Balance/Ledger/Record/Payments) hides with the
+   ``hidden`` attribute when its tab is not the active one. */
+.card[hidden] { display: none; }
+
+/* ── Owner-portal tabs. Each tab is a link to its own URL (/owner/reports · /owner/properties ·
+   /owner/statements); the server marks the active one (.tab.active) and renders only its panel, the
+   rest carrying the ``hidden`` attribute. Sit in the block stack with the same top gap as the cards
+   around it, and keep the standard ``.tabs-scroll`` gap below the bar. ── */
+.owner-tabs { margin-top: 1.5rem; }
+.owner-tabs .tab-body[hidden] { display: none; }
+/* Statement preview buttons: an eye glyph + format label, sized like the download buttons beside
+   them (``.btn`` already lays the icon and label out inline with its own gap). */
+.stmt-preview { white-space: nowrap; }
+.btn .btn-ico { width: 1rem; height: 1rem; }
+
+/* ── RBAC catalog. Disconnect the intro (the "Catalog" heading + blurb) from the tabbed content: it
+   sits as its own header block above, with the standard block gap before the card that holds the
+   sub-tabs and sections. ── */
+.catalog-intro { margin-bottom: 1.5rem; }
+.catalog-intro .card-sub { margin-bottom: 0; }
+/* Inside the card, separate the sub-tab strip (Resources / Actions / Permissions) from the active
+   section block below it, so the tabs read as navigation and the section reads as its own panel. */
+#panel-catalog .tabs-scroll { margin-bottom: 0; }
+#panel-catalog .catalog-section {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+#panel-catalog .catalog-section > .section-title { margin-top: 0; }
+
+/* A second bar under the first (the maintenance boards under the maintenance group) is a level
+   down, and two full-width bars with the same solid active fill read as two of the same thing.
+   Mark the sub-bar as subordinate: shorter, and active in the tint the breadcrumb trail uses for
+   the current crumb rather than the solid fill above it. */
+.tabs-sub .tab { min-height: 2.15rem; font-size: .9rem; }
+.tabs-sub .tab.active,
+.tabs-sub .tab.active:hover { background: var(--brand-soft); color: var(--brand-deep); }
+
+/* ── Sub-tab branch ─────────────────────────────────────────── */
+
+/* The sub-bar hangs off the bar above it the way a child node hangs off its parent in a tree:
+   indented, with an elbow rising from its left edge to the underside of the bar above.
+   The elbow is drawn on this wrapper rather than on the bar itself because both the bar (rounded
+   ends) and its scroller (horizontal scrolling) clip their overflow, and a connector's whole job
+   is to reach outside its own box.
+
+   It meets the parent bar under its *first* tab, which is where the sub-bar's own parent sits: a
+   group's tabs render in registry order, and only the first member of the maintenance group has
+   boards beneath it. A group whose later tabs grow sub-bars would want the elbow to follow the
+   active tab, which is a measurement, not a rule a stylesheet can express. */
+.tabs-branch {
+  position: relative;
+  padding-left: 1.9rem;
+  /* Sit close under the bar above, overriding the standing gap it carries for ordinary content. */
+  margin-top: -1rem;
+  margin-bottom: 1.5rem;
+}
+.tabs-branch::before {
+  content: "";
+  position: absolute;
+  left: .95rem;
+  top: -.55rem;      /* up into the gap, meeting the bar above */
+  bottom: 50%;       /* down to the middle of the sub-bar, where the elbow turns in */
+  width: .95rem;
+  /* A shade firmer than a plain border: `--line` is tuned for edges that sit against a surface,
+     and this one has to read as a deliberate stroke across the page background. */
+  border-left: 2px solid color-mix(in srgb, var(--muted) 45%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, var(--muted) 45%, transparent);
+  border-bottom-left-radius: 9px;
+  pointer-events: none;
+}
+.tabs-branch > .tabs-scroll { margin-bottom: 0; }
+/* Indenting costs width, so on a narrow screen the branch gives it back and the elbow goes. */
+@media (max-width: 40rem) {
+  .tabs-branch { padding-left: 0; }
+  .tabs-branch::before { display: none; }
+}
+
+/* ── Toolbar ────────────────────────────────────────────────── */
+
+/* Layout only — the control appearance is the shared one in the Forms section, so a
+   toolbar's search / date / select matches the form fields elsewhere on the page. */
+.toolbar { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin-bottom: 1rem; }
+.toolbar input[type="search"] { flex: 1; min-width: 12rem; }
+.toolbar .spacer { flex: 1; }
+/* A filter toolbar (search + filter selects on the left, an action on the right — Issue #108):
+   the search fills to a readable cap rather than fighting the spacer for half the row, so the
+   search + filter read as one left-aligned group flush with the card beneath, and the action sits
+   at the right edge. Filter controls share one height/footprint whether native or upgraded. */
+.toolbar-filters input[type="search"] { flex: 0 1 24rem; }
+.toolbar-filters > .cbx { flex: 0 0 auto; }
+/* A plain text field or autocomplete standing in as the toolbar's *primary* input (the RBAC
+   catalog's create forms: key, name, resource/action pickers) — not an auxiliary filter, so it
+   gets the same generous, screen-filling width as the search box above instead of the browser's
+   cramped intrinsic size. */
+.toolbar-filters input[type="text"],
+.toolbar-filters > .ac { flex: 1 1 14rem; min-width: 10rem; }
+/* Full-width filter/action banner (Issue 114): the search + typed filters + primary action read
+   as one control surface — a card-styled band that spans the content width and sits flush above
+   the list card beneath — instead of three detached controls. The `.toolbar-clear` reset sits with
+   the filters; it is hidden by the page JS until a filter is active. */
+.toolbar-filters {
+  padding: .7rem .85rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(26, 30, 36, .04);
+}
+.toolbar-clear { flex: 0 0 auto; }
+/* Collapse to a single stacked column on narrow screens so nothing is squeezed off-row. */
+@media (max-width: 40rem) {
+  .toolbar-filters { flex-direction: column; align-items: stretch; }
+  .toolbar-filters .spacer { display: none; }
+  .toolbar-filters input[type="search"],
+  .toolbar-filters input[type="text"],
+  .toolbar-filters > .ac,
+  .toolbar-filters > .cbx,
+  .toolbar-filters > .btn { width: 100%; flex: 1 1 auto; }
+}
+
+/* ── Filter bar (Issue 93) ──────────────────────────────────── */
+
+/* A full-width, collapsible panel for a list's result filters. It sits above the results
+   (spanning the shared content width from #89), promoting filters out of the narrow list-card
+   toolbar. Open by default; collapsing hides the controls and shows a one-line summary of what
+   is active. Card-styled from the same tokens so it reads as part of the console. */
+.filter-bar {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(26, 30, 36, .04), 0 6px 16px rgba(26, 30, 36, .04);
+  margin-bottom: 1.5rem;
+}
+.filter-bar-head {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .8rem 1.1rem;
+}
+/* The toggle is a quiet text button — a rotating chevron plus its "Filters" label. */
+.filter-bar-toggle {
+  display: inline-flex; align-items: center; gap: .5rem;
+  padding: .25rem .2rem; border: 0; background: none;
+  font: inherit; font-weight: 600; color: var(--ink); cursor: pointer;
+}
+.filter-bar-toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; border-radius: 6px; }
+.fb-chevron { display: inline-flex; color: var(--muted); transition: transform .15s ease; }
+.fb-chevron svg { width: 1.05rem; height: 1.05rem; display: block; }
+.filter-bar.is-collapsed .fb-chevron { transform: rotate(-90deg); }
+/* When collapsed, the controls give way to a one-line active-filter summary (it truncates
+   rather than wrap the header). */
+.filter-bar-summary {
+  flex: 1; min-width: 0;
+  color: var(--ink); font-size: .9rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.filter-bar-summary.is-empty { color: var(--muted); font-style: italic; }
+.filter-bar-actions { display: inline-flex; align-items: center; gap: .5rem; margin-left: auto; }
+/* The controls laid out in the shared form-grid so they wrap cleanly; divided from the head. */
+.filter-bar-body {
+  padding: .35rem 1.1rem 1.15rem;
+  border-top: 1px solid var(--line);
+}
+/* The body is a ``form-grid`` (``display: grid``), which would override the ``hidden``
+   attribute's ``display: none`` — collapse it from the state class so it truly hides. */
+.filter-bar.is-collapsed .filter-bar-body { display: none; }
+
+/* ── Split layout (list + detail) ───────────────────────────── */
+
+/* List + detail. Cards size to their own content (no stretch), so a short detail panel
+   never leaves a tall empty column beside a long list. */
+.split { display: grid; grid-template-columns: 1fr; gap: 1.5rem; align-items: start; }
+/* Grid items default to ``min-width: auto``, so a card refuses to shrink below the
+   intrinsic width of a wide (nowrap) table inside it — which pushes the whole page into a
+   horizontal scroll instead of letting the table scroll within its own ``.table-wrap``.
+   ``min-width: 0`` lets the column shrink to the available width so the ``overflow-x`` on
+   ``.table-wrap`` does its job, at any viewport including the fluid wide layout (Issue 89). */
+.split > .card { min-width: 0; }
+@media (min-width: 60rem) {
+  .split { grid-template-columns: 1.4fr 1fr; }
+  /* Keep the detail/edit panel in view while scrolling a long list. */
+  .split > .card:last-child { position: sticky; top: 1.5rem; }
+}
+
+/* A console whose detail half has become a slide-in panel (see ``.slideover-inset``) keeps only
+   the list card in the block, and that card takes the whole content width at every breakpoint.
+   Both rules out-specify the two-column ones above, so source order does not matter. */
+.split.split-full { grid-template-columns: 1fr; }
+.split.split-full > .card:last-child { position: static; }
+
+/* ── Aside + main layout ────────────────────────────────────── */
+
+/* A narrow card beside a wide one — the profile picture next to the profile fields. The aside
+   leads on a wide screen and stacks on top on a narrow one, which is the right order either way:
+   the picture is the smaller commitment and reads as a label for the fields beside it. */
+.split-aside { display: grid; grid-template-columns: 1fr; gap: 1.5rem; align-items: start; }
+/* The grid gap is the only spacing between them; the standing `.card + .card` margin would push
+   the second card down and leave the two tops out of line. */
+.split-aside > .card { min-width: 0; }
+.split-aside > .card + .card { margin-top: 0; }
+.split-aside + .card, .card + .split-aside { margin-top: 1.5rem; }
+@media (min-width: 60rem) {
+  .split-aside { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+}
+
+/* The `.stack` layout that lived here (Issue #90, a full-width list with the detail card opening
+   *below* it) is gone: leases was its last user, and it now opens its detail as a slide-in like
+   every other console. `.split.split-full` above is the one full-width list layout. */
+
+/* ── Permission matrix ──────────────────────────────────────── */
+
+.matrix { width: 100%; border-collapse: collapse; font-size: .875rem; }
+.matrix th, .matrix td { padding: .55rem .6rem; border-bottom: 1px solid var(--line-soft); text-align: left; }
+.matrix th { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 500; }
+.matrix td.res { font-weight: 500; }
+.matrix td.res .child { color: var(--muted); font-weight: 400; padding-left: 1.4rem; }
+.matrix .inherited { color: var(--muted); font-style: italic; font-size: .8rem; }
+/* A verb inherited via a parent role (role_hierarchy), distinct from resource-tree inheritance. */
+.matrix .via-role { color: var(--accent, #2563eb); font-style: italic; font-size: .8rem; }
+/* Role inheritance editor in the role detail slide-over (Issue #135). */
+.inherits-list { list-style: none; margin: .3rem 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
+.inherits-list li { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.inherits-list li.muted { color: var(--muted); font-size: .85rem; }
+.inherits-add { display: flex; gap: .4rem; align-items: center; margin-top: .3rem; }
+/* Multi-role, scoped & time-boxed assignments in the user detail slide-over (Issue #136). */
+.assignments-list { list-style: none; margin: .3rem 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
+.assignments-list li { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.assignments-list li.muted { color: var(--muted); font-size: .85rem; }
+.assignments-list li.expired { opacity: .6; text-decoration: line-through; }
+.assignments-add { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin-top: .3rem; }
+.assignments-add input, .assignments-add select { min-height: 2.1rem; padding: .2rem .5rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font: inherit; }
+/* "Effective access" in the role quick view (Issue #173): resource on the left, the verb and the
+   breadth it reaches on the right — the same two axes the grid's Effective column shows. */
+.access-list { list-style: none; margin: .3rem 0; padding: 0; display: flex; flex-direction: column; gap: .25rem; max-height: 16rem; overflow-y: auto; }
+.access-list li { display: flex; align-items: center; justify-content: space-between; gap: .5rem; font-size: .85rem; }
+.access-list li.muted { color: var(--muted); }
+.access-value { display: inline-flex; align-items: center; gap: .3rem; font-weight: 600; white-space: nowrap; }
+/* Toggle-open module groups (Issue #105): a parent resource is a collapsible group whose
+   sub-sections start hidden. The toggle is a plain, CSP-safe button styled as inline text. */
+.matrix tr.group-head td.res { font-weight: 600; }
+.matrix .group-toggle { appearance: none; border: 0; background: none; padding: 0; font: inherit;
+  font-weight: 600; color: var(--text); cursor: pointer; }
+.matrix .group-toggle:hover { color: var(--accent); }
+.matrix tr.group-child { background: var(--surface-soft, rgba(0,0,0,.02)); }
+/* Rows the resource/state filter has narrowed out (Issue #119) — hidden without leaving the DOM,
+   so their grant <select>s are still submitted with the matrix on Save. */
+.matrix tr.filter-hidden { display: none; }
+.matrix select { min-height: 2.1rem; min-width: 10rem; padding: .2rem .5rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font: inherit; }
+/* The ALLOW/DENY effect selector sits beside the verb select (Issue #134); it is narrower and
+   greys out while the cell grants nothing. */
+.matrix select.effect-select { min-width: 5.5rem; margin-left: .4rem; }
+.matrix select.effect-select:disabled { opacity: .45; cursor: not-allowed; }
+/* A DENY carve-out is called out distinctly so an operator can spot a subtraction at a glance. */
+.matrix tr.deny td.res { color: var(--danger, #b42318); }
+.matrix tr.deny select.effect-select { border-color: var(--danger, #b42318); color: var(--danger, #b42318); font-weight: 600; }
+/* The scope tier (Issue #173) — the grant's third field, beside verb and effect on the same cell.
+   Wider than the effect box because its options are operator language ("assigned properties"),
+   not enum values. */
+.matrix select.scope-select { min-width: 10.5rem; margin-left: .4rem; }
+.matrix select.scope-select:disabled { opacity: .45; cursor: not-allowed; }
+/* The effective tier, shown next to the effective verb: a quiet chip, so the verb still leads. */
+.scope-tag {
+  display: inline-block;
+  padding: .05rem .4rem;
+  border: 1px solid var(--border, #d7dbe0);
+  border-radius: 999px;
+  font-size: .72rem;
+  color: var(--muted, #5b6470);
+  white-space: nowrap;
+}
+/* The role picker on the Permissions tab is the primary control there — give it real width
+   so long role names are readable rather than truncated in a tiny box. */
+#perm-role { min-width: 16rem; }
+
+/* ── Pagination bar ─────────────────────────────────────────────── */
+
+/* Sits under a list (Issue 91): page-size selector on the left, a "Page X of Y (N items)"
+   info line in the middle, and a numbered nav — First/Prev, page buttons with the current
+   one highlighted plus an "…" gap for large ranges, Next/Last — on the right. Built purely
+   from the design tokens so it tracks the theme; wraps to stack on narrow screens. */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: .6rem .9rem;
+  margin-top: .9rem;
+}
+.pager-size { display: inline-flex; align-items: center; gap: .45rem; color: var(--muted); font-size: .85rem; }
+.pager-size select {
+  min-height: 2.1rem; padding: .2rem .5rem;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface); font: inherit; color: var(--ink);
+}
+.pager-info { color: var(--muted); font-size: .85rem; }
+
+.pager-nav { display: inline-flex; align-items: center; gap: .3rem; margin-left: auto; }
+.pager-pages { display: inline-flex; align-items: center; gap: .3rem; flex-wrap: wrap; }
+
+/* Every control in the nav is a uniform square-ish button sized from the tokens, overriding
+   the pill radius and roomy padding of the base ``.btn``. */
+.pager-btn, .pager-page {
+  min-width: 2.1rem; min-height: 2.1rem;
+  padding: 0 .5rem;
+  border-radius: 8px;
+  font-size: .85rem;
+}
+/* Inactive page numbers sit quiet; the current one takes the brand fill. */
+.pager-page:hover { border-color: var(--brand); color: var(--brand-deep); background: var(--surface); box-shadow: none; }
+.pager-page.is-active {
+  background: var(--brand); color: var(--on-brand); border-color: var(--brand);
+  font-weight: 600; cursor: default;
+}
+.pager-page.is-active:hover { background: var(--brand); color: var(--on-brand); border-color: var(--brand); }
+.pager-gap { padding: 0 .15rem; color: var(--muted); user-select: none; }
+
+/* ── Slide-over detail panel (Issue 95) ────────────────────── */
+
+/* A reusable right-hand detail panel: a full-height dialog that slides in over a dimmed
+   backdrop, sized proportionally to the viewport. Any console can adopt "full-width list +
+   slide-over detail" by dropping the same markup and calling ``BKPAdmin.mountSlideover``.
+   Toggled by the ``is-open`` state class (visibility/opacity like the account menu), so it
+   is out of the tab order and the a11y tree while closed without a ``hidden`` attribute
+   (which would block the transition). Token-styled, so it tracks the theme. */
+.slideover {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity .28s ease, visibility .28s ease;
+}
+.slideover.is-open { visibility: visible; opacity: 1; }
+.slideover-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(26, 30, 36, .45);
+}
+/* The panel is proportional to the screen (never wider than 40rem), full-height and
+   scrolls its own body; it slides in from the right. */
+.slideover-panel {
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: min(90vw, 40rem);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+  box-shadow: -8px 0 28px rgba(26, 30, 36, .18);
+  transform: translateX(100%);
+  transition: transform .28s ease;
+  outline: none;
+}
+.slideover.is-open .slideover-panel { transform: translateX(0); }
+.slideover-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.25rem clamp(1.25rem, 2.5vw, 1.75rem);
+  border-bottom: 1px solid var(--line);
+}
+.slideover-head h2 { font-size: 1.125rem; margin-bottom: .35rem; }
+.slideover-head .card-sub { margin-bottom: 0; word-break: break-all; }
+.slideover-close { margin-left: auto; flex: none; }
+.slideover-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: clamp(1.25rem, 2.5vw, 1.75rem);
+}
+/* Lock the page behind the panel so only the panel body scrolls while it is open. */
+body.slideover-lock { overflow: hidden; }
+
+@media (prefers-reduced-motion: reduce) {
+  .slideover, .slideover-panel { transition: none; }
+}
+
+/* A full-height overlay panel that has to be wider than the default, because what it holds is a
+   table rather than a form — the invoices ledger and payments columns. Everything else about it is
+   the standard panel: the same head, the same foot, the same controls at both ends. */
+.slideover-wide .slideover-panel { width: min(94vw, 60rem); }
+.slideover-wide .slideover-body { padding: clamp(1.1rem, 2.2vw, 1.6rem); }
+.slideover-wide .slideover-head,
+.slideover-wide .slideover-foot { background: var(--bg-soft); flex: none; }
+.slideover-wide .slideover-head { align-items: center; }
+.slideover-wide .slideover-foot { justify-content: flex-start; margin-top: 0; }
+
+/* ── Inset slide-in detail panel ────────────────────────────── */
+
+/* A second shape for the same component, for consoles laid out as "full-width list + slide-in
+   detail": instead of a full-height modal over a dimmed page, the panel opens *level with the
+   list it belongs to* — its top lines up with the top of the anchor block and its bottom stops
+   short of the bottom of the window, leaving the page's own bottom margin (the footer's room)
+   clear. It is not modal: nothing is dimmed, the page keeps scrolling and the rows behind stay
+   clickable, so picking another record just swaps the panel's contents.
+   The three insets are measured by the page script (the anchor's top moves as the page scrolls)
+   and handed over as custom properties; the fallbacks keep the panel usable if that never runs. */
+.slideover-inset {
+  /* The root spans the window only so the fixed panel has a containing block — it must not
+     swallow clicks meant for the list underneath. */
+  pointer-events: none;
+}
+.slideover-inset .slideover-panel {
+  top: var(--panel-top, 1.5rem);
+  bottom: var(--panel-bottom, 1.5rem);
+  right: var(--panel-right, 0px);
+  width: min(46rem, calc(100vw - 2rem));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: -10px 0 30px rgba(26, 30, 36, .16);
+  /* Clip the scrolling body to the rounded corners. */
+  overflow: hidden;
+  pointer-events: auto;
+}
+/* The head and foot stay put while the body between them scrolls (the requirement that a panel
+   too tall for the window scrolls itself rather than running past the bottom of the screen —
+   ``.slideover-body`` already carries ``flex: 1; overflow-y: auto``). Both are washed a shade off
+   the body so the fixed ends read as chrome and the scrolling content between them is clearly
+   where the record lives. */
+.slideover-inset .slideover-head,
+.slideover-inset .slideover-foot {
+  background: var(--bg-soft);
+  flex: none;
+}
+.slideover-inset .slideover-head { align-items: center; }
+/* The record's own actions read from the left; Close / Full view sit at the far right, past a
+   spacer, in the same order as the pair in the head. */
+.slideover-inset .slideover-foot { justify-content: flex-start; margin-top: 0; }
+/* A record with many actions (a vendor can be saved, activated, deactivated and deleted) wraps
+   rather than overflowing; the spacer then simply collapses and the chrome follows on its own row. */
+.slideover-foot .spacer { flex: 1 1 0; min-width: 0; }
+/* The two chrome controls travel together at both ends of the panel. */
+.slideover-actions { display: inline-flex; align-items: center; gap: .4rem; flex: none; }
+.slideover-head .slideover-actions { margin-left: auto; }
+.slideover-actions .btn { text-decoration: none; }
+.slideover-actions .btn[hidden] { display: none; }
+
+.slideover-inset .slideover-body { padding: clamp(1.1rem, 2.2vw, 1.6rem); }
+/* A comfortable rhythm between the fields of a long form, so a tall panel doesn't read as one
+   undifferentiated column of inputs. */
+.slideover-inset .slideover-body > .field,
+.slideover-inset .slideover-body > .field-row { margin-bottom: 1.1rem; }
+.slideover-inset .slideover-body > :last-child { margin-bottom: 0; }
+
+/* Catalog quick-view tree (the RBAC catalog's "View" slide-over): a resource's ancestors and
+   descendants at a glance, or — for an action, which has no hierarchy of its own — the flat list
+   of resources it's paired with. Indentation via a nested list is the hierarchy; no JS-drawn lines. */
+.tree-view, .tree-view ul { list-style: none; margin: 0; padding: 0; }
+.tree-view ul { padding-left: 1.1rem; margin-left: .45rem; border-left: 1px dashed var(--line); }
+.tree-view li { margin: .3rem 0; }
+.tree-node { display: inline-flex; align-items: baseline; gap: .5rem; padding: .1rem .3rem; border-radius: 6px; }
+.tree-node .tree-key { color: var(--muted); font-size: .8rem; }
+.tree-node.tree-current { background: var(--brand-soft); font-weight: 600; }
+.tree-node.tree-current .tree-key { color: var(--brand-deep); }
+/* The action quick-view's flat "paired with these resources" list, not a hierarchy — no rail. */
+.tree-flat li { margin: 0; }
+.tree-flat .tree-node { display: flex; width: 100%; }
+
+.slideover-titles { min-width: 0; }
+.slideover-titles h2 {
+  font-size: 1.1rem; margin-bottom: .2rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.slideover-titles .card-sub { margin-bottom: 0; word-break: break-word; font-size: .8rem; }
+.slideover-titles .detail-eyebrow {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--muted); margin: 0 0 .15rem;
+}
+
+/* A titled block inside a panel body — the units table under the property form, the message
+   thread, the inspection's items. Reads as its own section without nesting a second card. */
+.panel-section {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+}
+.panel-section-title { font-size: .95rem; margin: 0; }
+/* Headings the page templates write straight into a panel body get the same section treatment,
+   so a panel of stacked sub-forms doesn't run together. */
+.slideover-inset .slideover-body > h3 {
+  font-size: .95rem;
+  margin: 1.5rem 0 .75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+}
+.slideover-inset .slideover-body > h3:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+
+/* Read-only records (the notification delivery detail, an application's particulars) present as
+   label-over-value pairs rather than a wall of prose. */
+.slideover-inset .detail-grid {
+  display: grid; gap: .9rem 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  margin-bottom: 1.25rem;
+}
+/* The page-level version of this list is a two-column row with the value pushed right against a
+   rule; in a panel the label sits *above* its value, so reset both of those. */
+.slideover-inset .detail-row {
+  display: flex; flex-direction: column; gap: .15rem; min-width: 0;
+  padding: 0; border-bottom: 0;
+}
+.slideover-inset .detail-key {
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
+}
+.slideover-inset .detail-val { color: var(--ink); word-break: break-word; text-align: left; }
+
+/* On a narrow screen the panel is effectively the page: let it use the full width and drop the
+   side inset, so a form isn't squeezed into a column inside a column. */
+@media (max-width: 48rem) {
+  .slideover-inset .slideover-panel { width: calc(100vw - 1.5rem); }
+  .slideover-inset .slideover-head,
+  .slideover-inset .slideover-foot { padding-inline: 1.1rem; }
+}
+
+/* ── List actions column ────────────────────────────────────── */
+
+/* A trailing, right-aligned column holding the per-row eye, which opens the record's own page.
+   Glancing at a record is the row click's job — it opens the detail panel beside the list — so
+   this column is one icon, not two. Hugs it so it doesn't steal width from the data. */
+th.col-actions, td.col-actions { width: 1%; white-space: nowrap; text-align: right; }
+.col-actions .btn-icon + .btn-icon { margin-left: .25rem; }
+/* A compact mid-row "View" cell (the leases list's eye between Rent and Status). */
+.col-view { width: 1%; white-space: nowrap; text-align: center; }
+/* A row's action buttons (Edit/Delete, or Save/Cancel while editing) sit with a small,
+   consistent gap instead of touching flush. */
+.row-actions { display: flex; gap: .4rem; align-items: center; white-space: nowrap; }
+
+/* A column whose content is one long unbreakable string — a browser's user-agent, which runs to
+   hundreds of characters and would drag a horizontal scrollbar across the whole table. Cap it and
+   ellipsize; the full string stays available as the cell's tooltip. */
+th.col-device, td.col-device { max-width: 22rem; }
+/* The badge beside the string keeps its width; the string is the part that gives it up. */
+.device-cell { display: flex; align-items: center; gap: .4rem; min-width: 0; }
+.device-agent { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.device-cell .badge { flex: none; }
+
+/* Invoices column-sliders (Issue #123): each lease row carries four labelled columns (icon + title)
+   that open their section's slide-over. The cell is a compact, keyboard-operable button. */
+th.iv-col { white-space: nowrap; }
+td.iv-col { width: 1%; white-space: nowrap; }
+.iv-col-btn {
+  display: inline-flex; align-items: center; gap: .4rem;
+  appearance: none; border: 1px solid var(--line); background: var(--surface);
+  border-radius: 8px; padding: .3rem .55rem; font: inherit; color: var(--text); cursor: pointer;
+}
+.iv-col-btn:hover { border-color: var(--accent); color: var(--accent); }
+.iv-col-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.iv-col-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.35rem; height: 1.35rem; border-radius: 6px;
+  background: var(--surface-soft, rgba(0,0,0,.05)); font-weight: 600; font-size: .8rem;
+}
+.iv-col-label { font-size: .8rem; }
+
+/* A panel's action bar: the record's own actions, then Close / Full view at the far right. */
+.slideover-foot {
+  padding: 1rem clamp(1.25rem, 2.5vw, 1.75rem);
+  border-top: 1px solid var(--line);
+  display: flex; justify-content: flex-end; gap: .5rem;
+}
+.slideover-foot .btn { text-decoration: none; }
+.qv-titles { min-width: 0; }
+.qv-eyebrow { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 .2rem; }
+.qv-eyebrow:empty { display: none; }
+/* A labelled, read-only summary: the label sits above its value with a comfortable rhythm. */
+.qv-list { margin: 0; display: grid; grid-template-columns: 1fr; gap: .9rem; }
+.qv-list dt { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: .12rem; }
+.qv-list dd { margin: 0; color: var(--ink); word-break: break-word; }
+
+/* Adaptive: the anchored right panel becomes a full-width sheet on small screens (M19 pattern). */
+@media (max-width: 640px) {
+  .slideover-panel { width: 100vw; border-left: 0; }
+}
+
+/* ── Full-detail page: breadcrumbs, key facts, nav cards (Issue 118) ── */
+
+/* An accessible breadcrumb trail above a detail page, drawn as one connected pill of arrow-shaped
+   segments: every crumb points into the next, and the current page closes the pill with a
+   brand-tinted fill. The shape is `clip-path` on each item — the markup underneath stays a plain
+   ordered list, so the arrows are decoration and never reach assistive tech.
+
+   The hairline between segments is the strip of the list's own background left showing where two
+   clipped items *don't quite* meet: the overlap is one pixel short of the arrow depth, so the line
+   traces the chevron exactly. The rounded ends come from the list clipping its overflow, since a
+   `border-radius` on an item would be clipped away by its `clip-path`.
+
+   The row scrolls horizontally rather than wrapping, and intermediate crumbs truncate on narrow
+   screens so the trail never blows out the layout. */
+.breadcrumbs {
+  /* The trail sits *under* the page title, so it reads as "where this page lives" after the page
+     has said what it is — and it clears the fixed auth corner without a special case. */
+  margin-top: .9rem;
+  /* The scroll lives on the nav so the list keeps `overflow: hidden` for its rounded ends. */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.breadcrumbs::-webkit-scrollbar { display: none; }
+.breadcrumbs ol {
+  list-style: none; margin: 0; padding: 0;
+  display: inline-flex; align-items: stretch; flex-wrap: nowrap;
+  font-size: .85rem;
+  background: var(--line); /* shows through as the hairline between segments */
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+.breadcrumb-item {
+  --chev: .6rem; /* arrow depth; the padding and the overlap are both derived from it */
+  position: relative;
+  display: inline-flex; align-items: center; gap: .5rem;
+  padding: .6rem 1rem .6rem calc(1rem + var(--chev));
+  margin-left: calc(1px - var(--chev));
+  background: var(--surface);
+  color: var(--muted);
+  white-space: nowrap; min-width: 0;
+  clip-path: polygon(
+    0 0, calc(100% - var(--chev)) 0, 100% 50%,
+    calc(100% - var(--chev)) 100%, 0 100%, var(--chev) 50%);
+}
+/* The leading crumb starts the pill: a flat left edge, no notch to pay for in padding. */
+.breadcrumb-item:first-child {
+  margin-left: 0;
+  padding-left: 1.1rem;
+  clip-path: polygon(0 0, calc(100% - var(--chev)) 0, 100% 50%, calc(100% - var(--chev)) 100%, 0 100%);
+}
+/* The current page closes it: tinted, emphasised, and flat on the right. */
+.breadcrumb-item.is-current {
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+  font-weight: 600;
+  padding-right: 1.25rem;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, var(--chev) 50%);
+}
+/* A trail of one is both ends at once. */
+.breadcrumb-item:first-child.is-current { clip-path: none; }
+
+.breadcrumbs a { color: inherit; text-decoration: none; display: inline-flex; align-items: center; gap: .5rem; }
+/* Stretch the link over its whole segment so the arrow is the click target, not just the word. */
+.breadcrumbs a::after { content: ""; position: absolute; inset: 0; }
+.breadcrumb-item:not(.is-current):hover { background: var(--brand-soft); color: var(--brand-deep); }
+/* The stretched link makes its own focus ring a zero-size box — light up the segment instead. */
+.breadcrumb-item:focus-within { background: var(--brand-soft); color: var(--brand-deep); }
+.breadcrumbs a:focus-visible { outline: none; }
+
+.crumb-icon { width: 1rem; height: 1rem; flex: none; }
+.crumb-label { overflow: hidden; text-overflow: ellipsis; }
+.breadcrumb-item.is-current .crumb-label { max-width: 22rem; }
+/* On small screens keep only the ends readable; middle crumbs shrink to an ellipsis. */
+@media (max-width: 40rem) {
+  .breadcrumb-item:not(:first-child):not(.is-current) .crumb-label { max-width: 6rem; }
+}
+
+/* The detail page head — a small eyebrow above the record title. */
+.detail-head .detail-eyebrow {
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); margin: 0 0 .3rem;
+}
+
+/* A "key facts" summary inside the detail card: label above value, responsive columns. */
+.key-facts {
+  margin: 0; display: grid; gap: 1.1rem 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+.key-facts dt { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: .2rem; }
+.key-facts dd { margin: 0; color: var(--ink); word-break: break-word; }
+
+/* A small section label above a nav-card grid. */
+.section-label { font-size: .95rem; margin: 1.75rem 0 .85rem; }
+
+/* Clickable "direction cards" that move between related views — a responsive grid of iconed,
+   titled cards with a trailing chevron that nudges on hover. */
+.nav-cards {
+  display: grid; gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+}
+.nav-card {
+  display: flex; align-items: center; gap: .9rem;
+  padding: 1rem 1.1rem;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(26, 30, 36, .04);
+  text-decoration: none; color: inherit;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.nav-card:hover { border-color: var(--brand); box-shadow: 0 6px 18px rgba(26, 30, 36, .08); transform: translateY(-1px); }
+.nav-card:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.nav-card-icon {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 2.6rem; height: 2.6rem; border-radius: 12px;
+  background: var(--brand-soft); color: var(--brand-deep);
+}
+.nav-card-icon svg { width: 1.35rem; height: 1.35rem; }
+.nav-card-body { display: flex; flex-direction: column; gap: .15rem; min-width: 0; }
+.nav-card-title { font-weight: 600; color: var(--ink); }
+.nav-card-desc { font-size: .82rem; color: var(--muted); }
+.nav-card-arrow { flex: none; margin-left: auto; color: var(--muted); display: inline-flex; transition: transform .15s ease, color .15s ease; }
+.nav-card-arrow svg { width: 1.1rem; height: 1.1rem; }
+.nav-card:hover .nav-card-arrow { transform: translateX(3px); color: var(--brand); }
+@media (prefers-reduced-motion: reduce) {
+  .nav-card, .nav-card-arrow { transition: none; }
+  .nav-card:hover { transform: none; }
+  .nav-card:hover .nav-card-arrow { transform: none; }
+}
+
+/* ── Document viewer (Issue 99) ─────────────────────────────── */
+
+/* The in-app preview is a centred modal (not a slide-over): a dialog floated in the middle of
+   the screen over a dimmed backdrop, sized proportionally to the viewport, with the browser's
+   native PDF/image viewer embedded in an iframe and a Download alongside. Dialog behaviour
+   (focus trap, Esc / backdrop close, focus restore) is shared with ``mountSlideover``. */
+.doc-modal {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: grid;
+  place-items: center;
+  padding: clamp(1rem, 4vh, 3rem) clamp(1rem, 4vw, 3rem);
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity .2s ease, visibility .2s ease;
+}
+.doc-modal.is-open { visibility: visible; opacity: 1; }
+.doc-modal-backdrop { position: absolute; inset: 0; background: rgba(26, 30, 36, .55); }
+/* Proportional to the screen (never past 64rem × 56rem), centred, scrolls its own body. */
+.doc-modal-panel {
+  position: relative;
+  width: min(94vw, 64rem);
+  height: min(92vh, 56rem);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-menu);
+  overflow: hidden;
+  transform: translateY(10px) scale(.985);
+  transition: transform .2s ease;
+  outline: none;
+}
+.doc-modal.is-open .doc-modal-panel { transform: none; }
+.doc-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: .9rem 1.1rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.doc-modal-titles { min-width: 0; }
+.doc-modal-head h2 { font-size: 1.05rem; margin-bottom: .1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-modal-head .card-sub { margin-bottom: 0; font-size: .8rem; }
+.doc-viewer-actions { display: inline-flex; align-items: center; gap: .4rem; margin-left: auto; flex: none; }
+.doc-viewer-actions .btn { text-decoration: none; }
+/* The iframe fills the panel body flush (no padding) on a neutral backdrop. */
+.doc-modal-body { flex: 1; min-height: 0; background: var(--bg-soft); }
+.doc-frame { display: block; width: 100%; height: 100%; border: 0; background: var(--surface); }
+.doc-fallback { padding: clamp(1.25rem, 2.5vw, 1.75rem); text-align: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .doc-modal, .doc-modal-panel { transition: none; }
+}
+
+/* ── Logs viewer ────────────────────────────────────────────── */
+
+/* The log-detail slide-over header: a small eyebrow (with the level badge), the object's file
+   name as the title, and the full S3 key as a monospace sub-line that truncates rather than
+   wraps the header. */
+.log-detail-head { align-items: flex-start; }
+.log-detail-titles { min-width: 0; }
+.log-detail-eyebrow {
+  display: inline-flex; align-items: center; gap: .5rem;
+  font-size: .72rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: .35rem;
+}
+.log-detail-head h2 {
+  font-size: 1.05rem; margin-bottom: .3rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.log-detail-key {
+  margin: 0; color: var(--muted);
+  font-family: ui-monospace, "SF Mono", "Roboto Mono", Menlo, monospace;
+  font-size: .75rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.log-body {
+  margin-top: 1rem;
+  max-height: 30rem;
+  overflow: auto;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--code-bg);
+  color: var(--code-ink);
+  font-family: ui-monospace, "SF Mono", "Roboto Mono", Menlo, monospace;
+  font-size: .8rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.log-line { padding: .05rem 0; }
+.log-line .lv { font-weight: 700; }
+.log-line .lv-error { color: #ff8f80; }
+.log-line .lv-warning { color: #ffcf70; }
+.log-line .lv-info { color: #7fd0ff; }
+.log-line .lv-debug { color: #9aa4b2; }
+
+/* ── Messages / toasts ──────────────────────────────────────── */
+
+.msg { font-size: .875rem; margin-top: .5rem; min-height: 1.2rem; }
+.msg-error { color: var(--danger-ink); }
+.msg-ok { color: var(--brand-deep); }
+.msg-muted { color: var(--muted); }
+
+.empty-state { padding: 2.5rem 1rem; text-align: center; color: var(--muted); }
+.empty-state svg { width: 2.25rem; height: 2.25rem; color: var(--line); margin-bottom: .5rem; }
+
+.spinner {
+  display: inline-block;
+  width: 1rem; height: 1rem;
+  border: 2px solid var(--line);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: bkp-spin .7s linear infinite;
+  vertical-align: -.15rem;
+}
+@keyframes bkp-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+
+.toast-stack { position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%); z-index: var(--z-toast); display: flex; flex-direction: column; gap: .5rem; width: min(24rem, calc(100vw - 2rem)); }
+.toast {
+  display: flex; align-items: center; gap: .6rem;
+  padding: .7rem .75rem .7rem 1rem; border-radius: 12px;
+  background: var(--ink); color: var(--surface); font-size: .875rem; box-shadow: var(--shadow);
+  transition: opacity .18s ease, transform .18s ease;
+}
+.toast-text { flex: 1; }
+.toast-error { background: var(--danger); color: var(--on-danger); }
+.toast-ok { background: var(--brand); color: var(--on-brand); }
+/* An inline action (e.g. Undo) and the dismiss control on a toast. */
+.toast-action {
+  flex: none; border: 0; border-radius: 8px; padding: .25rem .6rem;
+  background: rgba(255, 255, 255, .18); color: inherit; font: inherit; font-weight: 600; cursor: pointer;
+}
+.toast-action:hover { background: rgba(255, 255, 255, .3); }
+.toast-x {
+  flex: none; display: grid; place-items: center; width: 1.5rem; height: 1.5rem;
+  border: 0; border-radius: 999px; background: none; color: inherit; opacity: .8; cursor: pointer;
+}
+.toast-x svg { width: .95rem; height: .95rem; }
+.toast-x:hover { opacity: 1; background: rgba(255, 255, 255, .18); }
+/* Enter/leave transitions — a toast slides up on show and fades on dismiss. */
+.toast-enter, .toast-leave { opacity: 0; transform: translateY(.5rem); }
+@media (prefers-reduced-motion: reduce) {
+  .toast { transition: none; }
+  .toast-enter, .toast-leave { transform: none; }
+}
+
+/* Skeleton loading (Issue #111): shimmering placeholder rows a table shows while its data loads,
+   so a console never flashes an empty table or a bare "Loading…" line. */
+.skeleton-line {
+  display: block; height: .85rem; border-radius: 6px;
+  background: linear-gradient(90deg,
+    var(--bg-soft) 25%, color-mix(in srgb, var(--line) 55%, var(--bg-soft)) 37%, var(--bg-soft) 63%);
+  background-size: 400% 100%;
+  animation: bkp-shimmer 1.4s ease infinite;
+}
+@keyframes bkp-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .skeleton-line { animation: none; } }
+
+/* ── Reports & charts (Issue #74) ───────────────────────────── */
+
+/* Two report charts side by side on wide screens, stacked on narrow ones. */
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 1rem;
+}
+.chart-panel {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 1rem 1.1rem 1.2rem;
+}
+.chart-panel h3 { font-size: .95rem; font-weight: 600; }
+.chart-panel .chart-caption { color: var(--muted); font-size: .82rem; margin: .1rem 0 .8rem; }
+
+/* Delta pill: up is on-brand (good for occupancy/income), down is warm. */
+.chart-delta { font-size: .8rem; font-weight: 500; }
+.chart-delta.up { color: var(--brand-deep); }
+.chart-delta.down { color: var(--danger-ink); }
+.chart-delta.flat { color: var(--muted); }
+
+/* Server-rendered SVG bar chart — no scripts, no inline styles (CSP stays put). */
+.report-chart { width: 100%; height: auto; display: block; overflow: visible; }
+.report-chart__bar { fill: var(--brand); }
+.report-chart__bar--muted { fill: var(--brand-tint); }
+.report-chart__baseline { stroke: var(--line); stroke-width: 1; }
+.report-chart__xlabel { fill: var(--muted); font-size: 11px; }
+.report-chart__ylabel { fill: var(--muted); font-size: 11px; }
+
+/* Report page toolbar: period range + export links. */
+.report-toolbar { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
+.report-toolbar .report-range { color: var(--muted); font-size: .9rem; }
+.report-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+
+/* ── Collapsible card (native <details>, no JS, closed by default) ──────────── */
+
+details.collapsible > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+details.collapsible > summary::-webkit-details-marker { display: none; }
+details.collapsible > summary h2 { margin-bottom: .35rem; }
+details.collapsible > summary .card-sub { margin-bottom: 0; }
+details.collapsible > summary:hover h2 { color: var(--brand-deep); }
+details.collapsible > summary .chev {
+  flex: none;
+  width: 1.25rem; height: 1.25rem;
+  margin-top: .15rem;
+  color: var(--muted);
+  transition: transform .2s ease;
+}
+details.collapsible[open] > summary .chev { transform: rotate(180deg); }
+.collapsible-body { margin-top: 1.1rem; }
+@media (prefers-reduced-motion: reduce) {
+  details.collapsible > summary .chev { transition: none; }
+}
+
+/* Row-limited scroll area: show a few rows, scroll the rest, header stays put. */
+.table-wrap.scroll-rows { max-height: 16rem; overflow-y: auto; }
+.table-wrap.scroll-rows thead th { position: sticky; top: 0; z-index: 1; }
+
+/* Long lists (admin directories, portals) cap their height and scroll internally, with
+   the header pinned, so a page never grows unbounded and the toolbar stays reachable. */
+.table-wrap.table-scroll { max-height: min(60vh, 32rem); overflow-y: auto; }
+.table-wrap.table-scroll thead th { position: sticky; top: 0; z-index: 1; }
+
+/* Refined, quiet scrollbars for the premium feel (WebKit; Firefox uses scrollbar-*). */
+.table-scroll, .scroll-rows, .log-body, .app-main {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent;
+}
+.table-scroll::-webkit-scrollbar,
+.scroll-rows::-webkit-scrollbar { width: 10px; height: 10px; }
+.table-scroll::-webkit-scrollbar-thumb,
+.scroll-rows::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 38%, transparent);
+  border-radius: 999px;
+  border: 3px solid var(--surface);
+}
+.table-scroll::-webkit-scrollbar-thumb:hover,
+.scroll-rows::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--muted) 60%, transparent);
+}
+.table-scroll::-webkit-scrollbar-track,
+.scroll-rows::-webkit-scrollbar-track { background: transparent; }
+
+/* ── Inspections console (Issue 82) ──────────────────────────── */
+
+/* Each inspection item is a collapsible block; a light card so a room's finding, its
+   condition and its photos read as one unit within the detail panel. */
+.item-block {
+  border: 1px solid var(--line);
+  border-radius: .6rem;
+  padding: .6rem .85rem;
+  margin-bottom: .6rem;
+  background: var(--surface);
+}
+.item-block > summary { align-items: center; }
+.item-block .form-grid { margin-top: .75rem; }
+
+/* Item photos: a plain list of filenames with a per-photo download control. Bytes only
+   ever arrive through a signed link, so no <img> src is ever put in the DOM. */
+.photos { margin-top: .75rem; }
+.photo-list { list-style: none; margin: 0 0 .5rem; padding: 0; }
+.photo-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .3rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.photo-list li:last-child { border-bottom: 0; }
+
+/* A comparison row whose element is strictly worse than at move-in — the deduction case. */
+.data tr.row-warn td { background: color-mix(in srgb, var(--warn-bg) 55%, transparent); }
+
+/* ── Maintenance console (Issue 83) ──────────────────────────── */
+
+/* The reported fault / job description shown in a detail panel: a readable block, not a control. */
+.rd-desc {
+  white-space: pre-wrap;
+  color: var(--ink);
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: .5rem;
+  padding: .6rem .75rem;
+  margin: 0 0 1rem;
+}
+
+/* A lifecycle sub-form (assign / approve / complete / …) revealed under the action row. Set off
+   from the buttons above so it reads as the follow-up step it is. */
+.sub-form {
+  border: 1px solid var(--line);
+  border-radius: .6rem;
+  padding: .85rem;
+  margin-bottom: 1rem;
+  background: var(--surface);
+}
+.sub-form .form-grid { margin-bottom: .75rem; }
+
+/* ── Applications console (Issue 85) ─────────────────────────── */
+
+/* A read-only key/value grid for an applicant's screening details — label on the left, value on
+   the right, one row per field. Reuses the shared control palette, no per-page restyle. */
+.detail-grid { margin: 0 0 1rem; }
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .38rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.detail-row:last-child { border-bottom: 0; }
+.detail-key { color: var(--muted); flex: none; }
+.detail-val { color: var(--ink); text-align: right; word-break: break-word; }
+
+/* ── Lease-template editor (Issue 86) ────────────────────────── */
+
+/* The template body is monospaced so {{ placeholder }} tokens and Markdown markup read as the
+   literal characters they are. Squared-off top corners so it sits flush under the toolbar. */
+#lt-editor-body {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: .88rem;
+  line-height: 1.5;
+  resize: vertical;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.hint-inline { color: var(--muted); font-weight: 400; font-size: .8rem; }
+
+/* ── Markdown formatting toolbar (Issue 96) ───────────────────
+   A strip of compact controls above the body that wrap/insert Markdown at the cursor. Reuses
+   the surface/line tokens; sits flush on top of the textarea as one control. */
+.md-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .25rem;
+  padding: .35rem .5rem;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+  background: var(--bg-soft);
+}
+.md-tool {
+  font: inherit;
+  font-size: .82rem;
+  line-height: 1.4;
+  cursor: pointer;
+  min-width: 2rem;
+  padding: .28rem .5rem;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink);
+}
+.md-tool:hover { background: var(--surface); border-color: var(--line); }
+.md-tool:focus-visible { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--focus-ring); }
+.md-tool code, .md-tool b, .md-tool i { font: inherit; }
+.md-sep { width: 1px; align-self: stretch; margin: .1rem .3rem; background: var(--line); }
+.md-spacer { flex: 1 1 auto; }
+.md-tool-toggle[aria-pressed="true"] {
+  background: var(--brand-soft);
+  border-color: color-mix(in srgb, var(--brand) 30%, var(--line));
+  color: var(--brand-deep);
+}
+
+/* ── Live Markdown preview (Issue 96) ─────────────────────────
+   GitHub-style rendering of the body: the client renderer emits a fixed, safe subset of tags,
+   styled here to match how a README reads. */
+.md-preview-wrap { margin: 0 0 1rem; }
+.md-preview {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 1rem 1.15rem;
+  max-height: 26rem;
+  overflow: auto;
+  color: var(--ink);
+  line-height: 1.6;
+  font-size: .95rem;
+}
+.md-preview > :first-child { margin-top: 0; }
+.md-preview > :last-child { margin-bottom: 0; }
+.md-preview h1, .md-preview h2, .md-preview h3,
+.md-preview h4, .md-preview h5, .md-preview h6 {
+  margin: 1.1em 0 .5em;
+  line-height: 1.25;
+  font-weight: 600;
+}
+.md-preview h1 { font-size: 1.6em; border-bottom: 1px solid var(--line); padding-bottom: .3em; }
+.md-preview h2 { font-size: 1.3em; border-bottom: 1px solid var(--line); padding-bottom: .3em; }
+.md-preview h3 { font-size: 1.12em; }
+.md-preview h4 { font-size: 1em; }
+.md-preview p { margin: 0 0 .55em; }
+.md-preview ul, .md-preview ol { margin: 0 0 .55em; padding-left: 1.6em; }
+.md-preview li { margin: .15em 0; }
+.md-preview a { color: var(--md-link); text-decoration: none; }
+.md-preview a:hover { text-decoration: underline; }
+.md-preview code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: .88em;
+  background: var(--bg-soft);
+  padding: .12em .35em;
+  border-radius: 5px;
+}
+.md-preview pre {
+  background: var(--md-code-bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: .8em 1em;
+  overflow: auto;
+  margin: 0 0 .6em;
+}
+.md-preview pre code { background: none; padding: 0; font-size: .85em; }
+.md-preview blockquote {
+  margin: 0 0 .6em;
+  padding: .1em .95em;
+  color: var(--muted);
+  border-left: .25em solid var(--line);
+}
+.md-preview hr { border: 0; border-top: 1px solid var(--line); margin: 1em 0; }
+.md-preview table { border-collapse: collapse; margin: 0 0 .6em; display: block; overflow: auto; }
+.md-preview th, .md-preview td { border: 1px solid var(--line); padding: .4em .7em; text-align: left; }
+.md-preview th { background: var(--bg-soft); font-weight: 600; }
+/* Placeholder tokens stay visible in the preview so authors can spot them among the prose. */
+.md-preview .md-token {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: .85em;
+  color: var(--brand-deep);
+  background: var(--brand-soft);
+  padding: .05em .3em;
+  border-radius: 5px;
+}
+
+/* The placeholder palette: grouped chips that insert a token at the cursor. Reuses the shared
+   control palette — the chips are the one new affordance. */
+.palette { margin: 0 0 1rem; }
+.palette-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .4rem;
+  margin-bottom: .5rem;
+}
+.palette-label {
+  color: var(--muted);
+  font-size: .8rem;
+  min-width: 7rem;
+  flex: none;
+}
+.chip-btn {
+  font: inherit;
+  font-size: .8rem;
+  cursor: pointer;
+  padding: .2rem .55rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-soft);
+  color: var(--ink);
+}
+.chip-btn:hover { border-color: var(--brand); color: var(--brand-deep); }
+
+/* ── Staff messaging console (Issue 87) ──────────────────────── */
+
+/* The message log: a scrollable column of message cards, newest at the bottom. */
+.thread-log {
+  max-height: min(45vh, 26rem);
+  overflow-y: auto;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .55rem;
+}
+.thread-msg {
+  border: 1px solid var(--line);
+  border-radius: .55rem;
+  padding: .5rem .7rem;
+  background: var(--surface);
+}
+.thread-msg-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: .25rem;
+  font-size: .8rem;
+}
+.thread-msg-who { font-weight: 600; color: var(--ink); }
+.thread-msg-at { color: var(--muted); }
+.thread-msg-body { white-space: pre-wrap; word-break: break-word; color: var(--ink); }
+
+/* ── Small screens ──────────────────────────────────────────── */
+
+@media (max-width: 34rem) {
+  .field-row,
+  .field-row.cols-3 { grid-template-columns: 1fr; }
+}
+
+/* ── Invoices / statement console (Issue #109) ──────────────────
+   The lease statement redesigned to read at a glance: who / which unit as human labels, a
+   prominent balance, and a ledger laid out like a real statement. Built on the shared tokens so it
+   follows light/dark and the rest of the console's look. */
+.statement-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 1rem; flex-wrap: wrap;
+}
+.statement-who h2 { margin-bottom: .15rem; }
+.statement-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+/* The balance panel: a hero net figure with the outstanding/overdue/credit breakdown beside it. */
+.statement-balance {
+  display: flex; align-items: center; gap: 1.5rem 2rem; flex-wrap: wrap;
+  margin: 1rem 0 1.5rem; padding: 1.2rem 1.35rem;
+  border: 1px solid var(--line); border-radius: 16px; background: var(--brand-soft);
+}
+.balance-hero { display: flex; flex-direction: column; gap: .15rem; min-width: 12rem; }
+.balance-label {
+  font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+}
+.balance-amount {
+  font-size: 2.1rem; font-weight: 700; line-height: 1.05; letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.balance-amount.is-credit { color: var(--brand-deep); }
+.balance-breakdown { display: flex; gap: 1.75rem; flex-wrap: wrap; }
+.balance-breakdown .label {
+  display: block; color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .05em;
+}
+.balance-breakdown .num {
+  font-size: 1.15rem; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+/* Money columns right-align with tabular figures so amounts line up cleanly down a statement. */
+.num-col { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* A secondary line under a table cell's primary value (e.g. the unit + property under a tenant). */
+.row-sub { font-size: .8rem; color: var(--muted); margin-top: .1rem; }
+
+@media (max-width: 34rem) {
+  .statement-balance { gap: 1rem; }
+  .balance-amount { font-size: 1.7rem; }
+}
+
+/* ── Property map & address search (Issue #129) ─────────────── */
+
+/* The search block anchors its own results menu, which reuses the combobox ``.ac-menu`` styling
+   above rather than inventing a second dropdown look. */
+[data-map-search] { position: relative; }
+/* Each match is a button (keyboard-reachable, no inline handler) styled as a menu option; the
+   reset strips the native button chrome so it sits flush with the rest of the menu. */
+.ac-opt-btn {
+  display: block; width: 100%;
+  padding: .5rem .6rem;
+  border: 0; border-radius: 8px;
+  background: none;
+  font: inherit; color: var(--ink); text-align: left;
+  cursor: pointer;
+}
+.ac-opt-btn:hover, .ac-opt-btn:focus-visible { background: var(--brand-soft); color: var(--brand-deep); }
+/* Leaflet needs an explicit height: its container has no intrinsic size, so a map in a
+   height-less box renders as a zero-pixel strip. */
+.map-canvas {
+  height: 16rem;
+  margin-top: .6rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* ── RBAC explainer (Issue #175, M29) ───────────────────────────────
+   The "why" panel that expands under an effective-access row, under a user's access table, and on
+   the 403 page for a caller holding rbac:READ. Every string in it is composed server-side; these
+   rules only give the block somewhere quiet to sit. */
+.explain-row > td { padding-top: 0; padding-bottom: 0; border-top: 0; }
+.explain-body {
+  margin: 0 0 .75rem;
+  padding: .8rem 1rem;
+  background: var(--surface-2, #f7f8fa);
+  border: 1px solid var(--line, #e2e6ea);
+  border-radius: .5rem;
+}
+.explain-summary { margin: 0 0 .6rem; font-weight: 600; }
+/* The raw trace is for the reader who wants it, so it is collapsed and quiet by default. */
+.explain-trace { margin-top: .6rem; }
+.explain-trace > summary { cursor: pointer; font-size: .85rem; color: var(--muted, #5b6470); }
+.explain-trace table.list td { font-size: .8rem; vertical-align: top; }
+
+/* ── Grant usage telemetry (Issue #176, M29) ────────────────────────
+   The matrix's "Last used" column. Quiet by default — this is advisory pruning data, not an audit
+   trail, and it must never shout louder than the grant itself. A grant past the unused threshold
+   is marked so the worklist reads at a glance once the filter is applied. */
+.matrix td.usage { font-size: .8rem; color: var(--muted, #5b6470); white-space: nowrap; }
+.matrix td.usage.usage-stale { color: var(--warn-deep, #8a6100); font-weight: 600; }
+
+/* ── Utilities that replaced inline style attributes (Issue #181, M30) ──────────────
+   Four `style="…"` attributes were the only thing keeping `'unsafe-inline'` in the CSP's
+   `style-src`. A nonce does not cover style *attributes* — only `<style>` elements — so nonce-ing
+   them was never an option; they had to become classes. `tests/unit/platform/test_no_inline_styles.py`
+   fails the build if a new one appears, so these stay the answer rather than the exception. */
+
+/* The two identical `margin-top:0;margin-bottom:.45rem` hints — the "Linked user account" status
+   line on Tenants and Vendors — share one class rather than being declared twice. A `.hint` sitting
+   directly under its own `<label>` needs no top margin (the label already provides the gap) and a
+   tighter bottom one so it reads as part of the field, not as a paragraph after it.
+   Scoped to `.field` deliberately: the rule it replaces is `.field .hint` (line ~542), and a bare
+   `.hint-under-label` loses to it on specificity — the inline attribute this class replaced won
+   automatically, a class does not. Caught by comparing computed styles in a browser, which is why
+   Issue #181 asked for the pages to be looked at rather than reasoned about. */
+.field .hint-under-label { margin-top: 0; margin-bottom: .45rem; }
+
+/* A label used as a toolbar item rather than above a field: the toolbar's own gap does the
+   spacing, so the label's default margin would push it out of alignment with its select. */
+.toolbar-filters > .toolbar-label { margin: 0; }
+
+/* The role-policy JSON editor: full-width, monospaced, and a notch smaller than body text so a
+   long policy document fits without wrapping mid-statement. */
+.policy-editor {
+  width: 100%;
+  font-family: var(--font-mono, monospace);
+  font-size: .85rem;
+}

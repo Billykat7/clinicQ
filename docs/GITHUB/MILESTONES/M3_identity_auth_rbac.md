@@ -1,9 +1,17 @@
 # Milestone 3: Identity, Auth, RBAC & Consent
 
-**Status:** 📋 planned · **Phase:** Semester 1 · Sprint 3–4 · **Suggested tag:** `v0.3.0`
-**Primary owner:** Backend Lead
-**Depends on:** M1
-**Blocks:** M4, M7, M12, M13; every authenticated surface and every site-scoped query. Ship the RBAC dependency and the site-scoping guard **first** inside this milestone so the dashboard and clinic-admin work can start against them.
+> **In short:** Staff accounts, patient phone identity, roles, per-clinic data isolation, the audit trail and consent: the trust layer everything else stands on.
+
+| | |
+|---|---|
+| **Status** | 📋 Planned |
+| **Sprints** | 3–4 (weeks 5–8), semester 1. The sprint plan spreads its issues over sprints 2–4: some start early against stubs (see the table) |
+| **Release tag** | `v0.3.0` |
+| **Primary owner** | A, Backend Lead |
+| **Who does the work** | A: 7 issues · F: 1 issue (see each issue for the backup) |
+| **Issues** | 15–22 (8 issues, about 19 person-days of estimates) |
+| **Depends on** | [M1](M1_foundation_local_ci.md) |
+| **Blocks** | [M4](M4_clinics_queues_config.md), [M7](M7_clinic_dashboard.md), [M12](M12_reporting_analytics.md), [M13](M13_security_privacy_compliance.md); every authenticated surface and every site-scoped query. Ship the RBAC dependency and the site-scoping guard **first** inside this milestone so the dashboard and clinic-admin work can start against them. |
 
 ## Goal
 
@@ -34,16 +42,48 @@ have to check them before they act.
 
 ## Issues
 
-| # | Title |
-|---|-------|
-| 15 | Staff user model and security core (JWT, refresh rotation, password hashing) |
-| 16 | Staff sign-in, sessions, logout, CSRF and password reset |
-| 17 | Patient identity: phone-first records with OTP verification |
-| 18 | RBAC model, seeded roles and enforcement dependencies |
-| 19 | Multi-tenant site scoping guard and cross-site access tests |
-| 20 | Append-only audit log and admin read API |
-| 21 | Consent capture and withdrawal (display, notifications, board comment) |
-| 22 | Staff invitations and account settings |
+| # | Issue | Owner | Estimate | Sprint | Needs first (this milestone) |
+|---|-------|-------|----------|--------|------------------------------|
+| [15](../ISSUES/M3/ISSUE_15_staff_user_security_core.md) | Staff user model and security core (JWT, refresh rotation, password hashing) | A | 3 days | 2 | nothing |
+| [16](../ISSUES/M3/ISSUE_16_staff_signin_sessions_csrf.md) | Staff sign-in, sessions, logout, CSRF and password reset | A | 2 days | 3 | [15](../ISSUES/M3/ISSUE_15_staff_user_security_core.md) |
+| [17](../ISSUES/M3/ISSUE_17_patient_identity_otp.md) | Patient identity: phone-first records with OTP verification | A | 3 days | 3 | [15](../ISSUES/M3/ISSUE_15_staff_user_security_core.md) |
+| [18](../ISSUES/M3/ISSUE_18_rbac_roles_enforcement.md) | RBAC model, seeded roles and enforcement dependencies | A | 3 days | 4 | [15](../ISSUES/M3/ISSUE_15_staff_user_security_core.md) |
+| [19](../ISSUES/M3/ISSUE_19_site_scoping_guard.md) | Multi-tenant site scoping guard and cross-site access tests | A | 2 days | 4 | [18](../ISSUES/M3/ISSUE_18_rbac_roles_enforcement.md) |
+| [20](../ISSUES/M3/ISSUE_20_audit_log_admin_api.md) | Append-only audit log and admin read API | A | 2 days | 4 | [15](../ISSUES/M3/ISSUE_15_staff_user_security_core.md), [18](../ISSUES/M3/ISSUE_18_rbac_roles_enforcement.md) |
+| [21](../ISSUES/M3/ISSUE_21_consent_capture_withdrawal.md) | Consent capture and withdrawal (display, notifications, board comment) | F | 2 days | 3 | [17](../ISSUES/M3/ISSUE_17_patient_identity_otp.md) |
+| [22](../ISSUES/M3/ISSUE_22_staff_invitations_account_settings.md) | Staff invitations and account settings | A | 2 days | 4 | [16](../ISSUES/M3/ISSUE_16_staff_signin_sessions_csrf.md), [18](../ISSUES/M3/ISSUE_18_rbac_roles_enforcement.md) |
+
+## Order of work
+
+Arrows point from an issue to the issues that need it. Start with the ones on the left; anything not connected by an arrow can run in parallel.
+
+```mermaid
+flowchart LR
+    I15["15: Staff user model and security…"]
+    I16["16: Staff sign-in, sessions, logout…"]
+    I17["17: Patient identity: phone-first…"]
+    I18["18: RBAC model, seeded roles and…"]
+    I19["19: Multi-tenant site scoping guard…"]
+    I20["20: Append-only audit log and admin…"]
+    I21["21: Consent capture and withdrawal…"]
+    I22["22: Staff invitations and account…"]
+    I15 --> I16
+    I15 --> I17
+    I15 --> I18
+    I18 --> I19
+    I15 --> I20
+    I18 --> I20
+    I17 --> I21
+    I16 --> I22
+    I18 --> I22
+```
+
+**Start here:** [Issue 15](../ISSUES/M3/ISSUE_15_staff_user_security_core.md).
+
+**Needed from other milestones** (merged, or stubbed by agreement, before the issues that use them start):
+
+- [Issue 3](../ISSUES/M1/ISSUE_3_sqlalchemy_alembic_baseline.md) (M1): Async SQLAlchemy 2.x + Alembic baseline (PostGIS extension enabled); needed by 15
+- [Issue 4](../ISSUES/M1/ISSUE_4_shared_kernel_enums_time_errors.md) (M1): Shared kernel: enums, error envelope, IDs, Africa/Johannesburg datetimes; needed by 15, 17
 
 ## Exit criteria
 
@@ -54,6 +94,14 @@ have to check them before they act.
 - [ ] Every state-changing action writes one audit row that cannot be updated or deleted
 - [ ] Consent is stored per patient per purpose, is withdrawable, and withdrawal takes effect immediately
 
+## Demo at the end of the milestone
+
+What the team shows at the sprint review to prove the milestone is done:
+
+- A receptionist, a nurse and a clinic manager sign in and each see only what their role allows.
+- A Clinic A token asks for a Clinic B record and gets 404.
+- A patient verifies a phone number with a 6-digit code; the audit log shows every step.
+
 ---
 
-**Navigation:** [GitHub docs index](../README.md) · [Implementation plan](../../PLAN/IMPLEMENTATION_PLAN.md) · [Workload split](../../TEAM/WORKLOAD_SPLIT.md) · [Issues](../ISSUES/M3/)
+**Navigation:** [GitHub docs index](../README.md) · [How to read a milestone](README.md) · [Implementation plan](../../PLAN/IMPLEMENTATION_PLAN.md) · [Workload split](../../TEAM/WORKLOAD_SPLIT.md) · [Issues](../ISSUES/M3/)

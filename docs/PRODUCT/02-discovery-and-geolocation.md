@@ -1,4 +1,4 @@
-# 02 - Clinic discovery: geo-location, public/private toggle, payment filters
+# 02: Clinic discovery: geo-location, public/private toggle, payment filters
 
 The original ClinicQ brief was queue management for one clinic. ClinicQ adds a **discovery layer**
 in front of that: help a patient find *which* clinic to queue at in the first place, before joining the
@@ -39,7 +39,7 @@ never changes automatically.
 ## Payment / medical-aid filter (Phase 2 enhancement, private only)
 
 **Not in the MVP.** Once a private clinic's onboarding form captures which payment types and medical aid
-schemes it accepts, the discovery filter can narrow results further - **but only within "Private"**,
+schemes it accepts, the discovery filter can narrow results further, **but only within "Private"**,
 since public clinics operate on a different funding model entirely and do not take medical aid billing at
 the point of care in the same way.
 
@@ -57,13 +57,13 @@ flowchart LR
 | `accepts_cash` | boolean | Almost always true for private clinics; shown for completeness |
 | `accepts_card` | boolean | Card machine at reception |
 | `accepted_medical_aids` | list of scheme names/tags | Free-text tag list at first (e.g. "Discovery Health", "Bonitas", "Momentum Health", "Medihelp"); a **directory attribute self-reported by the clinic**, not a live eligibility check |
-| `copay_notice` | short text (optional) | e.g. "Subject to plan type/network" - manages patient expectations without the platform doing claims logic |
+| `copay_notice` | short text (optional) | e.g. "Subject to plan type/network"; manages patient expectations without the platform doing claims logic |
 
 **Why phase this out of the MVP:** verified medical-aid acceptance/eligibility checking is a real
 integration project (each scheme has its own switch/API), and is easy to get wrong in a way that sends a
 patient to the wrong clinic. Shipping a simple, honest, **self-reported** directory tag first (with a
 clear "confirm with the clinic" disclaimer) gets 80% of the value at a fraction of the engineering and
-compliance cost - full integration is a realistic Stage 2+ item, see
+compliance cost. Full integration is a realistic Stage 2+ item; see
 [12-upscaling-24-months.md](12-upscaling-24-months.md).
 
 ## Data captured (discovery side)

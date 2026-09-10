@@ -3,8 +3,8 @@
 **The whole project on one page.** What we are building, in what order, why that order, and how we will
 know it works.
 
-- **What to build (detail):** [`docs/PRODUCT/`](../PRODUCT/README.md) - 14 numbered product docs
-- **How the work is tracked:** [`docs/GITHUB/`](../GITHUB/README.md) - 14 milestones, 109 issues
+- **What to build (detail):** [`docs/PRODUCT/`](../PRODUCT/README.md) (14 numbered product docs)
+- **How the work is tracked:** [`docs/GITHUB/`](../GITHUB/README.md) (14 milestones, 109 issues)
 - **Who does it, and what blocks what:** [`docs/TEAM/WORKLOAD_SPLIT.md`](../TEAM/WORKLOAD_SPLIT.md)
 - **What it looks like:** [`docs/DEMO/index.html`](../DEMO/index.html)
 

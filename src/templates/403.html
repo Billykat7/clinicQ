@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{#
+  Signed-in 403 page (Issue 53).
+
+  Rendered inside the app shell when an authenticated user reaches a page their role
+  cannot access (e.g. guessing an admin URL). The matching nav link is never shown in
+  the first place; this is the honest server response for someone who tries the URL
+  anyway. Uses only existing shell classes: no inline styles or handlers.
+#}
+{% block content %}
+<div class="page-head">
+  <h1>Access denied</h1>
+  <p class="lead">You don't have permission to view this page.</p>
+  {% include "partials/breadcrumbs.html" %}
+</div>
+
+<div class="card">
+  <h2>Not available to your account</h2>
+  <p class="card-sub">If you think this is a mistake, ask an administrator to grant your role access. Otherwise, head back to your dashboard.</p>
+  <div class="form-actions">
+    <a class="btn" href="/dashboard">Back to dashboard</a>
+  </div>
+</div>
+
+{% if can_explain_denial %}
+{#
+  Issue #175 (M29): the admin-only "why" affordance.
+
+  Rendered **only** for a caller who holds ``rbac:READ`` (see ``can_explain_denial`` in
+  ``src.web.context``). For every other caller this block does not exist, and the page above is
+  byte-for-byte the 403 that shipped before this issue: telling an unauthorized caller precisely
+  which grant they lack is a disclosure, not a courtesy. Gated on the grant, never on a role name.
+#}
+<div class="card" id="denial-explainer"
+     data-denied-path="{{ denied_path }}"
+     data-principal-email="{{ denied_principal_email }}">
+  <h2>Why was this refused?</h2>
+  <p class="card-sub">
+    You hold the permission-model read grant, so you can simulate this exact request and see which
+    grant decided it. This is a read; nothing is changed and nothing is recorded.
+  </p>
+  <div class="form-actions">
+    <button type="button" class="btn" id="denial-explain-btn">Explain this refusal</button>
+  </div>
+  <div id="denial-explain-body" hidden></div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if can_explain_denial %}
+<script src="/static/js/rbac-explainer.js" defer></script>
+{% endif %}
+{% endblock %}

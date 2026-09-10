@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Status modal harness</title>
+<link rel="stylesheet" href="css/site.css">
+<script>
+  // Stub the readiness endpoint so the harness needs no backend.
+  window.fetch = function (url) {
+    var body = JSON.stringify({ status: "degraded", checks: { database: "ok", migrations: "ok", storage: "degraded" } });
+    return Promise.resolve({ status: 200, text: function () { return Promise.resolve(body); } });
+  };
+</script>
+<script src="js/site.js" defer></script>
+</head>
+<body>
+<main class="home-main" style="flex:1"><p style="padding:2rem">Harness — click “Status” in the footer.</p></main>
+<footer class="footer">
+  <p>&copy; <span id="year">2026</span> BK ClinicQ</p>
+  <nav aria-label="Footer">
+    <a href="/features">Features</a>
+    <a href="/privacy">Privacy</a>
+    <a href="/terms">Terms</a>
+    <a href="/docs">API</a>
+    <a href="/health/ready" data-open-status>Status</a>
+  </nav>
+</footer>
+<div class="status-modal-backdrop" id="status-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="status-modal-title" aria-hidden="true">
+  <div class="status-modal" id="status-modal">
+    <button type="button" class="status-modal-close" id="status-modal-close" aria-label="Close">&times;</button>
+    <h2 id="status-modal-title">Service status</h2>
+    <div class="status-summary" id="status-summary" hidden>
+      <span class="status-pill" id="status-pill"></span>
+      <span class="status-code" id="status-code"></span>
+    </div>
+    <p class="status-loading" id="status-loading" role="status" aria-live="polite"><span class="status-spinner" aria-hidden="true"></span><span>Checking…</span></p>
+    <p class="status-error" id="status-error" aria-live="polite" hidden></p>
+    <pre class="status-json" id="status-json" tabindex="0" aria-label="Readiness response" hidden></pre>
+  </div>
+</div>
+</body>
+</html>

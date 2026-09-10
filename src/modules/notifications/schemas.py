@@ -1,0 +1,238 @@
+"""Schemas for the notification service (Issue #67).
+
+:class:`RenderedMessage` is the channel-agnostic body a template renders to — an email uses all
+three fields, an SMS uses only ``text``. :class:`NotificationRead` is the read model behind the
+admin status-query endpoint. :class:`DeliveryReceipt` is the shape a provider's delivery-status
+webhook posts.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime, time
+
+from pydantic import BaseModel, Field, model_validator
+
+from src.commons.enums import (
+    NotificationCategory,
+    NotificationChannel,
+    NotificationChannelPreference,
+    NotificationStatus,
+    NotificationTemplate,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class RenderedMessage:
+    """A rendered transactional message ready for a channel to deliver.
+
+    ``subject`` and ``html`` are email-only (``None`` for SMS); ``text`` is the always-present
+    plain-text body (and the whole message for SMS).
+    """
+
+    text: str
+    subject: str | None = None
+    html: str | None = None
+
+
+class NotificationRead(BaseModel):
+    """Delivery status of one notification, returned by the admin status-query endpoint."""
+
+    id: str = Field(description="Notification id.")
+    channel: NotificationChannel = Field(description="Delivery channel (email/sms).")
+    template_key: NotificationTemplate = Field(description="Which template was sent.")
+    recipient: str = Field(description="Destination address (email) or number (SMS).")
+    subject: str | None = Field(default=None, description="Email subject (SMS: null).")
+    status: NotificationStatus = Field(description="Current delivery state.")
+    provider: str | None = Field(default=None, description="Provider that handled it.")
+    provider_message_id: str | None = Field(
+        default=None, description="Provider's id for the message (webhook correlation)."
+    )
+    attempts: int = Field(description="Delivery attempts made so far.")
+    max_attempts: int = Field(description="Attempt budget before dead-lettering.")
+    last_error: str | None = Field(
+        default=None, description="Most recent failure message."
+    )
+    next_attempt_at: datetime | None = Field(
+        default=None, description="When the row is next eligible for retry (SAST)."
+    )
+    sent_at: datetime | None = Field(
+        default=None, description="When a provider accepted it (SAST)."
+    )
+    delivered_at: datetime | None = Field(
+        default=None, description="When delivery was confirmed by webhook (SAST)."
+    )
+    failed_at: datetime | None = Field(
+        default=None, description="When the last attempt failed (SAST)."
+    )
+    created_at: datetime = Field(description="When the row was created (SAST).")
+
+    model_config = {"from_attributes": True}
+
+
+class NotificationListOut(BaseModel):
+    """Paginated notification listing for the delivery viewer (Issue #87, ``logs`` READ)."""
+
+    items: list[NotificationRead] = Field(description="The page of notification rows.")
+    total: int = Field(
+        ge=0, description="Total notifications matching the filters (pre-paging)."
+    )
+
+
+class CategoryPreference(BaseModel):
+    """One category and the channel the user has chosen for it (Issue #72)."""
+
+    category: NotificationCategory = Field(description="The notification category.")
+    channel: NotificationChannelPreference = Field(
+        description="Chosen channel: email, sms, or off."
+    )
+    essential: bool = Field(
+        description=(
+            "Whether this category is essential — it cannot be turned off, only re-channelled."
+        )
+    )
+
+
+class NotificationPreferencesRead(BaseModel):
+    """A user's effective notification preferences, returned by the account preferences endpoint."""
+
+    categories: list[CategoryPreference] = Field(
+        description="Every category with the user's effective channel choice."
+    )
+    quiet_hours_start: time | None = Field(
+        default=None,
+        description="Local start of quiet hours (HH:MM), or null when quiet hours are off.",
+    )
+    quiet_hours_end: time | None = Field(
+        default=None,
+        description="Local end of quiet hours (HH:MM), or null when quiet hours are off.",
+    )
+    timezone: str = Field(
+        description="IANA timezone quiet hours are evaluated in (e.g. Africa/Johannesburg)."
+    )
+
+
+class NotificationPreferencesUpdate(BaseModel):
+    """A partial update of a user's notification preferences (only provided fields change).
+
+    ``channels`` maps a category to a chosen channel; an essential category set to ``off`` is
+    coerced back to ``email`` by the service (essential mail can be re-channelled, not disabled).
+    Quiet hours must be set or cleared as a pair.
+    """
+
+    channels: dict[NotificationCategory, NotificationChannelPreference] | None = Field(
+        default=None,
+        description="Per-category channel choices to apply (partial; unlisted categories keep).",
+    )
+    quiet_hours_start: time | None = Field(
+        default=None, description="Local start of quiet hours (HH:MM)."
+    )
+    quiet_hours_end: time | None = Field(
+        default=None, description="Local end of quiet hours (HH:MM)."
+    )
+    clear_quiet_hours: bool = Field(
+        default=False,
+        description="When true, turn quiet hours off (takes precedence over start/end).",
+    )
+    timezone: str | None = Field(
+        default=None,
+        max_length=64,
+        description="IANA timezone quiet hours are evaluated in.",
+    )
+
+    @model_validator(mode="after")
+    def _quiet_hours_paired(self) -> NotificationPreferencesUpdate:
+        """Quiet hours must be given as a pair (both start and end) unless clearing them."""
+        if self.clear_quiet_hours:
+            return self
+        start_set = self.quiet_hours_start is not None
+        end_set = self.quiet_hours_end is not None
+        if start_set != end_set:
+            raise ValueError(
+                "quiet_hours_start and quiet_hours_end must be provided together."
+            )
+        return self
+
+
+class UnsubscribeConfirm(BaseModel):
+    """The body of a one-click unsubscribe POST: the signed token identifying what to unsubscribe."""
+
+    token: str = Field(
+        min_length=1, description="The signed unsubscribe token from the link."
+    )
+
+
+class CenterItemRead(BaseModel):
+    """One preview in the notification-centre dropdown — a notification or a message (Issue #113)."""
+
+    id: str = Field(
+        description="Item id: an in-app notification id, or a message thread id."
+    )
+    source: str = Field(
+        description="Where the item came from: 'notification' or 'message'."
+    )
+    category: NotificationCategory = Field(description="The notification category.")
+    title: str = Field(description="Short headline for the preview.")
+    snippet: str = Field(
+        description="A trimmed preview of the body (escaped at render time)."
+    )
+    created_at: datetime | None = Field(
+        default=None, description="When the event/last message occurred (SAST)."
+    )
+    read: bool = Field(
+        description="Whether the item is read (no unread content) for the caller."
+    )
+    link: str | None = Field(
+        default=None,
+        description="Where 'view' opens the item full-screen, when it has a deep link.",
+    )
+
+
+class CenterUnreadOut(BaseModel):
+    """The bell badge total — unread in-app notifications plus unread messages (Issue #113)."""
+
+    unread_total: int = Field(
+        ge=0,
+        description="Unread in-app notifications plus unread messages across the caller's inbox.",
+    )
+
+
+class CenterSummaryOut(BaseModel):
+    """The notification-centre payload the dropdown renders: the badge total and recent previews."""
+
+    unread_total: int = Field(
+        ge=0, description="The bell badge total (notifications + messages)."
+    )
+    items: list[CenterItemRead] = Field(
+        description="Recent previews, newest first, merged across notifications and messages."
+    )
+
+
+class CenterMarkResult(BaseModel):
+    """Result of a read-state mutation: the new bell total after the change."""
+
+    unread_total: int = Field(
+        ge=0, description="The caller's bell total after the read/unread change."
+    )
+    changed: int = Field(
+        default=1,
+        ge=0,
+        description="How many items changed state (1, or N for mark-all).",
+    )
+
+
+class DeliveryReceipt(BaseModel):
+    """A provider delivery-status callback: which message, and whether it landed."""
+
+    provider_message_id: str = Field(
+        min_length=1,
+        description="The provider's message id, matched against a notification row.",
+    )
+    delivered: bool = Field(
+        description="True when the provider confirms delivery; False for a bounce/failure."
+    )
+    detail: str | None = Field(
+        default=None,
+        max_length=1000,
+        description="Optional provider-supplied reason, recorded on a failure.",
+    )

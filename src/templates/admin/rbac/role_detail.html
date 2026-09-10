@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{#
+  Full-detail page for one RBAC role (Issue #118, M20).
+
+  The shared full-detail pattern: a server-built breadcrumb trail, a page head, a "key facts" card,
+  and a grid of navigation cards to related views. Modelled on ``/owner/properties/{id}``. Reached at
+  the canonical ``/admin/rbac/roles/{name}`` route, from the quick-view "Open full" link and the
+  list "open full" icon (Issue #117). No inline styles or handlers (CSP unchanged).
+
+  Issue #173 (M28) adds two panels, both server-rendered from the same resolvers the runtime gate
+  uses: **Effective access** (per resource: the verb, the scope tier, and what that tier concretely
+  reaches for this role) and **Property assignments** (the ``scope_type='property'`` rows that give
+  an ``assigned`` grant its meaning, each linking to the user page where they are edited).
+#}
+
+{% block content %}
+<div class="page-head detail-head">
+  <p class="detail-eyebrow">{{ 'System role' if role.is_system else 'Custom role' }}</p>
+  <h1>{{ role.name }}</h1>
+  {% if role.description %}<p class="lead">{{ role.description }}</p>{% endif %}
+  {% include "partials/breadcrumbs.html" %}
+</div>
+
+<div class="card">
+  <h2>Key facts</h2>
+  <dl class="key-facts">
+    <div><dt>Type</dt><dd>{{ 'Built-in system role' if role.is_system else 'Custom role' }}</dd></div>
+    <div><dt>Users</dt><dd>{{ role.user_count }}</dd></div>
+    <div><dt>Grants</dt><dd>{{ role.permission_count }}</dd></div>
+    <div><dt>Created</dt><dd>{{ role.created_at or '—' }}</dd></div>
+    <div><dt>Last modified</dt><dd>{{ role.modified_at or '—' }}</dd></div>
+  </dl>
+</div>
+
+<div class="card" id="role-effective-access" data-role="{{ role.name }}">
+  <h2>Effective access</h2>
+  <p class="card-sub">
+    What a holder of this role actually reaches, after role and resource-tree inheritance:
+    the verb <em>and</em> how wide it goes. Edit either in
+    <a href="/admin/rbac/permissions">Permissions</a>.
+    Expand a row's <em>Why</em> to see which grant decided it: a grant cascaded from a parent
+    resource and one held directly look identical in this table, and are not the same thing
+    (Issue #175).
+  </p>
+  {% if effective_access %}
+  <div class="table-wrap">
+    <table class="list">
+      <thead><tr><th>Resource</th><th>Verb</th><th>Breadth</th><th>Which rows</th><th></th></tr></thead>
+      <tbody>
+        {% for row in effective_access %}
+        <tr>
+          <td><code>{{ row.resource }}</code></td>
+          <td>{{ row.verb }}</td>
+          <td><span class="scope-tag">{{ row.tier_label }}</span></td>
+          <td class="muted">{{ row.tier_meaning }}</td>
+          <td>
+            <button type="button" class="btn btn-quiet btn-sm"
+                    data-explain-resource="{{ row.resource }}"
+                    data-explain-verb="{{ row.verb | lower }}"
+                    data-explain-index="{{ loop.index0 }}">Why</button>
+          </td>
+        </tr>
+        <tr class="explain-row">
+          <td colspan="5"><div class="explain-body" id="explain-{{ loop.index0 }}" hidden></div></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="msg msg-muted">This role holds no grant on any resource, so it reaches nothing.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Property assignments</h2>
+  <p class="card-sub">
+    The properties this role's holders were assigned. A grant at
+    <span class="scope-tag">assigned properties</span> reaches exactly these, and nothing at all
+    when the list is empty. Assignments are added and removed on a user's own page.
+  </p>
+  {% if property_assignments %}
+  <div class="table-wrap">
+    <table class="list">
+      <thead><tr><th>Holder</th><th>Property</th><th></th></tr></thead>
+      <tbody>
+        {% for assignment in property_assignments %}
+        <tr>
+          <td>{{ assignment.user_email }}</td>
+          <td>{{ assignment.property_name }}</td>
+          <td><a href="/admin/rbac/users/{{ assignment.user_id }}">Edit assignments</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="msg msg-muted">
+    Nobody holding this role is assigned a property. Add one from
+    <a href="/admin/rbac/users">Users</a>: pick the holder, then add a role assignment with scope
+    type <code>property</code>.
+  </p>
+  {% endif %}
+</div>
+
+{% if nav_cards %}
+<h2 class="section-label">Go to</h2>
+{% include "partials/nav_cards.html" %}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{# The explainer only ever renders what /admin/rbac/simulate returns: no permission resolution
+   in the browser (Issue #175). csrf-htmx.js (loaded by the shell) supplies the write headers. #}
+<script src="/static/js/rbac-explainer.js" defer></script>
+{% endblock %}

@@ -1,0 +1,37 @@
+{#
+  Reusable navigation cards (Issue #118, M20).
+
+  Renders the ``nav_cards`` context var (a list of ``{title, description?, href, icon?}``) as a
+  responsive grid of clickable "direction cards" that move between related views (list → detail →
+  sub-section). The server decides which cards to show (RBAC-gate each destination with ``can(...)``
+  before adding it), so this partial only draws what it is given. ``icon`` selects a leading glyph;
+  a trailing chevron signals the card is a link. No-op when ``nav_cards`` is empty.
+#}
+{% if nav_cards %}
+<div class="nav-cards">
+  {% for card in nav_cards %}
+  <a class="nav-card" href="{{ card.href }}">
+    <span class="nav-card-icon" aria-hidden="true">
+      {% if card.icon == 'permissions' %}
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.4 3 7.6 8 9 5-1.4 8-4.6 8-9V6l-8-3z"/><path d="m9 12 2 2 4-4"/></svg>
+      {% elif card.icon == 'users' %}
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 5.2a3.2 3.2 0 0 1 0 6.1"/><path d="M17.5 13.5A5.5 5.5 0 0 1 20.5 19"/></svg>
+      {% elif card.icon == 'list' %}
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>
+      {% elif card.icon == 'role' %}
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg>
+      {% else %}
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      {% endif %}
+    </span>
+    <span class="nav-card-body">
+      <span class="nav-card-title">{{ card.title }}</span>
+      {% if card.description %}<span class="nav-card-desc">{{ card.description }}</span>{% endif %}
+    </span>
+    <span class="nav-card-arrow" aria-hidden="true">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4l6 6-6 6"/></svg>
+    </span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}

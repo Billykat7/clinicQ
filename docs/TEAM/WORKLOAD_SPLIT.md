@@ -88,7 +88,7 @@ design goal. Issue numbers in brackets.
 
 ### Semester 1
 
-| Sprint | A - Backend Lead | B - Integrations | C - Frontend/Patient | D - Frontend/Clinic | E - DevOps/QA | F - Data & Research |
+| Sprint | A: Backend Lead | B: Integrations | C: Frontend/Patient | D: Frontend/Clinic | E: DevOps/QA | F: Data & Research |
 |--------|------------------|------------------|----------------------|---------------------|---------------|---------------------|
 | **1** wk 1–2 | Shared kernel [4], SQLAlchemy + Alembic [3] | *Learning the stack;* channel provider research (Africa's Talking, Meta), no code yet | UI shell, Tailwind, htmx [5] | Pairs with C on [5]; dashboard wireframes | Repo scaffold [1], Docker stack [2], logging [6] | Requirements write-up, benchmark research (NHS, Solv, Qminder), POPIA reading |
 | **2** wk 3–4 | Staff auth core [15] | Notification provider spike; sandbox accounts | Wireframes for discovery & ticket pages | Wireframes for board & dashboard | `ci-local` [7], factories & seed [8], CI [9], GHCR [10] | Data map draft [→95], translation sourcing, area/suburb dataset for [34] |
@@ -100,7 +100,7 @@ design goal. Issue numbers in brackets.
 
 ### Semester 2
 
-| Sprint | A - Backend Lead | B - Integrations | C - Frontend/Patient | D - Frontend/Clinic | E - DevOps/QA | F - Data & Research |
+| Sprint | A: Backend Lead | B: Integrations | C: Frontend/Patient | D: Frontend/Clinic | E: DevOps/QA | F: Data & Research |
 |--------|------------------|------------------|----------------------|---------------------|---------------|---------------------|
 | **8** wk 15–16 | Appointment slots [80] | USSD menu tree [73] | QR ticket [70], patient polish | Reorder UI [52], room view [53] | Security hardening [97] | i18n framework & translations [77] |
 | **9** wk 17–18 | Booking & auto-ticket [81] | USSD sessions & security [74] | Kiosk check-in [83] | Manager settings [54], **board SSE [57] + privacy [58]** | Encryption & PII [98] | Stats worker [88] |
@@ -325,12 +325,12 @@ A group capstone is marked individually as well as collectively. Every person's 
 
 | Person | Issues owned | Weight |
 |--------|-------------|--------|
-| A - Backend Lead | 15, 16, 18, 19, 20, 22, 23, 24, 25, 26, 27, 28, 39–47, 80, 81, 84, 86, 99 | ~28 (**highest**; deliberately given no secondary work) |
-| B - Integrations | 63–67, 71, 72–79, 82, 85 | ~17 |
-| C - Frontend/Patient | 5, 32, 33, 35, 68, 69, 83, 101 + UI on 34, 37, 87 | ~15 |
-| D - Frontend/Clinic | 48–62 | ~15 |
-| E - DevOps/QA | 1, 2, 6, 7, 8, 9–14, 61, 97, 98, 100, 102–105, 107 | ~22 |
-| F - Data & Research | 17 (consent), 21, 29, 37, 77, 87–96, 106, 108, 109 | ~19 |
+| A: Backend Lead | 15, 16, 18, 19, 20, 22, 23, 24, 25, 26, 27, 28, 39–47, 80, 81, 84, 86, 99 | ~28 (**highest**; deliberately given no secondary work) |
+| B: Integrations | 63–67, 71, 72–79, 82, 85 | ~17 |
+| C: Frontend/Patient | 5, 32, 33, 35, 68, 69, 83, 101 + UI on 34, 37, 87 | ~15 |
+| D: Frontend/Clinic | 48–62 | ~15 |
+| E: DevOps/QA | 1, 2, 6, 7, 8, 9–14, 61, 97, 98, 100, 102–105, 107 | ~22 |
+| F: Data & Research | 17 (consent), 21, 29, 37, 77, 87–96, 106, 108, 109 | ~19 |
 
 A's count is the highest because the domain core is genuinely the biggest piece. If A is at risk, the
 first work to redistribute is M11 (issues 80, 81, 84, 86) to C and B.

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ClinicQ - Clinic discovery &amp; queue docs</title>
+  <title>ClinicQ: clinic discovery &amp; queue docs</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
@@ -363,21 +363,21 @@
     </div>
 
     <header class="hero">
-      <p class="eyebrow"><i></i> .btk/docs/ClinicQ - clinic discovery &amp; queue</p>
+      <p class="eyebrow"><i></i> .btk/docs/ClinicQ · clinic discovery &amp; queue</p>
       <h1>Find a clinic. Get a number. Watch it count down.</h1>
       <p class="lede">
         ClinicQ lets a patient geo-locate a nearby public or private clinic, join its digital queue
         from a phone (app, USSD, WhatsApp) or the web before even leaving home, and see a ticket number
-        count down on the clinic's own waiting-room screen - while staff run the whole line from one
+        count down on the clinic's own waiting-room screen, while staff run the whole line from one
         dashboard. Global retail queue systems have done this for a decade; most local clinics don't have
         it yet.
       </p>
       <div class="pills">
         <span class="pill"><strong>Discovery</strong> geo-location, public/private toggle</span>
-        <span class="pill"><strong>Channels</strong> PWA - USSD - WhatsApp - Web</span>
+        <span class="pill"><strong>Channels</strong> PWA · USSD · WhatsApp · Web</span>
         <span class="pill"><strong>Display</strong> number/time always, name/comment opt-in</span>
-        <span class="pill"><strong>Start</strong> R1,800-15,000 pilot clinic</span>
-        <span class="pill"><strong>Stack</strong> Python 3.14 - FastAPI - htmx - Postgres/PostGIS</span>
+        <span class="pill"><strong>Start</strong> R1,800–15,000 pilot clinic</span>
+        <span class="pill"><strong>Stack</strong> Python 3.14 · FastAPI · htmx · Postgres/PostGIS</span>
         <span class="pill"><strong>Payment filter</strong> Phase 2, private clinics only</span>
       </div>
       <div class="names">
@@ -386,7 +386,7 @@
         <div class="name-card"><strong>clinicq</strong> repository slug and package name</div>
       </div>
       <div class="verdict">
-        <strong>Critical:</strong> the waiting-room display defaults to number-only - name and the
+        <strong>Critical:</strong> the waiting-room display defaults to number-only: name and the
         optional visit comment ("headache", "follow-up") are clinic-configurable and off by default,
         because a name next to a health-related comment on a public screen is personal health information
         under POPIA even though the intent is just a friendlier board.
@@ -465,14 +465,14 @@ flowchart LR
   PAY --> CARD[Accepts card]
   TOGGLE -->|Public selected| NOPAY[Payment filter hidden]
         </div></div>
-        <div class="callout"><strong>Not in the MVP.</strong> Medical aid/cash/card filtering is a Phase 2 directory enhancement, self-reported by the clinic, only ever shown under "Private" - never a live claims/eligibility check.</div>
+        <div class="callout"><strong>Not in the MVP.</strong> Medical aid/cash/card filtering is a Phase 2 directory enhancement, self-reported by the clinic, only ever shown under "Private", never a live claims/eligibility check.</div>
         <p>Markdown: <a href="02-discovery-and-geolocation.md">02-discovery-and-geolocation.md</a></p>
       </section>
 
       <!-- 03 -->
       <section class="panel" role="tabpanel" id="queue" aria-labelledby="tab-queue" hidden>
         <h2>Booking &amp; digital queue</h2>
-        <p class="intro">One shared queue per clinic/room/service, joinable remotely or in person - fair by arrival order, not by channel.</p>
+        <p class="intro">One shared queue per clinic/room/service, joinable remotely or in person, fair by arrival order, not by channel.</p>
         <div class="diagram"><div class="mermaid">
 sequenceDiagram
     participant P as Patient any channel
@@ -519,14 +519,14 @@ sequenceDiagram
     API-->>D: Push new now serving row
     D->>D: Update board chime highlight
         </div></div>
-        <div class="callout">A name next to a symptom comment on a public screen is personal health information under POPIA once attached to an identity - never pair comment with a full name by default; number-only is the safe default, same caution ElimuKadi applies to biometric consent.</div>
+        <div class="callout">A name next to a symptom comment on a public screen is personal health information under POPIA once attached to an identity: never pair a comment with a full name by default; number-only is the safe default, same caution ElimuKadi applies to biometric consent.</div>
         <p>Markdown: <a href="04-display-monitor.md">04-display-monitor.md</a></p>
       </section>
 
       <!-- 05 -->
       <section class="panel" role="tabpanel" id="dashboard" aria-labelledby="tab-dashboard" hidden>
         <h2>Clinic dashboard</h2>
-        <p class="intro">Front-desk queue view, per-room queues, walk-in intake, and reporting - everything else is downstream of actions taken here.</p>
+        <p class="intro">Front-desk queue view, per-room queues, walk-in intake, and reporting: everything else is downstream of actions taken here.</p>
         <div class="diagram"><div class="mermaid">
 flowchart TB
   BOARD[Front desk board all active queues]
@@ -541,7 +541,7 @@ flowchart TB
             <tr><td>Average wait time</td><td>By queue/room, by hour of day</td></tr>
             <tr><td>No-show rate</td><td>% of remote tickets that never arrive</td></tr>
             <tr><td>Channel mix</td><td>App / USSD / WhatsApp / walk-in split</td></tr>
-            <tr><td>Queue-length heatmap</td><td>Busiest hours/days - the easiest "why buy this" chart</td></tr>
+            <tr><td>Queue-length heatmap</td><td>Busiest hours/days, the easiest "why buy this" chart</td></tr>
           </tbody>
         </table>
         <p>Markdown: <a href="05-clinic-dashboard.md">05-clinic-dashboard.md</a></p>
@@ -550,7 +550,7 @@ flowchart TB
       <!-- 06 -->
       <section class="panel" role="tabpanel" id="channels" aria-labelledby="tab-channels" hidden>
         <h2>Mobile PWA, USSD, WhatsApp bot, Web App</h2>
-        <p class="intro">One queue engine, four doors - no channel gets features the others lack in the core "find, join, get notified" loop.</p>
+        <p class="intro">One queue engine, four doors: no channel gets features the others lack in the core "find, join, get notified" loop.</p>
         <div class="diagram"><div class="mermaid">
 flowchart LR
   PWA[Mobile PWA] --> API[ClinicQ API]
@@ -564,10 +564,10 @@ flowchart LR
         <table>
           <thead><tr><th>Channel</th><th>Best for</th></tr></thead>
           <tbody>
-            <tr><td><strong>PWA</strong></td><td>Richest experience - map, live position, push</td></tr>
-            <tr><td><strong>USSD</strong></td><td>Any phone, no data needed - most inclusive</td></tr>
-            <tr><td><strong>WhatsApp</strong></td><td>Lowest friction - most people already live in it</td></tr>
-            <tr><td><strong>Web App</strong></td><td>Any browser - shared links, library/work PCs</td></tr>
+            <tr><td><strong>PWA</strong></td><td>Richest experience: map, live position, push</td></tr>
+            <tr><td><strong>USSD</strong></td><td>Any phone, no data needed; the most inclusive channel</td></tr>
+            <tr><td><strong>WhatsApp</strong></td><td>Lowest friction: most people already live in it</td></tr>
+            <tr><td><strong>Web App</strong></td><td>Any browser: shared links, library/work PCs</td></tr>
           </tbody>
         </table>
         <p>Markdown: <a href="06-channels-app-ussd-whatsapp-web.md">06-channels-app-ussd-whatsapp-web.md</a></p>
@@ -575,26 +575,26 @@ flowchart LR
 
       <!-- 07 -->
       <section class="panel" role="tabpanel" id="devices" aria-labelledby="tab-devices" hidden>
-        <h2>Devices to buy - cheapest first</h2>
-        <p class="intro">Far less hardware than a card/reader or radio-based project - the whole product is software plus one screen per clinic.</p>
+        <h2>Devices to buy: cheapest first</h2>
+        <p class="intro">Far less hardware than a card/reader or radio-based project: the whole product is software plus one screen per clinic.</p>
         <table>
           <thead><tr><th>#</th><th>Device</th><th>Job</th><th>~USD</th></tr></thead>
           <tbody>
             <tr><td>1</td><td><strong>Reuse existing TV/monitor + old PC</strong></td><td>Display board</td><td>$0</td></tr>
-            <tr><td>2</td><td>Raspberry Pi 4/5</td><td>Dedicated signage box</td><td>$45-80</td></tr>
-            <tr><td>3</td><td>Fire TV / Android TV stick</td><td>Same job, plug-in</td><td>$35-60</td></tr>
-            <tr><td>4</td><td>Budget 32-43" TV/monitor</td><td>If none on-site</td><td>$120-220</td></tr>
-            <tr><td>5</td><td>Thermal ticket printer (optional)</td><td>Physical stub for walk-ins</td><td>$25-45</td></tr>
+            <tr><td>2</td><td>Raspberry Pi 4/5</td><td>Dedicated signage box</td><td>$45–80</td></tr>
+            <tr><td>3</td><td>Fire TV / Android TV stick</td><td>Same job, plug-in</td><td>$35–60</td></tr>
+            <tr><td>4</td><td>Budget 32–43" TV/monitor</td><td>If none on-site</td><td>$120–220</td></tr>
+            <tr><td>5</td><td>Thermal ticket printer (optional)</td><td>Physical stub for walk-ins</td><td>$25–45</td></tr>
           </tbody>
         </table>
-        <div class="callout">Cheapest Phase 0 pilot: reuse the clinic's existing TV/monitor + a $45-80 Raspberry Pi. Total new hardware often under $100.</div>
+        <div class="callout">Cheapest Phase 0 pilot: reuse the clinic's existing TV/monitor + a $45–80 Raspberry Pi. Total new hardware often under $100.</div>
         <p>Markdown: <a href="07-devices-and-bom.md">07-devices-and-bom.md</a></p>
       </section>
 
       <!-- 08 -->
       <section class="panel" role="tabpanel" id="topology" aria-labelledby="tab-topology" hidden>
         <h2>System &amp; network topology</h2>
-        <p class="intro">Cloud-hosted API from day one - no local edge hardware needed, unlike card-reader or radio-based projects.</p>
+        <p class="intro">Cloud-hosted API from day one: no local edge hardware needed, unlike card-reader or radio-based projects.</p>
         <div class="diagram"><div class="mermaid">
 flowchart LR
   DASH[Reception dashboard] -->|Wi-Fi LAN| NET[Clinic internet]
@@ -617,20 +617,20 @@ flowchart LR
         <table>
           <thead><tr><th>Tier</th><th>Daily tickets</th><th>Price/month</th></tr></thead>
           <tbody>
-            <tr><td>Starter</td><td>up to 40</td><td>R450-700</td></tr>
-            <tr><td>Standard</td><td>41-120</td><td>R900-1,400</td></tr>
-            <tr><td>Plus</td><td>121-300+</td><td>R1,600-1,800</td></tr>
+            <tr><td>Starter</td><td>up to 40</td><td>R450–700</td></tr>
+            <tr><td>Standard</td><td>41–120</td><td>R900–1,400</td></tr>
+            <tr><td>Plus</td><td>121–300+</td><td>R1,600–1,800</td></tr>
           </tbody>
         </table>
         <h3>Startup budget (one pilot clinic)</h3>
         <table>
           <thead><tr><th>Scenario</th><th>Budget</th></tr></thead>
           <tbody>
-            <tr><td>Screen/PC already on-site</td><td><strong>R1,800-4,000 (~$100-220)</strong></td></tr>
-            <tr><td>Neither on-site</td><td>R6,000-15,000 (~$330-830)</td></tr>
+            <tr><td>Screen/PC already on-site</td><td><strong>R1,800–4,000 (~$100–220)</strong></td></tr>
+            <tr><td>Neither on-site</td><td>R6,000–15,000 (~$330–830)</td></tr>
           </tbody>
         </table>
-        <div class="callout">No card-issuance or hardware revenue line to fund launch - break-even is purely subscription-driven, reached fast in absolute Rand terms once 1-2 paying clinics are live.</div>
+        <div class="callout">No card-issuance or hardware revenue line to fund launch; break-even is purely subscription-driven, reached fast in absolute Rand terms once 1–2 paying clinics are live.</div>
         <p>Markdown: <a href="09-pricing-and-budget.md">09-pricing-and-budget.md</a></p>
       </section>
 
@@ -668,18 +668,18 @@ flowchart LR
   C -->|Testimonial plus numbers| D[Sign paid subscription]
   D -->|Case study| E[Referral to sister clinics]
         </div></div>
-        <div class="callout">Do not lead with "geo-location" or "PostGIS" - lead with "your patients queue from their phone, your waiting room runs itself."</div>
+        <div class="callout">Do not lead with "geo-location" or "PostGIS"; lead with "your patients queue from their phone, your waiting room runs itself."</div>
         <p>Markdown: <a href="11-marketing.md">11-marketing.md</a></p>
       </section>
 
       <!-- 12 -->
       <section class="panel" role="tabpanel" id="scale" aria-labelledby="tab-scale" hidden>
-        <h2>Upscaling journey - 24 months</h2>
+        <h2>Upscaling journey: 24 months</h2>
         <p class="intro">Grow clinic by clinic within one metro first, then expand geographically and add channel/feature depth.</p>
         <div class="diagram"><div class="mermaid">
 flowchart LR
-  A[Stage 0: 1 pilot clinic] -->|30 percent plus remote joins testimonial| B[Stage 1: 2-5 clinics]
-  B -->|Positive P and L per clinic| C[Stage 2: 6-20 clinics one metro]
+  A[Stage 0: 1 pilot clinic] -->|30 percent plus remote joins testimonial| B[Stage 1: 2–5 clinics]
+  B -->|Positive P and L per clinic| C[Stage 2: 6–20 clinics one metro]
   C -->|Support process documented| D[Stage 3: multi metro district]
   D -->|District MOU| E[Regional footprint]
         </div></div>
@@ -698,7 +698,7 @@ flowchart LR
       <!-- 13 -->
       <section class="panel" role="tabpanel" id="tech" aria-labelledby="tab-tech" hidden>
         <h2>Tech implementation &amp; dashboard stack</h2>
-        <p class="intro">Python 3.14 + FastAPI server-rendered app (Jinja2 + htmx) for discovery, queue, dashboard, and display - one codebase. PostgreSQL/PostGIS, Redis, USSD/WhatsApp channel adapters, Docker.</p>
+        <p class="intro">Python 3.14 + FastAPI server-rendered app (Jinja2 + htmx) for discovery, queue, dashboard, and display: one codebase. PostgreSQL/PostGIS, Redis, USSD/WhatsApp channel adapters, Docker.</p>
         <table>
           <thead><tr><th>Layer</th><th>Choice</th></tr></thead>
           <tbody>
@@ -731,7 +731,7 @@ flowchart TB
       <!-- 14 -->
       <section class="panel" role="tabpanel" id="bench" aria-labelledby="tab-bench" hidden>
         <h2>Benchmark vs global queue/appointment systems</h2>
-        <p class="intro">Retail and government services abroad have run digital queue systems for a decade - most local clinics don't have it yet.</p>
+        <p class="intro">Retail and government services abroad have run digital queue systems for a decade; most local clinics don't have it yet.</p>
         <table>
           <thead><tr><th>Region/sector</th><th>System</th><th>What it does</th></tr></thead>
           <tbody>
@@ -763,7 +763,7 @@ quadrantChart
     </div>
 
     <footer>
-      ClinicQ docs - <code>docs/PRODUCT/</code> - inactive tab panels are hidden - was ClinicQ in capstone shortlist
+      ClinicQ docs · <code>docs/PRODUCT/</code> · inactive tab panels are hidden · was ClinicQ in capstone shortlist
     </footer>
   </div>
 

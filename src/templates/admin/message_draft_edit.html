@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{#
+  Full-page editor for one reply draft (Issue #132 follow-up).
+
+  Opened in a new tab from the Drafts quick-edit slider's "Full edit" link when more room is
+  wanted. Fetches and saves client-side against the same drafts API the slider uses: no new
+  server-side data needed, the shell just carries the draft id. Ids are the generic ``de-*``
+  scheme ``admin-draft-edit.js`` shares across the message/announcement/alert draft editors.
+#}
+
+{% block content %}
+<div class="page-head">
+  <h1>Edit draft</h1>
+  <p class="lead">A private, unsent reply. Only you can see, edit, send or discard it.</p>
+  {% include "partials/breadcrumbs.html" %}
+</div>
+
+<span hidden id="draft-edit-page" data-draft-id="{{ draft_id }}" data-kind="message"></span>
+
+<div class="card">
+  <p class="msg" id="de-msg" aria-live="polite"></p>
+  <div class="field">
+    <label for="de-body">Reply</label>
+    <textarea id="de-body" rows="10" maxlength="8000" placeholder="Write a reply…"></textarea>
+  </div>
+  <div class="form-actions">
+    {# Same reasoning as the drafts slideover in ``messages.html``: the draft routes are
+       author-scoped, but the send needs ``communications.messages:create``, and a draft the caller
+       cannot send is not worth editing. Matches the gate this issue put on the page route. #}
+    {% if can('communications.messages', 'create') %}
+    <button type="button" class="btn btn-sm" id="de-save">Save</button>
+    <button type="button" class="btn btn-sm" id="de-send">Send</button>
+    <button type="button" class="btn btn-danger btn-sm" id="de-delete">Delete</button>
+    {% endif %}
+    <a class="btn btn-quiet btn-sm" href="/admin/messages/drafts">Back to Drafts</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/admin-crud.js" defer></script>
+<script src="/static/js/admin-draft-edit.js" defer></script>
+{% endblock %}
