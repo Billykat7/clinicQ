@@ -22,7 +22,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import functools
 import json
+import posixpath
 import re
 import subprocess
 import sys
@@ -37,6 +39,14 @@ ISSUE_NUM_RE = re.compile(r"ISSUE_(\d+)_", re.IGNORECASE)
 MILESTONE_FILE_RE = re.compile(r"^M(\d+)_", re.IGNORECASE)
 ISSUE_TITLE_NUM_RE = re.compile(r"^Issue\s+(\d+)\b", re.IGNORECASE)
 MILESTONE_TITLE_NUM_RE = re.compile(r"Milestone\s+(\d+)\b", re.IGNORECASE)
+
+# The branch that relative doc links are rewritten to point at. ``main`` because an issue outlives
+# any feature branch: a link to ``Issue/<N>/…`` would rot the day that branch is merged and
+# deleted. ``--ref`` overrides it, e.g. to preview links before the docs have reached ``main``.
+DOCS_REF = "main"
+
+# A markdown link target: ``](target)``. Only relative targets are rewritten (see below).
+MD_LINK_TARGET_RE = re.compile(r"\]\(([^)\s]+)\)")
 
 
 def run(cmd: list[str], *, input_text: str | None = None) -> str:
@@ -88,32 +98,61 @@ def milestone_body_to_description(body: str, *, max_len: int = 65000) -> str:
     return text
 
 
+@functools.cache
+def repo_slug() -> str:
+    """``owner/repo`` of the repository ``gh`` is pointed at, looked up once per run."""
+    return run(
+        ["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]
+    )
+
+
+def absolutize_links(body: str, folder: str) -> str:
+    """Rewrite every relative markdown link to an absolute GitHub URL on :data:`DOCS_REF`.
+
+    The specs link to each other and to the docs with paths relative to their own folder
+    (``../M4/ISSUE_25_….md``, ``../../../guideline.md``). That is right in the repository and
+    wrong on GitHub, where an issue or milestone page resolves them against its own URL and every
+    one of them 404s. Absolute links, external links and bare ``#anchor`` links are left alone.
+    """
+
+    def rewrite(m: re.Match[str]) -> str:
+        target = m.group(1)
+        if target.startswith(("http://", "https://", "mailto:", "#")):
+            return m.group(0)
+        path, _, anchor = target.partition("#")
+        resolved = posixpath.normpath(posixpath.join(folder, path))
+        kind = "tree" if path.endswith("/") else "blob"
+        url = f"https://github.com/{repo_slug()}/{kind}/{DOCS_REF}/{resolved}"
+        return f"]({url}#{anchor})" if anchor else f"]({url})"
+
+    return MD_LINK_TARGET_RE.sub(rewrite, body)
+
+
 def issue_body_from_doc(body: str, folder: str) -> str:
     """Turn a local issue spec's markdown into the body GitHub should carry.
 
-    Two transformations, both mandatory — every issue in this repo was created with them, and a
-    sync that skipped them would silently corrupt live issues:
+    Three transformations:
 
-    * **Strip the trailing ``Closes #N``**. That ``N`` is a *local* spec number, and this repo's
-      local sequence is not GitHub's (local 165 is GitHub 368, while GitHub 165 is an unrelated
-      M12 pull request). Left in place, GitHub renders it as a cross-reference to the wrong item
-      and a merging PR could close it.
-    * **Prepend the numbering note**, for the same reason: bare ``#NNN`` references *inside* the
-      body are local too, and a reader needs to be told so before the first one appears.
+    * **Strip the trailing ``Closes #N``.** It is right in the spec file, which is also the PR
+      description template, and pointless in the issue itself, where it is a link to itself.
+    * **Make links absolute** (:func:`absolutize_links`), so the *Depends on*, *Unblocks* and
+      reference links work on the issue page.
+    * **Prepend a source-of-truth note**, because the next sync overwrites the body: a change
+      made on GitHub is lost unless it is made in the spec file.
 
-    The local ``.md`` file keeps its ``Closes #N`` line — it is correct there, where the numbering
-    is local — so this transformation lives here rather than in the docs.
+    Issues are created in spec order, so on this repository GitHub issue ``#N`` is spec
+    ``Issue N``. (An earlier version of this note, carried over from the project the kernel came
+    from, said the opposite and pointed at a ``PROMPTS.md`` mapping file that does not exist here.)
     """
     lines = body.strip().splitlines()
     while lines and (not lines[-1].strip() or lines[-1].strip().startswith("Closes #")):
         lines.pop()
     note = (
-        "> **Numbering note:** this repo's local docs use a local issue sequence distinct from "
-        "GitHub's. Any bare `#NNN` reference below is a LOCAL number from "
-        f"`{folder}`, not this repo's GitHub issue numbering — see the local→GitHub "
-        "mapping table in `" + folder + "PROMPTS.md`."
+        f"> **Source of truth:** this issue is generated from its spec in `{folder}` by "
+        "`scripts/gh_sync_docs.py`. Edit the spec and re-sync rather than editing this issue: the "
+        "next sync overwrites the body."
     )
-    return note + "\n\n" + "\n".join(lines).strip() + "\n"
+    return note + "\n\n" + absolutize_links("\n".join(lines).strip(), folder) + "\n"
 
 
 def fetch_gh_milestones() -> dict[int, dict]:
@@ -145,6 +184,9 @@ def collect_milestone_docs(only: str | None) -> list[tuple[int, Path]]:
         if only and f"M{num}".lower() != only.lower():
             continue
         items.append((num, path))
+    # By number, not filename: ``sorted()`` on the paths puts M10–M14 before M1, and GitHub
+    # numbers milestones in creation order, permanently.
+    items.sort(key=lambda item: item[0])
     return items
 
 
@@ -157,7 +199,9 @@ def sync_milestones(*, dry_run: bool, only: str | None) -> tuple[int, int]:
         if not title:
             sys.stderr.write(f"! no title in {path.name}\n")
             continue
-        desc = milestone_body_to_description(body)
+        desc = milestone_body_to_description(
+            absolutize_links(body, "docs/GITHUB/MILESTONES/")
+        )
         row = existing.get(num)
         payload = json.dumps({"title": title, "description": desc, "state": "open"})
         if row is None:
@@ -417,6 +461,7 @@ def sync_issues(*, dry_run: bool, only: str | None) -> tuple[int, int, int, int]
 
 def main() -> int:
     """CLI entrypoint."""
+    global DOCS_REF
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -428,7 +473,13 @@ def main() -> int:
         "--milestone",
         help="limit to one folder/number, e.g. M5",
     )
+    parser.add_argument(
+        "--ref",
+        default=DOCS_REF,
+        help=f"branch that doc links point at (default: {DOCS_REF})",
+    )
     args = parser.parse_args()
+    DOCS_REF = args.ref
     ensure_gh()
 
     if not args.issues_only:
