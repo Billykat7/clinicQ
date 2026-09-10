@@ -71,12 +71,18 @@ Places where the specs and the repository disagree. None blocks sprint 1, but ea
 |---|----------|---------------|--------------------|---------|
 | 1 | Background jobs | `arq` workers | APScheduler with a PostgreSQL advisory lock (`src/core/scheduler.py`), already running the notification retry and retention sweeps | 36, 43, 63, 81, 82, 85, 88, 91, 95, 99 |
 | 2 | Styling | Tailwind, compiled | Hand-written CSS design tokens (`site.css`, `admin.css`, `landing.css`) with light and dark themes | 5 and every UI issue |
-| 3 | Packaging | `uv` and `uv sync` | `requirements.txt` with setuptools (`pyproject.toml`) | 1, 7, 9 |
+| 3 | Packaging and layout (**decided in Issue 1**) | `uv` and `uv sync`; an `app/` package | `requirements.txt` with setuptools (`pyproject.toml`); a `src/` package. **Kept as is**: see the note below the table | 1, 7, 9 |
 | 4 | PostgreSQL version | 18 | `postgis/postgis:16-3.4` in `infra/docker/docker-compose.db.yml` | 2, 3, 9, 102 |
 | 5 | Database sessions | Async everywhere | Both; most kernel routes use the sync `get_db` | 3 and every new module |
 | 6 | Seeding roles and grants | By migration | By module manifests and `make seed-rbac` (idempotent) | 18 |
 | 7 | Database topology | A production database of its own | A schema (`clinicq`) in a shared platform database, which `scripts/db/backup.sh` assumes | 102, 103 |
 | 8 | API paths | `/api/...` (for example `/api/clinics/nearby`) | Everything under `/api/v1/` | 31 and every API issue |
+
+**Decision 3, recorded in Issue 1:** the project keeps `requirements.txt` with setuptools and the
+`src/` package it was scaffolded with. Every script, Dockerfile, CI stage and guard test already
+assumes them, and moving to `uv` or to an `app/` package would be a repository-wide change with no
+feature behind it. Revisit only as a team decision in its own issue; until then, specs that mention
+`uv`, `uv sync`, `uv run` or `app/` mean the equivalents in the *Where code goes* table above.
 
 ## Planning inconsistencies found
 

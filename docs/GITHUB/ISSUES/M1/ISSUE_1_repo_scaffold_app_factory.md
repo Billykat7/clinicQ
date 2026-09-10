@@ -16,22 +16,22 @@
 ## Context
 
 Nothing can be built until the project boots the same way on six laptops. This issue creates the
-`uv`-managed Python 3.14 project, the FastAPI application factory, typed settings loaded from the
-environment, and the lint/type-check configuration every later issue is measured against.
+Python 3.14 project, the FastAPI application factory, typed settings loaded from the environment,
+and the lint/type-check configuration every later issue is measured against.
 
 ## Starting point
 
 - The scaffold is already committed: `src/main.py` (app factory), `src/core/config.py` (Pydantic settings with production guards), `pyproject.toml` (ruff, mypy and pytest config) and the `src/` layout.
-- The spec was written for `uv` and an `app/` package. The repo uses `requirements.txt` + setuptools and a `src/` package; see [open decisions](../README.md#open-decisions) before switching either.
-- What is left is mostly checking the acceptance criteria against what exists and documenting the day-one commands in `README.md`, whose *Getting started* section still shows the old `app.main` commands.
+- The spec was first written for `uv` and an `app/` package. **Decided in this issue** (decision 3 in [open decisions](../README.md#open-decisions)): the project keeps `requirements.txt` with setuptools and the `src/` package, and the scope and criteria below describe that layout.
+- What is left is mostly checking the acceptance criteria against what exists and documenting the day-one commands in `README.md`.
 
 ## Scope
 
-- `pyproject.toml` managed by `uv`, pinned to Python 3.14, with runtime and dev dependency groups
-- `app/main.py` application factory (`create_app()`) mounting routers, middleware and static files
-- `app/core/config.py`: a Pydantic `Settings` object with typed, documented fields and no bare `os.getenv` anywhere else
+- `pyproject.toml` pinned to Python 3.14 (`requires-python`), with dependencies in `requirements.txt`
+- `src/main.py` application factory (`create_app()`) mounting routers, middleware and static files
+- `src/core/config.py`: a Pydantic `Settings` object with typed, documented fields and no bare `os.getenv` anywhere else
 - `ruff` and `mypy` configuration in strict-enough mode to be useful without blocking a student team
-- Repository layout as specified in the tech-implementation doc (`app/`, `channels/`, `workers/`, `migrations/`, `tests/`, `scripts/`)
+- Repository layout: `src/`, `alembic/`, `tests/`, `scripts/`, `infra/` (see *Where code goes* in the [issues guide](../README.md#where-code-goes-in-this-repository))
 
 ## Out of scope
 
@@ -41,18 +41,18 @@ environment, and the lint/type-check configuration every later issue is measured
 
 ## Acceptance criteria
 
-- [ ] `uv sync` installs cleanly on macOS, Linux and WSL with Python 3.14
-- [ ] `uv run uvicorn app.main:app` starts and serves a placeholder route
+- [ ] `pip install -r requirements.txt` installs cleanly into a fresh Python 3.14 virtualenv on macOS, Linux and WSL
+- [ ] `make run` (`uvicorn src.main:app`) starts and serves a placeholder route
 - [ ] `create_app()` is importable and used by both the server and the test client
-- [ ] `ruff check` and `mypy app` both pass on the empty skeleton
+- [ ] `ruff check .` and `mypy src/` both pass
 - [ ] Settings raise a clear startup error when a required variable is missing
 - [ ] `README.md` documents the five commands a new team member needs on day one
 
 ## How to verify
 
-1. `pip install -r requirements.txt` in a fresh Python 3.14 virtualenv, then `make run`: the app serves `/health`.
-2. Remove a required variable from `.env`: startup fails with a message naming it.
-3. `make lint` and `make check-fast` pass.
+1. Follow *Getting started* in `README.md` on a fresh clone: `pip install -r requirements.txt` into a new Python 3.14 virtualenv, then `make run` serves `/health`.
+2. Start with `ENVIRONMENT=production` and no `JWT_SECRET`: startup fails with a message naming `JWT_SECRET` (in development every setting has a safe default, so nothing else is required).
+3. `make lint` and `mypy src/` pass.
 
 ## Files touched
 
