@@ -139,9 +139,9 @@ DEFAULT_TIMEZONE=Africa/Johannesburg
 
 ## Deployment (first real clinic)
 
-1. Provision a small cloud VPS - see
+1. Provision a small cloud VPS; see
    [`13-tech-implementation.md`](13-tech-implementation.md#9-hosting-choice).
-2. `docker compose -f infra/docker-compose.yml up -d` - brings up Postgres/PostGIS, Redis, the API, and
+2. `docker compose -f infra/docker-compose.yml up -d`: brings up Postgres/PostGIS, Redis, the API, and
    both workers.
 3. Set up the display box (Raspberry Pi or a reused PC) at the clinic in a kiosk-mode browser pointed at
    `/display/{site_id}`.
@@ -158,11 +158,11 @@ see [`docs/PLAN/IMPLEMENTATION_PLAN.md`](../PLAN/IMPLEMENTATION_PLAN.md) and
 
 ## Related docs
 
-- [`docs/PRODUCT/README.md`](README.md) - full doc index (naming, discovery, queue, display,
+- [`docs/PRODUCT/README.md`](README.md): full doc index (naming, discovery, queue, display,
   dashboard, channels, devices, topology, pricing, business plan, marketing, 24-month projection, tech
   implementation, benchmark)
-- [`docs/PRODUCT/index.html`](index.html) - tabbed HTML viewer with Mermaid diagrams
-- [`docs/PROJECTS/index.html#clinic-queue`](../PROJECTS/index.html#clinic-queue) - original
+- [`docs/PRODUCT/index.html`](index.html): tabbed HTML viewer with Mermaid diagrams
+- [`docs/PROJECTS/index.html#clinic-queue`](../PROJECTS/index.html#clinic-queue): original
   capstone shortlist entry (as *ClinicQueue*)
 
 ## License

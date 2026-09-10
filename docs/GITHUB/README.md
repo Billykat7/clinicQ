@@ -16,8 +16,9 @@ docs/
 ├── DEMO/index.html               # visual walkthrough for the team
 └── GITHUB/
     ├── README.md                 # this file
-    ├── MILESTONES/               # M1 … M14
+    ├── MILESTONES/               # M1 … M14, plus README.md: how to read a milestone
     ├── ISSUES/
+    │   ├── README.md             # how to read and pick up an issue, where code goes, open decisions
     │   ├── M1/  … M14/           # Issues 1–109
     │   └── BACKLOG/              # deliberately parked, post-capstone
     ├── PR/                       # PR_<N>_DESCRIPTION.md per merged issue
@@ -30,20 +31,20 @@ docs/
 
 | Milestone | Focus | Issues | Owner | Status |
 |-----------|-------|--------|-------|--------|
-| **[M1 - Foundation & Local CI](MILESTONES/M1_foundation_local_ci.md)** | Repo, FastAPI skeleton, PostGIS + Redis, migrations, UI shell, `ci-local` | 1–8 | DevOps/QA | 📋 planned |
-| **[M2 - CI/CD, Environments & Team Workflow](MILESTONES/M2_cicd_environments.md)** | Actions CI, GHCR, deploy on tag, CODEOWNERS, labels | 9–14 | DevOps/QA | 📋 planned |
-| **[M3 - Identity, Auth, RBAC & Consent](MILESTONES/M3_identity_auth_rbac.md)** | Staff auth, patient OTP identity, RBAC, site scoping, audit, consent | 15–22 | Backend Lead | 📋 planned |
-| **[M4 - Clinics, Queues & Configuration](MILESTONES/M4_clinics_queues_config.md)** | `sites` + PostGIS, hours, multi-room `queues`, services, display settings, onboarding | 23–30 | Backend Lead | 📋 planned |
-| **[M5 - Discovery & Geolocation](MILESTONES/M5_discovery_geolocation.md)** | Nearby search, sector toggle, map, area fallback, snapshot cache, payment filter | 31–38 | Frontend (Patient) | 📋 planned |
-| **[M6 - Queue Engine Core](MILESTONES/M6_queue_engine_core.md)** ⚠️ | Tickets, join, lifecycle, wait estimates, recall/no-show, transfer, priority | 39–47 | Backend Lead | 📋 planned |
-| **[M7 - Clinic Dashboard](MILESTONES/M7_clinic_dashboard.md)** | Front-desk board, call next, walk-in intake, reorder, room view, settings | 48–55 | Frontend (Clinic) | 📋 planned |
-| **[M8 - Waiting-room Display Monitor](MILESTONES/M8_display_monitor.md)** | Kiosk board, SSE, privacy modes, accessibility, audio call-out, device registry | 56–62 | Frontend (Clinic) | 📋 planned |
-| **[M9 - Notifications & Patient PWA](MILESTONES/M9_notifications_patient_pwa.md)** | Notification service, push, SMS, templates, preferences, ticket page, PWA, QR | 63–71 | Backend (Integrations) | 📋 planned |
-| **[M10 - USSD & WhatsApp Channels](MILESTONES/M10_ussd_whatsapp_channels.md)** | Adapter framework, USSD menu, WhatsApp bot, 5 languages, simulators, parity | 72–79 | Backend (Integrations) | 📋 planned |
-| **[M11 - Appointments, Check-in & Patient Care](MILESTONES/M11_appointments_checkin_patient_care.md)** | Slots, booking, reminders, kiosk check-in, proxy booking, chronic, feedback | 80–87 | Backend Lead | 📋 planned |
-| **[M12 - Reporting & Analytics](MILESTONES/M12_reporting_analytics.md)** | Stats worker, reports UI, KPIs, exports, district dashboard, no-show insight | 88–94 | Data & Research | 📋 planned |
-| **[M13 - Security, Privacy & POPIA](MILESTONES/M13_security_privacy_compliance.md)** | Data map, retention, DSAR, hardening, encryption, audit chain, pen test, a11y | 95–101 | DevOps/QA | 📋 planned |
-| **[M14 - Production, Pilot & Go-live](MILESTONES/M14_production_pilot_golive.md)** | Prod infra, backups, monitoring, load test, pilot kit, support, UAT, capstone | 102–109 | DevOps/QA + all | 📋 planned |
+| **[M1: Foundation & Local CI](MILESTONES/M1_foundation_local_ci.md)** | Repo, FastAPI skeleton, PostGIS + Redis, migrations, UI shell, `ci-local` | 1–8 | DevOps/QA | 📋 planned |
+| **[M2: CI/CD, Environments & Team Workflow](MILESTONES/M2_cicd_environments.md)** | Actions CI, GHCR, deploy on tag, CODEOWNERS, labels | 9–14 | DevOps/QA | 📋 planned |
+| **[M3: Identity, Auth, RBAC & Consent](MILESTONES/M3_identity_auth_rbac.md)** | Staff auth, patient OTP identity, RBAC, site scoping, audit, consent | 15–22 | Backend Lead | 📋 planned |
+| **[M4: Clinics, Queues & Configuration](MILESTONES/M4_clinics_queues_config.md)** | `sites` + PostGIS, hours, multi-room `queues`, services, display settings, onboarding | 23–30 | Backend Lead | 📋 planned |
+| **[M5: Discovery & Geolocation](MILESTONES/M5_discovery_geolocation.md)** | Nearby search, sector toggle, map, area fallback, snapshot cache, payment filter | 31–38 | Frontend (Patient) | 📋 planned |
+| **[M6: Queue Engine Core](MILESTONES/M6_queue_engine_core.md)** ⚠️ | Tickets, join, lifecycle, wait estimates, recall/no-show, transfer, priority | 39–47 | Backend Lead | 📋 planned |
+| **[M7: Clinic Dashboard](MILESTONES/M7_clinic_dashboard.md)** | Front-desk board, call next, walk-in intake, reorder, room view, settings | 48–55 | Frontend (Clinic) | 📋 planned |
+| **[M8: Waiting-room Display Monitor](MILESTONES/M8_display_monitor.md)** | Kiosk board, SSE, privacy modes, accessibility, audio call-out, device registry | 56–62 | Frontend (Clinic) | 📋 planned |
+| **[M9: Notifications & Patient PWA](MILESTONES/M9_notifications_patient_pwa.md)** | Notification service, push, SMS, templates, preferences, ticket page, PWA, QR | 63–71 | Backend (Integrations) | 📋 planned |
+| **[M10: USSD & WhatsApp Channels](MILESTONES/M10_ussd_whatsapp_channels.md)** | Adapter framework, USSD menu, WhatsApp bot, 5 languages, simulators, parity | 72–79 | Backend (Integrations) | 📋 planned |
+| **[M11: Appointments, Check-in & Patient Care](MILESTONES/M11_appointments_checkin_patient_care.md)** | Slots, booking, reminders, kiosk check-in, proxy booking, chronic, feedback | 80–87 | Backend Lead | 📋 planned |
+| **[M12: Reporting & Analytics](MILESTONES/M12_reporting_analytics.md)** | Stats worker, reports UI, KPIs, exports, district dashboard, no-show insight | 88–94 | Data & Research | 📋 planned |
+| **[M13: Security, Privacy & POPIA](MILESTONES/M13_security_privacy_compliance.md)** | Data map, retention, DSAR, hardening, encryption, audit chain, pen test, a11y | 95–101 | DevOps/QA | 📋 planned |
+| **[M14: Production, Pilot & Go-live](MILESTONES/M14_production_pilot_golive.md)** | Prod infra, backups, monitoring, load test, pilot kit, support, UAT, capstone | 102–109 | DevOps/QA + all | 📋 planned |
 
 **Total: 109 tracked issues across M1–M14**, plus 6 parked
 [backlog items](ISSUES/BACKLOG/).
@@ -137,5 +138,4 @@ Free plan allowance. Every tag gets a release note in [`RELEASES/`](RELEASES/).
 | Manual | Smoke check, security scan |
 
 The local gate is the primary one. CI on pull requests is the enforcement, and deployment is
-tag-only: the same shape the sibling `clinicq` project uses to stay inside 2,000 free minutes a
-month.
+tag-only: the shape that keeps the team inside the 2,000 free Actions minutes a month.

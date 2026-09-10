@@ -1,4 +1,4 @@
-# 06 - Mobile PWA, USSD, WhatsApp bot, Web App - one engine, four doors
+# 06: One engine, four doors (mobile PWA, USSD, WhatsApp bot, web app)
 
 South Africa's phone landscape is split between smartphone-with-data users, feature-phone/no-data users,
 and near-universal WhatsApp adoption on whatever phone people have. ClinicQ's discovery and queue engine
@@ -10,9 +10,9 @@ terms of the core "find a clinic, get a ticket, get notified" loop.
 
 | Channel | Needs | Best for | Notes |
 |---------|-------|----------|-------|
-| **Mobile PWA** | Smartphone + data (even patchy) | Richest experience: map view, live position, push notifications | Installable to home screen, no app-store review cycle - same pattern as ElimuKadi and UmojaNet |
-| **USSD** (e.g. `*120*XXX#`) | Any phone, including feature phones, **no data/airtime needed to browse** | Patients with no smartphone or no data - the most inclusive channel | Menu-driven text flow; works on the cheapest phones and in low-signal areas where only USSD/SMS gets through |
-| **WhatsApp bot** | Smartphone + WhatsApp (already installed by the vast majority of SA phone users) | Patients who already live in WhatsApp - lowest-friction channel for most people | Uses WhatsApp Business Cloud API (Meta) or a BSP like Twilio/Vonage; button-based menus (WhatsApp "quick reply" buttons) keep it simple |
+| **Mobile PWA** | Smartphone + data (even patchy) | Richest experience: map view, live position, push notifications | Installable to home screen, no app-store review cycle; same pattern as ElimuKadi and UmojaNet |
+| **USSD** (e.g. `*120*XXX#`) | Any phone, including feature phones, **no data/airtime needed to browse** | Patients with no smartphone or no data, the most inclusive channel | Menu-driven text flow; works on the cheapest phones and in low-signal areas where only USSD/SMS gets through |
+| **WhatsApp bot** | Smartphone + WhatsApp (already installed by the vast majority of SA phone users) | Patients who already live in WhatsApp, the lowest-friction channel for most people | Uses WhatsApp Business Cloud API (Meta) or a BSP like Twilio/Vonage; button-based menus (WhatsApp "quick reply" buttons) keep it simple |
 | **Web App** | Any browser, desktop or mobile | Clinic-side discovery embed (e.g. a link shared on a clinic's Facebook page), or patients without a smartphone but with library/work PC access | Same server-rendered pages as the PWA, just without the installable/offline shell |
 
 ## Same engine, different front door
@@ -76,10 +76,10 @@ sequenceDiagram
 
 | Patient joined via | "You're next" delivered via |
 |----------------------|-------------------------------|
-| PWA | Web push (if granted) - falls back to SMS if push isn't available |
-| USSD | SMS (USSD itself can't push - the phone number captured at join time is used) |
+| PWA | Web push (if granted), falling back to SMS if push isn't available |
+| USSD | SMS (USSD itself can't push; the phone number captured at join time is used) |
 | WhatsApp | WhatsApp message (same thread) |
-| Web App (no phone captured) | None automatic - patient is shown the live position on-screen and should refresh/return near their estimated turn |
+| Web App (no phone captured) | None automatic: the patient is shown the live position on-screen and should refresh/return near their estimated turn |
 
 This mirrors the **iOS PWA push gap workaround** already used in
 ElimuKadi: whenever a push channel might not

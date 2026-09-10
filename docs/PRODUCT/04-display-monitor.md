@@ -1,4 +1,4 @@
-# 04 - Waiting-room display monitor: number, time, name, comment
+# 04: Waiting-room display monitor: number, time, name, comment
 
 The brief asked for a **display monitor showing the queue**: number, time, and name, with a possible
 short comment such as "headache", "frequent check-up", "stomach ache". This is the single most visible
@@ -18,16 +18,16 @@ flowchart TB
 
 | Column | Always shown? | Notes |
 |--------|-----------------|-------|
-| **Ticket number** | Always | e.g. `#012` - the one thing every queue system needs at minimum |
-| **Called time** | Always | e.g. `08:41` - reassures people the board is live, not stuck |
-| **Name** | **Clinic-configurable** | Full first name, first name + last-initial, or initials only, or hidden entirely - see privacy note below |
+| **Ticket number** | Always | e.g. `#012`: the one thing every queue system needs at minimum |
+| **Called time** | Always | e.g. `08:41`: reassures people the board is live, not stuck |
+| **Name** | **Clinic-configurable** | Full first name, first name + last-initial, or initials only, or hidden entirely; see privacy note below |
 | **Comment / reason** | **Clinic-configurable, off by default** | Short free-text the patient (or reception) entered when joining, e.g. "headache", "follow-up", "stomach ache" |
 
 ## Display modes (clinic picks one per site, changeable anytime)
 
 | Mode | Number | Time | Name | Comment | Best for |
 |------|--------|------|------|---------|----------|
-| **Number-only** (recommended default) | Yes | Yes | No | No | Any clinic that wants zero identity/health info on a public screen - the safest default |
+| **Number-only** (recommended default) | Yes | Yes | No | No | Any clinic that wants zero identity/health info on a public screen, the safest default |
 | **Name-lite** | Yes | Yes | First name + last-initial (e.g. "Thabo M.") | No | Smaller clinics where patients like hearing something more personal than a number, without full identification |
 | **Full** (opt-in, requires explicit clinic + patient consent) | Yes | Yes | Full name or first name | Optional, only if patient ticked "show my reason for visit on the board" when joining | Small community clinics where everyone already knows everyone, and patients have explicitly said they don't mind |
 
@@ -68,19 +68,19 @@ sequenceDiagram
     Note over D: Board also shows next 3-5 tickets in queue as "up next", same privacy rule applied
 ```
 
-## Hardware notes (kept short - full detail in [07](07-devices-and-bom.md))
+## Hardware notes (kept short; full detail in [07](07-devices-and-bom.md))
 
 The board is just a **browser tab in kiosk mode** on any TV/monitor connected to a small always-on box
 (Raspberry Pi-class mini-PC or an old repurposed PC): no proprietary signage software or licence needed,
 consistent with the project's "PWA + server-rendered pages" approach
 ([06](06-channels-app-ussd-whatsapp-web.md), [13](13-tech-implementation.md)).
 
-## Data captured (display side - reuses ticket data from [03](03-booking-and-queue.md))
+## Data captured (display side; reuses ticket data from [03](03-booking-and-queue.md))
 
 | Table | Key fields |
 |-------|-----------|
 | `sites` | ...existing fields..., `display_mode` (number_only/name_lite/full), `display_show_comment` (boolean) |
-| `tickets` | ...existing fields from [03](03-booking-and-queue.md)..., `comment_consent` (boolean - patient explicitly agreed comment can be shown) |
+| `tickets` | ...existing fields from [03](03-booking-and-queue.md)..., `comment_consent` (boolean: patient explicitly agreed comment can be shown) |
 
 Markdown: this is [04-display-monitor.md](04-display-monitor.md); ticket lifecycle in
 [03-booking-and-queue.md](03-booking-and-queue.md); combined schema in

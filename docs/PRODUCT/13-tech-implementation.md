@@ -1,4 +1,4 @@
-# 13 - Tech implementation plan - dashboard, stack, rollout, device counts, wiring
+# 13: Tech implementation plan (dashboard, stack, rollout, device counts, wiring)
 
 Engineering-facing plan: what to build, what to run it on, how many physical devices per stage, and how
 the display/dashboard/channel wiring actually works.
@@ -9,19 +9,19 @@ the display/dashboard/channel wiring actually works.
 |-------|--------|-----|
 | Language / runtime | **Python 3.14** | One language across API, workers, and channel adapters (USSD/WhatsApp webhooks); modern typing, fast startup |
 | Backend API + web app | **FastAPI** (ASGI, Uvicorn/Granian) | Async I/O for queue-position polling and webhook bursts; auto OpenAPI docs; Pydantic v2 models double as data contracts |
-| Server-rendered pages | **Jinja2** templates | Patient discovery/queue pages, clinic dashboard, display-monitor board all rendered server-side - fast first paint on cheap devices |
-| Interactivity | **htmx** (+ small **Alpine.js** for local UI state) | Live queue position/countdown, call-next button updating the display board - all via HTML fragment swaps or Server-Sent Events, no React/Vite/Node toolchain |
+| Server-rendered pages | **Jinja2** templates | Patient discovery/queue pages, clinic dashboard, display-monitor board all rendered server-side, for a fast first paint on cheap devices |
+| Interactivity | **htmx** (+ small **Alpine.js** for local UI state) | Live queue position/countdown, call-next button updating the display board, all via HTML fragment swaps or Server-Sent Events, no React/Vite/Node toolchain |
 | Styling | **Tailwind CSS** (compiled once) | Consistent design system without a JS bundler in the critical path |
 | PWA shell | `manifest.json` + hand-written **service worker** | Installable patient/clinic app; offline "view last known queue position" cache |
 | Charts | **Chart.js** (CDN) | Wait-time trends, no-show rate, queue-length heatmap on the dashboard |
 | Database | **PostgreSQL 18+** with **PostGIS** | Clinic locations + geo-radius search ([02](02-discovery-and-geolocation.md)), queue/ticket data with strong constraints |
 | ORM / migrations | **SQLAlchemy 2.x (async)** + **Alembic** | Typed models, async sessions matching FastAPI, versioned schema per rollout |
 | Cache / queues | **Redis** + `arq` workers | Queue-length cache for fast discovery lists, rate limiting, background jobs (notifications, daily stats aggregation) |
-| USSD gateway | **Africa's Talking-class** (or Vonage/Onbufo-class) provider webhook | Thin adapter into the same booking/queue API - see [06](06-channels-app-ussd-whatsapp-web.md) |
+| USSD gateway | **Africa's Talking-class** (or Vonage/Onbufo-class) provider webhook | Thin adapter into the same booking/queue API; see [06](06-channels-app-ussd-whatsapp-web.md) |
 | WhatsApp channel | **WhatsApp Business Cloud API** (Meta) or a BSP (Twilio/360dialog-class) | Webhook-based bot, quick-reply buttons |
 | Notifications | SMS gateway (fallback) + Web Push + WhatsApp messages | "You're next" alerts across channels ([06](06-channels-app-ussd-whatsapp-web.md)) |
 | Monitoring | **Uptime Kuma** (simple) or **Prometheus + Grafana** | API latency, webhook failures, display-box heartbeat |
-| Deployment | **Docker Compose** on a small cloud VPS (Phase 0+) | Cloud-hosted from day one - see [08-topology.md](08-topology.md) |
+| Deployment | **Docker Compose** on a small cloud VPS (Phase 0+) | Cloud-hosted from day one; see [08-topology.md](08-topology.md) |
 | Package/env management | **uv**, pinned to Python 3.14 | Fast, reproducible installs; single `pyproject.toml` |
 | CI/CD | **GitHub Actions** | Lint (ruff), type-check (mypy/pyright), test (pytest), build image, deploy on tag |
 | Auth | JWT (short-lived access + refresh) in an httpOnly cookie; RBAC roles: `patient`, `receptionist`, `nurse_doctor`, `clinic_manager`, `platform_admin` | Simple, stateless, works with server-rendered + htmx pages |
@@ -96,12 +96,12 @@ from [05](05-clinic-dashboard.md) into one schema.
 
 ## 4. Dashboard views
 
-1. **Front-desk/receptionist** - all active queues at a glance, call next, add walk-in, cancel/no-show
-2. **Nurse/doctor** - their own room's queue only, call next, private visit note
-3. **Clinic manager** - clinic profile (sector, hours, display mode), reports (wait time, no-show rate,
+1. **Front-desk/receptionist**: all active queues at a glance, call next, add walk-in, cancel/no-show
+2. **Nurse/doctor**: their own room's queue only, call next, private visit note
+3. **Clinic manager**: clinic profile (sector, hours, display mode), reports (wait time, no-show rate,
    channel mix, queue-length heatmap)
-4. **Display monitor (public-facing)** - "now serving" + "up next", privacy-mode-aware ([04](04-display-monitor.md))
-5. **Platform admin** (Phase 2+) - cross-clinic onboarding, billing status, gateway health
+4. **Display monitor (public-facing)**: "now serving" + "up next", privacy-mode-aware ([04](04-display-monitor.md))
+5. **Platform admin** (Phase 2+): cross-clinic onboarding, billing status, gateway health
 
 ## 5. API / route surface (sketch)
 
@@ -152,7 +152,7 @@ sequenceDiagram
     API-->>D: SSE event: queue length updated
 ```
 
-## 6. Getting started - implementation roadmap
+## 6. Getting started: implementation roadmap
 
 ```mermaid
 flowchart TB
@@ -191,13 +191,13 @@ flowchart TB
 Quantities needed of each **device type**, matching the coverage stages in
 [12-upscaling-24-months.md](12-upscaling-24-months.md):
 
-| Device type | Stage 0 (1 clinic, pilot) | Stage 1 (2-5 clinics) | Stage 2 (6-20 clinics) | Stage 3 (20-60+ clinics) |
+| Device type | Stage 0 (1 clinic, pilot) | Stage 1 (2–5 clinics) | Stage 2 (6–20 clinics) | Stage 3 (20–60+ clinics) |
 |-------------|------------------------------|--------------------------|----------------------------|------------------------------|
-| Display signage box (Pi or reused PC) | 1 | 2-5 | 6-20 | 20-60+ |
-| Display screen (if not already on-site) | 0-1 | 0-3 | 2-8 | 5-20 |
-| Reception dashboard device (reused PC/tablet) | 1 | 2-5 | 6-20 | 20-60+ |
-| Small UPS/battery backup | 0-1 | 1-3 | 3-10 | 10-30 |
-| Thermal ticket printer (optional) | 0-1 | 0-3 | 2-8 | 5-20 |
+| Display signage box (Pi or reused PC) | 1 | 2–5 | 6–20 | 20–60+ |
+| Display screen (if not already on-site) | 0–1 | 0–3 | 2–8 | 5–20 |
+| Reception dashboard device (reused PC/tablet) | 1 | 2–5 | 6–20 | 20–60+ |
+| Small UPS/battery backup | 0–1 | 1–3 | 3–10 | 10–30 |
+| Thermal ticket printer (optional) | 0–1 | 0–3 | 2–8 | 5–20 |
 
 These are planning quantities, not exact bills of materials; always confirm with a real site check (see
 [07-devices-and-bom.md](07-devices-and-bom.md) for model-level pricing).
@@ -232,13 +232,13 @@ flowchart TB
 
 | Segment | Purpose | Who is on it |
 |---------|---------|--------------|
-| Clinic Wi-Fi/LAN (existing) | Display box + dashboard traffic out to the internet | Display box, dashboard PC/tablet - reuse existing network, no new SSID needed |
+| Clinic Wi-Fi/LAN (existing) | Display box + dashboard traffic out to the internet | Display box, dashboard PC/tablet; reuse the existing network, no new SSID needed |
 | Cloud VPS | Runs the API, database, cache, workers | Platform only |
 | Patient/public internet | PWA, USSD gateway, WhatsApp Business API | Patients, gateway webhooks |
 
 ### Practical wiring rules
 
-- Reuse the clinic's existing Wi-Fi/LAN - no special network build needed, since there's no edge reader
+- Reuse the clinic's existing Wi-Fi/LAN: no special network build needed, since there's no edge reader
   hardware like ElimuKadi's NFC readers.
 - Mount the display box behind or beside the screen, out of casual reach, with its `site_id`/URL
   configured once and never touched again (kiosk auto-launch on boot).
@@ -253,7 +253,7 @@ flowchart TB
 
 | Option | When to use |
 |--------|-------------|
-| Shared cloud VPS (multi-tenant) from day one | **Recommended for all stages** - there's no local edge hardware requiring an on-site gateway, unlike ElimuKadi/UmojaNet |
+| Shared cloud VPS (multi-tenant) from day one | **Recommended for all stages**: there's no local edge hardware requiring an on-site gateway, unlike ElimuKadi/UmojaNet |
 | Regional cloud region closest to South Africa | Keeps API latency low for dashboard/display polling and SSE streams |
 | Managed Postgres w/ PostGIS extension enabled | Simplifies ops vs self-managing PostGIS on a bare VPS, worth it once past Stage 1 |
 

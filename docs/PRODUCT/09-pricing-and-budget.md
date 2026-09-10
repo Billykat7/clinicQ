@@ -1,4 +1,4 @@
-# 09 - Pricing, startup budget & break-even
+# 09: Pricing, startup budget & break-even
 
 Planning currency: **South African Rand (R)**, mirroring ElimuKadi and
 UmojaNet; USD shown for reference at an indicative **R18/$1** (confirm
@@ -8,29 +8,29 @@ live rate).
 
 | Line item | Price | Notes |
 |-----------|-------|-------|
-| Per-clinic SaaS subscription (discovery listing + queue + dashboard + display) | **R450-1,800/month** | Tiered by clinic size/queue volume (see table below) |
-| USSD session cost pass-through | **~R0.20-0.60/session** at cost | USSD gateway providers (Africa's Talking-class) charge per session; pass through or absorb into subscription for Phase 0 |
-| WhatsApp conversation cost pass-through | **~R0.30-0.90/conversation** at cost | Meta charges per business-initiated conversation category; mostly avoided by using user-initiated sessions where possible |
-| SMS fallback notification | **~R0.25-0.45/SMS** at cost | Only triggered when push/WhatsApp isn't available - see [06](06-channels-app-ussd-whatsapp-web.md) |
-| Setup/onboarding (one-off) | **R500-1,500/clinic** | Configuring clinic profile, hours, display mode, staff accounts |
-| Support & maintenance | Included in subscription for Phase 0-1; SLA add-on later | Faster response once a clinic is paying for uptime-critical queue management |
+| Per-clinic SaaS subscription (discovery listing + queue + dashboard + display) | **R450–1,800/month** | Tiered by clinic size/queue volume (see table below) |
+| USSD session cost pass-through | **~R0.20–0.60/session** at cost | USSD gateway providers (Africa's Talking-class) charge per session; pass through or absorb into subscription for Phase 0 |
+| WhatsApp conversation cost pass-through | **~R0.30–0.90/conversation** at cost | Meta charges per business-initiated conversation category; mostly avoided by using user-initiated sessions where possible |
+| SMS fallback notification | **~R0.25–0.45/SMS** at cost | Only triggered when push/WhatsApp isn't available; see [06](06-channels-app-ussd-whatsapp-web.md) |
+| Setup/onboarding (one-off) | **R500–1,500/clinic** | Configuring clinic profile, hours, display mode, staff accounts |
+| Support & maintenance | Included in subscription for Phase 0–1; SLA add-on later | Faster response once a clinic is paying for uptime-critical queue management |
 
 ### Subscription tiers (per clinic, per month)
 
 | Tier | Typical daily tickets | Price/month | Notes |
 |------|---------------------------|-------------|-------|
-| Starter | up to 40/day | **R450-700** | Single queue, number-only display, self-serve support |
-| Standard | 41-120/day | **R900-1,400** | Multi-room queues, name-lite display option, priority support |
-| Plus | 121-300+/day | **R1,600-1,800** | Full reporting suite, USSD+WhatsApp channels included, dedicated support |
-| Multi-site / network | Several clinics under one operator (e.g. a group practice or a district) | Custom, volume discount **10-20%** | One combined reporting dashboard across sites |
+| Starter | up to 40/day | **R450–700** | Single queue, number-only display, self-serve support |
+| Standard | 41–120/day | **R900–1,400** | Multi-room queues, name-lite display option, priority support |
+| Plus | 121–300+/day | **R1,600–1,800** | Full reporting suite, USSD+WhatsApp channels included, dedicated support |
+| Multi-site / network | Several clinics under one operator (e.g. a group practice or a district) | Custom, volume discount **10–20%** | One combined reporting dashboard across sites |
 
 ## Startup budget (one pilot clinic)
 
 | Stage | Budget (R) | Budget (~USD) | Covers |
 |-------|------------|-----------------|--------|
-| Phase 0 pilot (1 clinic, reusing existing screen/PC) | **R1,800 - 4,000** | **$100 - 220** | Signage box (Pi), UPS, setup labour |
-| Phase 0 pilot (1 clinic, no existing screen/PC) | **R6,000 - 15,000** | **$330 - 830** | + TV/monitor, reused/cheap PC |
-| District rollout (10+ clinics) | **R25,000 - 70,000** | **$1,400 - 3,900** | Only after Phase 0-1 proves the model - see [12-upscaling-24-months.md](12-upscaling-24-months.md) |
+| Phase 0 pilot (1 clinic, reusing existing screen/PC) | **R1,800–4,000** | **$100–220** | Signage box (Pi), UPS, setup labour |
+| Phase 0 pilot (1 clinic, no existing screen/PC) | **R6,000–15,000** | **$330–830** | + TV/monitor, reused/cheap PC |
+| District rollout (10+ clinics) | **R25,000–70,000** | **$1,400–3,900** | Only after Phase 0–1 proves the model; see [12-upscaling-24-months.md](12-upscaling-24-months.md) |
 
 This is **dramatically cheaper to start** than ElimuKadi (card stock +
 NFC readers) or UmojaNet (Starlink + radios): the entire capex is one
@@ -38,7 +38,7 @@ small always-on box and maybe a screen.
 
 ## Break-even sketch (one clinic)
 
-To cover a lean **~R400-600/month** opex per pilot clinic (hosting share, USSD/WhatsApp/SMS pass-through,
+To cover a lean **~R400–600/month** opex per pilot clinic (hosting share, USSD/WhatsApp/SMS pass-through,
 support time), a clinic needs roughly:
 
 - **~1 Standard-tier clinic**, or
@@ -49,7 +49,7 @@ Because there is no card issuance revenue line to fund Phase 0 hardware (as Elim
 break-even is **purely subscription-driven and reached faster in absolute Rand terms**, even though the
 per-clinic ticket is smaller than a per-school ticket.
 
-## Worked example - one Standard-tier clinic
+## Worked example: one Standard-tier clinic
 
 | Price/month | Opex (hosting, gateway pass-through, support) | Net |
 |----------------|--------------------------------------------------|-----|

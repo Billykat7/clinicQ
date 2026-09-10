@@ -1,4 +1,4 @@
-# 02 - Clinic discovery: geo-location, public/private toggle, payment filters
+# 02: Clinic discovery: geo-location, public/private toggle, payment filters
 
 The original ClinicQ brief was queue management for one clinic. ClinicQ adds a **discovery layer**
 in front of that: help a patient find *which* clinic to queue at in the first place, before joining the
@@ -57,7 +57,7 @@ flowchart LR
 | `accepts_cash` | boolean | Almost always true for private clinics; shown for completeness |
 | `accepts_card` | boolean | Card machine at reception |
 | `accepted_medical_aids` | list of scheme names/tags | Free-text tag list at first (e.g. "Discovery Health", "Bonitas", "Momentum Health", "Medihelp"); a **directory attribute self-reported by the clinic**, not a live eligibility check |
-| `copay_notice` | short text (optional) | e.g. "Subject to plan type/network" - manages patient expectations without the platform doing claims logic |
+| `copay_notice` | short text (optional) | e.g. "Subject to plan type/network"; manages patient expectations without the platform doing claims logic |
 
 **Why phase this out of the MVP:** verified medical-aid acceptance/eligibility checking is a real
 integration project (each scheme has its own switch/API), and is easy to get wrong in a way that sends a

@@ -159,9 +159,9 @@ uv run uvicorn app.main:app --reload --port 8000
 
 Then open:
 
-- `http://localhost:8000/discover` - find a clinic
-- `http://localhost:8000/dashboard/1` - clinic dashboard
-- `http://localhost:8000/display/1` - waiting-room board
+- `http://localhost:8000/discover`: find a clinic
+- `http://localhost:8000/dashboard/1`: clinic dashboard
+- `http://localhost:8000/display/1`: waiting-room board
 
 Before every push:
 

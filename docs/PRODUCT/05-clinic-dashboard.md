@@ -1,4 +1,4 @@
-# 05 - Clinic dashboard: call-next, per-room queues, walk-in intake, reporting
+# 05: Clinic dashboard: call-next, per-room queues, walk-in intake, reporting
 
 The dashboard is where reception, nurses, and the clinic manager actually run the day: every other
 surface (patient app, USSD, WhatsApp, display monitor) is downstream of actions taken here.
@@ -8,7 +8,7 @@ surface (patient app, USSD, WhatsApp, display monitor) is downstream of actions 
 | Role | View | Key actions |
 |------|------|--------------|
 | **Receptionist/clerk** | Front-desk queue view, all active queues at the clinic | Add walk-in, call next, mark arrived, cancel/no-show, print a paper ticket stub if needed |
-| **Nurse/doctor** | Their own room/queue only | Call next, add a short visit note (private, not the same as the public comment - see [04](04-display-monitor.md)), mark done |
+| **Nurse/doctor** | Their own room/queue only | Call next, add a short visit note (private, not the same as the public comment; see [04](04-display-monitor.md)), mark done |
 | **Clinic manager/admin** | Clinic profile + reports | Edit hours/sector/public-private flag, set display mode, view wait-time and no-show reports, manage staff accounts |
 | **Platform admin** (ClinicQ operator) | Cross-clinic view (Phase 2+) | Onboarding, billing status, support tickets, aggregate uptime |
 
@@ -56,10 +56,10 @@ sequenceDiagram
 
 | Report | Shows | Why it matters |
 |--------|-------|------------------|
-| Average wait time (daily/weekly) | By queue/room, by hour of day | Staffing decisions - e.g. add a second doctor's queue on Monday mornings |
+| Average wait time (daily/weekly) | By queue/room, by hour of day | Staffing decisions, e.g. add a second doctor's queue on Monday mornings |
 | No-show rate | % of remote-joined tickets that never arrive | High rate may mean the wait estimate is misleading patients, or notifications aren't landing |
-| Channel mix | % joined via app / USSD / WhatsApp / walk-in | Tells the clinic (and ClinicQ) which channel to invest support/marketing in - see [06](06-channels-app-ussd-whatsapp-web.md) |
-| Queue-length heatmap | Busiest hours/days | The single easiest "why should we buy this" chart for a clinic manager - mirrors the canteen queue-time story used in ElimuKadi's marketing |
+| Channel mix | % joined via app / USSD / WhatsApp / walk-in | Tells the clinic (and ClinicQ) which channel to invest support/marketing in; see [06](06-channels-app-ussd-whatsapp-web.md) |
+| Queue-length heatmap | Busiest hours/days | The single easiest "why should we buy this" chart for a clinic manager; mirrors the canteen queue-time story used in ElimuKadi's marketing |
 | Public vs private discovery views | How many people viewed this clinic in discovery ([02](02-discovery-and-geolocation.md)) vs actually joined | Helps a clinic gauge whether its listing (hours, sector badge) is driving or losing footfall |
 
 ## Data captured (dashboard/reporting side)
@@ -68,7 +68,7 @@ sequenceDiagram
 |-------|-----------|
 | `staff_users` | id, site_id, role (receptionist/nurse/doctor/manager/platform_admin), auth fields |
 | `queue_reorders` | id, ticket_id, staff_id, reason_code, occurred_at |
-| `visit_notes` (private, staff-only) | id, ticket_id, staff_id, note_text, created_at - **never shown on the display monitor** |
+| `visit_notes` (private, staff-only) | id, ticket_id, staff_id, note_text, created_at; **never shown on the display monitor** |
 | `daily_queue_stats` | site_id, queue_id, date, avg_wait_minutes, no_show_count, ticket_count (pre-aggregated for fast dashboard charts) |
 
 Markdown: this is [05-clinic-dashboard.md](05-clinic-dashboard.md); queue mechanics in

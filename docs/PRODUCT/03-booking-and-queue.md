@@ -1,4 +1,4 @@
-# 03 - Booking & digital queue: join remotely or walk in, tickets, wait estimates
+# 03: Booking & digital queue: join remotely or walk in, tickets, wait estimates
 
 Once a clinic is chosen ([02](02-discovery-and-geolocation.md)), the core product is a **single shared
 queue** that can be joined from four different doors ([06](06-channels-app-ussd-whatsapp-web.md)) and is
@@ -10,7 +10,7 @@ run from one dashboard ([05](05-clinic-dashboard.md)).
 |--------|-------------|-------|
 | **Join remotely** (app/USSD/WhatsApp/web, before leaving home) | Patients with a phone | Gets a ticket number and live position **before** travelling; can time arrival to reduce time spent physically waiting |
 | **Walk-in** (reception issues ticket) | Patients with no phone, or who arrive without booking | Receptionist taps "add walk-in" on the dashboard; ticket appears on the display monitor exactly like a remote one |
-| **Scheduled appointment** (optional, later) | Returning/chronic patients with a set slot | A booked time slot converts into a ticket automatically near the appointment time - see [12](12-upscaling-24-months.md) for phasing |
+| **Scheduled appointment** (optional, later) | Returning/chronic patients with a set slot | A booked time slot converts into a ticket automatically near the appointment time; see [12](12-upscaling-24-months.md) for phasing |
 
 ## Remote join sequence
 
@@ -29,7 +29,7 @@ sequenceDiagram
 ```
 
 **Estimated wait** starts as a simple rolling average (`average service time last N tickets x position in
-queue`), shown as a range (e.g. "~15-25 min") rather than a false-precision single number; this mirrors
+queue`), shown as a range (e.g. "~15–25 min") rather than a false-precision single number; this mirrors
 how well-run real-world queue systems (bank branches, DMV-style services) set expectations honestly.
 
 ## Walk-in intake (reception side)
@@ -73,7 +73,7 @@ screen if the clinic only has one monitor.
 
 | Situation | Behaviour |
 |-----------|-----------|
-| Called, doesn't respond in X minutes | Ticket auto-moves to "recall" state, drops to end of active window (not deleted) - staff can re-call once |
+| Called, doesn't respond in X minutes | Ticket auto-moves to "recall" state, drops to end of active window (not deleted); staff can re-call once |
 | Recalled twice, still absent | Ticket marked `no_show`, freeing the slot; patient (if remote) gets a notification explaining this and how to rejoin |
 | Patient explicitly cancels remotely | Ticket marked `cancelled`, position recalculates for everyone behind them |
 

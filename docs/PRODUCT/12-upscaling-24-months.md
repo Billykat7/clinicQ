@@ -1,4 +1,4 @@
-# 12 - Upscaling journey - 24 months
+# 12: Upscaling journey over 24 months
 
 Grow **clinic by clinic within one metro first**, then expand geographically and add channel/feature
 depth; never oversell support capacity ahead of the small team, mirroring the discipline used in
@@ -8,10 +8,10 @@ ElimuKadi and UmojaNet.
 
 | Stage | Clinics | Daily tickets (aggregate) | Channels live | Monthly revenue (R) |
 |-------|---------|------------------------------|-------------------|------------------------|
-| 0 - Pilot | 1 | 20-80 | Dashboard + number-only display | R0 - 900 |
-| 1 - Prove it | 2-5 | 80-400 | + PWA + WhatsApp remote join | R900 - 5,000 |
-| 2 - Metro cluster | 6-20 | 400-1,800 | + USSD, name-lite display option | R5,000 - 22,000 |
-| 3 - Multi-metro/district | 20-60+ | 1,800-6,000+ | + medical-aid/payment filter (Phase 2), multi-site reporting | R22,000 - 70,000+ |
+| 0: Pilot | 1 | 20–80 | Dashboard + number-only display | R0–900 |
+| 1: Prove it | 2–5 | 80–400 | + PWA + WhatsApp remote join | R900–5,000 |
+| 2: Metro cluster | 6–20 | 400–1,800 | + USSD, name-lite display option | R5,000–22,000 |
+| 3: Multi-metro/district | 20–60+ | 1,800–6,000+ | + medical-aid/payment filter (Phase 2), multi-site reporting | R22,000–70,000+ |
 
 ## Growth gates
 
@@ -34,12 +34,12 @@ document use **ClinicQ**.
 
 | Month | Clinics | Daily tickets | Revenue (R) | Net (R) | Main action |
 |-------|---------|-------------------|---------------|---------|----------------|
-| 1 | 1 | 20-40 | 0 | -600 | Free pilot, number-only display + dashboard |
-| 3 | 2 | 80-120 | 1,600 | +700 | Remote join (PWA + WhatsApp) live |
-| 6 | 5 | 200-350 | 5,000 | +2,800 | USSD channel added |
-| 12 | 12 | 500-900 | 13,000 | +8,000 | Hire first dedicated support/onboarding person |
-| 18 | 20 | 900-1,500 | 22,000 | +14,000 | Second metro scouted, medical-aid/payment filter piloted |
-| 24 | 35 | 1,500-2,800 | 40,000 | +26,000 | Multi-site/district conversations begin |
+| 1 | 1 | 20–40 | 0 | -600 | Free pilot, number-only display + dashboard |
+| 3 | 2 | 80–120 | 1,600 | +700 | Remote join (PWA + WhatsApp) live |
+| 6 | 5 | 200–350 | 5,000 | +2,800 | USSD channel added |
+| 12 | 12 | 500–900 | 13,000 | +8,000 | Hire first dedicated support/onboarding person |
+| 18 | 20 | 900–1,500 | 22,000 | +14,000 | Second metro scouted, medical-aid/payment filter piloted |
+| 24 | 35 | 1,500–2,800 | 40,000 | +26,000 | Multi-site/district conversations begin |
 
 <div class="callout">Spend first on **reliable notifications and accurate wait estimates**, second on
 **onboarding/support capacity**, third on **a second metro**, and only then on the medical-aid/payment

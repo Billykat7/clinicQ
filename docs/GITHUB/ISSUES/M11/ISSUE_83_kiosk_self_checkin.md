@@ -1,17 +1,28 @@
 # Issue 83: Self check-in kiosk and QR arrival check-in
 
-**Area:** Frontend / Patient
-**Milestone:** M11 - Appointments, Check-in & Patient Care Extras
-**Owner role:** Frontend (Patient) Dev
-**Depends on:** Issues 70, 81
-**Estimate:** 3 days
-**Status:** Planned
+> **In short:** A tablet at the clinic door lets booked patients check in by scanning their QR code, instead of queueing to tell reception they have arrived.
+
+| | |
+|---|---|
+| **Milestone** | [M11: Appointments, Check-in & Patient Care Extras](../../MILESTONES/M11_appointments_checkin_patient_care.md) |
+| **Sprint** | 9 (weeks 17–18) |
+| **Owner** | C, Frontend/Patient (backup: D, Frontend/Clinic) |
+| **Area** | Frontend / Patient |
+| **Estimate** | 3 days |
+| **Status** | Planned |
+| **Depends on** | [Issue 70](../M9/ISSUE_70_qr_ticket_code.md): QR ticket code for kiosk check-in and reception lookup<br>[Issue 81](../M11/ISSUE_81_booking_reschedule_auto_ticket.md): Book, reschedule, cancel and auto-convert an appointment into a ticket |
+| **Unblocks** | No other issue waits on this one. |
 
 ## Context
 
 The 07:30 reception bottleneck, borrowed straight from Qmatic and NHS outpatient kiosks. A patient who
 already holds a ticket or a booking should be able to say 'I am here' without joining a second queue just
 to talk to reception.
+
+## Starting point
+
+- Device pairing reuses the board's mechanism from Issue 61; QR resolving comes from Issue 70.
+- It is a public page on a paired device, not a signed-in staff screen.
 
 ## Scope
 
@@ -20,6 +31,10 @@ to talk to reception.
 - Walk-in self-registration where a clinic enables it, with an optional phone number
 - Very large touch targets, a short timeout back to the idle screen, and no keyboard requirement beyond digits
 - Kiosk device registration reusing the M8 pairing mechanism
+
+## Out of scope
+
+- The board and dashboard updates, which follow automatically from the ticket moving to waiting.
 
 ## Acceptance criteria
 
@@ -30,14 +45,20 @@ to talk to reception.
 - [ ] The kiosk cannot be used to browse away from the check-in app
 - [ ] An offline kiosk shows a clear 'please see reception' message rather than failing silently
 
+## How to verify
+
+1. Scan a booked patient's QR: checked in in under 15 seconds, and the board updates.
+2. Leave the kiosk after checking in: it returns to the idle screen with nothing personal showing.
+3. Unplug the network: "please see reception" appears.
+
 ## Files touched
 
-- `app/web/kiosk/routes.py`
-- `app/templates/kiosk/checkin.html`
-- `app/services/checkin.py`
+- `src/web/kiosk.py`
+- `src/templates/kiosk/checkin.html`
+- `src/modules/appointments/checkin.py`
 
 ---
 
-**Refs:** [M11 milestone](../../MILESTONES/M11_appointments_checkin_patient_care.md) · [product docs](../../../PRODUCT/14-benchmark.md) · [workload split](../../../TEAM/WORKLOAD_SPLIT.md)
+**Refs:** [M11 milestone](../../MILESTONES/M11_appointments_checkin_patient_care.md) · [product docs](../../../PRODUCT/14-benchmark.md) · [workload split](../../../TEAM/WORKLOAD_SPLIT.md) · [how to read this spec](../README.md)
 
 Closes #83

@@ -1,17 +1,28 @@
 # Issue 82: Appointment reminders with confirm/cancel by reply
 
-**Area:** Backend / Appointments
-**Milestone:** M11 - Appointments, Check-in & Patient Care Extras
-**Owner role:** Backend (Integrations) Dev
-**Depends on:** Issues 81, 63
-**Estimate:** 2 days
-**Status:** Planned
+> **In short:** Patients are reminded the day before and two hours before, and can confirm or cancel by simply replying.
+
+| | |
+|---|---|
+| **Milestone** | [M11: Appointments, Check-in & Patient Care Extras](../../MILESTONES/M11_appointments_checkin_patient_care.md) |
+| **Sprint** | 11 (weeks 21–22) |
+| **Owner** | B, Integrations (backup: A, Backend Lead) |
+| **Area** | Backend / Appointments |
+| **Estimate** | 2 days |
+| **Status** | Planned |
+| **Depends on** | [Issue 63](../M9/ISSUE_63_notification_service_adapters.md): Notification service, transport adapters and delivery log<br>[Issue 81](../M11/ISSUE_81_booking_reschedule_auto_ticket.md): Book, reschedule, cancel and auto-convert an appointment into a ticket |
+| **Unblocks** | [Issue 85](../M11/ISSUE_85_chronic_repeat_reminders.md): Chronic and repeat-visit reminder schedules<br>[Issue 93](../M12/ISSUE_93_noshow_risk_staffing_insight.md): No-show risk insight and staffing recommendation |
 
 ## Context
 
 Reminders with a reply action are the cheapest no-show reduction available, and they are what turns
 an appointment system into one a clinic will actually pay for: a cancelled slot the day before can be
 given to someone else.
+
+## Starting point
+
+- Sends go through the notification service (Issue 63), so preferences, quiet hours and consent apply automatically.
+- Replies arrive on the same inbound channels as M10 (SMS keyword, WhatsApp button, push action).
 
 ## Scope
 
@@ -20,6 +31,11 @@ given to someone else.
 - A cancelled slot returned to availability immediately and offered to a waiting list
 - Reminder suppression when a patient has already checked in
 - Reminder effectiveness measured for the M12 no-show analysis
+
+## Out of scope
+
+- Chronic medication reminders (Issue 85).
+- The no-show analysis that measures whether reminders work (Issue 93).
 
 ## Acceptance criteria
 
@@ -30,14 +46,20 @@ given to someone else.
 - [ ] Reminder-to-attendance correlation is measurable per site
 - [ ] Reminders respect quiet hours and opt-outs
 
+## How to verify
+
+1. Book a slot and advance the clock: reminders at 24 hours and at 2 hours, on the preferred channel.
+2. Reply CANCEL: the slot is free within seconds.
+3. Check in early: the 2-hour reminder is not sent.
+
 ## Files touched
 
-- `app/services/appointment_reminders.py`
-- `workers/reminder_worker.py`
-- `tests/integration/test_reminders.py`
+- `src/modules/appointments/reminders.py`
+- `src/core/scheduler.py`
+- `tests/integration/appointments/test_reminders.py`
 
 ---
 
-**Refs:** [M11 milestone](../../MILESTONES/M11_appointments_checkin_patient_care.md) · [product docs](../../../PRODUCT/14-benchmark.md) · [workload split](../../../TEAM/WORKLOAD_SPLIT.md)
+**Refs:** [M11 milestone](../../MILESTONES/M11_appointments_checkin_patient_care.md) · [product docs](../../../PRODUCT/14-benchmark.md) · [workload split](../../../TEAM/WORKLOAD_SPLIT.md) · [how to read this spec](../README.md)
 
 Closes #82
