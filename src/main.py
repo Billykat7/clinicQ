@@ -28,6 +28,12 @@ from src.core.logging_config import setup_logging
 from src.core.request_logging import RequestLoggingMiddleware
 from src.core.scheduler import shutdown_scheduler, start_scheduler
 from src.core.security_headers import SecurityHeadersMiddleware
+from src.core.telemetry import (
+    MetricsMiddleware,
+    init_error_tracking,
+    metrics_endpoint,
+    raise_for_error_tracking,
+)
 from src.schemas.health import DependencyChecks, LivenessResponse, ReadinessResponse
 from src.web.dev import router as dev_router
 from src.web.routes import router as web_router
@@ -38,6 +44,8 @@ _STATIC_DIR = Path(__file__).resolve().parent / "static"
 def create_app(settings_obj: Settings | None = None) -> FastAPI:
     cfg = settings_obj if settings_obj is not None else get_settings()
     setup_logging()
+    # Before the app exists, so Sentry's FastAPI integration wraps it (Issue 14). Off without a DSN.
+    init_error_tracking(cfg)
     is_prod = cfg.environment == AppEnvironment.PRODUCTION
 
     @asynccontextmanager
@@ -77,6 +85,24 @@ def create_app(settings_obj: Settings | None = None) -> FastAPI:
     app.add_middleware(
         RequestLoggingMiddleware, trust_proxy_headers=cfg.trust_proxy_headers
     )
+    # Outermost of ours, so it times and counts everything, the requests the others refuse included.
+    if cfg.metrics_enabled:
+        app.add_middleware(MetricsMiddleware)
+        app.add_api_route(
+            "/metrics",
+            metrics_endpoint(cfg),
+            methods=["GET"],
+            include_in_schema=False,
+        )
+    # Staging only (production refuses the setting): a route that fails on purpose, so an
+    # exception can be followed from the request into error tracking (Issue 14).
+    if cfg.error_tracking_test_route:
+        app.add_api_route(
+            "/health/error-tracking-test",
+            raise_for_error_tracking,
+            methods=["GET"],
+            include_in_schema=False,
+        )
     # One error envelope for every API error (Issue 4): domain errors, HTTPException, validation.
     install_error_handlers(app)
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")

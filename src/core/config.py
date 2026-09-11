@@ -105,6 +105,47 @@ class Settings(BaseSettings):
         description="Console log format: json (one object per line) or text (env: LOG_FORMAT).",
     )
 
+    # Monitoring (Issue 14). Both are opt-in: error tracking is off without a DSN, /metrics without
+    # METRICS_ENABLED, and outside development /metrics also needs a token, or it would tell anyone
+    # the app's traffic.
+    sentry_dsn: str = Field(
+        default="",
+        description=(
+            "Where unhandled exceptions are sent: a Sentry or GlitchTip project DSN (env: "
+            "SENTRY_DSN). Empty: error tracking is off."
+        ),
+    )
+    sentry_traces_sample_rate: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Share of requests sent as performance traces, 0 to 1 (env: "
+            "SENTRY_TRACES_SAMPLE_RATE). 0 sends errors only, which fits the free tiers."
+        ),
+    )
+    metrics_enabled: bool = Field(
+        default=False,
+        description=(
+            "Serve Prometheus metrics (request rate, latency, errors) at /metrics "
+            "(env: METRICS_ENABLED)."
+        ),
+    )
+    metrics_token: str = Field(
+        default="",
+        description=(
+            "Bearer token /metrics requires (env: METRICS_TOKEN). Required outside development "
+            "while metrics are on: traffic figures are not for everyone."
+        ),
+    )
+    error_tracking_test_route: bool = Field(
+        default=False,
+        description=(
+            "Serve GET /health/error-tracking-test, which raises on purpose, to prove error "
+            "tracking works end to end (env: ERROR_TRACKING_TEST_ROUTE). Refused in production."
+        ),
+    )
+
     # Edge TLS certificate whose expiry is reported in the health body so the infra
     # gateway can surface it (the gateway can't read the edge PEMs — only its nginx
     # mounts them, see infra alembic 0012). In production this is set by the compose file
@@ -1070,6 +1111,25 @@ class Settings(BaseSettings):
                     "DEBUG",
                     "DEBUG must be false outside development: debug mode sends tracebacks "
                     "to whoever triggered the error.",
+                )
+            )
+        if self.metrics_enabled and not self.metrics_token:
+            problems.append(
+                ConfigProblem(
+                    "METRICS_TOKEN",
+                    "METRICS_TOKEN must be set outside development while METRICS_ENABLED is "
+                    "true, or anyone could read the app's traffic at /metrics.",
+                )
+            )
+        if (
+            self.error_tracking_test_route
+            and self.environment is AppEnvironment.PRODUCTION
+        ):
+            problems.append(
+                ConfigProblem(
+                    "ERROR_TRACKING_TEST_ROUTE",
+                    "ERROR_TRACKING_TEST_ROUTE must be false in production: it raises an error "
+                    "on request, which is for proving error tracking on staging.",
                 )
             )
         if CORS_ANY_ORIGIN in self.cors_origins:

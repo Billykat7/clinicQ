@@ -21,6 +21,9 @@ with its description and default, and is generated from that class (`make env-ex
 | `PUBLIC_BASE_URL` | blank | `https://` staging URL | `https://` production URL | absolute links in email |
 | `LOG_FORMAT` | `text` is easier to read | `json` | `json` | the log pipeline parses one object per line |
 | `AWS_S3_LOGGING_ENABLED` | `false` | `true` | `true` | only deployed logs are shipped |
+| `SENTRY_DSN` | blank (off) | the staging project's DSN | the production project's DSN | errors go to the environment they happened in (Issue 14) |
+| `ERROR_TRACKING_TEST_ROUTE` | may be `true` | `true` while proving error tracking | **refused** | a route that fails on purpose has no place in production |
+| `METRICS_ENABLED`, `METRICS_TOKEN` | `true`, token optional | `true` **with** a token | `true` **with** a token | `/metrics` tells its reader the app's traffic |
 | Development pages (`/dev/...`) | served | not registered (404) | not registered (404) | the component catalogue is for building, not for users |
 | `/docs`, `/openapi.json` | served | served | not served | the API surface is not published in production |
 
@@ -41,6 +44,8 @@ list for an env file without starting anything, so neither can drift from the ot
 | `DB_HOST` / `DB_NAME`, when set, agree with `DATABASE_URL` (which wins) | staging, production (a warning locally) |
 | an enabled gateway has its keys (`STRIPE_*`, `PAYSTACK_SECRET_KEY`) | everywhere |
 | a live payment key (`sk_live_…`) | production only |
+| `METRICS_TOKEN` is set while `METRICS_ENABLED` is true (Issue 14) | staging, production |
+| `ERROR_TRACKING_TEST_ROUTE` is false (Issue 14) | production |
 | every value is readable at all (types, ranges, a parseable `DATABASE_URL`) | everywhere |
 
 A new rule goes into `configuration_problems()`, never into a validator of its own. The guard tests
