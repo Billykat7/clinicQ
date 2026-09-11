@@ -1,16 +1,23 @@
-"""Auth routes: signup/activation plus the sign-in and session lifecycle.
+"""Auth routes: signup/activation plus the staff sign-in and session lifecycle (Issue 16).
 
-Ported from the ``maps`` project. Signup/activation create and verify accounts;
-sign-in is via email OTP (short-TTL, rate-limited) or an email+password fallback.
-Browser clients receive an httpOnly access cookie, an httpOnly refresh cookie, and a
-readable CSRF cookie; API clients can use ``Authorization: Bearer``. ``/auth/refresh``
-rotates the refresh token (one-time use) and revokes all sessions if a revoked token is
-reused (theft detection). Sessions can be listed and individually revoked.
+Sign-in is by email OTP or password (rate-limited per account and per IP). Browser clients receive
+an httpOnly access cookie (15 minutes), an httpOnly refresh cookie and a readable CSRF cookie, all
+``SameSite=Lax`` and ``Secure`` outside development; API clients use ``Authorization: Bearer``.
+
+**A session is a token family.** A sign-in starts one: its first refresh row and every row rotated
+from it share ``family_id``. ``/auth/refresh`` rotates (one-time use). Presenting a token that was
+already rotated is a replay, and revokes the **whole family**, because the server cannot tell
+whether the thief or the owner holds the newest token; the user's other sessions are untouched. The
+one exception is a replay within ``REFRESH_REUSE_GRACE_SECONDS`` of the rotation, which is two tabs
+whose refresh requests crossed: it gets a fresh access token and nothing else. Sign-out revokes the
+family server-side; the sessions list shows one entry per family, and revoking one revokes its
+family. The CSRF token is bound to the family (``src.core.csrf_middleware``).
 """
 
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -31,10 +38,12 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from src.commons.enums import TokenType
+from src.commons.enums import SecurityAuditEvent, SecurityAuditOutcome, TokenType
 from src.commons.exceptions import InvalidImageError
+from src.commons.ids import new_id
 from src.core.client_ip import client_ip_or_unknown, resolve_client_ip
 from src.core.config import Settings, get_settings
+from src.core.csrf_middleware import csrf_token_is_bound, mint_csrf_token
 from src.core.email_send import (
     EmailDeliveryError,
     send_activation_email,
@@ -56,7 +65,11 @@ from src.core.rbac import resource_permissions_for_user
 from src.core.refresh_token_policy import (
     enforce_refresh_row_absolute_max,
     enforce_server_idle_timeout,
+    family_is_live,
     get_valid_refresh_token_row,
+    in_family,
+    revoke_families_except,
+    revoke_family,
 )
 from src.core.security import (
     CurrentStaff,
@@ -70,6 +83,7 @@ from src.core.security import (
     hash_password,
     hash_refresh_token,
     issue_access_token,
+    password_fingerprint,
     resolve_active_user,
     verify_password,
 )
@@ -146,11 +160,18 @@ def _create_refresh_token_for_user(
     *,
     user_agent: str | None = None,
     sign_in_ip: str | None = None,
-) -> str:
-    """Create a refresh token, store its hash, and return the raw token for the cookie."""
+) -> tuple[str, str]:
+    """Start a session: store a new family's first refresh row; return ``(raw token, family id)``.
+
+    The family id is the first row's own id, so a session keeps one stable id however often it
+    rotates. Only the hash of the raw token is stored.
+    """
     raw = secrets.token_urlsafe(32)
     now = datetime.now(UTC)
+    row_id = new_id()
     rt = RefreshToken(
+        id=row_id,
+        family_id=row_id,
         user_id=user_id,
         token_hash=hash_refresh_token(raw),
         expires_at=now + timedelta(days=settings.refresh_token_expire_days),
@@ -161,7 +182,7 @@ def _create_refresh_token_for_user(
     )
     db.add(rt)
     db.commit()
-    return raw
+    return raw, row_id
 
 
 def _get_refresh_token_row_by_raw(
@@ -176,31 +197,8 @@ def _get_refresh_token_row_by_raw(
     ).scalar_one_or_none()
 
 
-def _validate_refresh_token(db: Session, raw_token: str | None) -> User | None:
-    """Return the owning user for a currently-valid refresh cookie; bump last_seen_at."""
-    row = get_valid_refresh_token_row(db, raw_token)
-    if not row:
-        return None
-    row.last_seen_at = datetime.now(UTC)
-    db.commit()
-    return db.execute(select(User).where(User.id == row.user_id)).scalar_one_or_none()
-
-
-def _revoke_refresh_token(db: Session, raw_token: str) -> None:
-    """Revoke a refresh token by setting ``revoked_at``."""
-    if not raw_token or not raw_token.strip():
-        return
-    token_hash = hash_refresh_token(raw_token.strip())
-    db.execute(
-        update(RefreshToken)
-        .where(RefreshToken.token_hash == token_hash)
-        .values(revoked_at=datetime.now(UTC))
-    )
-    db.commit()
-
-
 def _revoke_all_refresh_tokens_for_user(db: Session, user_id: str) -> None:
-    """Revoke every still-active refresh token for the user (e.g. reuse detection)."""
+    """Revoke every still-active refresh token for the user (a password reset)."""
     db.execute(
         update(RefreshToken)
         .where(
@@ -212,25 +210,6 @@ def _revoke_all_refresh_tokens_for_user(db: Session, user_id: str) -> None:
     db.commit()
 
 
-def _revoke_refresh_tokens_except(
-    db: Session, user_id: str, keep_token_hash: str | None
-) -> None:
-    """Revoke every active refresh token for the user except one (``keep_token_hash``).
-
-    When ``keep_token_hash`` is None (e.g. an API caller with no refresh cookie) every active
-    session is revoked. Used to sign a user out everywhere but the device they are on after a
-    sensitive change such as a password change (Issue #59).
-    """
-    stmt = update(RefreshToken).where(
-        RefreshToken.user_id == user_id,
-        RefreshToken.revoked_at.is_(None),
-    )
-    if keep_token_hash is not None:
-        stmt = stmt.where(RefreshToken.token_hash != keep_token_hash)
-    db.execute(stmt.values(revoked_at=datetime.now(UTC)))
-    db.commit()
-
-
 def _rotate_refresh_token_for_session(
     db: Session,
     old_row: RefreshToken,
@@ -239,12 +218,17 @@ def _rotate_refresh_token_for_session(
     user_agent: str | None,
     sign_in_ip: str | None,
 ) -> str:
-    """Revoke the presented refresh row and insert a new one; return the new raw token."""
+    """Spend the presented row and add its successor to the same family; return the new raw token.
+
+    The spent row is marked ``rotated_at`` (and revoked): presenting it again is a replay.
+    """
     now = datetime.now(UTC)
     old_row.revoked_at = now
+    old_row.rotated_at = now
     raw = secrets.token_urlsafe(32)
     rt = RefreshToken(
         user_id=old_row.user_id,
+        family_id=old_row.session_id,
         token_hash=hash_refresh_token(raw),
         expires_at=now + timedelta(days=settings.refresh_token_expire_days),
         user_agent=user_agent,
@@ -255,6 +239,44 @@ def _rotate_refresh_token_for_session(
     db.add(rt)
     db.commit()
     return raw
+
+
+def _current_session_id(
+    db: Session, request: Request, settings: Settings, claims: dict | None = None
+) -> str | None:
+    """The caller's own session: its refresh cookie's family, else the access token's ``sid``."""
+    row = get_valid_refresh_token_row(
+        db, request.cookies.get(settings.refresh_token_cookie_name)
+    )
+    if row is not None:
+        return row.session_id
+    sid = (claims or {}).get("sid")
+    return str(sid) if sid else None
+
+
+def _refresh_csrf_ok(request: Request, settings: Settings, family_id: str) -> bool:
+    """For a refresh or sign-out, whether the CSRF token (when there is one) is this session's.
+
+    The middleware has already checked that the echoed token matches the cookie; a request carrying
+    only the refresh cookie has no access token to bind against, so the binding is checked here,
+    against the refresh token's own family. No CSRF cookie at all (a browser signed in before
+    Issue 16, whose CSRF cookie expired with its access cookie) is let through: ``SameSite=Lax``
+    and the Fetch Metadata check already stop a cross-site request.
+    """
+    token = request.cookies.get(settings.csrf_cookie_name)
+    return token is None or csrf_token_is_bound(token, family_id)
+
+
+def _audit_refresh_reuse(user_id: str, family_id: str, revoked: int) -> None:
+    """Record a replayed refresh token: a security event, keyed on by log aggregators."""
+    logger.warning(
+        "SECURITY_AUDIT %s outcome=%s user_id=%s session=%s revoked_rows=%d",
+        SecurityAuditEvent.REFRESH_TOKEN_REUSE.value,
+        SecurityAuditOutcome.FAILURE.value,
+        user_id,
+        family_id,
+        revoked,
+    )
 
 
 def _set_refresh_token_cookie(
@@ -302,11 +324,15 @@ def _clear_access_token_cookie(response: Response, settings: Settings) -> None:
 
 
 def _set_csrf_cookie(response: Response, token: str, settings: Settings) -> None:
-    """Set the readable CSRF cookie for double-submit (paired with the access cookie)."""
+    """Set the readable CSRF cookie (session-bound, signed double-submit).
+
+    It lives as long as the refresh cookie, not the access cookie: a browser whose access cookie
+    has expired still holds the token its silent refresh must echo.
+    """
     response.set_cookie(
         key=settings.csrf_cookie_name,
         value=token,
-        max_age=settings.jwt_access_expire_minutes * 60,
+        max_age=settings.refresh_token_expire_days * 86400,
         httponly=False,
         secure=not settings.is_development,
         samesite="lax",
@@ -320,11 +346,11 @@ def _clear_csrf_cookie(response: Response, settings: Settings) -> None:
 
 
 def _set_auth_session_cookies(
-    response: Response, access_token: str, settings: Settings
+    response: Response, access_token: str, settings: Settings, session_id: str
 ) -> None:
-    """Issue a fresh access JWT (httpOnly) and CSRF token (readable) for a session."""
+    """Issue a fresh access JWT (httpOnly) and a CSRF token bound to ``session_id`` (readable)."""
     _set_access_token_cookie(response, access_token, settings)
-    _set_csrf_cookie(response, secrets.token_urlsafe(32), settings)
+    _set_csrf_cookie(response, mint_csrf_token(session_id), settings)
 
 
 def _refresh_failed_response(settings: Settings) -> JSONResponse:
@@ -346,14 +372,14 @@ def _login_response(
     sign_ip = resolve_client_ip(request)
     user.last_login = datetime.now(UTC)
     db.commit()
-    access_token = issue_access_token(db, user)
-    refresh_token = _create_refresh_token_for_user(
+    refresh_token, session_id = _create_refresh_token_for_user(
         db,
         str(user.id),
         settings,
         user_agent=_user_agent_for_refresh_session(request),
         sign_in_ip=sign_ip,
     )
+    access_token = issue_access_token(db, user, sid=session_id)
     data = TokenResponse(
         access_token="",
         token_type=TokenType.BEARER.value,
@@ -361,7 +387,7 @@ def _login_response(
     )
     response = JSONResponse(content=data.model_dump())
     _set_refresh_token_cookie(response, refresh_token, settings)
-    _set_auth_session_cookies(response, access_token, settings)
+    _set_auth_session_cookies(response, access_token, settings, session_id)
     return response
 
 
@@ -702,7 +728,9 @@ async def password_forgot(
         return generic
 
     base_url = str(request.base_url).rstrip("/")
-    token = create_password_reset_token(user_id=str(user.id), email=email)
+    token = create_password_reset_token(
+        user_id=str(user.id), email=email, password_hash=user.password
+    )
     reset_link = f"{base_url}/?resetToken={quote(token, safe='')}"
     try:
         # Blocking SMTP send — offload to a thread so it never stalls the event loop.
@@ -743,7 +771,16 @@ async def password_reset(
     user_id = str(payload.get("sub") or "").strip()
     email = str(payload.get("email") or "").strip().lower()
     user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
-    if user is None or user.is_deleted or user.email.lower().strip() != email:
+    if (
+        user is None
+        or user.is_deleted
+        or not user.is_active
+        or user.email.lower().strip() != email
+        # Single use: the link names the password it resets, and a used link no longer matches.
+        or not hmac.compare_digest(
+            str(payload.get("pwv") or ""), password_fingerprint(user.password)
+        )
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired reset token.",
@@ -765,10 +802,17 @@ async def refresh_access_token(
 ) -> JSONResponse:
     """Rotate the refresh token and issue a new access JWT.
 
-    Each successful call revokes the presented refresh token and sets a new one
-    (one-time use). If a revoked refresh token is presented again, all of the user's
-    refresh sessions are revoked (possible theft) and the client must sign in again.
-    Returns 401 when the token is missing, unknown, expired, or reused after rotation.
+    Each successful call spends the presented refresh token and sets its successor, in the same
+    family (one-time use). A token that was already rotated is a replay:
+
+    * within ``REFRESH_REUSE_GRACE_SECONDS`` of its rotation, while its family is still signed in,
+      it is two tabs whose refreshes crossed: a fresh access token, no new refresh token, nothing
+      revoked;
+    * otherwise every token in its family is revoked and the client must sign in again. The
+      user's other sessions are left alone.
+
+    Returns 401 (with every session cookie cleared) when the token is missing, unknown, revoked,
+    expired, past the idle or absolute cap, replayed, or its account is switched off.
     """
     raw = request.cookies.get(settings.refresh_token_cookie_name)
     if not raw or not raw.strip():
@@ -777,13 +821,45 @@ async def refresh_access_token(
     row = _get_refresh_token_row_by_raw(db, raw)
     if row is None:
         return _refresh_failed_response(settings)
-
-    if row.revoked_at is not None:
-        # Reuse of a rotated/revoked token: revoke everything for this user.
-        _revoke_all_refresh_tokens_for_user(db, row.user_id)
-        return _refresh_failed_response(settings)
+    family_id = row.session_id
+    if not _refresh_csrf_ok(request, settings, family_id):
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={"detail": "Invalid or missing CSRF token"},
+        )
 
     now = datetime.now(UTC)
+    if row.rotated_at is not None:
+        within_grace = now - _as_utc_aware(row.rotated_at) <= timedelta(
+            seconds=settings.refresh_reuse_grace_seconds
+        )
+        if within_grace and family_is_live(db, family_id):
+            user = db.execute(
+                select(User).where(User.id == row.user_id)
+            ).scalar_one_or_none()
+            if user is None or not user.is_active or user.is_deleted:
+                return _refresh_failed_response(settings)
+            response = JSONResponse(
+                content=TokenResponse(
+                    access_token="", token_type=TokenType.BEARER.value, email=user.email
+                ).model_dump()
+            )
+            # No refresh cookie: the request that rotated it has already set the successor.
+            _set_auth_session_cookies(
+                response,
+                issue_access_token(db, user, sid=family_id),
+                settings,
+                family_id,
+            )
+            return response
+        _audit_refresh_reuse(
+            row.user_id, family_id, revoke_family(db, family_id, now=now)
+        )
+        return _refresh_failed_response(settings)
+    if row.revoked_at is not None:
+        # Signed out, revoked from another device, or timed out: not a replay, just over.
+        return _refresh_failed_response(settings)
+
     if _as_utc_aware(row.expires_at) <= now:
         return _refresh_failed_response(settings)
     if not enforce_refresh_row_absolute_max(db, row):
@@ -792,7 +868,8 @@ async def refresh_access_token(
         return _refresh_failed_response(settings)
 
     user = db.execute(select(User).where(User.id == row.user_id)).scalar_one_or_none()
-    if user is None:
+    if user is None or not user.is_active or user.is_deleted:
+        revoke_family(db, family_id, now=now)
         return _refresh_failed_response(settings)
 
     ua = _user_agent_for_refresh_session(request) or row.user_agent
@@ -800,7 +877,7 @@ async def refresh_access_token(
     new_raw = _rotate_refresh_token_for_session(
         db, row, settings, user_agent=ua, sign_in_ip=sign_ip
     )
-    access_token = issue_access_token(db, user)
+    access_token = issue_access_token(db, user, sid=family_id)
     data = TokenResponse(
         access_token="",
         token_type=TokenType.BEARER.value,
@@ -808,16 +885,27 @@ async def refresh_access_token(
     )
     response = JSONResponse(content=data.model_dump())
     _set_refresh_token_cookie(response, new_raw, settings)
-    _set_auth_session_cookies(response, access_token, settings)
+    _set_auth_session_cookies(response, access_token, settings, family_id)
     return response
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(request: Request, db: DbSession, settings: SettingsDep) -> Response:
-    """Revoke the refresh token (from the cookie) and clear all session cookies."""
-    raw = request.cookies.get(settings.refresh_token_cookie_name)
-    if raw:
-        _revoke_refresh_token(db, raw)
+    """Sign out: revoke this session's whole token family server-side and clear every cookie.
+
+    The family, not just the presented row, so a sign-out cannot be undone by a copy of an earlier
+    token from the same session.
+    """
+    row = _get_refresh_token_row_by_raw(
+        db, request.cookies.get(settings.refresh_token_cookie_name)
+    )
+    if row is not None:
+        if not _refresh_csrf_ok(request, settings, row.session_id):
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"detail": "Invalid or missing CSRF token"},
+            )
+        revoke_family(db, row.session_id)
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     _clear_refresh_token_cookie(response, settings)
     _clear_access_token_cookie(response, settings)
@@ -1077,10 +1165,9 @@ async def change_my_password(
     user.password = hash_password(body.new_password)
     db.commit()
 
-    raw = request.cookies.get(settings.refresh_token_cookie_name)
-    current_row = get_valid_refresh_token_row(db, raw)
-    keep_hash = current_row.token_hash if current_row else None
-    _revoke_refresh_tokens_except(db, str(user.id), keep_hash)
+    revoke_families_except(
+        db, str(user.id), _current_session_id(db, request, settings, current_user)
+    )
     return PasswordChangeOut()
 
 
@@ -1241,11 +1328,13 @@ async def list_my_sessions(
     current_user: CurrentUser,
     settings: SettingsDep,
 ) -> SessionListOut:
-    """List active refresh-token sessions; the cookie's session is marked ``is_current``."""
+    """List the caller's signed-in sessions, one per token family; their own is ``is_current``.
+
+    ``id`` is the family id, which stays the same however often the session's token rotates, so a
+    revoke issued from this list always reaches the session it names.
+    """
     user = _get_current_user_by_token(db, current_user)
-    raw = request.cookies.get(settings.refresh_token_cookie_name)
-    current_row = get_valid_refresh_token_row(db, raw)
-    current_hash = current_row.token_hash if current_row else None
+    current = _current_session_id(db, request, settings, current_user)
     now = datetime.now(UTC)
     rows = (
         db.execute(
@@ -1255,23 +1344,26 @@ async def list_my_sessions(
                 RefreshToken.revoked_at.is_(None),
                 RefreshToken.expires_at > now,
             )
-            .order_by(RefreshToken.expires_at.desc())
+            .order_by(RefreshToken.last_seen_at.desc(), RefreshToken.expires_at.desc())
         )
         .scalars()
         .all()
     )
-    sessions = [
-        SessionOut(
-            id=r.id,
-            expires_at=r.expires_at,
-            is_current=current_hash is not None and r.token_hash == current_hash,
-            user_agent=r.user_agent,
-            sign_in_ip=r.sign_in_ip,
-            last_seen_at=r.last_seen_at,
+    sessions: dict[str, SessionOut] = {}
+    for r in rows:
+        # One live row per family in steady state; keep the most recently seen if a race left two.
+        sessions.setdefault(
+            r.session_id,
+            SessionOut(
+                id=r.session_id,
+                expires_at=r.expires_at,
+                is_current=r.session_id == current,
+                user_agent=r.user_agent,
+                sign_in_ip=r.sign_in_ip,
+                last_seen_at=r.last_seen_at,
+            ),
         )
-        for r in rows
-    ]
-    return SessionListOut(sessions=sessions)
+    return SessionListOut(sessions=list(sessions.values()))
 
 
 @router.delete("/me/sessions", status_code=status.HTTP_204_NO_CONTENT)
@@ -1281,58 +1373,46 @@ async def revoke_other_sessions(
     current_user: CurrentUser,
     settings: SettingsDep,
 ) -> Response:
-    """Revoke all of the user's refresh tokens except the one in the current cookie."""
+    """Sign out everywhere else: revoke every session of the caller's except the current one."""
     user = _get_current_user_by_token(db, current_user)
-    raw = request.cookies.get(settings.refresh_token_cookie_name)
-    current_row = get_valid_refresh_token_row(db, raw)
-    if current_row is None:
+    current = _current_session_id(db, request, settings, current_user)
+    if current is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No active refresh session cookie; cannot identify current session.",
+            detail="No active session cookie; cannot identify the current session.",
         )
-    db.execute(
-        update(RefreshToken)
-        .where(
-            RefreshToken.user_id == user.id,
-            RefreshToken.token_hash != current_row.token_hash,
-            RefreshToken.revoked_at.is_(None),
-        )
-        .values(revoked_at=datetime.now(UTC))
-    )
-    db.commit()
+    revoke_families_except(db, str(user.id), current)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.delete("/me/sessions/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/me/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_one_session(
     request: Request,
-    token_id: str,
+    session_id: str,
     db: DbSession,
     current_user: CurrentUser,
     settings: SettingsDep,
 ) -> Response:
-    """Revoke a specific session by id. The current session cannot be revoked here."""
+    """Revoke one of the caller's sessions (its whole family) by the id the list shows.
+
+    Another user's session, or an unknown id, is 404 (never 403: a session id says nothing about
+    whether it exists). The current session is signed out with ``POST /auth/logout`` instead.
+    """
     user = _get_current_user_by_token(db, current_user)
-    row = db.execute(
-        select(RefreshToken).where(
-            RefreshToken.id == token_id,
-            RefreshToken.user_id == user.id,
-        )
-    ).scalar_one_or_none()
-    if row is None:
+    owned = db.execute(
+        select(RefreshToken.id)
+        .where(in_family(session_id), RefreshToken.user_id == user.id)
+        .limit(1)
+    ).first()
+    if owned is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Session not found.",
         )
-    raw = request.cookies.get(settings.refresh_token_cookie_name)
-    current_row = get_valid_refresh_token_row(db, raw)
-    if current_row is not None and current_row.token_hash == row.token_hash:
+    if session_id == _current_session_id(db, request, settings, current_user):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot revoke the current session; use POST /auth/logout instead.",
         )
-    if row.revoked_at is not None or _as_utc_aware(row.expires_at) <= datetime.now(UTC):
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-    row.revoked_at = datetime.now(UTC)
-    db.commit()
+    revoke_family(db, session_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

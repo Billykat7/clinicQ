@@ -20,6 +20,7 @@ Staff are the only people who hold an account; patients are a phone number and a
 from __future__ import annotations
 
 import hashlib
+import hmac
 from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
@@ -97,12 +98,16 @@ def create_access_token(
     *,
     role: str | None = None,
     sites: Iterable[str] = (),
+    sid: str | None = None,
 ) -> str:
     """Create a short-lived HS256 access JWT typed ``access``.
 
-    Claims: ``sub``, ``type``, ``iat``, ``exp`` always; ``email``, ``uid`` and ``role`` when given;
-    ``sites`` always (a sorted list, empty when the holder has no site). Use
+    Claims: ``sub``, ``type``, ``iat``, ``exp`` always; ``email``, ``uid``, ``role`` and ``sid`` when
+    given; ``sites`` always (a sorted list, empty when the holder has no site). Use
     :func:`issue_access_token` to mint one for a signed-in account.
+
+    ``sid`` is the session: the refresh-token family the token was minted for (Issue 16). The CSRF
+    token is bound to it, and the sessions list marks the caller's own session by it.
 
     ``sub`` is the durable human identity (the email). ``uid`` is the ``user.id`` (a UUID) and is
     kept as a separate claim because audit attribution stores it in ``audit_event.actor_id``, which
@@ -129,6 +134,8 @@ def create_access_token(
         payload["uid"] = uid
     if role is not None:
         payload["role"] = role
+    if sid is not None:
+        payload["sid"] = sid
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
@@ -152,14 +159,15 @@ def site_ids_for(db: Session, user_id: str) -> list[str]:
     )
 
 
-def issue_access_token(db: Session, user: User) -> str:
-    """Mint the access token for a signed-in ``user``: identity, role and sites."""
+def issue_access_token(db: Session, user: User, *, sid: str | None = None) -> str:
+    """Mint the access token for a signed-in ``user``: identity, role, sites and session."""
     return create_access_token(
         sub=user.email,
         email=user.email,
         uid=str(user.id),
         role=user.role,
         sites=site_ids_for(db, str(user.id)),
+        sid=sid,
     )
 
 
@@ -178,8 +186,31 @@ def create_activation_token(user_id: str, email: str) -> str:
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
-def create_password_reset_token(user_id: str, email: str) -> str:
-    """Create a typed PASSWORD_RESET JWT for the reset-password link."""
+def password_fingerprint(password_hash: str | None) -> str:
+    """A keyed fingerprint of an account's current password hash (Issue 16).
+
+    Carried by a password-reset link as ``pwv`` and compared with the account's hash when the link
+    is used. A reset writes a new hash (bcrypt salts every hash, even for the same password), so
+    the link stops matching the moment it has been used, or the password has changed any other way:
+    a reset link is single-use without a table to remember it in. Keyed with the signing secret, so
+    the fingerprint in a readable JWT says nothing about the hash.
+    """
+    key = hashlib.sha256(
+        b"clinicq-pwv-v1|" + get_settings().jwt_secret.encode()
+    ).digest()
+    return hmac.new(key, (password_hash or "").encode(), hashlib.sha256).hexdigest()[
+        :32
+    ]
+
+
+def create_password_reset_token(
+    user_id: str, email: str, *, password_hash: str | None = None
+) -> str:
+    """Create a typed, single-use PASSWORD_RESET JWT for the reset-password link.
+
+    ``password_hash`` is the account's current hash (``None`` for an account with no password);
+    its :func:`password_fingerprint` rides as ``pwv`` so the link dies once used.
+    """
     settings = get_settings()
     now = datetime.now(UTC)
     expire = now + timedelta(hours=settings.password_reset_link_expire_hours)
@@ -187,6 +218,7 @@ def create_password_reset_token(user_id: str, email: str) -> str:
         "sub": user_id,
         "email": email.lower(),
         "type": TokenType.PASSWORD_RESET.value,
+        "pwv": password_fingerprint(password_hash),
         "exp": int(expire.timestamp()),
         "iat": int(now.timestamp()),
     }
@@ -256,6 +288,31 @@ def decode_access_token(token: str) -> dict[str, Any] | None:
     if payload is None or payload.get("type") != TokenType.ACCESS.value:
         return None
     return payload
+
+
+def session_id_from_access_token(token: str | None) -> str | None:
+    """Return the ``sid`` of a genuinely signed access token, **ignoring its expiry**, or None.
+
+    The CSRF check needs to know which session a request's access cookie belongs to even in the
+    second before a route turns an expired token into a 401; the signature and the type are still
+    verified, so the answer cannot be forged.
+    """
+    if not token:
+        return None
+    settings = get_settings()
+    try:
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+            options={"verify_exp": False},
+        )
+    except jwt.PyJWTError:
+        return None
+    if payload.get("type") != TokenType.ACCESS.value:
+        return None
+    sid = payload.get("sid")
+    return str(sid) if sid else None
 
 
 def decode_activation_token(token: str) -> dict[str, Any] | None:

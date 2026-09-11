@@ -7,12 +7,18 @@ in-memory database:
   refresh and CSRF cookie, and is gated by ``AUTH_OTP_LOGIN_ENABLED``;
 * password login (``/auth/password/login``) works when enabled and is rejected when
   disabled or on a bad credential;
-* ``/auth/refresh`` rotates the refresh token (one-time use) and re-presenting a rotated
-  token revokes every session for the user (theft detection);
-* ``/auth/logout`` revokes the refresh row and clears the cookies;
-* ``/auth/me`` returns the current profile and sessions can be listed and revoked;
-* the double-submit CSRF middleware protects cookie-based ``/api/*`` writes and is
-  skipped for ``Authorization: Bearer`` clients.
+* ``/auth/refresh`` rotates the refresh token (one-time use); replaying a rotated token revokes
+  its whole **family** and forces re-authentication, while the user's other sessions survive, and a
+  replay inside the concurrent-refresh grace window (two tabs) revokes nothing (Issue 16);
+* ``/auth/logout`` revokes the session's whole family server-side and clears the cookies;
+* ``/auth/me`` returns the current profile; sessions are listed one per family and revoked by
+  family id, which survives rotation;
+* sign-in sets ``HttpOnly``, ``Secure`` and ``SameSite=Lax`` cookies outside development, read off
+  a real response;
+* CSRF: a cookie write needs a token bound to its own session (a missing CSRF cookie is no longer
+  a bypass), a browser-labelled cross-site request is refused, and ``Authorization: Bearer``
+  clients skip the token check;
+* a password-reset link works once.
 
 Per ``.cursor/rules/testing-strategy.mdc`` these assert JSON, status codes, cookies and
 DB state — never HTML body content — and build isolated ``Settings`` (``_env_file=None``)
@@ -22,6 +28,7 @@ outcomes.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Generator
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -37,6 +44,7 @@ from src.api.v1.routes import auth as auth_routes
 from src.commons.enums import AppEnvironment
 from src.core import otp_store, refresh_token_policy, security
 from src.core.config import Settings, get_settings
+from src.core.csrf_middleware import mint_csrf_token
 from src.core.security import create_access_token, hash_password
 from src.database.models import Base, RefreshToken, User
 from src.database.schema import sqlite_schema_translate_map
@@ -347,31 +355,209 @@ def test_refresh_rotates_token_and_revokes_the_old_row(
     assert len(revoked) == 1 and len(active) == 1
 
 
-def test_reusing_a_rotated_refresh_token_revokes_all_sessions(
-    make_signin_client: Callable[..., SimpleNamespace],
-) -> None:
-    """Presenting an already-rotated refresh token revokes every session (theft signal)."""
-    ctx = make_signin_client()
-    user = _add_user(ctx.session, password=_PASSWORD)
-    ctx.client.post(
+def _sign_in(ctx: SimpleNamespace, client: TestClient | None = None) -> TestClient:
+    """Sign ``client`` (a fresh one by default: a separate device) in with the password."""
+    device = client or TestClient(ctx.client.app)
+    response = device.post(
         "/api/v1/auth/password/login",
         json={"email": _EMAIL, "password": _PASSWORD},
     )
-    stolen = ctx.client.cookies.get(ctx.settings.refresh_token_cookie_name)
+    assert response.status_code == status.HTTP_200_OK, response.text
+    return device
 
-    # Legitimate rotation invalidates ``stolen`` and installs a new cookie.
-    ctx.client.post("/api/v1/auth/refresh", headers=_csrf(ctx))
 
-    # Replay the old (now revoked) token from a clean client that carries only the
-    # stolen refresh cookie — no CSRF cookie, so the double-submit check is skipped and
-    # the request reaches the reuse-detection branch.
-    attacker = TestClient(ctx.client.app)
-    attacker.cookies.set(ctx.settings.refresh_token_cookie_name, stolen)
-    reuse = attacker.post("/api/v1/auth/refresh")
+def _device_csrf(ctx: SimpleNamespace, device: TestClient) -> dict[str, str]:
+    """The double-submit header for one device's own cookie jar."""
+    token = device.cookies.get(ctx.settings.csrf_cookie_name)
+    return {"X-CSRF-Token": token} if token else {}
 
-    assert reuse.status_code == status.HTTP_401_UNAUTHORIZED
+
+def _age_rotations(ctx: SimpleNamespace, seconds: int) -> None:
+    """Move every rotation ``seconds`` into the past: the replay comes later, not in a race."""
+    with ctx.session() as db:
+        for row in db.execute(
+            select(RefreshToken).where(RefreshToken.rotated_at.is_not(None))
+        ).scalars():
+            row.rotated_at -= timedelta(seconds=seconds)
+        db.commit()
+
+
+def test_replaying_a_rotated_refresh_token_revokes_its_whole_family(
+    make_signin_client: Callable[..., SimpleNamespace],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The replay the criterion names: the family goes, including its newest token; nothing else.
+
+    The owner signs in and their token rotates twice (silent refreshes). A thief replays the
+    first token a minute later. Every row of that family is revoked, so the owner's newest token,
+    which the thief never saw, stops working too and the owner has to sign in again. The owner's
+    other session, a separate sign-in, is untouched. On ``main`` that other session was revoked as
+    well: the reuse check revoked every session the user had.
+    """
+    ctx = make_signin_client()
+    user = _add_user(ctx.session, password=_PASSWORD)
+    elsewhere = _sign_in(ctx)
+    owner = _sign_in(ctx, ctx.client)
+    stolen = owner.cookies.get(ctx.settings.refresh_token_cookie_name)
+    for _ in range(2):
+        assert owner.post("/api/v1/auth/refresh", headers=_csrf(ctx)).status_code == 200
+    _age_rotations(ctx, 60)
+
+    thief = TestClient(ctx.client.app)
+    thief.cookies.set(ctx.settings.refresh_token_cookie_name, stolen)
+    # create_app() re-ran setup_logging, which replaced the root handlers: re-attach caplog's.
+    logging.getLogger().addHandler(caplog.handler)
+    try:
+        with caplog.at_level("WARNING"):
+            replay = thief.post("/api/v1/auth/refresh")
+    finally:
+        logging.getLogger().removeHandler(caplog.handler)
+
+    assert replay.status_code == status.HTTP_401_UNAUTHORIZED
+    family = {r.session_id for r in _refresh_rows(ctx.session, user.id)}
+    assert len(family) == 2  # the owner's session and the one elsewhere
+    owner_family = next(
+        r.session_id
+        for r in _refresh_rows(ctx.session, user.id)
+        if r.token_hash == security.hash_refresh_token(stolen)
+    )
     rows = _refresh_rows(ctx.session, user.id)
-    assert rows and all(r.revoked_at is not None for r in rows)
+    assert all(r.revoked_at is not None for r in rows if r.session_id == owner_family)
+    assert len([r for r in rows if r.session_id == owner_family]) == 3
+    # The owner's newest token (never replayed) is dead: re-authentication is forced.
+    forced = owner.post("/api/v1/auth/refresh", headers=_csrf(ctx))
+    assert forced.status_code == status.HTTP_401_UNAUTHORIZED
+    assert not owner.cookies.get(ctx.settings.refresh_token_cookie_name)
+    # The other session, a different family, still refreshes.
+    kept = elsewhere.post("/api/v1/auth/refresh", headers=_device_csrf(ctx, elsewhere))
+    assert kept.status_code == status.HTTP_200_OK
+    # And the replay is on the security record, by session id, never by token.
+    audit = [
+        r.getMessage()
+        for r in caplog.records
+        if "refresh_token_reuse" in r.getMessage()
+    ]
+    assert audit and owner_family in audit[0] and stolen not in audit[0]
+
+
+def test_two_tabs_refreshing_at_once_do_not_trip_reuse_detection(
+    make_signin_client: Callable[..., SimpleNamespace],
+) -> None:
+    """Inside the grace window a second presentation is a race, not a theft.
+
+    Two tabs share the cookie jar; ``session-refresh.js`` de-duplicates refreshes within one page
+    but not across tabs. The second tab's refresh, a moment after the first rotated the token, gets
+    a fresh access token and **no** refresh cookie (the first response already set the successor),
+    and nothing is revoked.
+    """
+    ctx = make_signin_client()
+    user = _add_user(ctx.session, password=_PASSWORD)
+    _sign_in(ctx, ctx.client)
+    spent = ctx.client.cookies.get(ctx.settings.refresh_token_cookie_name)
+    first = ctx.client.post("/api/v1/auth/refresh", headers=_csrf(ctx))
+    assert first.status_code == status.HTTP_200_OK
+
+    second_tab = TestClient(ctx.client.app)
+    second_tab.cookies.set(ctx.settings.refresh_token_cookie_name, spent)
+    raced = second_tab.post("/api/v1/auth/refresh")
+
+    assert raced.status_code == status.HTTP_200_OK
+    assert ctx.settings.refresh_token_cookie_name not in raced.cookies
+    assert ctx.settings.access_token_cookie_name in raced.cookies
+    live = [r for r in _refresh_rows(ctx.session, user.id) if r.revoked_at is None]
+    assert len(live) == 1  # the first tab's successor, still good
+
+
+def test_a_signed_out_token_is_refused_without_touching_other_sessions(
+    make_signin_client: Callable[..., SimpleNamespace],
+) -> None:
+    """A revoked (not rotated) token is simply over: 401, and no sweep of the user's sessions.
+
+    On ``main`` a device whose session had been revoked from the sessions list triggered the reuse
+    branch on its next silent refresh, which signed out every session, including the one that had
+    done the revoking.
+    """
+    ctx = make_signin_client()
+    _add_user(ctx.session, password=_PASSWORD)
+    other = _sign_in(ctx)
+    _sign_in(ctx, ctx.client)
+    other_id = next(
+        s["id"]
+        for s in ctx.client.get("/api/v1/auth/me/sessions").json()["sessions"]
+        if not s["is_current"]
+    )
+    assert (
+        ctx.client.delete(
+            f"/api/v1/auth/me/sessions/{other_id}", headers=_csrf(ctx)
+        ).status_code
+        == 204
+    )
+
+    assert (
+        other.post("/api/v1/auth/refresh", headers=_device_csrf(ctx, other)).status_code
+        == 401
+    )
+    assert (
+        ctx.client.post("/api/v1/auth/refresh", headers=_csrf(ctx)).status_code == 200
+    )
+
+
+def test_a_session_id_from_the_list_still_revokes_it_after_its_token_rotates(
+    make_signin_client: Callable[..., SimpleNamespace],
+) -> None:
+    """The list shows the family id, which rotation does not change.
+
+    On ``main`` the id was the row id: once the other device's silent refresh rotated its token,
+    revoking the id the list had shown answered 204 and revoked nothing.
+    """
+    ctx = make_signin_client()
+    _add_user(ctx.session, password=_PASSWORD)
+    other = _sign_in(ctx)
+    _sign_in(ctx, ctx.client)
+    listed = ctx.client.get("/api/v1/auth/me/sessions").json()["sessions"]
+    other_id = next(s["id"] for s in listed if not s["is_current"])
+    assert (
+        other.post("/api/v1/auth/refresh", headers=_device_csrf(ctx, other)).status_code
+        == 200
+    )
+    assert other_id in [
+        s["id"] for s in ctx.client.get("/api/v1/auth/me/sessions").json()["sessions"]
+    ]
+
+    ctx.client.delete(f"/api/v1/auth/me/sessions/{other_id}", headers=_csrf(ctx))
+
+    assert (
+        other.post("/api/v1/auth/refresh", headers=_device_csrf(ctx, other)).status_code
+        == 401
+    )
+
+
+def test_another_users_session_id_is_not_found(
+    make_signin_client: Callable[..., SimpleNamespace],
+) -> None:
+    """A session id that is not the caller's is 404, exactly like one that does not exist."""
+    ctx = make_signin_client()
+    _add_user(ctx.session, password=_PASSWORD)
+    _add_user(ctx.session, email="someone.else@example.com", password=_PASSWORD)
+    stranger = TestClient(ctx.client.app)
+    stranger.post(
+        "/api/v1/auth/password/login",
+        json={"email": "someone.else@example.com", "password": _PASSWORD},
+    )
+    theirs = stranger.get("/api/v1/auth/me/sessions").json()["sessions"][0]["id"]
+    _sign_in(ctx, ctx.client)
+
+    for session_id in (theirs, "0199b0c0-0000-7000-8000-000000000000"):
+        response = ctx.client.delete(
+            f"/api/v1/auth/me/sessions/{session_id}", headers=_csrf(ctx)
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert (
+        stranger.post(
+            "/api/v1/auth/refresh", headers=_device_csrf(ctx, stranger)
+        ).status_code
+        == 200
+    )
 
 
 def test_refresh_without_cookie_is_401(
@@ -499,6 +685,26 @@ def test_logout_revokes_refresh_row_and_clears_cookies(
         ctx.client.post("/api/v1/auth/refresh").status_code
         == status.HTTP_401_UNAUTHORIZED
     )
+
+
+def test_logout_is_server_side_for_every_token_of_the_session(
+    make_signin_client: Callable[..., SimpleNamespace],
+) -> None:
+    """A copy of the cookie kept from before the sign-out (current or earlier) is dead too."""
+    ctx = make_signin_client()
+    _add_user(ctx.session, password=_PASSWORD)
+    _sign_in(ctx, ctx.client)
+    earlier = ctx.client.cookies.get(ctx.settings.refresh_token_cookie_name)
+    ctx.client.post("/api/v1/auth/refresh", headers=_csrf(ctx))
+    current = ctx.client.cookies.get(ctx.settings.refresh_token_cookie_name)
+    _age_rotations(ctx, 60)
+
+    assert ctx.client.post("/api/v1/auth/logout", headers=_csrf(ctx)).status_code == 204
+
+    for kept_copy in (current, earlier):
+        replay = TestClient(ctx.client.app)
+        replay.cookies.set(ctx.settings.refresh_token_cookie_name, kept_copy)
+        assert replay.post("/api/v1/auth/refresh").status_code == 401
 
 
 # --- Current user + sessions --------------------------------------------------
@@ -692,3 +898,159 @@ def test_auth_config_reports_enabled_flags(
     body = response.json()
     assert body["otp_login_enabled"] is True
     assert body["password_login_enabled"] is False
+
+
+# --- Issue 16: cookie flags on a real response ----------------------------------
+
+
+@pytest.mark.parametrize(
+    "environment", [AppEnvironment.STAGING, AppEnvironment.PRODUCTION]
+)
+def test_sign_in_sets_httponly_secure_samesite_cookies_outside_development(
+    make_signin_client: Callable[..., SimpleNamespace], environment: AppEnvironment
+) -> None:
+    """Read off the ``Set-Cookie`` headers of a real sign-in response, not off the code."""
+    ctx = make_signin_client(
+        environment=environment,
+        jwt_secret=_TEST_JWT_SECRET,
+        cors_origins="https://clinicq.example",
+        metrics_enabled=False,
+    )
+    _add_user(ctx.session, password=_PASSWORD)
+    secure_client = TestClient(ctx.client.app, base_url="https://testserver")
+    response = secure_client.post(
+        "/api/v1/auth/password/login",
+        json={"email": _EMAIL, "password": _PASSWORD},
+    )
+    assert response.status_code == status.HTTP_200_OK
+    headers = {
+        header.split("=", 1)[0]: header.lower()
+        for header in response.headers.get_list("set-cookie")
+    }
+    refresh = headers[ctx.settings.refresh_token_cookie_name]
+    access = headers[ctx.settings.access_token_cookie_name]
+    csrf = headers[ctx.settings.csrf_cookie_name]
+    for cookie in (refresh, access):
+        assert "; httponly" in cookie and "; secure" in cookie
+        assert "; samesite=lax" in cookie and "; path=/" in cookie
+    # The CSRF cookie must be readable by the page's script, and lives as long as the refresh one.
+    assert "httponly" not in csrf and "; secure" in csrf and "; samesite=lax" in csrf
+    assert f"max-age={7 * 86400}" in refresh and f"max-age={7 * 86400}" in csrf
+    assert f"max-age={15 * 60}" in access
+
+
+# --- Issue 16: CSRF --------------------------------------------------------------
+
+
+def test_a_cookie_write_is_refused_when_the_csrf_cookie_is_missing(
+    make_signin_client: Callable[..., SimpleNamespace],
+) -> None:
+    """On ``main`` no CSRF cookie meant no check at all, even with the access cookie present."""
+    ctx = make_signin_client()
+    _add_user(ctx.session, password=_PASSWORD)
+    _sign_in(ctx, ctx.client)
+    ctx.client.cookies.delete(ctx.settings.csrf_cookie_name)
+
+    response = ctx.client.patch("/api/v1/auth/me", json={"first_name": "Nope"})
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_a_csrf_token_from_another_session_is_refused(
+    make_signin_client: Callable[..., SimpleNamespace],
+) -> None:
+    """The token is bound to the session: a validly signed token planted from elsewhere fails.
+
+    An attacker who can write a cookie for the site (a sibling subdomain) can make the cookie and
+    the form field match; what they cannot do is mint a token for the victim's session.
+    """
+    ctx = make_signin_client()
+    _add_user(ctx.session, password=_PASSWORD)
+    attacker = _sign_in(ctx)
+    planted = attacker.cookies.get(ctx.settings.csrf_cookie_name)
+    _sign_in(ctx, ctx.client)
+    ctx.client.cookies.set(ctx.settings.csrf_cookie_name, planted)
+    forged = mint_csrf_token("some-other-session")
+
+    for token in (planted, forged):
+        ctx.client.cookies.set(ctx.settings.csrf_cookie_name, token)
+        response = ctx.client.patch(
+            "/api/v1/auth/me",
+            json={"first_name": "Nope"},
+            headers={"X-CSRF-Token": token},
+        )
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        refresh = ctx.client.post(
+            "/api/v1/auth/refresh", headers={"X-CSRF-Token": token}
+        )
+        assert refresh.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_a_cross_site_request_is_refused_even_before_sign_in(
+    make_signin_client: Callable[..., SimpleNamespace],
+) -> None:
+    """Fetch Metadata: a browser-labelled cross-site POST never reaches a route (login CSRF)."""
+    ctx = make_signin_client()
+    _add_user(ctx.session, password=_PASSWORD)
+
+    response = ctx.client.post(
+        "/api/v1/auth/password/login",
+        json={"email": _EMAIL, "password": _PASSWORD},
+        headers={"Sec-Fetch-Site": "cross-site"},
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert not ctx.client.cookies.get(ctx.settings.refresh_token_cookie_name)
+    same_site = ctx.client.post(
+        "/api/v1/auth/password/login",
+        json={"email": _EMAIL, "password": _PASSWORD},
+        headers={"Sec-Fetch-Site": "same-origin"},
+    )
+    assert same_site.status_code == status.HTTP_200_OK
+
+
+def test_a_silent_refresh_still_works_after_the_access_cookie_has_expired(
+    make_signin_client: Callable[..., SimpleNamespace],
+) -> None:
+    """Only the refresh and CSRF cookies left, as a browser holds them after 15 minutes."""
+    ctx = make_signin_client()
+    _add_user(ctx.session, password=_PASSWORD)
+    _sign_in(ctx, ctx.client)
+    ctx.client.cookies.delete(ctx.settings.access_token_cookie_name)
+
+    response = ctx.client.post("/api/v1/auth/refresh", headers=_csrf(ctx))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert ctx.client.cookies.get(ctx.settings.access_token_cookie_name)
+
+
+# --- Issue 16: password reset links are single-use -----------------------------------
+
+
+def test_a_password_reset_link_works_once(
+    make_signin_client: Callable[..., SimpleNamespace],
+) -> None:
+    """The link names the password it resets, so a used one no longer matches (it did on ``main``)."""
+    ctx = make_signin_client()
+    user = _add_user(ctx.session, password=_PASSWORD)
+    link = security.create_password_reset_token(
+        user.id, _EMAIL, password_hash=user.password
+    )
+    reset = TestClient(ctx.client.app)
+
+    first = reset.post(
+        "/api/v1/auth/password/reset",
+        json={"token": link, "new_password": "brand-new-passw0rd"},
+    )
+    again = reset.post(
+        "/api/v1/auth/password/reset",
+        json={"token": link, "new_password": "attacker-passw0rd"},
+    )
+
+    assert first.status_code == status.HTTP_200_OK
+    assert again.status_code == status.HTTP_400_BAD_REQUEST
+    login = reset.post(
+        "/api/v1/auth/password/login",
+        json={"email": _EMAIL, "password": "brand-new-passw0rd"},
+    )
+    assert login.status_code == status.HTTP_200_OK

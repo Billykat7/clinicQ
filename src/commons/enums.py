@@ -222,6 +222,11 @@ class SecurityAuditEvent(StrEnum):
     # names only the category, so an unsubscribe is auditable without leaking who does or does not
     # have an account. Keyed on by log aggregators.
     NOTIFICATION_UNSUBSCRIBED = "notification_unsubscribed"
+    # Sessions (Issue 16). REFRESH_TOKEN_REUSE records a refresh token presented again after it was
+    # rotated, outside the concurrent-refresh grace window: the family it belongs to is revoked,
+    # because the server cannot tell whether the thief or the owner holds the newest token. The
+    # line names the user id and the family (session) id, never the token.
+    REFRESH_TOKEN_REUSE = "refresh_token_reuse"
 
 
 class UserRole(StrEnum):
