@@ -38,6 +38,7 @@ from src.commons.enums import HttpSecurityResponseEvent, SecurityAuditOutcome
 from src.commons.ids import new_id
 from src.core.client_ip import resolve_client_ip
 from src.core.config import get_settings
+from src.core.telemetry import tag_request
 
 #: The response (and trusted request) header that carries the request id.
 REQUEST_ID_HEADER: Final = "X-Request-ID"
@@ -197,6 +198,8 @@ class RequestLoggingMiddleware:
         )
         scope.setdefault("state", {})[_STATE_KEY] = ctx
         token = _current.set(ctx)
+        # Error tracking tags this request's events with its id (Issue 14); a no-op when it is off.
+        tag_request(ctx.request_id)
         status_code: int | None = None
 
         async def send_with_request_id(message: Message) -> None:

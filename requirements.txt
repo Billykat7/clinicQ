@@ -67,6 +67,9 @@ shapely==2.1.2
 
 # Monitoring and metrics
 prometheus-client==0.24.1
+# Error tracking (Issue 14): unhandled exceptions, tagged with the request id, release and commit,
+# sent to Sentry or any Sentry-compatible service (GlitchTip) named by SENTRY_DSN; off without one.
+sentry-sdk[fastapi]==2.69.1
 
 # Logging
 structlog==25.5.0

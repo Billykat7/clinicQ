@@ -1,0 +1,62 @@
+# Uptime checks for ClinicQ (Issue 14), run by Gatus (https://github.com/TwiN/gatus), started with
+# infra/docker/docker-compose.monitoring.yml. Run it somewhere other than the hosts it watches: a
+# monitor on the host that went down goes down with it.
+#
+# One check per environment, on /health (liveness: the process answers). An alert names the role
+# that responds, not only a URL, and fires once per incident: when `failure-threshold` checks in a
+# row fail it opens, one message goes to the team channel, and nothing more is sent until
+# `success-threshold` checks in a row pass, which sends one "resolved". At a 60 s interval and a
+# threshold of 3 the alert arrives within 3 minutes of the outage (the target is 5);
+# tests/unit/platform/test_monitoring_config.py holds that arithmetic and the role in every alert.
+#
+# Environment (never written here): STAGING_URL and PRODUCTION_URL (the public base URLs), and
+# TEAM_WEBHOOK_URL, the team channel's Slack incoming webhook. For Discord, change `slack` to
+# `discord` in both places below. docs/CICD/RUNBOOK_ALERTS.md says what each alert means.
+
+storage:
+  type: sqlite
+  path: /data/gatus.db
+
+alerting:
+  slack:
+    webhook-url: "${TEAM_WEBHOOK_URL}"
+    default-alert:
+      enabled: true
+      failure-threshold: 3
+      success-threshold: 2
+      send-on-resolved: true
+
+endpoints:
+  - name: staging
+    group: clinicq
+    url: "${STAGING_URL}/health"
+    interval: 60s
+    client:
+      timeout: 10s
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].status == ok"
+      - "[RESPONSE_TIME] < 5000"
+    alerts:
+      - type: slack
+        description: >-
+          ClinicQ STAGING is not answering /health. Responsible: DevOps/QA Lead (role E), backup
+          Data & Research Lead (role F). Act within the working day: see
+          docs/CICD/RUNBOOK_ALERTS.md, "Staging or production is down".
+
+  - name: production
+    group: clinicq
+    url: "${PRODUCTION_URL}/health"
+    interval: 60s
+    client:
+      timeout: 10s
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].status == ok"
+      - "[RESPONSE_TIME] < 5000"
+    alerts:
+      - type: slack
+        description: >-
+          ClinicQ PRODUCTION is not answering /health: clinics cannot queue. Responsible:
+          DevOps/QA Lead (role E), backup Data & Research Lead (role F). Act now: see
+          docs/CICD/RUNBOOK_ALERTS.md, "Staging or production is down".
