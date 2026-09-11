@@ -24,6 +24,7 @@ up with three visual languages and three copies of the same button.
 - `src/templates/base.html`, `src/static/css/site.css` (the design tokens), `admin.css`, `landing.css` and htmx (`src/static/vendor/`) already exist, with light and dark themes.
 - The kernel styles with hand-written CSS tokens, not Tailwind, and a guard test (`tests/unit/platform/test_no_inline_styles.py`) enforces the CSP rule of no inline styles. Decide Tailwind versus tokens before writing new CSS; see [open decisions](../README.md#open-decisions).
 - Alpine.js is not in the repo yet.
+- **Decided (decision 2):** the tokens stay and grow into one set for all three layouts; no Tailwind, no Alpine (the CSP has no `'unsafe-eval'`). The scope and criteria below read "Tailwind" as the token stylesheet and "Alpine" as a small module in `src/static/js/`. See [open decisions](../README.md#open-decisions).
 
 ## Scope
 
@@ -40,7 +41,7 @@ up with three visual languages and three copies of the same button.
 
 ## Acceptance criteria
 
-- [ ] A page extending `base.html` renders with compiled Tailwind and no unstyled flash
+- [ ] A page extending `base.html` renders with the shared token stylesheet (compiled Tailwind before decision 2) and no unstyled flash
 - [ ] An htmx fragment swap works end to end on a demo route
 - [ ] The three layouts are visually distinct but share tokens, proven by a screenshot in the PR
 - [ ] No runtime CDN request is made for CSS or JS
@@ -58,7 +59,9 @@ up with three visual languages and three copies of the same button.
 - `src/templates/base.html`
 - `src/templates/layouts/`
 - `src/templates/components/`
-- `src/static/css/site.css`
+- `src/static/css/site.css`, `components.css`, `layouts.css`
+- `src/static/fonts/` (self-hosted, so no stylesheet comes from a CDN)
+- `src/web/components.py`, `src/web/dev.py` (`/dev/components`, development only)
 - `src/static/vendor/`
 
 ---

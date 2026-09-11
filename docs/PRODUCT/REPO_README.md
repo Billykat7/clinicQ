@@ -45,7 +45,7 @@ clinicq/
     schemas/            # Pydantic schemas
     services/           # Business logic: geo-search, queue/ticket rules, notifications
     templates/          # Jinja2 templates (base layout, discover, queue, dashboard, display, fragments)
-    static/             # Tailwind output CSS, htmx.min.js, manifest.json, service-worker.js, icons
+    static/             # token CSS, self-hosted fonts, htmx.min.js, manifest.json, service-worker.js, icons
   channels/
     ussd/               # USSD gateway webhook adapter + session-state handling
     whatsapp/           # WhatsApp Business API webhook adapter + quick-reply flows
@@ -71,8 +71,8 @@ clinicq/
 |-------|--------|
 | Language | **Python 3.14** |
 | Web framework | **FastAPI** (ASGI, Uvicorn) |
-| Templates / interactivity | **Jinja2** + **htmx** (+ small Alpine.js where needed) |
-| Styling | **Tailwind CSS** (compiled, no runtime JS framework) |
+| Templates / interactivity | **Jinja2** + **htmx** (+ small modules in `src/static/js/`; no Alpine.js, decision 2) |
+| Styling | **Hand-written CSS design tokens**, one set for every layout (no build step, no runtime JS framework) |
 | Database | **PostgreSQL 18+** with **PostGIS** |
 | ORM / migrations | **SQLAlchemy 2.x (async)** + **Alembic** |
 | Cache / queues | **Redis** + `arq` (async task queue) |

@@ -1,0 +1,58 @@
+{% extends "layouts/dashboard.html" %}
+{#- The dashboard layout, filled (Issue 5 demo): a front desk at the start of a morning. The stat
+    tiles lazy-load over a skeleton, and Refresh swaps the queue's rows in from the server. -#}
+{% from "components/button.html" import button %}
+{% from "components/card.html" import card %}
+{% from "components/empty_state.html" import empty_state %}
+{% from "components/skeleton.html" import skeleton %}
+
+{% block styles %}
+  {{ super() }}
+  <link rel="stylesheet" href="/static/css/dev.css">
+{% endblock %}
+
+{% block content %}
+{% include "dev/_nav.html" %}
+
+<div class="dev-page-head">
+  <div>
+    <h1>Front desk: Zola Clinic</h1>
+    <p class="lead">General queue, {{ now.strftime("%A %d %B") }}</p>
+  </div>
+  {{ button("Add a walk-in", attrs={"data-toast-message": "This is a demo: the walk-in form arrives with Issue 51."}) }}
+</div>
+
+<div class="dev-queue-grid">
+  <div>
+    <div hx-get="/dev/fragments/stats" hx-trigger="load" hx-swap="outerHTML">
+      {{ skeleton(lines=2, label="Loading today's figures") }}
+    </div>
+
+    <div class="dev-section">
+    {% call card("Queue") %}
+      <div class="table-actions">
+        <span class="dev-updated">Everyone who joined today, in order.</span>
+        <span class="cluster">
+          <span class="spinner htmx-indicator" id="queue-spinner" aria-hidden="true"></span>
+          {{ button("Refresh", variant=ButtonVariant.QUIET, small=True, attrs={"hx-get": "/dev/fragments/queue", "hx-target": "#queue-rows", "hx-swap": "innerHTML", "hx-indicator": "#queue-spinner"}) }}
+        </span>
+      </div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th scope="col">Ticket</th><th scope="col">Status</th><th scope="col">Joined by</th><th scope="col">Waiting</th></tr></thead>
+          <tbody id="queue-rows">
+            {% include "dev/fragments/queue_rows.html" %}
+          </tbody>
+        </table>
+      </div>
+    {% endcall %}
+    </div>
+  </div>
+
+  <div>
+    {% call card("Pharmacy", sub="Collections window") %}
+      {{ empty_state("No one is waiting", body="Tickets transferred from a consulting room appear here.") }}
+    {% endcall %}
+  </div>
+</div>
+{% endblock %}

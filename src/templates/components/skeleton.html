@@ -1,0 +1,18 @@
+{#- Skeleton (Issue 5): shimmering placeholder lines while content loads.
+
+    {% from "components/skeleton.html" import skeleton %}
+    <div hx-get="/fragment" hx-trigger="load" hx-swap="outerHTML">{{ skeleton(lines=3) }}</div>
+
+    The lazy-load pattern above is the usual pairing: the placeholder holds the space, and htmx
+    swaps the real content in over it. For a table body, ui-feedback.js has BKP.skeletonRows.
+
+    lines  how many placeholder lines (the last one is shorter, like the end of a paragraph)
+    label  what a screen reader announces while it waits -#}
+{% macro skeleton(lines=3, label="Loading") -%}
+<div class="skeleton" role="status">
+  {%- for _ in range(lines) %}
+  <span class="skeleton-line{% if loop.last and lines > 1 %} is-short{% endif %}" aria-hidden="true"></span>
+  {%- endfor %}
+  <span class="sr-only">{{ label }}…</span>
+</div>
+{%- endmacro %}

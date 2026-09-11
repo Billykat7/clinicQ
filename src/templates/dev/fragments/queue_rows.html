@@ -1,0 +1,12 @@
+{#- The queue table's rows (Issue 5 demo): rendered with the page, and again by
+    /dev/fragments/queue for an htmx swap. data-rendered-at shows when the server drew each row,
+    so a swap can be seen to have happened. -#}
+{% from "components/badge.html" import status_badge %}
+{%- for ticket in queue %}
+<tr data-rendered-at="{{ now.isoformat(timespec='seconds') }}">
+  <td><strong>{{ ticket.number }}</strong></td>
+  <td>{{ status_badge(ticket.status) }}</td>
+  <td>{{ TICKET_SOURCE_LABELS[ticket.source] }}</td>
+  <td>{{ ticket.minutes_waiting }} min</td>
+</tr>
+{%- endfor %}

@@ -56,17 +56,18 @@ def build_content_security_policy(nonce: str) -> str:
         #
         # Unlike ``script-src``, adding a nonce here does *not* disable the host sources: source
         # expressions are OR-ed, and it is ``'strict-dynamic'`` — a script-only keyword, not used —
-        # that would make host sources ignored. So same-origin stylesheets, the Google Fonts
-        # stylesheet and the nonced block all continue to load.
+        # that would make host sources ignored. So same-origin stylesheets and the nonced block
+        # both load.
         #
-        # ``https://fonts.googleapis.com`` stays: it serves the font stylesheet, it is a named
-        # audited host rather than a wildcard, and self-hosting the font is a separate change with
-        # its own trade-off. It cannot be used to inject a style attribute.
-        f"style-src 'self' {n} https://fonts.googleapis.com",
+        # No third-party host (Issue 5): DM Sans and Roboto are self-hosted under /static/fonts/,
+        # so the Google Fonts stylesheet host and its font host both left the policy. A page now
+        # asks no other origin for CSS or fonts: it renders offline on a clinic's board, and no
+        # visitor's address goes to a font CDN.
+        f"style-src 'self' {n}",
         # ``https:`` covers the OSM tile hosts the property map draws from; ``data:``/``blob:``
         # cover generated previews (e.g. an avatar chosen but not yet uploaded).
         "img-src 'self' data: blob: https:",
-        "font-src 'self' https://fonts.gstatic.com",
+        "font-src 'self'",
         "connect-src 'self'",
         "worker-src 'self' blob:",
         "base-uri 'self'",

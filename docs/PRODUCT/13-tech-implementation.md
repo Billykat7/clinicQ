@@ -10,8 +10,8 @@ the display/dashboard/channel wiring actually works.
 | Language / runtime | **Python 3.14** | One language across API, workers, and channel adapters (USSD/WhatsApp webhooks); modern typing, fast startup |
 | Backend API + web app | **FastAPI** (ASGI, Uvicorn/Granian) | Async I/O for queue-position polling and webhook bursts; auto OpenAPI docs; Pydantic v2 models double as data contracts |
 | Server-rendered pages | **Jinja2** templates | Patient discovery/queue pages, clinic dashboard, display-monitor board all rendered server-side, for a fast first paint on cheap devices |
-| Interactivity | **htmx** (+ small **Alpine.js** for local UI state) | Live queue position/countdown, call-next button updating the display board, all via HTML fragment swaps or Server-Sent Events, no React/Vite/Node toolchain |
-| Styling | **Tailwind CSS** (compiled once) | Consistent design system without a JS bundler in the critical path |
+| Interactivity | **htmx** (+ small modules in `src/static/js/` for local UI state; no Alpine.js, decision 2) | Live queue position/countdown, call-next button updating the display board, all via HTML fragment swaps or Server-Sent Events, no React/Vite/Node toolchain |
+| Styling | **Hand-written CSS design tokens** (`site.css`: one set for every layout, light and dark; decision 2) | Consistent design system without a JS bundler in the critical path |
 | PWA shell | `manifest.json` + hand-written **service worker** | Installable patient/clinic app; offline "view last known queue position" cache |
 | Charts | **Chart.js** (CDN) | Wait-time trends, no-show rate, queue-length heatmap on the dashboard |
 | Database | **PostgreSQL 18+** with **PostGIS** | Clinic locations + geo-radius search ([02](02-discovery-and-geolocation.md)), queue/ticket data with strong constraints |
@@ -55,7 +55,7 @@ clinicq/
     schemas/            # Pydantic schemas
     services/           # Business logic: geo-search, queue/ticket rules, notifications
     templates/          # Jinja2 templates (base layout, discover, queue, dashboard, display, fragments)
-    static/             # Tailwind output CSS, htmx.min.js, manifest.json, service-worker.js, icons
+    static/             # token CSS, self-hosted fonts, htmx.min.js, manifest.json, service-worker.js, icons
   channels/
     ussd/               # USSD gateway webhook adapter + session-state handling
     whatsapp/           # WhatsApp Business API webhook adapter + quick-reply flows

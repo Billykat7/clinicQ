@@ -1,0 +1,174 @@
+/**
+ * BK ClinicQ: the shared component library (Issue 5).
+ *
+ * Button, theme toggle, card, badge, empty state, spinner, toast and skeleton: the pieces every layout
+ * (patient, dashboard, board) and the kernel console build screens from. They were in admin.css,
+ * which only the console loads; they moved here unchanged so the patient pages and the board get
+ * the same button rather than a copy of it. The Jinja macros that render them are in
+ * src/templates/components/, and /dev/components shows each one in development.
+ *
+ * Tokens only: every colour, radius and shadow is a ``var(--token)`` from site.css, so a
+ * component follows the light and dark themes with no rule of its own.
+ * tests/unit/platform/test_ui_shell.py fails on a colour literal in this file.
+ */
+
+/* ── Buttons ────────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
+  min-height: var(--tap);
+  padding: 0 1.2rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--brand); color: var(--on-brand);
+  font: inherit; font-size: .9375rem; font-weight: 500;
+  cursor: pointer;
+  transition: background .15s ease, box-shadow .15s ease, border-color .15s ease, color .15s ease;
+}
+.btn:hover { background: var(--brand-hover); box-shadow: var(--shadow-icon); }
+.btn:disabled { opacity: .6; cursor: not-allowed; box-shadow: none; }
+.btn[hidden] { display: none; }
+.btn-quiet { background: var(--surface); color: var(--ink); border-color: var(--line); }
+.btn-quiet:hover { background: var(--surface); border-color: var(--brand); color: var(--brand-deep); box-shadow: none; }
+.btn-danger { background: var(--danger); color: var(--on-danger); }
+.btn-danger:hover { background: var(--danger-deep); box-shadow: none; }
+.btn-sm { min-height: 2.1rem; padding: 0 .85rem; font-size: .85rem; }
+/* An icon-only button (e.g. the View eye): square, with the glyph centred. */
+.btn-icon { padding: 0; width: 2.1rem; }
+.btn-icon svg { width: 1.15rem; height: 1.15rem; }
+.btn .btn-ico { width: 1rem; height: 1rem; }
+/* A full-width button: the patient layout's one primary action per screen. */
+.btn-block { width: 100%; }
+
+/* ── Theme toggle ───────────────────────────────────────────── */
+
+/* Theme toggle (Issue 97): a quiet round icon button in the top corner. The icon shows the
+   theme you would switch *to* (a moon in light, a sun in dark), following both the OS
+   preference and an explicit override. */
+.theme-toggle {
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease, background .15s ease;
+}
+.theme-toggle:hover { color: var(--brand-deep); border-color: var(--brand); background: var(--bg-soft); }
+.theme-toggle svg { width: 1.2rem; height: 1.2rem; }
+/* Default (light): show the moon. Dark (by choice or OS) shows the sun. */
+.theme-icon-sun { display: none; }
+.theme-icon-moon { display: block; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-icon-sun { display: block; }
+  :root:not([data-theme="light"]) .theme-icon-moon { display: none; }
+}
+:root[data-theme="dark"] .theme-icon-sun { display: block; }
+:root[data-theme="dark"] .theme-icon-moon { display: none; }
+:root[data-theme="light"] .theme-icon-sun { display: none; }
+:root[data-theme="light"] .theme-icon-moon { display: block; }
+
+/* ── Cards ──────────────────────────────────────────────────── */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: clamp(1.25rem, 2.5vw, 1.75rem);
+  box-shadow: var(--shadow-card);
+}
+.card[hidden] { display: none; }
+/* Headings/subtitles style the same whether at the card root or nested in a detail panel. */
+.card h2 { font-size: 1.125rem; margin-bottom: .35rem; }
+.card-sub { color: var(--muted); font-size: .9rem; margin-bottom: 1.1rem; }
+
+/* ── Badges ─────────────────────────────────────────────────── */
+
+.badge {
+  display: inline-flex; align-items: center; gap: .3rem;
+  padding: .15rem .55rem;
+  border-radius: var(--radius-pill);
+  font-size: .75rem; font-weight: 500;
+  background: var(--bg-soft); color: var(--muted);
+}
+.badge-ok { background: var(--brand-soft); color: var(--brand-deep); }
+.badge-warn { background: var(--warn-bg); color: var(--warn-ink); }
+.badge-muted { background: var(--bg-soft); color: var(--muted); }
+.badge-current { background: var(--brand); color: var(--on-brand); }
+
+/* ── Empty state and spinner ────────────────────────────────── */
+
+.empty-state { padding: 2.5rem 1rem; text-align: center; color: var(--muted); }
+.empty-state svg { width: 2.25rem; height: 2.25rem; color: var(--line); margin-bottom: .5rem; }
+.empty-state-title { color: var(--ink); font-weight: 600; }
+.empty-state-body { margin-top: .25rem; }
+.empty-state .btn { margin-top: 1rem; }
+
+.spinner {
+  display: inline-block;
+  width: 1rem; height: 1rem;
+  border: 2px solid var(--line);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: bkp-spin .7s linear infinite;
+  vertical-align: -.15rem;
+}
+@keyframes bkp-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+
+/* ── htmx request indicator ─────────────────────────────────────
+   htmx would inject these two rules as an inline <style>, which the CSP blocks; base.html turns
+   that off (htmx-config includeIndicatorStyles: false) and they live here instead. An element
+   with class htmx-indicator shows only while its request is in flight. */
+.htmx-indicator { opacity: 0; transition: opacity .2s ease-in; }
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator { opacity: 1; }
+
+/* ── Toasts ─────────────────────────────────────────────────── */
+
+.toast-stack { position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%); z-index: var(--z-toast); display: flex; flex-direction: column; gap: .5rem; width: min(24rem, calc(100vw - 2rem)); }
+.toast {
+  display: flex; align-items: center; gap: .6rem;
+  padding: .7rem .75rem .7rem 1rem; border-radius: 12px;
+  background: var(--ink); color: var(--surface); font-size: .875rem; box-shadow: var(--shadow);
+  transition: opacity .18s ease, transform .18s ease;
+}
+.toast-text { flex: 1; }
+.toast-error { background: var(--danger); color: var(--on-danger); }
+.toast-ok { background: var(--brand); color: var(--on-brand); }
+/* An inline action (e.g. Undo) and the dismiss control on a toast. */
+.toast-action {
+  flex: none; border: 0; border-radius: 8px; padding: .25rem .6rem;
+  background: var(--on-fill-wash); color: inherit; font: inherit; font-weight: 600; cursor: pointer;
+}
+.toast-action:hover { background: var(--on-fill-wash-strong); }
+.toast-x {
+  flex: none; display: grid; place-items: center; width: 1.5rem; height: 1.5rem;
+  border: 0; border-radius: var(--radius-pill); background: none; color: inherit; opacity: .8; cursor: pointer;
+}
+.toast-x svg { width: .95rem; height: .95rem; }
+.toast-x:hover { opacity: 1; background: var(--on-fill-wash); }
+/* Enter/leave transitions: a toast slides up on show and fades on dismiss. */
+.toast-enter, .toast-leave { opacity: 0; transform: translateY(.5rem); }
+@media (prefers-reduced-motion: reduce) {
+  .toast { transition: none; }
+  .toast-enter, .toast-leave { transform: none; }
+}
+
+/* ── Skeleton loading ─────────────────────────────────────────
+   Shimmering placeholders shown while data loads, so a screen never flashes an empty table or a
+   bare "Loading…" line (Issue #111). */
+.skeleton-line {
+  display: block; height: .85rem; border-radius: 6px;
+  background: linear-gradient(90deg,
+    var(--bg-soft) 25%, color-mix(in srgb, var(--line) 55%, var(--bg-soft)) 37%, var(--bg-soft) 63%);
+  background-size: 400% 100%;
+  animation: bkp-shimmer 1.4s ease infinite;
+}
+.skeleton-line + .skeleton-line { margin-top: .6rem; }
+.skeleton-line.is-short { width: 60%; }
+@keyframes bkp-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .skeleton-line { animation: none; } }

@@ -1,0 +1,41 @@
+{% extends "layouts/patient.html" %}
+{#- The patient layout, filled (Issue 5 demo): a patient's ticket on their own phone. -#}
+{% from "components/badge.html" import badge, status_badge %}
+{% from "components/button.html" import button %}
+{% from "components/card.html" import card %}
+{% from "components/toast.html" import toast %}
+
+{% block content %}
+<div class="stack">
+  <div>
+    <h1>Your ticket</h1>
+    <p class="lead">Zola Clinic, general queue. We'll message you when you're next.</p>
+  </div>
+
+  {% call card() %}
+    <div class="cluster">
+      <span class="ticket-number">{{ mine.number }}</span>
+      {{ status_badge(mine.status) }}
+    </div>
+    <dl class="ticket-facts">
+      <div><dt>Ahead of you</dt><dd>{{ ahead }}</dd></div>
+      <div><dt>Estimated call</dt><dd>{{ eta.strftime("%H:%M") }}</dd></div>
+      <div><dt>Now serving</dt><dd>{{ serving.number }}</dd></div>
+      <div><dt>Joined by</dt><dd>{{ TICKET_SOURCE_LABELS[mine.source] }}</dd></div>
+    </dl>
+  {% endcall %}
+
+  <div class="stack">
+    {{ button("I'm on my way", block=True, attrs={"data-toast-message": "Thanks. The clinic knows you're coming.", "data-toast-kind": ToastKind.OK}) }}
+    {{ button("Cancel my ticket", variant=ButtonVariant.QUIET, block=True, attrs={"data-toast-message": "This is a demo: nothing was cancelled."}) }}
+  </div>
+
+  {% call card("Zola Clinic", sub="Public clinic, Soweto") %}
+    <div class="cluster">
+      {{ badge("Public", BadgeTone.OK) }}
+      {{ badge("Open until 16:00") }}
+    </div>
+  {% endcall %}
+</div>
+{{ toast("You joined the queue as " ~ mine.number ~ ".", kind=ToastKind.OK) }}
+{% endblock %}

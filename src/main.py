@@ -27,6 +27,7 @@ from src.core.request_logging import RequestLoggingMiddleware
 from src.core.scheduler import shutdown_scheduler, start_scheduler
 from src.core.security_headers import SecurityHeadersMiddleware
 from src.schemas.health import DependencyChecks, LivenessResponse, ReadinessResponse
+from src.web.dev import router as dev_router
 from src.web.routes import router as web_router
 
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -61,6 +62,10 @@ def create_app(settings_obj: Settings | None = None) -> FastAPI:
     install_error_handlers(app)
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
     app.include_router(web_router)
+    # The component catalogue and layout samples (Issue 5) exist only in development: in staging
+    # and production the paths are not registered at all, so they answer 404.
+    if cfg.environment is AppEnvironment.DEVELOPMENT:
+        app.include_router(dev_router)
     app.include_router(api_v1_router, prefix="/api/v1", responses=ERROR_RESPONSES)
 
     def liveness() -> LivenessResponse:

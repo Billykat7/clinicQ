@@ -1,0 +1,26 @@
+{#- Button (Issue 5): the one button every layout uses.
+
+    {% from "components/button.html" import button %}
+    {{ button("Join the queue") }}
+    {{ button("Cancel my ticket", variant=ButtonVariant.DANGER, block=True) }}
+    {{ button("Refresh", variant=ButtonVariant.QUIET, small=True, attrs={"hx-get": "/x"}) }}
+    {{ button("Directions", href="/clinics/zola") }}
+
+    label    the visible text (escaped)
+    variant  a ButtonVariant: PRIMARY (brand fill, the default), QUIET (outline) or DANGER
+    href     renders a link styled as a button instead of a <button>
+    type     the <button> type: button (the default), submit or reset
+    small    the compact console size
+    block    full width: the patient layout's one primary action per screen
+    attrs    any other attributes (hx-*, data-*, aria-*), escaped by xmlattr -#}
+{% macro button(label, variant=ButtonVariant.PRIMARY, href=None, type="button", small=False, block=False, attrs={}) -%}
+  {%- set classes = ["btn"] -%}
+  {%- if variant != ButtonVariant.PRIMARY %}{% set classes = classes + ["btn-" ~ variant] %}{% endif -%}
+  {%- if small %}{% set classes = classes + ["btn-sm"] %}{% endif -%}
+  {%- if block %}{% set classes = classes + ["btn-block"] %}{% endif -%}
+  {%- if href -%}
+    <a class="{{ classes | join(' ') }}" href="{{ href }}"{{ attrs | xmlattr }}>{{ label }}</a>
+  {%- else -%}
+    <button type="{{ type }}" class="{{ classes | join(' ') }}"{{ attrs | xmlattr }}>{{ label }}</button>
+  {%- endif -%}
+{%- endmacro %}

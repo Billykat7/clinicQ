@@ -1,0 +1,13 @@
+{#- Toast (Issue 5): a short, dismissible message in the corner of the screen.
+
+    Three ways to raise one, all drawn by ui-feedback.js in one aria-live region:
+
+    1. From the page as it renders: {{ toast("Ticket cancelled", kind=ToastKind.OK) }}
+       (an inert <template> the script turns into a toast on load, or after an htmx swap).
+    2. From an htmx response: return the headers of src.web.components.toast_trigger().
+    3. From a button, with no script of your own: data-toast-message="Saved" data-toast-kind="ok".
+
+    kind  a ToastKind: INFO (the default), OK or ERROR (announced assertively) -#}
+{% macro toast(message, kind=ToastKind.INFO) -%}
+<template data-toast data-toast-kind="{{ kind }}">{{ message }}</template>
+{%- endmacro %}

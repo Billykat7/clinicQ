@@ -1,0 +1,31 @@
+{% extends "layouts/board.html" %}
+{#- The board layout, filled (Issue 5 demo): the waiting-room screen. Numbers only, as every new
+    site's display mode is number_only (non-negotiable 4). -#}
+
+{% block scripts %}
+  <script src="/static/js/board-clock.js" defer></script>
+{% endblock %}
+
+{% block content %}
+<header class="board-header">
+  <span>Zola Clinic: general queue</span>
+  <time class="board-clock" data-board-clock datetime="{{ now.isoformat(timespec='minutes') }}">{{ now.strftime("%H:%M") }}</time>
+</header>
+
+<section class="board-now" aria-live="polite" aria-label="Now serving">
+  <p class="board-now-label">Now serving</p>
+  <p class="board-now-number">{{ serving.number }}</p>
+  <p class="board-now-room">{{ serving.room }}</p>
+</section>
+
+<section class="board-next" aria-label="Up next">
+  <h2>Up next</h2>
+  <ol>
+    {%- for ticket in up_next %}
+    <li>{{ ticket.number }} <span>~{{ loop.index * 5 }} min</span></li>
+    {%- endfor %}
+  </ol>
+</section>
+
+<p class="board-footer">Listen for your number. Joined from your phone? We'll send you a message when you're next.</p>
+{% endblock %}

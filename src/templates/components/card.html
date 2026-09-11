@@ -1,0 +1,24 @@
+{#- Card (Issue 5): a surface that groups one thing.
+
+    {% from "components/card.html" import card %}
+    {% call card("Your ticket", sub="Zola Clinic: general queue") %}
+      ... the card's body ...
+    {% endcall %}
+
+    title  optional heading (an h2)
+    sub    optional muted line under the heading
+    attrs  any other attributes (id, aria-*, hx-*), escaped by xmlattr; not class: wrap the
+           card instead, so its own class is never overwritten -#}
+{% macro card(title=None, sub=None, attrs={}) -%}
+<section class="card"{{ attrs | xmlattr }}>
+  {%- if title %}
+  <h2>{{ title }}</h2>
+  {%- endif %}
+  {%- if sub %}
+  <p class="card-sub">{{ sub }}</p>
+  {%- endif %}
+  {%- if caller is defined %}
+  {{ caller() }}
+  {%- endif %}
+</section>
+{%- endmacro %}

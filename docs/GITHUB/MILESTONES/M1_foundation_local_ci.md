@@ -35,7 +35,7 @@ and **timezone discipline** (all business datetimes are `Africa/Johannesburg`, s
 - Docker Compose dev stack: PostgreSQL 18 with PostGIS, Redis, and the API container
 - SQLAlchemy 2.x async engine/session, Alembic baseline including the `postgis` extension
 - Shared enums, error envelope, ID strategy and `Africa/Johannesburg` datetime helpers
-- Jinja2 base layout, Tailwind build, htmx/Alpine wiring, design tokens
+- Jinja2 base layout and three layouts (patient, dashboard, board) on one set of design tokens, with htmx (decision 2: no Tailwind, no Alpine)
 - Structured JSON logging with request-context middleware, `/health` and `/ready`
 - `scripts/ci-local.sh` (ruff → mypy → pytest → docker build) and pre-commit hooks
 - Test factories and a `seed_dev_data.py` that produces clinics, queues, staff and tickets
@@ -84,7 +84,7 @@ flowchart LR
 
 - [ ] `docker compose up` brings up API + Postgres/PostGIS + Redis, and `/health` returns 200
 - [ ] `alembic upgrade head` creates the baseline schema with the PostGIS extension present
-- [ ] A Jinja2 page renders with Tailwind CSS applied and an htmx fragment swap working
+- [ ] A Jinja2 page renders with the shared design tokens applied and an htmx fragment swap working
 - [ ] `./scripts/ci-local.sh` runs ruff, mypy and pytest green in under 3 minutes on a laptop
 - [ ] `uv run scripts/seed_dev_data.py` produces at least 5 clinics with real coordinates, 3 queues each, and 20 tickets
 - [ ] Every business datetime helper returns `Africa/Johannesburg`; no naive datetimes pass the lint rule

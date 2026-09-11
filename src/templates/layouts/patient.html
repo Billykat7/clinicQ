@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{#- The patient layout (Issue 5): mobile-first pages a patient opens on their own phone.
+
+    One narrow column that reads well on a small, cheap Android screen and stays centred on a
+    desktop; tap targets at least 44px; a slim header with the brand and the theme toggle; a
+    footer with the legal links. No sign-in chrome: most patients never make an account.
+
+    Pages fill the content block. The ticket page (Issue 68) and clinic discovery (Issue 32) build
+    here. -#}
+
+{% block styles %}
+  <link rel="stylesheet" href="/static/css/layouts.css">
+{% endblock %}
+
+{% block body_class %}layout-patient{% endblock %}
+
+{% block body %}
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="patient-header">
+    <a class="brand" href="/">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+      </span>
+      <span class="brand-text">{{ app_name }}</span>
+    </a>
+    {% include "components/theme_toggle.html" %}
+  </header>
+
+  <main id="main" class="patient-main">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="patient-footer">
+    <a href="/privacy">Privacy</a>
+    <a href="/terms">Terms</a>
+  </footer>
+{% endblock %}

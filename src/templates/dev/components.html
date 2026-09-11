@@ -1,0 +1,161 @@
+{% extends "layouts/dashboard.html" %}
+{#- The component catalogue (Issue 5; development only). Each section renders one component live
+    beside the macro call that renders it, so the page is the documentation. -#}
+{% from "components/badge.html" import badge, status_badge %}
+{% from "components/button.html" import button %}
+{% from "components/card.html" import card %}
+{% from "components/empty_state.html" import empty_state %}
+{% from "components/skeleton.html" import skeleton %}
+
+{% block styles %}
+  {{ super() }}
+  <link rel="stylesheet" href="/static/css/dev.css">
+{% endblock %}
+
+{% block content %}
+<div class="dev-intro">
+  <h1>Components</h1>
+  <p>Every ClinicQ screen is built from these pieces and one set of design tokens (<code>site.css</code>). The macros live in <code>src/templates/components/</code>, their styles in <code>src/static/css/components.css</code>. This page exists only in development.</p>
+</div>
+
+{% include "dev/_nav.html" %}
+
+<section class="dev-section" aria-labelledby="tokens">
+  <h2 id="tokens">Colour tokens</h2>
+  <p>Roles, not colours: each swatch is filled from its token, so switching the theme changes every swatch and every screen together.</p>
+  <div class="swatches">
+    {%- for swatch, token in [("brand", "--brand"), ("brand-deep", "--brand-deep"), ("brand-soft", "--brand-soft"), ("ink", "--ink"), ("muted", "--muted"), ("bg", "--bg"), ("surface", "--surface"), ("line", "--line"), ("danger", "--danger"), ("warn", "--warn-bg")] %}
+    <figure class="swatch swatch-{{ swatch }}"><div class="swatch-chip"></div><figcaption><code>{{ token }}</code></figcaption></figure>
+    {%- endfor %}
+  </div>
+</section>
+
+<section class="dev-section" aria-labelledby="type">
+  <h2 id="type">Type scale</h2>
+  <p>A layout chooses which step its text reads: the console sits low on the ladder, the patient's ticket number near the top and the board at <code>--step-5</code>.</p>
+  <ol class="type-ladder">
+    {%- for step in ["-2", "-1", "0", "1", "2", "3", "4"] %}
+    <li><code>--step-{{ step }}</code><span class="type-step-{{ step }}">Ticket A016, 5 ahead of you</span></li>
+    {%- endfor %}
+  </ol>
+</section>
+
+<section class="dev-section" aria-labelledby="buttons">
+  <h2 id="buttons">Button</h2>
+  <p>Primary for the one action a screen is for, quiet for the rest, danger for what cannot be undone. <code>href</code> renders a link that looks like a button.</p>
+  <div class="specimen">
+    <div class="specimen-demo">
+      {{ button("Join the queue") }}
+      {{ button("Directions", variant=ButtonVariant.QUIET) }}
+      {{ button("Cancel ticket", variant=ButtonVariant.DANGER) }}
+      {{ button("Refresh", variant=ButtonVariant.QUIET, small=True) }}
+      {{ button("Features", href="/features", variant=ButtonVariant.QUIET) }}
+    </div>
+<pre class="specimen-code"><code>{% raw %}{% from "components/button.html" import button %}
+{{ button("Join the queue") }}
+{{ button("Directions", variant=ButtonVariant.QUIET) }}
+{{ button("Cancel ticket", variant=ButtonVariant.DANGER) }}
+{{ button("Refresh", variant=ButtonVariant.QUIET, small=True) }}
+{{ button("Features", href="/features", variant=ButtonVariant.QUIET) }}{% endraw %}</code></pre>
+  </div>
+</section>
+
+<section class="dev-section" aria-labelledby="badges">
+  <h2 id="badges">Badge and ticket status</h2>
+  <p><code>status_badge</code> draws a <code>TicketStatus</code> with the words and tone every surface shares; a template never compares a status with a string.</p>
+  <div class="specimen">
+    <div class="specimen-demo">
+      {%- for status in statuses %}
+      {{ status_badge(status) }}
+      {%- endfor %}
+      {{ badge("Public", BadgeTone.OK) }}
+    </div>
+<pre class="specimen-code"><code>{% raw %}{% from "components/badge.html" import badge, status_badge %}
+{{ status_badge(ticket.status) }}
+{{ badge("Public", BadgeTone.OK) }}{% endraw %}</code></pre>
+  </div>
+</section>
+
+<section class="dev-section" aria-labelledby="cards">
+  <h2 id="cards">Card</h2>
+  <p>A surface that groups one thing. The body is whatever the call block holds.</p>
+  <div class="specimen">
+    <div class="specimen-demo is-block">
+      {% call card("Zola Clinic", sub="Public clinic, Soweto") %}
+        <p>Open 07:00–16:00. General queue: 6 waiting.</p>
+      {% endcall %}
+    </div>
+<pre class="specimen-code"><code>{% raw %}{% from "components/card.html" import card %}
+{% call card("Zola Clinic", sub="Public clinic, Soweto") %}
+  &lt;p&gt;Open 07:00–16:00. General queue: 6 waiting.&lt;/p&gt;
+{% endcall %}{% endraw %}</code></pre>
+  </div>
+</section>
+
+<section class="dev-section" aria-labelledby="empty">
+  <h2 id="empty">Empty state</h2>
+  <p>What a list shows when it has nothing, so an empty queue never looks like a broken page.</p>
+  <div class="specimen">
+    <div class="specimen-demo is-block">
+      {{ empty_state("No one is waiting", body="New tickets appear here as patients join.", action_label="Add a walk-in", action_href="/dev/layouts/dashboard") }}
+    </div>
+<pre class="specimen-code"><code>{% raw %}{% from "components/empty_state.html" import empty_state %}
+{{ empty_state("No one is waiting",
+               body="New tickets appear here as patients join.",
+               action_label="Add a walk-in", action_href="/queue/walk-in") }}{% endraw %}</code></pre>
+  </div>
+</section>
+
+<section class="dev-section" aria-labelledby="toasts">
+  <h2 id="toasts">Toast</h2>
+  <p>A short message in one live region. Raised from the page (the <code>toast()</code> macro), from an htmx response (<code>toast_trigger()</code>, below) or from a button, as here, with no script of its own.</p>
+  <div class="specimen">
+    <div class="specimen-demo">
+      {{ button("Info toast", variant=ButtonVariant.QUIET, attrs={"data-toast-message": "Ticket A016 is next in line."}) }}
+      {{ button("Success toast", variant=ButtonVariant.QUIET, attrs={"data-toast-message": "Walk-in added as A018.", "data-toast-kind": ToastKind.OK}) }}
+      {{ button("Error toast", variant=ButtonVariant.QUIET, attrs={"data-toast-message": "Could not reach the SMS gateway.", "data-toast-kind": ToastKind.ERROR}) }}
+    </div>
+<pre class="specimen-code"><code>{% raw %}{% from "components/toast.html" import toast %}
+{{ toast("Ticket cancelled", kind=ToastKind.OK) }}
+
+# From an htmx response, in Python:
+response.headers.update(toast_trigger("Queue refreshed", ToastKind.OK))
+
+&lt;button data-toast-message="Saved" data-toast-kind="ok"&gt;Save&lt;/button&gt;{% endraw %}</code></pre>
+  </div>
+</section>
+
+<section class="dev-section" aria-labelledby="skeleton">
+  <h2 id="skeleton">Skeleton, and an htmx swap</h2>
+  <p>A placeholder that holds the space while content loads. The button fetches the queue's rows from the server and swaps them in; the response also raises a toast through <code>HX-Trigger</code>.</p>
+  <div class="specimen">
+    <div class="specimen-demo is-block">
+      {{ skeleton(lines=3) }}
+      <div class="table-actions">
+        <span class="dev-updated">Four columns, rendered on the server; the button asks for them again.</span>
+        <span class="cluster">
+          <span class="spinner htmx-indicator" id="catalogue-spinner" aria-hidden="true"></span>
+          {{ button("Refresh rows", variant=ButtonVariant.QUIET, small=True, attrs={"hx-get": "/dev/fragments/queue", "hx-target": "#catalogue-rows", "hx-swap": "innerHTML", "hx-indicator": "#catalogue-spinner"}) }}
+        </span>
+      </div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th scope="col">Ticket</th><th scope="col">Status</th><th scope="col">Joined by</th><th scope="col">Waiting</th></tr></thead>
+          <tbody id="catalogue-rows">
+            {% include "dev/fragments/queue_rows.html" %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+<pre class="specimen-code"><code>{% raw %}{% from "components/skeleton.html" import skeleton %}
+{{ skeleton(lines=3) }}
+
+&lt;div hx-get="/stats" hx-trigger="load" hx-swap="outerHTML"&gt;
+  {{ skeleton(lines=2) }}
+&lt;/div&gt;
+
+{{ button("Refresh rows", variant=ButtonVariant.QUIET, small=True,
+          attrs={"hx-get": "/dev/fragments/queue", "hx-target": "#rows"}) }}{% endraw %}</code></pre>
+  </div>
+</section>
+{% endblock %}

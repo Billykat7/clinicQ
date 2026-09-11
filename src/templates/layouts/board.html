@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{#- The board layout (Issue 5): the waiting-room screen, read from five metres.
+
+    Full screen and fixed: no header, no navigation, no scrolling, nothing to click. The type
+    comes from the top of the shared scale (--step-5 for the number being served), and the page
+    follows the light or dark theme like every other screen, so a clinic can pick whichever reads
+    better in its room.
+
+    The board page (Issue 56), its live updates (Issue 57) and the privacy projection (Issue 58)
+    build here. Whatever a page shows, the server has already removed what the display mode
+    forbids (non-negotiable 4): this layout never receives a name it may not show. -#}
+
+{% block styles %}
+  <link rel="stylesheet" href="/static/css/layouts.css">
+{% endblock %}
+
+{% block body_class %}layout-board{% endblock %}
+
+{% block body %}
+  <main id="main" class="board">
+    {% block content %}{% endblock %}
+  </main>
+{% endblock %}

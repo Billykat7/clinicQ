@@ -1,0 +1,7 @@
+{#- Tabs between the development pages. Each is a link to its own URL (the list-view rule). -#}
+<nav class="dev-nav" aria-label="Development pages">
+  <a href="/dev/components"{% if not current_layout %} aria-current="page"{% endif %}>Components</a>
+  {%- for layout in layouts %}
+  <a href="/dev/layouts/{{ layout }}"{% if current_layout == layout %} aria-current="page"{% endif %}>{{ layout | title }} layout</a>
+  {%- endfor %}
+</nav>

@@ -1,0 +1,83 @@
+/**
+ * BK ClinicQ: the development pages (Issue 5), /dev/components and the layout samples.
+ *
+ * Only what the catalogue itself needs to present the components: its tabs, the token swatches,
+ * the type ladder and the specimen-plus-code blocks. Tokens only, like every new stylesheet;
+ * tests/unit/platform/test_ui_shell.py fails on a colour literal in this file.
+ */
+
+.dev-intro { max-width: 52rem; }
+.dev-intro p { margin-top: var(--space-2); color: var(--muted); }
+
+/* Tabs: every view is its own URL (/dev/components, /dev/layouts/<name>). */
+.dev-nav { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-5) 0; }
+.dev-nav a {
+  display: inline-flex; align-items: center; min-height: 2.25rem;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--line); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--ink); font-size: var(--step--1); font-weight: 500;
+}
+.dev-nav a:hover { border-color: var(--brand); color: var(--brand-deep); }
+.dev-nav a[aria-current="page"] { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+
+.dev-section { margin-top: var(--space-6); }
+.dev-section > h2 { font-size: var(--step-2); }
+.dev-section > p { margin-top: var(--space-1); color: var(--muted); max-width: 52rem; }
+
+/* A component rendered live, beside the call that renders it. */
+.specimen {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+@media (max-width: 60rem) { .specimen { grid-template-columns: minmax(0, 1fr); } }
+.specimen-demo {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px dashed var(--line); border-radius: var(--radius-lg);
+  background: var(--bg);
+}
+.specimen-demo.is-block { display: block; }
+.specimen-code {
+  overflow-x: auto;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--code-bg); color: var(--code-ink);
+  font: .8125rem/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* Colour tokens: one swatch per role, filled from the token itself. */
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: var(--space-3); margin-top: var(--space-4); }
+.swatch { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+.swatch-chip { height: 3.5rem; }
+.swatch figcaption { padding: var(--space-2) var(--space-3); font-size: var(--step--1); }
+.swatch code { color: var(--muted); font-size: var(--step--2); }
+.swatch-brand .swatch-chip { background: var(--brand); }
+.swatch-brand-deep .swatch-chip { background: var(--brand-deep); }
+.swatch-brand-soft .swatch-chip { background: var(--brand-soft); }
+.swatch-ink .swatch-chip { background: var(--ink); }
+.swatch-muted .swatch-chip { background: var(--muted); }
+.swatch-bg .swatch-chip { background: var(--bg); }
+.swatch-surface .swatch-chip { background: var(--surface); }
+.swatch-line .swatch-chip { background: var(--line); }
+.swatch-danger .swatch-chip { background: var(--danger); }
+.swatch-warn .swatch-chip { background: var(--warn-bg); }
+
+/* The type ladder, each line set in the step it names. */
+.type-ladder { margin-top: var(--space-4); }
+.type-ladder li { display: flex; align-items: baseline; gap: var(--space-4); padding-block: var(--space-2); border-bottom: 1px solid var(--line-soft); line-height: 1.15; }
+.type-ladder code { flex: none; width: 5.5rem; color: var(--muted); font-size: var(--step--2); }
+.type-step--2 { font-size: var(--step--2); }
+.type-step--1 { font-size: var(--step--1); }
+.type-step-0 { font-size: var(--step-0); }
+.type-step-1 { font-size: var(--step-1); }
+.type-step-2 { font-size: var(--step-2); }
+.type-step-3 { font-size: var(--step-3); }
+.type-step-4 { font-size: var(--step-4); font-weight: 600; }
+
+/* The dashboard sample: a page header with its action, and the queue beside the side panel. */
+.dev-page-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-4); }
+.dev-page-head .lead { margin-top: var(--space-1); color: var(--muted); }
+.dev-queue-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(16rem, 1fr); gap: var(--space-5); margin-top: var(--space-5); }
+@media (max-width: 64rem) { .dev-queue-grid { grid-template-columns: minmax(0, 1fr); } }
+.dev-updated { color: var(--muted); font-size: var(--step--1); }
+.table-actions { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
