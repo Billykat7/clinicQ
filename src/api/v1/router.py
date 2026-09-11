@@ -15,6 +15,7 @@ from src.api.v1.routes.reference import router as reference_router
 from src.api.v1.routes.webhooks import router as webhooks_router
 from src.modules.alerts.router import router as alerts_router
 from src.modules.audit.router import router as audit_router
+from src.modules.audit.router import site_router as site_audit_router
 from src.modules.documents.esign_router import router as esign_router
 from src.modules.documents.router import router as documents_router
 from src.modules.messaging.router import router as messaging_router
@@ -31,6 +32,7 @@ api_v1_router.include_router(auth_router)
 api_v1_router.include_router(admin_router)
 api_v1_router.include_router(rbac_admin_router)
 api_v1_router.include_router(audit_router)
+api_v1_router.include_router(site_audit_router)
 api_v1_router.include_router(webhooks_router)
 api_v1_router.include_router(reference_router)
 api_v1_router.include_router(notifications_router)

@@ -137,10 +137,10 @@ def test_a_second_run_creates_no_duplicates(migrated_database: URL) -> None:
     finally:
         engine.dispose()
     assert users == len(DEMO_STAFF)
-    # One unscoped assignment each, plus a site assignment for everyone but the platform admin,
-    # who reaches a clinic only through the audited cross-site hatch (Issue 19).
+    # One assignment each: at the demo clinic for the clinic roles, unscoped for the platform
+    # admin, who reaches a clinic only through the audited cross-site hatch (Issue 19).
     assert at_a_site == len(DEMO_STAFF) - 1
-    assert assignments == len(DEMO_STAFF) + at_a_site
+    assert assignments == len(DEMO_STAFF)
 
 
 @pytest.mark.postgres

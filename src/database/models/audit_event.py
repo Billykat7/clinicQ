@@ -17,6 +17,10 @@ a trigger that raises on any ``UPDATE`` or ``DELETE`` (see ``docs/CICD/KEY-ROTAT
 migration), so "audit records cannot be edited or deleted through the application" holds even
 against a bug or a compromised code path.
 
+Issue 20 added ``site_id``, ``request_id`` and ``actor_role``: which clinic the action happened at
+(so the trail reads per clinic and the read API is site-scoped), which request caused it (so a row
+joins to that request's log lines), and what the actor was acting as at the time.
+
 The ``actor`` is free-form text (an email or identifier), never a foreign key, so the trail
 survives a later user rename or removal — the same choice ``accounting_export.exported_by``
 makes. ``actor_id`` keeps the ``user.id`` when it is known (``SET NULL`` on user removal) purely
@@ -58,6 +62,14 @@ class AuditEvent(Base):
             "actor",
             "created_at",
         ),
+        # The clinic's own trail, newest first: the site-scoped read API's one query (Issue 20).
+        Index(
+            "ix_clinicq_audit_event_site",
+            "site_id",
+            "created_at",
+        ),
+        # Every row a single request wrote, for joining the trail to the logs of that request.
+        Index("ix_clinicq_audit_event_request_id", "request_id"),
     )
 
     id: Mapped[str] = mapped_column(
@@ -88,6 +100,17 @@ class AuditEvent(Base):
     values are **redacted** to ``"<redacted>"`` (see :data:`~src.commons.enums.AUDIT_REDACTED_FIELDS`)
     so the trail records *that* a secret changed without becoming a second plaintext copy of it.
     Null for actions with no field delta (a read/export)."""
+    site_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    """The clinic the action happened at (Issue 20), so the trail can be read per clinic and the
+    read API can be site-scoped (Issue 19). Taken from the request's site context when the caller
+    does not pass one. NULL for a platform-level action (an RBAC change, a patient's own record),
+    which only a whole-platform reader sees."""
+    request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    """The id of the request that caused this row (Issue 6's ``X-Request-ID``), so an audit row
+    joins to the application logs of the same request. NULL for a background job."""
+    actor_role: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    """The role the actor was acting under, recorded at the time: a role withdrawn later must not
+    change what the trail says happened."""
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     """Caller IP (IPv4 or IPv6, up to 45 chars); null when not resolvable (a background job)."""
     context: Mapped[str | None] = mapped_column(String(255), nullable=True)

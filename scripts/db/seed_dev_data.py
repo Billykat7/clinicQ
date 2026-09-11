@@ -161,33 +161,28 @@ def seed_staff(session: Session, *, password: str) -> SeedReport:
                 report.updated += 1
             else:
                 report.unchanged += 1
+        # The assignment RBAC resolves them by. Clinic staff hold their role **at the demo clinic**
+        # and nowhere else (Issue 19); the platform admin holds theirs unscoped, reaching a clinic
+        # only through the audited cross-site hatch.
+        at_site = staff.role is not UserRole.PLATFORM_ADMIN
+        scope_type = AssignmentScopeType.SITE.value if at_site else None
+        scope_id = DEMO_SITE_ID if at_site else None
         has_assignment = session.execute(
             select(UserRoleAssignment.id).where(
                 UserRoleAssignment.user_id == user.id,
                 UserRoleAssignment.role == staff.role.value,
-                UserRoleAssignment.scope_type.is_(None),
+                UserRoleAssignment.scope_type.is_(scope_type)
+                if scope_type is None
+                else UserRoleAssignment.scope_type == scope_type,
             )
         ).first()
         if has_assignment is None:
-            session.add(UserRoleAssignment(user_id=user.id, role=staff.role.value))
-        # Where they work (Issue 19). The platform admin is assigned to no clinic on purpose: the
-        # operator reaches one only through the audited cross-site hatch.
-        if staff.role is UserRole.PLATFORM_ADMIN:
-            continue
-        has_site = session.execute(
-            select(UserRoleAssignment.id).where(
-                UserRoleAssignment.user_id == user.id,
-                UserRoleAssignment.scope_type == AssignmentScopeType.SITE.value,
-                UserRoleAssignment.scope_id == DEMO_SITE_ID,
-            )
-        ).first()
-        if has_site is None:
             session.add(
                 UserRoleAssignment(
                     user_id=user.id,
                     role=staff.role.value,
-                    scope_type=AssignmentScopeType.SITE.value,
-                    scope_id=DEMO_SITE_ID,
+                    scope_type=scope_type,
+                    scope_id=scope_id,
                 )
             )
     session.flush()

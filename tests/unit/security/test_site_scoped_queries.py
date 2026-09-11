@@ -30,6 +30,7 @@ _QUERY_CALLS = frozenset({"select", "get", "query"})
 _SCOPED_CALLS = frozenset(
     {
         "scoped_select",
+        "select_in_scope",
         "get_in_site_or_404",
         "staff_at_site",
         "staff_member_in_site_or_404",
