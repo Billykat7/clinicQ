@@ -10,7 +10,7 @@ pull request to `main` and blocks the merge when one of them fails. Deployment h
 | Before every push | `make check`: quality, pip-audit, secrets, tests, coverage, docker + Trivy | your machine |
 | Pull request to `main` | **CI**: the same stages minus pip-audit, Trivy and the compose smoke | GitHub Actions |
 | Push to any branch, including `main` | nothing | — |
-| Tag `v*.*.*` | image build and publish (Issue 10), then deploy (Issue 11) | GitHub Actions |
+| Tag `v*.*.*` | `release.yml`: build once, check, publish to GHCR ([`RELEASE.md`](RELEASE.md)); then deploy (Issue 11) | GitHub Actions |
 | Manual (`Run workflow` on CI) | the whole CI run, image build included | GitHub Actions |
 
 ## The CI workflow, job by job
@@ -162,7 +162,7 @@ about 17, plus follow-ups):
 | Image-input pushes | 10% of those again, at the cold price: 8 × (13 − 8) | 40 |
 | Superseded pushes | 1 in 10 pushes cancelled part-way: 8 × 4 min | 32 |
 | Prose-only and draft pushes | 15 pushes × 2 min | 30 |
-| Releases and deploys | reserved for Issues 10 and 11: 2 tags × about 25 min | 50 |
+| Releases and deploys | 2 tags × (release, measured 4 min cold, + deploy, reserved for Issue 11) | 50 |
 | **Total** | | **≈ 790 (40% of 2,000)** |
 
 Doubling the pushes (8 a pull request, nobody running `make check`) gives about 1,450 minutes,
