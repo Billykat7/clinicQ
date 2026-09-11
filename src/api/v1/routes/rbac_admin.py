@@ -1365,7 +1365,7 @@ async def put_role_permissions(
                     max_verb=verb.value,
                     effect=effect.value,
                     scope=resolved_scope,
-                    created_at=datetime.now(UTC),
+                    created_at=datetime.now(APP_TIMEZONE),
                 )
             )
         _record_audit(
@@ -1609,7 +1609,7 @@ def _apply_statement(
                 effect=statement.effect,
                 scope=scope,
                 applies_to_descendants=statement.applies_to_descendants,
-                created_at=datetime.now(UTC),
+                created_at=datetime.now(APP_TIMEZONE),
             )
         )
         outcome = "created"

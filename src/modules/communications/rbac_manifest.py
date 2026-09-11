@@ -24,7 +24,13 @@ administrator who is supposed to hand the grants out. Everyone else is provision
 console.
 """
 
-from src.commons.enums import GrantScope, PermissionAction, PermissionVerb, ScopeShape
+from src.commons.enums import (
+    GrantScope,
+    PermissionAction,
+    PermissionVerb,
+    ScopeShape,
+    UserRole,
+)
 from src.core.rbac import catalog_display_name
 from src.core.rbac_manifest import ModuleManifest, NavMeta, ResourceSpec, RoleGrant
 
@@ -68,7 +74,7 @@ MANIFEST = ModuleManifest(
     name=catalog_display_name("communications"),
     grants=(
         RoleGrant(
-            role="admin",
+            role=UserRole.ADMIN.value,
             resource="communications",
             verb=PermissionVerb.DELETE.value,
             scope=GrantScope.BUSINESS.value,

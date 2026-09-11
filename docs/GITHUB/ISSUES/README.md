@@ -52,7 +52,7 @@ kernel with a `src/` layout, and the file paths in every spec now point at the r
 | The module's permissions | registered in `src/core/rbac_manifest_registry.py`, then `make seed-rbac` | `src/modules/widgets/rbac_manifest.py` |
 | A server-rendered page | `src/web/<area>.py` (or `src/web/<area>/` once there are several) plus `src/templates/<area>/` | `src/web/routes.py` |
 | CSS or JavaScript | `src/static/css/`, `src/static/js/`, third-party code in `src/static/vendor/`. No inline styles or scripts: the CSP forbids them and guard tests enforce it | `src/static/css/site.css` (the design tokens) |
-| Shared enums, errors, helpers | `src/commons/` (`enums.py`, `exceptions.py`) | |
+| Shared enums, errors, helpers | `src/commons/`: `enums.py` (wire values), `exceptions.py` (domain errors and the error envelope), `time.py` (`now_sast()`, `business_date()`), `ids.py` (`new_id()`) | A domain error subclasses a category in `exceptions.py` (`NotFoundError`, `ConflictError`…); `src/core/error_handlers.py` answers it |
 | Cross-cutting infrastructure | `src/core/` (config, security, audit, scoping, rate limits, scheduler) | |
 | A scheduled job | a `run_*` function in the module's `service.py`, registered in `src/core/scheduler.py` | the notification retry and document retention sweeps |
 | Tests | `tests/unit/<area>/test_*.py` and `tests/integration/<area>/test_*.py` | `tests/integration/auth/` |

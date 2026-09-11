@@ -28,7 +28,6 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -37,6 +36,7 @@ from sqlalchemy.orm import Session
 from starlette.templating import Jinja2Templates
 
 from src.commons.enums import GrantScope, PermissionVerb, S3LogListingLevel
+from src.commons.time import APP_TIMEZONE
 from src.core.nav_visibility import (
     nav_visibility_for_request,
     peek_user_from_refresh_cookie,
@@ -61,7 +61,6 @@ logger = logging.getLogger(__name__)
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = PACKAGE_DIR / "templates"
-APP_TIMEZONE = ZoneInfo("Africa/Johannesburg")
 
 # The date the public legal pages (`/privacy`, `/terms`) were last reviewed. A single source so
 # both pages show the same visible "last updated" line. Update it whenever the wording changes;

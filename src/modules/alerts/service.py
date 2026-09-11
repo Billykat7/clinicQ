@@ -7,11 +7,12 @@ is authorised and targeted exactly like an announcement.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from src.commons.time import now_sast
 from src.database.models import Alert, AlertRecipient, User
 from src.modules.messaging import audience as audience_service
 from src.modules.messaging.enums import (
@@ -28,7 +29,8 @@ _FOLDERS = ("inbox", "sent", "deleted")
 
 
 def _now() -> datetime:
-    return datetime.now(UTC)
+    """Business time for read receipts: Africa/Johannesburg (Issue 4)."""
+    return now_sast()
 
 
 def create_alert(

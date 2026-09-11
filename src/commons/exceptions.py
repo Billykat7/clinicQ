@@ -1,12 +1,131 @@
-"""Application-wide exception types."""
+"""Application-wide exception types and the one error envelope every API error is sent in.
+
+**Raising.** A service raises a domain error: a subclass of :class:`BKPropertyError`, usually of
+one of the category bases below (:class:`NotFoundError`, :class:`ConflictError`, …), with a
+human-readable message and a stable ``code``. It never raises ``HTTPException``: a service does not
+know it is behind HTTP (a USSD session and a scheduled job call the same code).
+
+**Answering.** ``src.core.error_handlers`` turns an uncaught domain error into its category's HTTP
+status and an :class:`ErrorEnvelope` body, so a route needs no ``try``/``except`` to map one. The
+same envelope carries ``HTTPException`` and request-validation errors, so a client reads one shape
+for every failure:
+
+.. code-block:: json
+
+    {"detail": "Ticket 01a0… cannot move from done to called.",
+     "code": "queue.ticket.illegal_transition",
+     "request_id": "7c9e…"}
+
+``detail`` is the field every kernel client and the static JS already read, which is why the
+envelope extends it instead of replacing it. A request-validation error keeps FastAPI's list of
+field errors there.
+
+**Codes** are dotted and lowercase, ``<area>.<reason>`` (``queue.ticket.illegal_transition``). A
+client branches on the code, never on the message, so a code is a contract: rename one only with
+the clients that read it.
+"""
+
+from http import HTTPStatus
+from typing import Any, ClassVar
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class ErrorEnvelope(BaseModel):
+    """The JSON body of every API error response (Issue 4)."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "detail": "No such ticket: 01a08ecc-dd1f-7350-9d45-9273b6e70647.",
+                    "code": "queue.ticket.not_found",
+                    "request_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                }
+            ]
+        }
+    )
+
+    detail: str | dict[str, Any] | list[dict[str, Any]] = Field(
+        description=(
+            "What went wrong, safe to show to the user. A request-validation error (422 "
+            "`request.invalid`) carries FastAPI's list of field errors instead, and an RBAC "
+            "refusal (403 `insufficient_permission`) an object naming the resource and verb it lacked."
+        )
+    )
+    code: str = Field(
+        description=(
+            "Stable machine-readable error code, `<area>.<reason>`. Branch on this, never on "
+            "`detail`."
+        ),
+        examples=["queue.ticket.not_found", "http.not_found", "request.invalid"],
+    )
+    request_id: str | None = Field(
+        default=None,
+        description="The id of the request that failed, to quote in a support message.",
+    )
 
 
 class BKPropertyError(Exception):
-    """Base error for domain and infrastructure failures."""
+    """Base error for domain and infrastructure failures.
+
+    Subclass one of the category bases below rather than this class directly, so the HTTP status
+    is decided once per category. ``status_code`` is the status the envelope handler answers
+    with; a subclass overrides it as a class attribute, never per instance.
+    """
+
+    status_code: ClassVar[HTTPStatus] = HTTPStatus.BAD_REQUEST
 
     def __init__(self, message: str, *, code: str = "clinicq.error") -> None:
         super().__init__(message)
         self.code = code
+
+    def to_envelope(self, *, request_id: str | None = None) -> ErrorEnvelope:
+        """Return this error as the :class:`ErrorEnvelope` the API answers with."""
+        return ErrorEnvelope(detail=str(self), code=self.code, request_id=request_id)
+
+
+class NotFoundError(BKPropertyError):
+    """A record does not exist, or the caller may not know that it does: HTTP 404.
+
+    Cross-site access answers 404 rather than 403 (non-negotiable 3), so an id cannot be probed
+    for existence. Raise this, not :class:`ForbiddenError`, when the honest answer would leak that.
+    """
+
+    status_code = HTTPStatus.NOT_FOUND
+
+
+class ConflictError(BKPropertyError):
+    """The request is valid but conflicts with the record's current state: HTTP 409.
+
+    An illegal status transition, a duplicate, a record that has already been decided.
+    """
+
+    status_code = HTTPStatus.CONFLICT
+
+
+class UnprocessableError(BKPropertyError):
+    """The request is well-formed but breaks a business rule about its content: HTTP 422."""
+
+    status_code = HTTPStatus.UNPROCESSABLE_CONTENT
+
+
+class ForbiddenError(BKPropertyError):
+    """The caller is known but may not do this: HTTP 403."""
+
+    status_code = HTTPStatus.FORBIDDEN
+
+
+class UpstreamError(BKPropertyError):
+    """A provider this service depends on (SMS, payments, e-signature) failed: HTTP 502."""
+
+    status_code = HTTPStatus.BAD_GATEWAY
+
+
+class ServiceUnavailableError(BKPropertyError):
+    """The feature is not enabled or configured for this deployment: HTTP 503."""
+
+    status_code = HTTPStatus.SERVICE_UNAVAILABLE
 
 
 class UnitStatusTransitionError(BKPropertyError):
@@ -43,7 +162,7 @@ class ApplicationStatusTransitionError(BKPropertyError):
         self.target = target
 
 
-class InvalidImageError(BKPropertyError):
+class InvalidImageError(UnprocessableError):
     """Raised when an uploaded unit photo cannot be decoded as a real image (Issue #24).
 
     The content-type allow-list is checked before this, so reaching here means the bytes
@@ -774,7 +893,7 @@ class VendorUserLinkConflictError(BKPropertyError):
         super().__init__(message, code="vendors.user_link_conflict")
 
 
-class MessageAnchorNotFoundError(BKPropertyError):
+class MessageAnchorNotFoundError(NotFoundError):
     """Raised when a messaging thread is opened against a record that does not exist (Issue #68).
 
     A thread is anchored to a domain record (a unit, lease, work order or application); if no such
@@ -791,7 +910,7 @@ class MessageAnchorNotFoundError(BKPropertyError):
         self.anchor_id = anchor_id
 
 
-class NotAThreadParticipantError(BKPropertyError):
+class NotAThreadParticipantError(NotFoundError):
     """Raised when a user who is not a participant acts on a thread (Issue #68).
 
     Participants are derived from a thread's anchor (the tenant, the owner, the assigned vendor,
@@ -807,7 +926,7 @@ class NotAThreadParticipantError(BKPropertyError):
         self.thread_id = thread_id
 
 
-class MessageDraftNotFoundError(BKPropertyError):
+class MessageDraftNotFoundError(NotFoundError):
     """Raised when a message draft cannot be found for the acting author (Issue #112).
 
     Drafts are private to their author, so a draft owned by someone else is indistinguishable from
@@ -823,7 +942,7 @@ class MessageDraftNotFoundError(BKPropertyError):
         self.draft_id = draft_id
 
 
-class AlertDraftNotFoundError(BKPropertyError):
+class AlertDraftNotFoundError(NotFoundError):
     """Raised when an alert draft cannot be found for the acting author (Issue #132 follow-up).
 
     Mirrors :class:`MessageDraftNotFoundError`: a draft owned by someone else is indistinguishable
@@ -838,7 +957,7 @@ class AlertDraftNotFoundError(BKPropertyError):
         self.draft_id = draft_id
 
 
-class AudienceNotAuthorisedError(BKPropertyError):
+class AudienceNotAuthorisedError(ForbiddenError):
     """Raised when a sender targets an announcement audience outside their authority (Issue #112).
 
     An audience resolves from RBAC + ownership: an admin alone may broadcast globally, an owner
@@ -858,7 +977,7 @@ class AudienceNotAuthorisedError(BKPropertyError):
         self.audience_ref = audience_ref
 
 
-class EmptyAudienceError(BKPropertyError):
+class EmptyAudienceError(ConflictError):
     """Raised when a resolved announcement audience contains no reachable recipient (Issue #112).
 
     The sender is authorised, but the audience resolves to an empty set (e.g. an owner with no
@@ -874,7 +993,7 @@ class EmptyAudienceError(BKPropertyError):
         self.audience_type = audience_type
 
 
-class PeerNotReachableError(BKPropertyError):
+class PeerNotReachableError(ForbiddenError):
     """Raised when a tenant tries to message someone they do not share a property with (Issue #126).
 
     Peer-to-peer messaging is authorised by a server-checked **co-occupancy** relationship: the
@@ -891,7 +1010,7 @@ class PeerNotReachableError(BKPropertyError):
         )
 
 
-class InAppNotificationNotFoundError(BKPropertyError):
+class InAppNotificationNotFoundError(NotFoundError):
     """Raised when an in-app notification cannot be found for the acting user (Issue #113).
 
     Notifications are private to the user they belong to, so one owned by someone else is
@@ -1028,7 +1147,7 @@ class DeductionLeaseNotFoundError(BKPropertyError):
         self.inspection_id = inspection_id
 
 
-class DocumentInfectedError(BKPropertyError):
+class DocumentInfectedError(UnprocessableError):
     """Raised when a document upload fails the virus scan on ingest (Issue #70).
 
     Scanning runs on the raw bytes before the document row is committed, so an infected upload is
@@ -1046,7 +1165,7 @@ class DocumentInfectedError(BKPropertyError):
         self.scan_status = scan_status
 
 
-class DocumentChecksumMismatchError(BKPropertyError):
+class DocumentChecksumMismatchError(ConflictError):
     """Raised when a stored document's bytes no longer match its recorded checksum (Issue #70).
 
     Every document records the SHA-256 of the bytes written at ingest; the download path re-hashes
@@ -1080,7 +1199,7 @@ class EsignEnvelopeNotFoundError(BKPropertyError):
         self.envelope_id = envelope_id
 
 
-class EsignEnvelopeStateError(BKPropertyError):
+class EsignEnvelopeStateError(ConflictError):
     """Raised when an action is attempted on an envelope in the wrong state (Issue #71).
 
     Sending an already-sent envelope, or voiding one that has already reached a terminal outcome
@@ -1116,7 +1235,7 @@ class LeaseSignatureRequiredError(BKPropertyError):
         self.lease_id = lease_id
 
 
-class StripeNotConfiguredError(BKPropertyError):
+class StripeNotConfiguredError(ServiceUnavailableError):
     """Raised when a Stripe operation is attempted while the gateway is disabled (Issue #76).
 
     Creating a PaymentIntent or handling a webhook needs ``STRIPE_ENABLED`` set with keys present;
@@ -1164,7 +1283,7 @@ class StripePaymentError(BKPropertyError):
         self.reason = reason
 
 
-class PaystackNotConfiguredError(BKPropertyError):
+class PaystackNotConfiguredError(ServiceUnavailableError):
     """Raised when a Paystack operation is attempted while the gateway is disabled (Issue #79).
 
     Initializing a transaction or handling a webhook needs ``PAYSTACK_ENABLED`` set with the secret

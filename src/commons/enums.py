@@ -214,20 +214,124 @@ class SecurityAuditEvent(StrEnum):
 class UserRole(StrEnum):
     """User role for RBAC. Stored in ``user.role``.
 
-    ``user`` and ``admin`` are the original system roles (M1). ``tenant``, ``owner``,
-    ``manager`` and ``vendor`` are the four portal roles introduced with the M9 role
-    portals (Issue #58): each backs one portal and carries the explicit permission
-    matrix seeded in migration ``0026`` (see ``docs/architecture/rbac-matrix.md``).
-    RBAC decides *what* verb a role holds on a resource; ownership is the second gate
-    that decides *whose* rows the role may touch.
+    One role vocabulary for staff and patients alike: ClinicQ extends this enum rather than adding
+    a second ``StaffRole`` (Issue 4), so a role in a token, a grant or a column is always a member
+    of this one type.
+
+    - ``user`` and ``admin`` are the kernel's system roles, seeded by ``make seed-rbac``.
+    - ``patient``, ``receptionist``, ``nurse_doctor``, ``clinic_manager`` and ``platform_admin``
+      are ClinicQ's five roles. They are vocabulary only until Issue 18 seeds their grants; a
+      staff member's site is a scoped role assignment, never a column (Issue 15).
+    - ``tenant``, ``owner``, ``manager`` and ``vendor`` are the portal roles of the property
+      project the kernel came from. Issue 18 retires them together with the grants and tests that
+      still name them.
+
+    RBAC decides *what* verb a role holds on a resource; scoping is the second gate that decides
+    *whose* rows the role may touch.
     """
 
     USER = "user"
     ADMIN = "admin"
+    # ClinicQ (Issue 4; grants seeded by Issue 18).
+    PATIENT = "patient"
+    RECEPTIONIST = "receptionist"
+    NURSE_DOCTOR = "nurse_doctor"
+    CLINIC_MANAGER = "clinic_manager"
+    PLATFORM_ADMIN = "platform_admin"
+    # Kernel portal roles, retired by Issue 18.
     TENANT = "tenant"
     OWNER = "owner"
     MANAGER = "manager"
     VENDOR = "vendor"
+
+
+# --------------------------------------------------------------------------------------
+# ClinicQ vocabulary (Issue 4). The wire values every module shares: a site's sector, a ticket's
+# status and source, and what the waiting-room board may show. Models use them from their own
+# issues (23, 27, 39, 41); ``GET /api/v1/reference/enums`` publishes them in the OpenAPI schema.
+# Adding a member is a contract change: a USSD menu, a board and a report all read these values.
+# --------------------------------------------------------------------------------------
+
+
+class SiteSector(StrEnum):
+    """Whether a site (one clinic) is a public facility or a private practice. ``sites.sector``."""
+
+    PUBLIC = "public"
+    PRIVATE = "private"
+
+
+class TicketStatus(StrEnum):
+    """Where one ticket is in its lifecycle. Stored in ``tickets.status``.
+
+    Written only by ``transition_ticket()`` (non-negotiable 2, Issue 41), which owns the legal
+    transitions; this enum is only the vocabulary.
+
+    - ``WAITING``: in the queue, not yet called. Every ticket starts here, from any source.
+    - ``CALLED``: called to a room or counter; the board shows it as now serving.
+    - ``RECALLED``: called, did not arrive within the site's timeout, and was called once more
+      (Issue 43).
+    - ``IN_PROGRESS``: the patient is being seen.
+    - ``DONE``: seen and finished.
+    - ``NO_SHOW``: recalled and still absent; the slot is freed.
+    - ``CANCELLED``: withdrawn by the patient or by staff before being seen.
+    - ``TRANSFERRED``: closed in this queue because the visit moved on to another (triage to
+      doctor to pharmacy); the next queue has a ticket of its own (Issue 45).
+    """
+
+    WAITING = "waiting"
+    CALLED = "called"
+    RECALLED = "recalled"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+    NO_SHOW = "no_show"
+    CANCELLED = "cancelled"
+    TRANSFERRED = "transferred"
+
+
+# Statuses a ticket never leaves: a correction is a new ticket, not an edit (Issue 41). Defined here,
+# next to the enum, so the board, notifications and reports agree on what "finished" means.
+TICKET_TERMINAL_STATUSES: frozenset[TicketStatus] = frozenset(
+    {
+        TicketStatus.DONE,
+        TicketStatus.NO_SHOW,
+        TicketStatus.CANCELLED,
+        TicketStatus.TRANSFERRED,
+    }
+)
+
+
+class TicketSource(StrEnum):
+    """How a ticket was created. Stored in ``tickets.source``.
+
+    Every source draws from the same sequence (non-negotiable 1): the source is recorded for
+    channel-mix reporting (Issue 79), never to order the queue.
+    """
+
+    WEB = "web"
+    USSD = "ussd"
+    WHATSAPP = "whatsapp"
+    WALK_IN = "walk_in"
+
+
+class DisplayMode(StrEnum):
+    """What the waiting-room board may show about a ticket. Stored in ``sites.display_mode``.
+
+    The server applies it before anything reaches the board (non-negotiable 4, Issue 58): under
+    ``NUMBER_ONLY`` a name is not in the payload at all.
+
+    - ``NUMBER_ONLY``: the ticket number and nothing else. The default for every new site.
+    - ``NAME_LITE``: the number with a shortened name (first name and an initial).
+    - ``FULL``: the number and the full display name.
+    """
+
+    NUMBER_ONLY = "number_only"
+    NAME_LITE = "name_lite"
+    FULL = "full"
+
+
+#: The display mode every new site is created with, through every code path (Issue 27). Read this
+#: constant; never restate the member at a call site.
+SITE_DEFAULT_DISPLAY_MODE: DisplayMode = DisplayMode.NUMBER_ONLY
 
 
 class TokenType(StrEnum):

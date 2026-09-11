@@ -22,7 +22,7 @@ are enums, business datetimes are `Africa/Johannesburg`, and every API error use
 ## Starting point
 
 - `src/commons/enums.py` and `src/commons/exceptions.py` already hold the kernel's enums and error envelope. Add the ClinicQ enums (`SiteSector`, `TicketStatus`, `TicketSource`, `DisplayMode`) there rather than in a new file.
-- The kernel has no `now_sast()` helper yet; the app timezone is set in `src/core/config.py`. Put the time helpers next to the other shared code in `src/commons/`.
+- The kernel has no `now_sast()` helper yet; the app timezone (`APP_TIMEZONE`) is defined in `src/core/s3_logging.py`, with a second copy in `src/web/routes.py`. Put the time helpers next to the other shared code in `src/commons/`, and make that the one definition.
 - `StaffRole` overlaps the kernel's `UserRole`; extend that rather than adding a second role enum.
 
 ## Scope
@@ -59,6 +59,8 @@ are enums, business datetimes are `Africa/Johannesburg`, and every API error use
 - `src/commons/exceptions.py`
 - `src/commons/time.py`
 - `src/commons/ids.py`
+- `src/core/error_handlers.py` (the handlers, registered in `src/main.py`)
+- `src/api/v1/routes/reference.py` (publishes the enums in OpenAPI)
 - `tests/unit/commons/test_conventions.py`
 
 ---
