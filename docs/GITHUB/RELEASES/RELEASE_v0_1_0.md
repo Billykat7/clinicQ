@@ -41,6 +41,17 @@ vocabulary, and one local gate that says whether a change is safe to push.
   as agreed stubs), eleven real Gauteng and KwaZulu-Natal clinics from OpenStreetMap with queues and
   a day of ticket history, and `make seed-dev-data`. It is idempotent and refuses any database that
   is not a local development one.
+- **Two follow-ups, merged after the eight issues closed:**
+  - **Leftover exceptions removed** (Issue 4 follow-up, PR #118). `src/commons/exceptions.py` loses
+    the 55 exception classes left over from the property-management project the kernel was built
+    from. Nothing raised, caught or imported them. What remains is the envelope, the base, the six
+    category bases and the 16 exceptions the kernel raises.
+  - **No dependency advisories** (Issue 7 follow-up, PR #119). httpx2 and httpcore2 go from 2.9.1
+    to 2.12.0, clearing four advisories: PYSEC-2026-3844 / CVE-2026-84381, PYSEC-2026-3845,
+    PYSEC-2026-3846 / CVE-2026-84382 and PYSEC-2026-3848. The first version to fix the original
+    three, 2.11.0, carries the fourth. `make check` now runs with no scanner warning: pip-audit
+    finds no known vulnerability, and Trivy finds no CRITICAL or HIGH advisory with a fix in the
+    image.
 
 ## Migrations
 
@@ -57,6 +68,9 @@ vocabulary, and one local gate that says whether a change is safe to push.
   remove it (see the README).
 - **Install the hooks and gitleaks:** `pip install -e ".[dev]"`, `brew install gitleaks`, then
   `make hooks`. Without gitleaks every commit fails the secret-scan hook, by design.
+- **Reinstall after pulling:** `pip install -e ".[dev]"` brings httpx2 and httpcore2 to 2.12.0 and
+  refreshes the project's own requirements. Installing only `requirements.txt` leaves the old
+  `httpx2==2.9.1` pin in the installed metadata, and `pip check` reports a conflict.
 - **Before every push, `make check`** (or `make check-fast` without Docker). See `CONTRIBUTING.md`.
 - **The console prints JSON logs** (`LOG_FORMAT=json` by default); `LOG_FORMAT=text` restores
   readable lines. `LOG_LEVEL` must be a level name (`info` is still accepted).
@@ -82,9 +96,9 @@ vocabulary, and one local gate that says whether a change is safe to push.
   itself; it is fully met when those issues add their steps.
 - **Seeded staff have no permissions** until Issue 18 seeds grants for the ClinicQ roles. They can
   sign in and do nothing else.
-- **Dependency advisories:** pip-audit and Trivy report httpx2 2.9.1 (PYSEC-2026-3845, -3848) and
-  httpcore2 2.9.1 (PYSEC-2026-3844), fixed in 2.11.0 and 2.10.0. The app uses neither affected
-  feature; the pins still need raising.
+- **The scanners have limits:** both only warn, so `make check` passes whatever they find. Trivy
+  looks only for CRITICAL or HIGH advisories with a published fix, so a lower-severity or unfixed
+  one in the image does not show.
 - **Kernel stylesheets predate the token rule:** `admin.css` and `landing.css` still carry colour
   literals, and border contrast (`--line`) is below 3:1, which the first form field must fix.
 - **Tested on macOS only.** Linux and WSL were not tried; the Docker image and the compose stack are
