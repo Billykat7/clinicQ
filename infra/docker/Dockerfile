@@ -1,6 +1,11 @@
 # BK ClinicQ app image. Build context is repo root (requirements.txt, src/);
 # see the root .dockerignore for what is kept out of that context.
 # From repo root: docker build -f infra/docker/Dockerfile -t clinicq-app:local .
+#
+# Release builds (.github/workflows/release.yml, Issue 10) also pass the version, the commit and the
+# build time, which the image reports at /health and carries as OCI labels:
+#   docker build -f infra/docker/Dockerfile --build-arg VERSION=0.2.0 \
+#     --build-arg GIT_SHA="$(git rev-parse HEAD)" --build-arg BUILD_TIME="$(date -u +%FT%TZ)" .
 
 # ── Stage 1: builder ─────────────────────────────────────────────────────────
 FROM python:3.14-slim AS builder
@@ -47,6 +52,17 @@ RUN for pkg in \
         pip uninstall -y "$pkg" >/dev/null 2>&1 || true; \
     done
 
+# Strip what the runtime never uses from the venv *here*, before the runtime stage copies it: a file
+# deleted in a later layer still ships in the layer that added it (Issue 10 measured 167 MB of
+# bytecode caches and pip hidden that way). pip bundles old setuptools and msgpack under
+# pip/_vendor/ that Trivy flags as HIGH regardless of the versions installed, and the server never
+# regenerates bytecode (PYTHONDONTWRITEBYTECODE), so both are pure image weight.
+RUN rm -rf /opt/venv/lib/python3.*/site-packages/pip \
+           /opt/venv/lib/python3.*/site-packages/pip-*.dist-info \
+           /opt/venv/bin/pip* \
+    && find /opt/venv -type d -name __pycache__ -prune -exec rm -rf {} + \
+    && find /opt/venv -name '*.pyc' -delete
+
 # ── Stage 2: runtime ─────────────────────────────────────────────────────────
 FROM python:3.14-slim AS runtime
 
@@ -78,35 +94,43 @@ COPY --from=builder /opt/venv /opt/venv
 # Upgrade system Python's setuptools/wheel so Trivy does not report vulns in base image (CVE-2026-23949, CVE-2026-24049)
 RUN /usr/local/bin/python3 -m pip install --no-cache-dir --upgrade "setuptools>=81" "wheel>=0.46.2"
 
-# Remove pip from both the venv and system Python. The app never invokes pip at
-# runtime, but pip bundles its own internal copies of old setuptools and msgpack
-# under pip/_vendor/ (e.g. setuptools==70.3.0, msgpack==1.1.2) that Trivy flags as
-# HIGH CVEs regardless of the setuptools/wheel versions installed above.
-RUN rm -rf /opt/venv/lib/python3.*/site-packages/pip \
-           /opt/venv/lib/python3.*/site-packages/pip-*.dist-info \
-           /opt/venv/bin/pip* \
-           /usr/local/lib/python3.*/site-packages/pip \
+# Remove pip from the system Python too (the venv's went in the builder stage). The app
+# never invokes pip at runtime, and pip's vendored setuptools and msgpack
+# (e.g. setuptools==70.3.0, msgpack==1.1.2) are flagged by Trivy as HIGH CVEs.
+RUN rm -rf /usr/local/lib/python3.*/site-packages/pip \
            /usr/local/lib/python3.*/site-packages/pip-*.dist-info \
            /usr/local/bin/pip*
 
-# Strip Python bytecode caches from the shipped venv. PYTHONDONTWRITEBYTECODE keeps the
-# server from regenerating them, so on disk they are pure image weight.
-RUN find /opt/venv -type d -name __pycache__ -prune -exec rm -rf {} + \
-    && find /opt/venv -name '*.pyc' -delete
+# Application code, owned by appuser as it is copied: a `chown -R` afterwards would duplicate every
+# file in a layer of its own. src/ includes src/static for the /static mount.
+COPY --chown=appuser:appuser src/ ./src/
 
-# Copy application code (includes src/static for /static mount)
-COPY src/ ./src/
-
-# Alembic ships in-image for operator-run migrations (not CD, not container start).
-COPY alembic.ini ./alembic.ini
-COPY alembic/ ./alembic/
+# Alembic and the deploy sequence (scripts/db/deploy-sequence.sh: migrations, then the RBAC seed and
+# its check) ship in the image, so a deploy migrates with exactly the code it is about to run
+# (Issue 11). Nothing runs them at container start: that would race every replica.
+COPY --chown=appuser:appuser alembic.ini ./alembic.ini
+COPY --chown=appuser:appuser alembic/ ./alembic/
+COPY --chown=appuser:appuser scripts/__init__.py ./scripts/__init__.py
+COPY --chown=appuser:appuser scripts/db/ ./scripts/db/
 
 # Writable matplotlib config (avoids slow temp dir fallback if ~/.config is ever tight)
 ENV MPLCONFIGDIR=/tmp/mplconfig
 RUN mkdir -p /tmp/mplconfig && chown appuser:appuser /tmp/mplconfig
 
-# Change ownership
-RUN chown -R appuser:appuser /app
+# What this image is (Issue 10): /health reports VERSION and GIT_SHA, and the OCI labels let
+# `docker inspect` answer the same question without starting it. Declared last, so a new commit
+# rebuilds only these metadata layers. The defaults mark a local build that is not a release.
+ARG VERSION=0.0.0-dev
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=unknown
+ENV VERSION=${VERSION} \
+    GIT_SHA=${GIT_SHA}
+LABEL org.opencontainers.image.title="BK ClinicQ" \
+      org.opencontainers.image.source="https://github.com/Billykat7/clinicQ" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${GIT_SHA}" \
+      org.opencontainers.image.created="${BUILD_TIME}"
+
 USER appuser
 
 # Liveness only: /health/live never touches the database or S3, so a dependency

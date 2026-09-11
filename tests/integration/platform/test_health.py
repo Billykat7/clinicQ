@@ -77,6 +77,16 @@ def test_liveness_returns_ok(client: TestClient, path: str) -> None:
     # Version is whatever the running settings report; assert it is populated, not a
     # literal, so a version bump does not break the release gate.
     assert body["version"]
+    assert body["git_sha"]
+
+
+def test_liveness_reports_the_version_and_commit_the_image_was_built_with() -> None:
+    """A release image sets VERSION and GIT_SHA (Issue 10); /health is where they are read back."""
+    sha = "0123456789abcdef0123456789abcdef01234567"
+    # VERSION is the alias the image sets; the field name is not accepted as a keyword.
+    settings = Settings(_env_file=None, VERSION="0.2.0", git_sha=sha)  # type: ignore[call-arg]
+    body = TestClient(create_app(settings)).get("/health").json()
+    assert (body["version"], body["git_sha"]) == ("0.2.0", sha)
 
 
 def test_readiness_all_healthy_returns_ok(

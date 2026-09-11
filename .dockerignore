@@ -1,0 +1,20 @@
+# The build context for infra/docker/Dockerfile (Issue 10), which every build sends from the repo
+# root. An allowlist: nothing enters the context unless it is named here, so a new file (above all
+# a .env holding secrets) cannot reach a build daemon, a cache or a layer by accident. Add a line
+# here when the Dockerfile starts copying something new; the build fails loudly until you do.
+#
+# This file lives at the repo root, not under infra/docker/: Docker reads .dockerignore only from
+# the root of the build context (.cursor/rules/infra-layout.mdc).
+
+**
+
+!requirements.txt
+!src/
+!alembic/
+!alembic.ini
+!scripts/__init__.py
+!scripts/db/
+
+# Never bytecode, whatever the folders above hold.
+**/__pycache__
+**/*.pyc

@@ -53,6 +53,16 @@ CI_JOB_TIMEOUT_CEILING_MINUTES = 15
 #: The branch every pull request merges into, and the only one CI gates.
 MAIN_BRANCH = "main"
 
+#: The only ref that publishes an image (Issue 10).
+VERSION_TAG_PATTERN = "v*.*.*"
+
+#: What marks each image check in release.yml, which must all run before :latest moves.
+RELEASE_IMAGE_CHECKS = {
+    "size ceiling": "IMAGE_SIZE_CEILING_MB",
+    "non-root user": "id -u",
+    "version and commit at /health": ".git_sha == $sha",
+}
+
 
 class Workflow(StrEnum):
     """The workflow files, by filename."""
@@ -66,7 +76,6 @@ class Workflow(StrEnum):
 #: Workflow files a later issue creates. An entry comes out in the PR that adds the file, and
 #: `test_every_workflow_file_is_covered` fails while a listed file exists, so none can linger.
 NOT_YET_CREATED: dict[Workflow, str] = {
-    Workflow.RELEASE: "Issue 10: image build and GHCR publish on a tag",
     Workflow.DEPLOY: "Issue 11: staging on a tag, production behind approval",
     Workflow.VULNERABILITY_SCAN: "Issue 97: dependency and secret scanning",
 }
@@ -623,3 +632,72 @@ def test_the_prose_only_fast_path_skips_nothing_a_test_reads(
                 ):
                     offenders.append(f"{path.relative_to(REPO_ROOT)} reads {named}")
     assert offenders == []
+
+
+# ── Issue 10: the release ─────────────────────────────────────────────────────────────────────
+
+
+def _release_steps(workflows: dict[Workflow, dict[str, Any]]) -> list[dict[str, Any]]:
+    """The steps of release.yml's one job, in order."""
+    (job,) = _jobs(workflows[Workflow.RELEASE]).values()
+    return job["steps"]
+
+
+def test_the_release_runs_on_version_tags_and_nothing_else(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """An image is published for a v*.*.* tag only: never a branch, a pull request or a schedule."""
+    assert _triggers(workflows[Workflow.RELEASE]) == {
+        Trigger.PUSH: {"tags": [VERSION_TAG_PATTERN]}
+    }
+
+
+def test_the_release_is_never_cancelled_mid_push(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """Cancelling mid-push can leave `:latest` on a half-written manifest, so releases queue.
+
+    The group does not depend on the tag, so two tags pushed together publish in order.
+    """
+    concurrency = workflows[Workflow.RELEASE]["concurrency"]
+    assert concurrency["cancel-in-progress"] is False
+    assert "github.ref" not in concurrency["group"]
+
+
+def test_the_release_moves_latest_only_after_the_image_passed_every_check(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """The build pushes `:<sha>` alone; `:<version>` and `:latest` point at it once it is checked.
+
+    Tagging the checked digest (never rebuilding) is what makes the three tags one manifest, and
+    what makes a rollback a redeploy of an older tag.
+    """
+    steps = _release_steps(workflows)
+    runs = [str(step.get("run", "")) for step in steps]
+    (build,) = [
+        i
+        for i, step in enumerate(steps)
+        if str(step.get("uses", "")).startswith("docker/build-push-action")
+    ]
+    assert steps[build]["with"]["tags"].endswith(":${{ github.sha }}")
+    assert "latest" not in steps[build]["with"]["tags"]
+    (promote,) = [i for i, run in enumerate(runs) if "imagetools create" in run]
+    assert "latest" in runs[promote]
+    for check, marker in RELEASE_IMAGE_CHECKS.items():
+        (at,) = [i for i, run in enumerate(runs) if marker in run]
+        assert build < at < promote, (
+            f"the {check} check must run between build and :latest"
+        )
+
+
+def test_the_release_enforces_an_agreed_size_ceiling(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """A ceiling, stated once, that the size check fails against."""
+    ceiling = workflows[Workflow.RELEASE]["env"]["IMAGE_SIZE_CEILING_MB"]
+    assert int(ceiling) > 0
+    assert any(
+        "exit 1" in str(step.get("run", ""))
+        and "IMAGE_SIZE_CEILING_MB" in str(step.get("run", ""))
+        for step in _release_steps(workflows)
+    )

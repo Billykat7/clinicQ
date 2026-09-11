@@ -1,0 +1,187 @@
+# Release (Issue 10): a version tag builds the image once, checks it, and publishes it to GHCR under
+# three tags that all point at the one manifest that was checked:
+#
+#   ghcr.io/<owner>/clinicq:<git sha>    pushed by the build, the image every check below runs
+#   ghcr.io/<owner>/clinicq:<version>    added after the checks pass (v0.2.0 → 0.2.0)
+#   ghcr.io/<owner>/clinicq:latest       moved at the same moment, to the same digest
+#
+# Nothing is rebuilt to add a tag, and an old tag is never overwritten, so a rollback is a deploy
+# of an older tag (docs/CICD/RELEASE.md). The tagged commit has already passed CI's merge gate: the
+# ruleset admits nothing into main otherwise, so this workflow checks the *image*, not the code.
+#
+# tests/unit/platform/test_workflow_guardrails.py holds the trigger, the concurrency, the order of
+# the checks and the size ceiling; every action is pinned to a commit SHA.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+# Releases queue and are never cancelled: stopping mid-push can leave :latest on a half-written
+# manifest, and two tags pushed together must land in the order they were pushed. The group does
+# not depend on the tag, so that they serialise.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # The agreed ceiling for the uncompressed linux/amd64 image, in MB (Issue 10). Measured at 881 MB
+  # locally after the Issue 10 slimming (1,071 MB before); raising it is a team decision made in
+  # review, recorded in docs/CICD/RELEASE.md, never a line edited to get a release through.
+  IMAGE_SIZE_CEILING_MB: "1000"
+
+jobs:
+  publish:
+    name: Build, check and publish the image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io
+      id-token: write # sign the build provenance
+      attestations: write # store it
+    steps:
+      - name: Check out the tagged commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Name the image and the version
+        id: meta
+        run: |
+          # Registry paths must be lower case; the owner (Billykat7) is not.
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/clinicq"
+          version="${GITHUB_REF_NAME#v}"
+          {
+            echo "image=$image"
+            echo "version=$version"
+            echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } >> "$GITHUB_OUTPUT"
+          echo "Releasing $image $version from ${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Only the commit tag here: :<version> and :latest are added once this exact digest has passed
+      # the checks below. The layer cache lives in its own package, so the app package holds only
+      # release tags, and every tag reuses the last release's layers.
+      - name: Build and push :<git sha>
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: infra/docker/Dockerfile
+          platforms: linux/amd64
+          pull: true
+          push: true
+          tags: ${{ steps.meta.outputs.image }}:${{ github.sha }}
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ steps.meta.outputs.created }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=registry,ref=${{ steps.meta.outputs.image }}-buildcache:amd64
+          cache-to: type=registry,ref=${{ steps.meta.outputs.image }}-buildcache:amd64,mode=max
+
+      - name: Pull the pushed image by digest
+        env:
+          REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+        run: docker pull --quiet "$REF"
+
+      - name: Image size is under the ceiling
+        env:
+          REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+        run: |
+          size_mb=$(( $(docker image inspect --format '{{.Size}}' "$REF") / 1000 / 1000 ))
+          echo "Image size: ${size_mb} MB uncompressed (ceiling ${IMAGE_SIZE_CEILING_MB} MB)" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+          if (( size_mb > IMAGE_SIZE_CEILING_MB )); then
+            echo "::error title=Image too large::${size_mb} MB is over the ${IMAGE_SIZE_CEILING_MB} MB ceiling"
+            exit 1
+          fi
+
+      - name: Runs as a non-root user, with no build toolchain
+        env:
+          REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+        run: |
+          docker run --rm "$REF" id | tee -a "$GITHUB_STEP_SUMMARY"
+          if [[ "$(docker run --rm "$REF" id -u)" == "0" ]]; then
+            echo "::error title=Runs as root::the image's user is root"
+            exit 1
+          fi
+          # shellcheck disable=SC2016  # $tool expands inside the container
+          docker run --rm --entrypoint sh "$REF" -c '
+            status=0
+            for tool in gcc cc c++ g++ make pip pip3; do
+              if command -v "$tool" >/dev/null; then echo "::error::$tool is in the image"; status=1; fi
+            done
+            exit $status'
+
+      # As production, with a throwaway secret and no database: liveness is dependency-free, so a
+      # healthy /health proves the image boots under the production guards and knows what it is.
+      - name: Boots as production and reports its version and commit at /health
+        env:
+          REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          docker run -d --name smoke -p 8000:8000 \
+            -e ENVIRONMENT=production -e JWT_SECRET="$(openssl rand -hex 32)" "$REF"
+          for _ in $(seq 1 30); do
+            curl -fsS http://localhost:8000/health >/dev/null 2>&1 && break
+            sleep 2
+          done
+          body="$(curl -fsS http://localhost:8000/health)" || { docker logs smoke; exit 1; }
+          echo "GET /health → $body" | tee -a "$GITHUB_STEP_SUMMARY"
+          jq -e --arg version "$VERSION" --arg sha "$GITHUB_SHA" \
+            '.status == "ok" and .version == $version and .git_sha == $sha' <<<"$body" >/dev/null \
+            || { echo "::error title=Wrong /health::expected version $VERSION and sha $GITHUB_SHA"; exit 1; }
+          docker rm -f smoke >/dev/null
+
+      - name: Tag the checked manifest :<version> and :latest
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: docker buildx imagetools create --tag "$IMAGE:$VERSION" --tag "$IMAGE:latest" "$IMAGE@$DIGEST"
+
+      - name: All three tags resolve to one digest
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          {
+            echo "| Tag | Digest |"
+            echo "|-----|--------|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for tag in "$GITHUB_SHA" "$VERSION" latest; do
+            digest="$(docker buildx imagetools inspect "$IMAGE:$tag" --format '{{json .Manifest}}' | jq -r .digest)"
+            echo "| \`$IMAGE:$tag\` | \`$digest\` |" >> "$GITHUB_STEP_SUMMARY"
+            if [[ "$digest" != "$DIGEST" ]]; then
+              echo "::error title=Tag mismatch::$IMAGE:$tag is $digest, not $DIGEST"
+              exit 1
+            fi
+          done
+
+      - name: Attest the build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.meta.outputs.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
