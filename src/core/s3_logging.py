@@ -20,13 +20,13 @@ from datetime import date, datetime
 from datetime import time as datetime_time
 from enum import Enum
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from src.commons.enums import S3LogType
-from src.core.config import get_settings
 
-# af-south-1 (Cape Town) region timestamps use the Johannesburg wall clock.
-APP_TIMEZONE = ZoneInfo("Africa/Johannesburg")
+# af-south-1 (Cape Town) region timestamps use the Johannesburg wall clock. Defined once in
+# src.commons.time (Issue 4) and re-exported here, because the kernel imports it from this module.
+from src.commons.time import APP_TIMEZONE
+from src.core.config import get_settings
 
 
 def _json_fallback_serializer(value: Any) -> Any:

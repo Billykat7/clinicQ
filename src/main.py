@@ -14,6 +14,7 @@ from src.api.v1.router import api_v1_router
 from src.commons.enums import AppEnvironment, DependencyStatus, HealthStatus
 from src.core.config import Settings, get_settings
 from src.core.csrf_middleware import CsrfProtectMiddleware
+from src.core.error_handlers import ERROR_RESPONSES, install_error_handlers
 from src.core.health import (
     aggregate_status,
     database_status,
@@ -56,9 +57,11 @@ def create_app(settings_obj: Settings | None = None) -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestLoggingMiddleware)
     app.add_middleware(CsrfProtectMiddleware)
+    # One error envelope for every API error (Issue 4): domain errors, HTTPException, validation.
+    install_error_handlers(app)
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
     app.include_router(web_router)
-    app.include_router(api_v1_router, prefix="/api/v1")
+    app.include_router(api_v1_router, prefix="/api/v1", responses=ERROR_RESPONSES)
 
     def liveness() -> LivenessResponse:
         """Liveness: the process is up. Touches no dependency, so it never restart-loops

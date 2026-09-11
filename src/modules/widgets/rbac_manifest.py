@@ -19,7 +19,7 @@ Three things worth copying into your own module:
   have it — rather than with a console nobody can open.
 """
 
-from src.commons.enums import GrantScope, PermissionVerb
+from src.commons.enums import GrantScope, PermissionVerb, UserRole
 from src.core.rbac_manifest import ModuleManifest, NavMeta, ResourceSpec, RoleGrant
 
 MANIFEST = ModuleManifest(
@@ -37,7 +37,7 @@ MANIFEST = ModuleManifest(
     ),
     grants=(
         RoleGrant(
-            role="admin",
+            role=UserRole.ADMIN.value,
             resource="widgets",
             verb=PermissionVerb.DELETE.value,
             scope=GrantScope.BUSINESS.value,

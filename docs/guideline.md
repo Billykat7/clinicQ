@@ -49,12 +49,15 @@ mis-styled template must not be able to cause that.
 ## 5. Enums on the wire, Johannesburg in the business layer
 
 Wire-safe values are enums, never bare strings. Datetimes are stored as UTC and presented in
-`Africa/Johannesburg`. A naive `datetime.now()` fails lint.
+`Africa/Johannesburg`. A naive `datetime.now()`, or a status written as a bare string, fails the
+build.
 
 **Why:** magic strings drift between six developers; timezone bugs in a queue system are invisible until
 a ticket sequence resets at the wrong hour.
 
-*Enforced by:* Issue 4 and `tests/unit/test_conventions.py`.
+*Enforced by:* Issue 4 and `tests/unit/commons/test_conventions.py`, which scans `src/` and
+`scripts/db/` and names the file and line of every naive datetime, UTC "now" outside the modules a
+standard obliges to use it, and magic status string.
 
 ---
 

@@ -2,8 +2,9 @@
 
 Four conventions every model here follows, and the example exists partly to show them:
 
-* a **string UUID primary key**, defaulted in Python, so an id exists before the flush and a row
-  can be referenced (in an audit event, say) inside the same transaction;
+* a **string UUIDv7 primary key** (:func:`src.commons.ids.new_id`), defaulted in Python, so an id
+  exists before the flush and a row can be referenced (in an audit event, say) inside the same
+  transaction, and ids sort by creation time;
 * the **mixins** carry the columns every table wants — :class:`TimestampMixin` for
   ``created_at``/``modified_at``, :class:`ActiveMixin` for a reversible enable/disable, and
   :class:`SoftDeleteMixin` because an audit trail that references a deleted row must still be able
@@ -15,11 +16,10 @@ Four conventions every model here follows, and the example exists partly to show
   table.
 """
 
-from uuid import uuid4
-
 from sqlalchemy import Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
+from src.commons.ids import new_id
 from src.database.models.base import Base
 from src.database.models.mixins import ActiveMixin, SoftDeleteMixin, TimestampMixin
 
@@ -40,7 +40,7 @@ class Widget(Base, TimestampMixin, ActiveMixin, SoftDeleteMixin):
     id: Mapped[str] = mapped_column(
         String(36),
         primary_key=True,
-        default=lambda: str(uuid4()),
+        default=new_id,
     )
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     """What the widget is called. Not unique — two widgets may share a name."""
