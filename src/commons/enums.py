@@ -85,6 +85,19 @@ class LogLevel(StrEnum):
     INFO = "INFO"
     WARNING = "WARNING"
     ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
+
+
+class LogFormat(StrEnum):
+    """How the console handler writes a record (env: ``LOG_FORMAT``; Issue 6).
+
+    ``JSON`` is one object per line (NDJSON), the format a log pipeline and ``jq`` read, and the
+    default everywhere. ``TEXT`` is the kernel's human-readable line, for a developer who prefers
+    it locally; the same context and the same redaction apply to both.
+    """
+
+    JSON = "json"
+    TEXT = "text"
 
 
 class S3LogPath(StrEnum):

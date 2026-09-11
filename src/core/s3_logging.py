@@ -171,6 +171,8 @@ def _record_to_payload(record: logging.LogRecord) -> dict[str, Any]:
     # Request context injected by RequestContextFilter / RequestLoggingMiddleware.
     for attr in (
         "request_id",
+        "site_id",
+        "actor_id",
         "path",
         "method",
         "client_ip",

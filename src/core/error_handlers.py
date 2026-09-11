@@ -32,7 +32,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
 
 from src.commons.exceptions import BKPropertyError, ErrorEnvelope
-from src.core.request_logging import get_request_id
+from src.core.request_logging import REQUEST_ID_HEADER, request_id_for
 
 logger = logging.getLogger(__name__)
 
@@ -66,14 +66,15 @@ def http_error_code(status_code: int) -> str:
 
 
 def _envelope_response(
+    request: Request,
     *,
     status_code: int,
     detail: Any,
     code: str,
     headers: Mapping[str, str] | None = None,
 ) -> JSONResponse:
-    """Build the JSON response for one error, stamping the current request id."""
-    body = {"detail": detail, "code": code, "request_id": get_request_id()}
+    """Build the JSON response for one error, stamping the request's id."""
+    body = {"detail": detail, "code": code, "request_id": request_id_for(request)}
     return JSONResponse(
         jsonable_encoder(body), status_code=status_code, headers=headers
     )
@@ -91,7 +92,7 @@ async def domain_error_handler(request: Request, exc: Exception) -> Response:
         status_code,
         extra={"error_code": error.code, "status": status_code},
     )
-    envelope = error.to_envelope(request_id=get_request_id())
+    envelope = error.to_envelope(request_id=request_id_for(request))
     return JSONResponse(envelope.model_dump(mode="json"), status_code=status_code)
 
 
@@ -107,7 +108,11 @@ async def http_exception_handler(request: Request, exc: Exception) -> Response:
         else http_error_code(error.status_code)
     )
     return _envelope_response(
-        status_code=error.status_code, detail=detail, code=code, headers=error.headers
+        request,
+        status_code=error.status_code,
+        detail=detail,
+        code=code,
+        headers=error.headers,
     )
 
 
@@ -115,6 +120,7 @@ async def request_validation_handler(request: Request, exc: Exception) -> Respon
     """Answer a request-validation failure in the envelope, keeping FastAPI's error list."""
     error = cast(RequestValidationError, exc)
     return _envelope_response(
+        request,
         status_code=HTTPStatus.UNPROCESSABLE_CONTENT,
         detail=error.errors(),
         code=REQUEST_INVALID_CODE,
@@ -125,12 +131,17 @@ async def unhandled_error_handler(request: Request, exc: Exception) -> Response:
     """Answer an unhandled exception with a generic 500 envelope.
 
     Starlette calls this from its outermost middleware and then re-raises ``exc``, so the traceback
-    still reaches the server log; the client only ever sees the fixed message below.
+    still reaches the server log; the client only ever sees the fixed message below. It runs
+    outside the request-logging middleware, so it sets ``X-Request-ID`` itself: a 500 is the
+    response a user most needs an id to quote (Issue 6).
     """
+    request_id = request_id_for(request)
     return _envelope_response(
+        request,
         status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
         detail=HTTPStatus.INTERNAL_SERVER_ERROR.phrase,
         code=INTERNAL_ERROR_CODE,
+        headers={REQUEST_ID_HEADER: request_id} if request_id else None,
     )
 
 

@@ -20,6 +20,7 @@ from src.core.health import (
     database_status,
     migrations_status,
     probe_cert,
+    redis_status,
     storage_status,
 )
 from src.core.logging_config import setup_logging
@@ -55,9 +56,13 @@ def create_app(settings_obj: Settings | None = None) -> FastAPI:
         openapi_url=None if is_prod else "/openapi.json",
         lifespan=lifespan,
     )
+    # Added last = outermost (Starlette wraps in reverse), so every response carries X-Request-ID
+    # and its log lines their context, including a request the CSRF middleware refuses (Issue 6).
     app.add_middleware(SecurityHeadersMiddleware)
-    app.add_middleware(RequestLoggingMiddleware)
     app.add_middleware(CsrfProtectMiddleware)
+    app.add_middleware(
+        RequestLoggingMiddleware, trust_proxy_headers=cfg.trust_proxy_headers
+    )
     # One error envelope for every API error (Issue 4): domain errors, HTTPException, validation.
     install_error_handlers(app)
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
@@ -115,6 +120,7 @@ def create_app(settings_obj: Settings | None = None) -> FastAPI:
         response: Response,
         database: DependencyStatus = Depends(database_status),
         migrations: DependencyStatus = Depends(migrations_status),
+        redis: DependencyStatus = Depends(redis_status),
         storage: DependencyStatus = Depends(storage_status),
     ) -> ReadinessResponse:
         """Readiness: per-dependency status and an aggregated verdict. Answers 503 when a
@@ -125,9 +131,9 @@ def create_app(settings_obj: Settings | None = None) -> FastAPI:
         this path for clinicq specifically, while services that only expose ``/health``
         keep working unchanged."""
         checks = DependencyChecks(
-            database=database, migrations=migrations, storage=storage
+            database=database, migrations=migrations, redis=redis, storage=storage
         )
-        overall = aggregate_status(database, migrations, storage)
+        overall = aggregate_status(database, migrations, redis, storage)
         if overall is HealthStatus.DOWN:
             response.status_code = http_status.HTTP_503_SERVICE_UNAVAILABLE
         return ReadinessResponse(status=overall, checks=checks, cert=probe_cert(cfg))

@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import AliasChoices, Field, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine.url import make_url
 
@@ -14,6 +14,7 @@ from src.commons.enums import (
     DbSchema,
     DocumentScannerKind,
     EsignProviderKind,
+    LogFormat,
     LogLevel,
     RateLimitBackendKind,
     S3LogPath,
@@ -45,7 +46,14 @@ class Settings(BaseSettings):
         default=AppEnvironment.DEVELOPMENT,
         description="Runtime environment (env: ENVIRONMENT)",
     )
-    log_level: str = Field(default="INFO", description="Log level (env: LOG_LEVEL)")
+    log_level: LogLevel = Field(
+        default=LogLevel.INFO,
+        description="Minimum level the console writes (env: LOG_LEVEL). INFO unless a deployment says otherwise.",
+    )
+    log_format: LogFormat = Field(
+        default=LogFormat.JSON,
+        description="Console log format: json (one object per line) or text (env: LOG_FORMAT).",
+    )
 
     # Edge TLS certificate whose expiry is reported in the health body so the infra
     # gateway can surface it (the gateway can't read the edge PEMs — only its nginx
@@ -205,6 +213,12 @@ class Settings(BaseSettings):
             "fails fast rather than stalling. 0 disables (env: DB_LOCK_TIMEOUT_SECONDS)."
         ),
     )
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def normalise_log_level(cls, value: object) -> object:
+        """Accept ``info`` as well as ``INFO``: the level was a free string before it was an enum."""
+        return value.strip().upper() if isinstance(value, str) else value
 
     @model_validator(mode="after")
     def build_database_url_from_components(self) -> Settings:
@@ -385,6 +399,23 @@ class Settings(BaseSettings):
     # degrades back to the in-process window when the shared store is unreachable and logs it once
     # per outage — a limiter that takes the site down when Redis blinks is a worse outcome than the
     # abuse it prevents.
+    # The Redis the application depends on (Issue 6): queued work and live updates arrive in later
+    # milestones, and readiness checks it from now on. Unset means "this deployment has no Redis":
+    # readiness reports it ``skipped``. Set and unreachable, readiness answers 503 naming it.
+    redis_url: str | None = Field(
+        default=None,
+        description="Redis the app depends on; checked by /health/ready (env: REDIS_URL). Unset: skipped.",
+    )
+    redis_probe_timeout_seconds: float = Field(
+        default=1.0,
+        gt=0,
+        le=5,
+        description=(
+            "Connect and read timeout of the readiness Redis ping, in seconds "
+            "(env: REDIS_PROBE_TIMEOUT_SECONDS). Short, so a hung Redis fails readiness quickly."
+        ),
+    )
+
     rate_limit_backend: RateLimitBackendKind = Field(
         default=RateLimitBackendKind.MEMORY,
         description="Where rate-limit windows live: memory or redis (env: RATE_LIMIT_BACKEND)",
