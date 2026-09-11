@@ -208,6 +208,7 @@ def test_an_inbound_request_id_is_kept_only_from_a_trusted_proxy_in_a_safe_forma
     assert (response.headers[REQUEST_ID_HEADER] == inbound) is kept
 
 
+@pytest.mark.slow
 def test_liveness_never_touches_the_database_and_answers_fast() -> None:
     """With every session request failing, ``/health`` still answers, p95 under 50 ms.
 
