@@ -21,10 +21,22 @@ class OtpRequestIn(BaseModel):
     )
 
 
+#: What a patient is told about their number when they give it (POPIA s18: why it is collected).
+#: Wording owned by F (Data & Research); draft v1, awaiting F's review before the patient pages
+#: (M9) show it. Plain words, no legal terms, readable on a feature phone's screen.
+PHONE_NOTICE = (
+    "We use your number to check it is you and to find your place in the queue. We never show it "
+    "on a screen or give it to anyone else. We only send you messages you ask for."
+)
+
+
 class OtpRequestOut(BaseModel):
     """The same answer for every number that could be sent a code (no enumeration)."""
 
     detail: str = "A 6-digit code is on its way by SMS."
+    notice: str = Field(
+        default=PHONE_NOTICE, description="Why the number is collected."
+    )
     expires_in_seconds: int = Field(description="How long the code is good for.")
     resend_after_seconds: int = Field(description="When another code may be requested.")
 
