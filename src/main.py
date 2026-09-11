@@ -102,7 +102,10 @@ def create_app(settings_obj: Settings | None = None) -> FastAPI:
         which can't read the edge cert files — can surface expiry. It is omitted, never
         failing, when unconfigured or unreadable."""
         return LivenessResponse(
-            status=HealthStatus.OK, version=cfg.version, cert=probe_cert(cfg)
+            status=HealthStatus.OK,
+            version=cfg.version,
+            git_sha=cfg.git_sha,
+            cert=probe_cert(cfg),
         )
 
     # Two paths, one handler: /health is the uniform heartbeat (what the infra health poller

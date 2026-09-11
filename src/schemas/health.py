@@ -40,6 +40,9 @@ class LivenessResponse(BaseModel):
 
     status: HealthStatus = Field(description="Liveness status for the API process.")
     version: str = Field(description="Application version string.")
+    git_sha: str = Field(
+        description="The commit this build came from (`unknown` outside a release image)."
+    )
     cert: CertInfo | None = Field(
         default=None,
         description="Edge TLS certificate expiry, when a cert path is configured; else omitted.",

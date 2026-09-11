@@ -64,7 +64,18 @@ class Settings(BaseSettings):
     version: str = Field(
         default="0.1.0",
         validation_alias=AliasChoices("VERSION", "APP_VERSION"),
-        description="Application version (env: VERSION; APP_VERSION accepted as alias)",
+        description=(
+            "Application version, reported at /health (env: VERSION; APP_VERSION accepted as "
+            "alias). The release image sets it from the tag (Issue 10); leave it out of env files."
+        ),
+    )
+    git_sha: str = Field(
+        default="unknown",
+        description=(
+            "The commit the running code was built from, reported at /health (env: GIT_SHA). Set "
+            "by the image build (Issue 10); never set it in an env file, or it would mislabel "
+            "the image it runs in."
+        ),
     )
     environment: AppEnvironment = Field(
         default=AppEnvironment.DEVELOPMENT,
