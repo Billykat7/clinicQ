@@ -89,7 +89,7 @@ anonymised district-level dashboards for health-department planning.
 | Interactivity | **htmx** + small modules in `src/static/js/` + **SSE**, no separate JS build |
 | Styling | Hand-written **CSS design tokens**: one set for the patient, dashboard and board layouts, light and dark, fonts self-hosted (decision 2) |
 | Database | **PostgreSQL 18** with **PostGIS** |
-| ORM / migrations | **SQLAlchemy 2.x (async)** + **Alembic** |
+| ORM / migrations | **SQLAlchemy 2.x** (sync sessions by default, async for streams; decision 5) + **Alembic** |
 | Cache / jobs | **Redis** + `arq` |
 | Channels | USSD gateway (Africa's Talking-class) · WhatsApp Business Cloud API · SMS · Web Push |
 | Packaging / infra | **pip** + `requirements.txt` · **Docker Compose** · **GitHub Actions** |

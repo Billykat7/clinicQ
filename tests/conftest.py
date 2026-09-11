@@ -1,15 +1,20 @@
 """Pytest fixtures."""
 
-from __future__ import annotations
-
+import os
 from collections.abc import Generator
+from pathlib import Path
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import Engine, create_engine, text
+from sqlalchemy.engine import URL, make_url
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from src.commons.ids import new_id
 from src.core import security
 from src.core.rate_limit import reset_all_limiters
 from src.database.models import Base
@@ -68,3 +73,108 @@ def session_factory() -> Generator[sessionmaker[Session]]:
 # * `session_factory` gives an in-memory SQLite database with the schema mapped away
 #   (`sqlite_schema_translate_map`), so a test never needs PostgreSQL to exercise a query. Reach
 #   for the real database only when you are testing something PostgreSQL does and SQLite does not.
+
+
+# ── PostgreSQL + PostGIS (Issue 3) ───────────────────────────────────────────────────────────
+#
+# SQLite is enough for most tests, but not for the database layer itself: migrations, PostGIS,
+# the schema, constraint names and connection handling are PostgreSQL behaviour. Tests marked
+# ``postgres`` get a **throwaway database** on the server named by ``TEST_DATABASE_URL``: created
+# empty for the test, dropped afterwards, called ``clinicq_test_<uuid7>`` so nothing else on the
+# server is ever touched. With the compose stack up (``make db-up``) that is::
+#
+#     TEST_DATABASE_URL=postgresql://btk_user:change-me@localhost:5432/btk pytest -m postgres
+#
+# or ``make test-postgres``. The URL is never guessed: whatever answers on localhost:5432 on a
+# developer's machine may be another product's database. Without it the tests are skipped with
+# that instruction, unless ``REQUIRE_POSTGRES_TESTS=1`` (CI sets it) turns the skip into a failure,
+# so a missing service container cannot pass as green.
+
+MIGRATIONS_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
+_TEST_DB_PREFIX = "clinicq_test_"
+
+
+def _postgres_unavailable(reason: str) -> None:
+    """Skip, or fail when the run requires PostgreSQL."""
+    if os.environ.get("REQUIRE_POSTGRES_TESTS") == "1":
+        pytest.fail(f"PostgreSQL tests are required here: {reason}")
+    pytest.skip(
+        f"{reason}. Set TEST_DATABASE_URL to a PostgreSQL 18 + PostGIS server (make db-up)."
+    )
+
+
+@pytest.fixture(scope="session")
+def postgres_server_url() -> URL:
+    """The server the throwaway databases are created on; skips (or fails) when there is none."""
+    raw = os.environ.get("TEST_DATABASE_URL", "").strip()
+    if not raw:
+        _postgres_unavailable("TEST_DATABASE_URL is not set")
+    url = make_url(raw)
+    engine = create_engine(url, isolation_level="AUTOCOMMIT")
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except OperationalError as exc:
+        _postgres_unavailable(
+            f"cannot reach {url.render_as_string(hide_password=True)}: {exc.orig}"
+        )
+    finally:
+        engine.dispose()
+    return url
+
+
+@pytest.fixture
+def empty_database(postgres_server_url: URL) -> Generator[URL]:
+    """A brand-new, empty database for one test, dropped (connections and all) afterwards."""
+    name = f"{_TEST_DB_PREFIX}{new_id().replace('-', '')}"
+    admin = create_engine(postgres_server_url, isolation_level="AUTOCOMMIT")
+    with admin.connect() as conn:
+        conn.execute(text(f'CREATE DATABASE "{name}"'))
+    try:
+        yield postgres_server_url.set(database=name)
+    finally:
+        assert name.startswith(
+            _TEST_DB_PREFIX
+        )  # never drop anything this fixture did not create
+        with admin.connect() as conn:
+            conn.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+        admin.dispose()
+
+
+def run_alembic(url: URL, *commands: tuple[str, ...]) -> Config:
+    """Run Alembic ``commands`` (``("upgrade", "head")``, ``("check",)``...) against ``url``.
+
+    The migrations run on a connection handed to ``alembic/env.py`` (its cookbook hook), so they
+    reach the test database whatever ``DATABASE_URL`` the local ``.env`` names.
+    """
+    config = Config(str(MIGRATIONS_INI))
+    config.attributes["configure_logger"] = (
+        False  # keep the test process's logging as it is
+    )
+    engine = create_engine(url)
+    try:
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            for name, *arguments in commands:
+                getattr(command, name)(config, *arguments)
+    finally:
+        engine.dispose()
+    return config
+
+
+@pytest.fixture
+def migrated_database(empty_database: URL) -> URL:
+    """An empty database brought to ``head`` by the real migrations."""
+    run_alembic(empty_database, ("upgrade", "head"))
+    return empty_database
+
+
+@pytest.fixture
+def migrated_engine(migrated_database: URL) -> Generator[Engine]:
+    """An engine on the migrated database, with the app's ``search_path``, disposed afterwards."""
+    from src.database.schema import apply_postgres_search_path
+
+    engine = create_engine(migrated_database, pool_size=5, max_overflow=0)
+    apply_postgres_search_path(engine)
+    yield engine
+    engine.dispose()

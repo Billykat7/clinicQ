@@ -33,7 +33,7 @@ and **timezone discipline** (all business datetimes are `Africa/Johannesburg`, s
 
 - `uv`-managed Python 3.14 project, `pyproject.toml`, ruff + mypy configuration, app factory and typed settings
 - Docker Compose dev stack: PostgreSQL 18 with PostGIS, Redis, and the API container
-- SQLAlchemy 2.x async engine/session, Alembic baseline including the `postgis` extension
+- SQLAlchemy 2.x sessions (sync by default, async for streams: decision 5), Alembic baseline including the `postgis` extension
 - Shared enums, error envelope, ID strategy and `Africa/Johannesburg` datetime helpers
 - Jinja2 base layout and three layouts (patient, dashboard, board) on one set of design tokens, with htmx (decision 2: no Tailwind, no Alpine)
 - Structured JSON logging with request-context middleware, `/health` and `/ready`

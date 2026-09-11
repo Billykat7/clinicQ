@@ -73,7 +73,7 @@ Places where the specs and the repository disagree. None blocks sprint 1, but ea
 | 2 | Styling (**decided in Issue 5**) | Tailwind, compiled; Alpine.js for local state | Hand-written CSS design tokens (`site.css`, `admin.css`, `landing.css`) with light and dark themes. **Kept, with htmx and no Alpine**: see the note below the table | 5 and every UI issue |
 | 3 | Packaging and layout (**decided in Issue 1**) | `uv` and `uv sync`; an `app/` package | `requirements.txt` with setuptools (`pyproject.toml`); a `src/` package. **Kept as is**: see the note below the table | 1, 7, 9 |
 | 4 | PostgreSQL version (**decided in Issue 2**) | 18 | `postgis/postgis:16-3.4` in `infra/docker/docker-compose.db.yml`. **Now `postgis/postgis:18-3.6`**: see the note below the table | 2, 3, 9, 102 |
-| 5 | Database sessions | Async everywhere | Both; most kernel routes use the sync `get_db` | 3 and every new module |
+| 5 | Database sessions (**decided in Issue 3**) | Async everywhere | Both; most kernel routes use the sync `get_db`. **Sync by default, async for streams**: see the note below the table | 3 and every new module |
 | 6 | Seeding roles and grants | By migration | By module manifests and `make seed-rbac` (idempotent) | 18 |
 | 7 | Database topology | A production database of its own | A schema (`clinicq`) in a shared platform database, which `scripts/db/backup.sh` assumes | 102, 103 |
 | 8 | API paths | `/api/...` (for example `/api/clinics/nearby`) | Everything under `/api/v1/` | 31 and every API issue |
@@ -89,6 +89,15 @@ same policy. The components are Jinja macros in `src/templates/components/` over
 `src/static/css/components.css`, and the fonts are self-hosted, so no page loads CSS, JavaScript or
 fonts from another host. Specs that say Tailwind or Alpine mean the tokens and a module in
 `src/static/js/`; `/dev/components` shows what exists.
+
+**Decision 5, recorded in Issue 3:** new modules use the **sync** session, `get_db`, like every
+kernel router. The RBAC dependencies, the tenancy scoping and the audit writer all take a sync
+`Session`, and FastAPI runs a sync route in its worker pool, so it never blocks the event loop.
+Going async everywhere would mean async twins of all of those before the first ClinicQ route, for no
+gain at a clinic's request rate. `get_async_db` stays for the few handlers that must not hold a
+worker for long: the board's server-sent events (M8) and similar streams. Alembic runs on the sync
+engine too. Both dependencies roll back on an exception and never leak a connection, which
+`tests/integration/database/test_session_lifecycle.py` proves against PostgreSQL.
 
 **Decision 3, recorded in Issue 1:** the project keeps `requirements.txt` with setuptools and the
 `src/` package it was scaffolded with. Every script, Dockerfile, CI stage and guard test already
