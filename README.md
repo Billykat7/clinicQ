@@ -154,8 +154,10 @@ five commands take you from nothing to a running app:
    python3.14 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
    ```
 
-2. Point the app at the local stack. `.env.example` holds `DATABASE_URL` and `REDIS_URL`, matching
-   the compose defaults; every other setting has a development default (Issue 12 fills in the rest):
+2. Point the app at the local stack. `.env.example` lists every setting the app reads, each with
+   its description and default; only `DATABASE_URL` and `REDIS_URL` are active, matching the compose
+   defaults. What differs in staging and production, and what the app refuses to start with there,
+   is in [`docs/CICD/ENVIRONMENTS.md`](docs/CICD/ENVIRONMENTS.md):
 
    ```bash
    cp .env.example .env

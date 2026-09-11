@@ -180,7 +180,10 @@ export DB_HOST=127.0.0.1
 export DB_PORT="$PG_PORT"
 export DB_NAME=btk
 export DB_USER="${DB_USER:-btk_user}"
-export DB_PASSWORD="${DB_PASSWORD:-F9v#3rPq!T2mLd8X}"
+# No fallback value: a password written here is in git history for good (Issue 12 found the
+# shared platform database's password in this line and removed it). It comes from .env, sourced
+# above, which takes it from the platform repo's own .env.
+export DB_PASSWORD="${DB_PASSWORD:?set DB_PASSWORD in .env to the shared platform database password (see ../infra/.env)}"
 DEFAULT_PLATFORM_DB_URL="postgresql://${DB_USER}:${DB_PASSWORD}@127.0.0.1:${PG_PORT}/btk"
 export DATABASE_URL="${PLATFORM_DATABASE_URL:-$DEFAULT_PLATFORM_DB_URL}"
 DOCKER_DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@host.docker.internal:${PG_PORT}/btk"

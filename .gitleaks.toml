@@ -6,15 +6,28 @@
 # real AWS key committed into a test file pass every rule; tests/unit/platform/test_scanning_config.py
 # fails the build if a `paths` entry appears here.
 #
-# Historical findings that were reviewed and are not secrets (test passwords, test JWT secrets, the
-# fake token the log-redaction test masks) are enumerated, one by one, in .gitleaks-baseline.json.
-# A new one goes there only after review, never into a pattern below. A real secret is rotated
-# first, then removed: once committed it is in history, and rotation stops being optional.
+# Historical findings that were reviewed are enumerated, one by one, in .gitleaks-baseline.json:
+# test passwords, test JWT secrets, the fake token the log-redaction test masks, two development
+# placeholders from Issue 1, and one real credential Issue 12 found in history (the shared platform
+# database password, removed from the tree; see docs/CICD/ENVIRONMENTS.md, "History"). A new one
+# goes there only after review, never into a pattern below. A real secret is rotated first, then
+# removed: once committed it is in history, and rotation stops being optional.
 
 title = "BK ClinicQ secret scan"
 
 [extend]
 useDefault = true
+
+# Issue 12's history check found a real credential the default rules miss: a secret-named shell
+# variable with a literal fallback, `${DB_PASSWORD:-…}` (scripts/run-local-platform.sh,
+# Issue 1). This rule catches that shape; the compose files' documented `change-me` default is
+# allowlisted below by its value.
+[[rules]]
+id = "shell-default-secret"
+description = "A secret-named shell variable with a literal fallback value, e.g. ${DB_PASSWORD:-value}"
+regex = '''\$\{[A-Za-z0-9_]*(?i:password|passwd|secret|token|api_key|private_key)[A-Za-z0-9_]*:?-([^}$\s"']{6,})\}'''
+secretGroup = 1
+keywords = ["password", "passwd", "secret", "token", "api_key", "private_key"]
 
 [[allowlists]]
 description = "Values that cannot be secrets, whatever key they sit beside"
@@ -24,4 +37,6 @@ regexes = [
   '''^(?:Africa|America|Antarctica|Asia|Atlantic|Australia|Europe|Indian|Pacific|Etc)/[A-Za-z_+-]+$''',
   # The compose stack's published development default, documented in .env.example.
   '''^change-me$''',
+  # What gitleaks writes in place of a secret in a --redact report, and so in the baseline file.
+  '''^REDACTED$''',
 ]
