@@ -59,6 +59,7 @@ CSRF protection, because the dashboard is a cookie-authenticated server-rendered
 - `src/api/v1/routes/auth.py`
 - `src/core/refresh_token_policy.py`
 - `src/core/csrf_middleware.py`
+- `alembic/versions/0002_refresh_token_family.py` (the token family)
 - `tests/integration/auth/test_auth_signin_sessions.py`
 
 ---

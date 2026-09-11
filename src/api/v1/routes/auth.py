@@ -259,12 +259,15 @@ def _refresh_csrf_ok(request: Request, settings: Settings, family_id: str) -> bo
 
     The middleware has already checked that the echoed token matches the cookie; a request carrying
     only the refresh cookie has no access token to bind against, so the binding is checked here,
-    against the refresh token's own family. No CSRF cookie at all (a browser signed in before
-    Issue 16, whose CSRF cookie expired with its access cookie) is let through: ``SameSite=Lax``
-    and the Fetch Metadata check already stop a cross-site request.
+    against the refresh token's own family. A browser signed in before Issue 16 holds no CSRF
+    cookie (it expired with the access cookie) or an unsigned one (no ``.``); either is let through
+    once, and this response mints a bound one. ``SameSite=Lax`` and the Fetch Metadata check still
+    stop a cross-site request, and a refresh only ever rotates the caller's own session.
     """
     token = request.cookies.get(settings.csrf_cookie_name)
-    return token is None or csrf_token_is_bound(token, family_id)
+    if token is None or "." not in token:
+        return True
+    return csrf_token_is_bound(token, family_id)
 
 
 def _audit_refresh_reuse(user_id: str, family_id: str, revoked: int) -> None:
