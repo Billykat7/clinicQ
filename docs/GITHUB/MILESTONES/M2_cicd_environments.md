@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Status** | 📋 Planned |
+| **Status** | ✅ Done: issues 9–14 closed on 2026-09-11, release note [`v0.2.0`](../RELEASES/RELEASE_v0_2_0.md). Three exit criteria are met only in part until hosts and a team channel exist (below) |
 | **Sprints** | 2 (weeks 3–4), semester 1. The sprint plan spreads its issues over sprints 2–3: some are scheduled after this window, which moves the milestone's close (and its tag) to sprint 3 (see the table) |
 | **Release tag** | `v0.2.0` |
 | **Primary owner** | E, DevOps/QA |
@@ -76,12 +76,12 @@ flowchart LR
 
 ## Exit criteria
 
-- [ ] A pull request runs lint + type-check + tests and blocks merge on failure
-- [ ] Pushing a `v*.*.*` tag builds an image, publishes it to GHCR and deploys it to staging
-- [ ] Production deploys require an explicit approval from the DevOps/QA Lead
-- [ ] The app refuses to boot with a missing or default secret outside local development
-- [ ] Every issue and PR carries a milestone, an area label and a CODEOWNERS-routed reviewer
-- [ ] Staging downtime raises an alert in the team channel within 5 minutes
+- [x] A pull request runs lint + type-check + tests and blocks merge on failure (Issue 9: PR #121 was blocked by its red CI gate)
+- [ ] Pushing a `v*.*.*` tag builds an image, publishes it to GHCR and deploys it to staging. **Partly (Issues 10, 11):** a tag builds, checks and publishes one image in under 4 minutes and starts a staging deploy by itself; with no staging host yet (Issue 102) that deploy reports "not provisioned". Every host step was proven on a local stand-in
+- [x] Production deploys require an explicit approval from the DevOps/QA Lead (Issue 11: the `production` Environment; a production run waited with 0 steps run)
+- [x] The app refuses to boot with a missing or default secret outside local development (Issues 1 and 12: every problem in one error)
+- [ ] Every issue and PR carries a milestone, an area label and a CODEOWNERS-routed reviewer. **Partly (Issue 13):** every M2 issue and PR has milestone M2 and `AREA: Infra`; CODEOWNERS routes every path to one reviewer until `WORKLOAD_SPLIT.md` §1 names the team, and GitHub requests no review from an author who owns every path
+- [ ] Staging downtime raises an alert in the team channel within 5 minutes. **Partly (Issue 14):** one alert, naming the responsible role, 122 s into an outage and none more for its 6.5 minutes, shown on a local stand-in; no staging host or team channel exists yet
 
 ## Demo at the end of the milestone
 
