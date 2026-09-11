@@ -50,13 +50,9 @@ jobs:
     name: Changed paths
     runs-on: ubuntu-24.04
     timeout-minutes: 3
-    permissions:
-      contents: read
-      pull-requests: read # the conventions check reads the description, commits and files
     outputs:
       code: ${{ steps.classify.outputs.code }}
       image: ${{ steps.classify.outputs.image }}
-      conventions: ${{ steps.conventions.outcome }}
     steps:
       - name: Check out the merge commit and its base
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -116,20 +112,32 @@ jobs:
           done
           emit "$code" "$image" "${#changed[@]} files changed · code: $code · image inputs: $image"
 
+  # Issue 13: Issue/<N>/<slug> branches, `Issue N: ` commits, `Closes #N`, a screenshot for a UI
+  # change (scripts/check_pr_conventions.py). A job of its own, needing nothing: a naming slip never
+  # stops the tests, and after fixing a description, "Re-run failed jobs" re-runs just this and the
+  # gate, which read the pull request afresh. It runs on drafts too, being cheap.
+  conventions:
+    name: Conventions
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      pull-requests: read # the description, commits and changed files
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - name: Set up Python 3.14
-        if: github.event_name == 'pull_request'
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.14"
 
-      # Issue 13: Issue/<N>/<slug> branches, `Issue N: ` commits, `Closes #N`, a screenshot for a UI
-      # change (scripts/check_pr_conventions.py). continue-on-error: a naming slip must not stop the
-      # tests running; the gate fails on this outcome instead. The branch name reaches the script
-      # through the environment, never the shell text, because a fork chooses it.
+      # The branch name reaches the script through the environment, never the shell text: a fork
+      # chooses it.
       - name: Branch, commits and description follow the conventions
-        id: conventions
-        if: github.event_name == 'pull_request'
-        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -436,26 +444,27 @@ jobs:
     # The one check branch protection requires. It needs every other job, so a job added later is
     # covered as soon as it is listed here, and the guard test fails if one is left out.
     name: CI gate
-    needs: [changes, quality, test, report, docker]
+    needs: [changes, conventions, quality, test, report, docker]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
-      - name: Every job passed, the conventions hold, and nothing was skipped without a reason
+      - name: Every job passed, or was skipped for a prose-only or draft change
         env:
           NEEDS: ${{ toJSON(needs) }}
+          EVENT: ${{ github.event_name }}
         run: |
           jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<<"$NEEDS"
-          if ! jq -e '
+          if ! jq -e --arg event "$EVENT" '
             (.changes.result == "success")
-            and (.changes.outputs.conventions != "failure")
+            and ($event != "pull_request" or .conventions.result == "success")
             and ([.[] | .result] | all(. == "success" or . == "skipped"))
             and (if .changes.outputs.code == "true"
                  then ([.quality, .test, .report] | all(.result == "success")) else true end)
             and (if .changes.outputs.image == "true"
                  then .docker.result == "success" else true end)
           ' <<<"$NEEDS" > /dev/null; then
-            echo "::error title=CI gate::A required job failed, was cancelled or did not run, or the conventions check failed."
+            echo "::error title=CI gate::A required job failed, was cancelled or did not run."
             exit 1
           fi
           echo "All required jobs passed."

@@ -20,6 +20,7 @@ Each stage of `ci-local.sh` has a home in `ci.yml`, or is local-only on purpose:
 | `ci-local.sh` stage | CI job | What it runs | Timeout |
 |---------------------|--------|--------------|---------|
 | — | `changes` | classifies the pull request: draft, prose-only, image inputs touched | 3 min |
+| — | `conventions` | branch name, commit prefixes, `Closes #N`, a screenshot for UI changes (Issue 13) | 3 min |
 | quality | `quality` | `ruff check .`, `ruff format --check .`, `mypy src/`, `scripts/check-ruff-pin.sh` | 10 min |
 | secrets | `quality` | `gitleaks detect` over the whole history, the exact command `ci-local.sh` runs | (same job) |
 | tests | `test` × 3 shards | `pytest -n auto --dist loadscope --cov`, after the deploy sequence (integration shard) | 15 min |
@@ -84,9 +85,9 @@ open PRs; the daily-rebase rule in `CONTRIBUTING.md` covers the risk more cheapl
 
 | Pull request | Jobs that run | Gate |
 |--------------|---------------|------|
-| Draft | `changes` only | green, with "runs when marked ready for review" on the summary |
-| Only prose files changed | `changes` only | green |
-| Code changed | `changes`, `quality`, `test` × 3, `report` | green when all pass |
+| Draft | `changes` and `conventions` | green, with "runs when marked ready for review" on the summary |
+| Only prose files changed | `changes` and `conventions` | green |
+| Code changed | `changes`, `conventions`, `quality`, `test` × 3, `report` | green when all pass |
 | `infra/docker/Dockerfile`, `requirements.txt` or `.dockerignore` changed | the above plus `docker` | green when all pass |
 
 Marking a draft ready for review starts a full run. Prose means the folders and files in
@@ -147,10 +148,10 @@ Measured on PR #120 and its manual runs:
 
 | Run | Wall clock | Jobs (rounded up) | Billable if private |
 |-----|-----------:|-------------------|--------------------:|
-| Code change, image not touched | 2 min 20 s | changes 1, quality 1, unit 1, integration 2, flows 1, report 1, gate 1 | **8 min** |
-| Code change touching the image inputs, warm cache | 2 min 6 s | the above + docker 1 | **9 min** |
-| The same, cold Docker cache | 5 min 12 s | the above + docker 5 | **13 min** |
-| Draft or prose-only pull request | under 20 s | changes 1, gate 1 | **2 min** |
+| Code change, image not touched | 2 min 20 s | changes 1, conventions 1, quality 1, unit 1, integration 2, flows 1, report 1, gate 1 | **9 min** |
+| Code change touching the image inputs, warm cache | 2 min 6 s | the above + docker 1 | **10 min** |
+| The same, cold Docker cache | 5 min 12 s | the above + docker 5 | **14 min** |
+| Draft or prose-only pull request | under 30 s | changes 1, conventions 1, gate 1 | **3 min** |
 | Superseded push, cancelled | partial | about half a run | **~4 min** |
 
 A typical run finishes in under five minutes (the acceptance criterion); only a cold image build
@@ -161,15 +162,16 @@ about 17, plus follow-ups):
 
 | Item | Assumption | Minutes |
 |------|------------|--------:|
-| Code pushes | 20 PRs × 4 pushes that reach CI (each after `make check`) × 8 min | 640 |
-| Image-input pushes | 10% of those again, at the cold price: 8 × (13 − 8) | 40 |
+| Code pushes | 20 PRs × 4 pushes that reach CI (each after `make check`) × 9 min | 720 |
+| Image-input pushes | 10% of those again, at the cold price: 8 × (14 − 9) | 40 |
 | Superseded pushes | 1 in 10 pushes cancelled part-way: 8 × 4 min | 32 |
-| Prose-only and draft pushes | 15 pushes × 2 min | 30 |
+| Prose-only and draft pushes | 15 pushes × 3 min | 45 |
 | Releases and deploys | 2 tags × (release, measured 4 min cold, + deploy, reserved for Issue 11) | 50 |
-| **Total** | | **≈ 790 (40% of 2,000)** |
+| **Total** | | **≈ 890 (45% of 2,000)** |
 
-Doubling the pushes (8 a pull request, nobody running `make check`) gives about 1,450 minutes,
-still inside the allowance. What protects the budget is written down as a test, not a habit: the
+Doubling the pushes (8 a pull request, nobody running `make check`) gives about 1,700 minutes,
+still inside the allowance. (Issue 13's `conventions` job added a minute to every run: 790 became
+890.) What protects the budget is written down as a test, not a habit: the
 timeouts (`timeout-minutes` on every job, 15 at most in CI, so a wedged job costs 15 minutes rather
 than 360), the concurrency group, the prose and draft fast paths, and the absence of any branch-push
 trigger.

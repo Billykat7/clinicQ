@@ -94,6 +94,7 @@ class CiJob(StrEnum):
     """The jobs of `ci.yml` these tests reason about."""
 
     CHANGES = "changes"
+    CONVENTIONS = "conventions"
     QUALITY = "quality"
     TEST = "test"
     REPORT = "report"
@@ -703,20 +704,26 @@ def test_the_release_enforces_an_agreed_size_ceiling(
     )
 
 
-def test_the_gate_fails_on_a_convention_problem_without_stopping_the_tests(
+def test_the_conventions_check_is_its_own_job_that_blocks_nothing_but_the_gate(
     workflows: dict[Workflow, dict[str, Any]],
 ) -> None:
-    """Issue 13: the conventions check reports to the gate, and never blocks the jobs after it."""
+    """Issue 13: a naming slip never stops the tests, and re-running the check alone works.
+
+    A step with ``continue-on-error`` would leave its job green, so "Re-run failed jobs" would
+    re-run only the gate, with the stale result, after the description was fixed.
+    """
     jobs = _jobs(workflows[Workflow.CI])
+    conventions = jobs[CiJob.CONVENTIONS]
+    assert "needs" not in conventions
+    assert CiJob.CONVENTIONS in jobs[CiJob.GATE]["needs"]
     (step,) = [
         step
-        for step in jobs[CiJob.CHANGES]["steps"]
+        for step in conventions["steps"]
         if "check_pr_conventions.py" in str(step.get("run", ""))
     ]
-    assert step["continue-on-error"] is True
-    assert "steps.conventions.outcome" in jobs[CiJob.CHANGES]["outputs"]["conventions"]
-    gate_script = str(jobs[CiJob.GATE]["steps"][0]["run"])
-    assert '.changes.outputs.conventions != "failure"' in gate_script
+    assert "continue-on-error" not in step
     assert "github.head_ref" not in str(step["run"]), (
         "the branch name must come via env"
     )
+    for job_name, job in jobs.items():
+        assert CiJob.CONVENTIONS not in job.get("needs", []) or job_name == CiJob.GATE
