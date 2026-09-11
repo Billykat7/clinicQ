@@ -34,6 +34,9 @@ from starlette import status
 
 from src.main import create_app
 
+# Seconds per test by design: the benchmark has to stall a loop to measure it (Issue 7 marker).
+pytestmark = pytest.mark.slow
+
 # The slow handler's duration, the concurrent load, and how many probes we sample while saturated.
 _SLOW_SECONDS = 0.4
 _CONCURRENCY = 8

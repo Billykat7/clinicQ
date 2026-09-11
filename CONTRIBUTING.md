@@ -1,0 +1,129 @@
+# Contributing to ClinicQ
+
+How the six of us work in one repository without breaking `main` for the other five. The rules
+behind this page are in [the engineering non-negotiables](docs/guideline.md); how to pick up an
+issue is in [the issues guide](docs/GITHUB/ISSUES/README.md).
+
+## Once per clone
+
+```bash
+python3.14 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+pip install -e ".[dev]"          # pre-commit
+brew install gitleaks trivy      # the secret scan (required) and the image scan (optional)
+make hooks                       # install the git hooks from .pre-commit-config.yaml
+cp .env.example .env
+make db-up && make migrate-up    # PostgreSQL 18 + PostGIS and Redis, then the schema
+```
+
+On Linux, install gitleaks from its [releases page](https://github.com/gitleaks/gitleaks/releases)
+(8.25 or newer). Without it, every commit fails the secret-scan hook: that is deliberate, since a
+scan that quietly does not run protects nobody.
+
+## The loop, from first edit to push
+
+| When | Run | Takes | What it catches |
+|------|-----|-------|-----------------|
+| While coding | `make test-fast` (or one module's tests, below) | about 15 s | the tests that do not need a server |
+| On `git commit` | the hooks, automatically | a few seconds | formatting, whitespace, large files, merge markers, private keys, **secrets** |
+| **Before every push** | **`make check`** | under 3 min | everything CI runs: see below |
+| No Docker running | `make check-fast` | about 45 s | the same, without the image build |
+
+`make check` runs `scripts/ci-local.sh`, stage by stage, and stops at the first stage that fails,
+naming it (`✗ ci-local.sh failed at stage: coverage`). Fix that stage and run it again. Push only
+on green:
+
+1. **quality**: `ruff check`, `ruff format --check`, `mypy src/`, and the ruff version pin
+2. **pip-audit**: known CVEs in `requirements.txt` (a warning here; blocking in CI)
+3. **secrets**: gitleaks over the whole git history
+4. **tests**: the whole suite in parallel, coverage collected
+5. **coverage**: at least the floor in `pyproject.toml` (see below)
+6. **docker**: the production image builds, and Trivy scans it (Trivy warns only)
+
+`make check-compose` adds the compose smoke test (up, `/health/live`, PostGIS, Redis, down).
+
+Never push with `--no-verify`, and never commit with it. If a hook is wrong, fix the hook in its own
+PR.
+
+## Running some of the tests
+
+```bash
+pytest tests/unit/commons                             # one area
+pytest tests/integration/platform/test_health.py      # one file
+pytest tests/integration/platform/test_health.py -k ready   # tests whose name matches
+pytest -m unit                                        # all unit tests (under 10 s)
+pytest -m "not slow"                                  # make test-fast
+pytest -x --lf                                        # stop at the first failure; rerun last failures
+```
+
+Markers are applied by location in `tests/conftest.py`, so you rarely write one yourself:
+
+| Marker | Means | Applied |
+|--------|-------|---------|
+| `unit` | essential logic, no server | everything under `tests/unit/` |
+| `integration` | HTTP, the database, or several modules together | everything else |
+| `slow` | seconds rather than milliseconds | PostgreSQL tests, and timing tests mark themselves |
+| `postgres` | needs a real PostgreSQL + PostGIS server | written on the test module (`pytestmark`) |
+
+An unknown marker is an error (`--strict-markers`), so a typo cannot silently select nothing.
+
+### The database tests
+
+Tests marked `postgres` each get a throwaway database, created and dropped on the server named by
+`TEST_DATABASE_URL`. With the stack up (`make db-up`):
+
+```bash
+make test-postgres                                    # the compose server on localhost:5432
+make test-postgres DB_PORT=5433                       # if you moved it
+```
+
+Without `TEST_DATABASE_URL`, `make test` and `make check` skip them and say why. The URL is never
+guessed: whatever answers on port 5432 on your laptop may be another project's database.
+
+## Coverage
+
+At least **75% of the lines in `src/`** must run under the suite, set in `pyproject.toml`
+(`[tool.coverage.report] fail_under`) and enforced by the coverage stage of `make check`. It was
+76% when the team agreed the floor. The report lists every file that is not fully covered, with the
+missing lines. To see it for your own change:
+
+```bash
+pytest --cov --cov-report=term-missing tests/unit/commons
+```
+
+New code comes with its tests. The floor goes up as ClinicQ's modules land, and it is never lowered
+to get a change through: that is a team decision in its own issue.
+
+## If a commit is blocked for a secret
+
+1. **A real credential:** rotate it now, at the provider, then remove it from the file. It has not
+   reached `main`, but assume anything that touched your disk may have been copied; rotation is the
+   only fix that holds.
+2. **Not a secret** (a test fixture, a documented placeholder): say so in review, and if it cannot
+   be written differently, add it to `.gitleaks-baseline.json` after the commit lands:
+
+   ```bash
+   gitleaks git --config .gitleaks.toml --redact --report-format json \
+     --report-path .gitleaks-baseline.json .
+   ```
+
+   Review the diff of that file: it should gain exactly your finding, redacted.
+
+`.gitleaks.toml` narrows only by the *shape of a value* (a time-zone name, the compose default
+password). Never add a `paths` entry: gitleaks would then skip every rule on those files, real AWS
+keys included, and `tests/unit/platform/test_scanning_config.py` fails if one appears.
+
+## Tests that wait for a later issue
+
+Some kernel guard tests check files that later issues create: the CI workflows (Issue 9 onwards)
+and the security documents. They are listed in `PENDING_ON_LATER_ISSUES` in `tests/conftest.py` as
+strict expected failures. When your issue creates the file, the test starts passing, and strict
+xfail reports that as a failure: delete its entry in the same PR.
+
+## Branches, commits and pull requests
+
+- Branch `Issue/<N>/<short-slug>`; every commit message starts `Issue <N>: `.
+- One issue, one pull request, merged within three days of starting. Rebase onto `main` daily.
+- The PR description lives in `docs/GITHUB/PR/M<milestone>/PR_<N>_DESCRIPTION.md`, ends with
+  `Closes #<N>`, and proves each acceptance criterion by showing it working.
+- Review within 24 hours on a weekday, or the backup reviewer may merge.

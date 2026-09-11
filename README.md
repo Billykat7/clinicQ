@@ -255,6 +255,10 @@ the files they inspect do not exist yet: `.github/workflows/` (Issue 9), `.gitle
   `make run`, [`/dev/components`](http://127.0.0.1:8000/dev/components) shows them all (development only).
 - Review within 24 hours on a weekday, or the backup reviewer may merge.
 
+Before every push: `make check` (the same gates as CI, in under three minutes). The setup, the
+pre-push workflow, running one module's tests and what to do when a commit is blocked for a secret
+are in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 Full detail: [engineering non-negotiables](docs/guideline.md) and
 [workload split](docs/TEAM/WORKLOAD_SPLIT.md).
 

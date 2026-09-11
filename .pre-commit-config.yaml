@@ -1,0 +1,69 @@
+# Pre-commit hooks (Issue 7): the checks that run on every `git commit`, on the staged files only.
+#
+#   make hooks       install them (once per clone; `pip install -e ".[dev]"` brings pre-commit)
+#   make hooks-all   run every hook over the whole repository
+#
+# Fast by design, so nobody is tempted to skip them. The full gate is `make check`
+# (scripts/ci-local.sh), run before every push: see CONTRIBUTING.md.
+#
+# Versions are pinned. ruff's `rev` must equal the `ruff==` pin in requirements.txt (what CI and
+# ci-local.sh run); the `ruff-pin` hook below and ci-local.sh fail if the two drift apart.
+
+default_install_hook_types: [pre-commit]
+default_stages: [pre-commit]
+
+# Third-party and binary assets are checked in as they came: never reformatted, never rewritten.
+exclude: |
+  (?x)^(
+    src/static/vendor/.*|
+    src/static/fonts/.*|
+    docs/GITHUB/PR/.*/assets/.*
+  )$
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      # 500 KB: the largest file anyone should add by hand. Fonts, vendored code and PR screenshots
+      # are excluded above; anything else this big belongs in object storage, not in git.
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: detect-private-key
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.5
+    hooks:
+      # Bare ruff: the rules live in [tool.ruff] in pyproject.toml, the same section CI reads.
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  # Secrets, before they reach history: the staged diff against .gitleaks.toml (found at the
+  # repository root). `gitleaks-system` runs the gitleaks binary ci-local.sh already requires
+  # (`brew install gitleaks`, 8.25 or newer for `[[allowlists]]`) rather than building one with a
+  # Go toolchain pre-commit would download. Without the binary the hook fails the commit; it never
+  # skips the scan.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.27.2
+    hooks:
+      - id: gitleaks-system
+        pass_filenames: false
+
+  - repo: local
+    hooks:
+      - id: ruff-pin
+        name: ruff version matches requirements.txt
+        entry: scripts/check-ruff-pin.sh
+        language: script
+        files: ^(requirements\.txt|\.pre-commit-config\.yaml)$
+        pass_filenames: false

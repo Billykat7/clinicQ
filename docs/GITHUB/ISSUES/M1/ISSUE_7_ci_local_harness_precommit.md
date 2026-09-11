@@ -23,7 +23,8 @@ that developers actually use it before pushing.
 
 - `scripts/ci-local.sh` already runs ruff, mypy, pytest and a Docker build, with optional pip-audit, Trivy and a secret scan (`make check`, `make check-fast`).
 - `make hooks` expects a `.pre-commit-config.yaml` that is not in the repository yet, and `tests/unit/platform/test_scanning_config.py` expects a `.gitleaks.toml` (the secret-scan config), which is also missing and makes that test fail today.
-- Still to agree: the coverage threshold and the `unit` / `integration` / `slow` pytest markers.
+- Still to agree: the coverage threshold and the `unit` / `integration` / `slow` pytest markers. **Agreed:** a 75% line-coverage floor on `src/` (76% when agreed), in `pyproject.toml`.
+- `make check` cannot be green on `main` while 24 kernel guard tests check files later issues create (the CI workflows, `docs/SECURITY/`); this issue marks them as strict expected failures, each naming what it waits for.
 
 ## Scope
 
@@ -57,7 +58,9 @@ that developers actually use it before pushing.
 
 - `scripts/ci-local.sh`
 - `.pre-commit-config.yaml`
-- `pyproject.toml`
+- `.gitleaks.toml`, `.gitleaks-baseline.json`
+- `pyproject.toml` (markers, coverage floor)
+- `tests/conftest.py` (markers by location, guard tests pending on later issues)
 - `CONTRIBUTING.md`
 
 ---

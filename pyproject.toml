@@ -25,9 +25,34 @@ dev = ["pre-commit>=4.6.1,<5"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+# A marker not listed here is an error, not a silent no-op (Issue 7). unit and integration are
+# applied by location in tests/conftest.py; see CONTRIBUTING.md for the selections.
+addopts = ["--strict-markers"]
 markers = [
+    "unit: essential logic under tests/unit/, no server (applied by location)",
+    "integration: HTTP, database or several modules together (applied by location)",
+    "slow: seconds, not milliseconds: timing tests and anything needing a server; excluded by make test-fast",
     "postgres: runs against a real PostgreSQL + PostGIS server (TEST_DATABASE_URL; Issue 3)",
 ]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Coverage (Issue 7): the floor the team agreed to hold, enforced by scripts/ci-local.sh.
+#
+# 75% of the lines in src/ must run under the suite. It was 76% when the floor was set: close
+# enough that coverage cannot slip unnoticed, low enough that the kernel code M3 to M6 will rewrite
+# does not block anyone today. Raise it as the ClinicQ modules land with their tests; never lower it
+# to get a change through.
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.coverage.run]
+source = ["src"]
+# pytest-xdist workers each write a data file; coverage combines them.
+parallel = true
+
+[tool.coverage.report]
+fail_under = 75
+skip_covered = true
+show_missing = true
+precision = 1
 
 [tool.mypy]
 # Stated rather than inherited from whichever interpreter invoked mypy, so a stray

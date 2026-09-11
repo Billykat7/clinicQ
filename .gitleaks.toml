@@ -1,0 +1,27 @@
+# Secret-scanning rules for gitleaks (Issue 7). Read by `scripts/ci-local.sh` (the whole history,
+# step 1c) and by the pre-commit hook (staged changes, before every commit).
+#
+# The default rule set, plus one allowlist that narrows by the *shape of a value*, never by path.
+# gitleaks applies an allowlist's `paths` before any rule runs, so `paths = ['^tests/']` would let a
+# real AWS key committed into a test file pass every rule; tests/unit/platform/test_scanning_config.py
+# fails the build if a `paths` entry appears here.
+#
+# Historical findings that were reviewed and are not secrets (test passwords, test JWT secrets, the
+# fake token the log-redaction test masks) are enumerated, one by one, in .gitleaks-baseline.json.
+# A new one goes there only after review, never into a pattern below. A real secret is rotated
+# first, then removed: once committed it is in history, and rotation stops being optional.
+
+title = "BK ClinicQ secret scan"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Values that cannot be secrets, whatever key they sit beside"
+regexTarget = "secret"
+regexes = [
+  # An IANA time zone name ("Africa/Johannesburg"): generic-api-key reads `.key == "..."` as a key.
+  '''^(?:Africa|America|Antarctica|Asia|Atlantic|Australia|Europe|Indian|Pacific|Etc)/[A-Za-z_+-]+$''',
+  # The compose stack's published development default, documented in .env.example.
+  '''^change-me$''',
+]
