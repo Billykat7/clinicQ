@@ -25,7 +25,6 @@ environment variable.
 """
 
 from collections.abc import Iterable
-from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import create_engine
@@ -35,19 +34,17 @@ from sqlalchemy.pool import StaticPool
 from src.commons.enums import PermissionVerb
 from src.core.nav_registry import NAV_DESTINATIONS
 from src.core.rbac import (
-    default_role_permissions,
     default_system_roles,
     load_resource_parent_map,
     refresh_resource_descendants_py,
     seed_resource_catalog,
-    seeded_grant_scope,
 )
 from src.core.rbac_simulator import (
     SimulationPrincipal,
     SimulationTarget,
     simulate,
 )
-from src.database.models import Base, RbacRole, RolePermission
+from src.database.models import Base
 from src.database.schema import sqlite_schema_translate_map
 
 #: Where the committed golden file lives, relative to the repository root.
@@ -86,32 +83,17 @@ def snapshot_roles() -> tuple[str, ...]:
 
 
 def seed_snapshot_database(db: Session) -> None:
-    """Seed ``db`` exactly as a fresh deployment is seeded: roles, the grant matrix, the catalog.
+    """Seed ``db`` exactly as a fresh deployment is seeded, through the same entrypoint.
 
-    The snapshot is only meaningful if it pins what a *deployment* decides, so this is the shipped
-    seed data — the same helpers the Alembic migrations and the integration fixtures use — never a
-    reduced fixture chosen to make the file small.
+    :func:`~src.core.rbac_manifest_sync.sync_rbac_catalog` is what ``make seed-rbac`` and the deploy
+    sequence run: the system roles, every manifest's resources and grants, and the nav gates. Until
+    Issue 18 this seeded a hand-picked subset (the two system roles and the kernel's five system
+    grants), so a grant a module's manifest shipped was never pinned; a snapshot that does not
+    seed what a deployment seeds pins nothing a deployment decides.
     """
-    for name, description in default_system_roles():
-        db.add(RbacRole(name=name, description=description, is_system=True))
-    seen: set[tuple[str, str]] = set()
-    for helper in (default_role_permissions,):
-        for role, resource_key, verb in helper():
-            if (role, resource_key) in seen:
-                continue
-            seen.add((role, resource_key))
-            db.add(
-                RolePermission(
-                    role=role,
-                    resource=resource_key,
-                    max_verb=verb.value,
-                    # A fixed instant, not ``now()``: nothing in the snapshot reads this column, and
-                    # a clock read in a fixture is how "deterministic across runs and machines"
-                    # quietly stops being true.
-                    created_at=datetime(2026, 1, 1, tzinfo=UTC),
-                    scope=seeded_grant_scope(role).value,
-                )
-            )
+    from src.core.rbac_manifest_sync import sync_rbac_catalog
+
+    sync_rbac_catalog(db)
     db.commit()
     seed_resource_catalog(db)
     db.commit()
