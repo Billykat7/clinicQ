@@ -230,12 +230,13 @@ fi
 # ─── STEP 1b: pip-audit (warn-only; never fails the script) ───
 # pip-audit: Pygments CVE-2026-4539 — no fixed release on PyPI yet (transitive via pytest/rich); local-access ReDoS.
 #
-# Since Issue 180 (M30) this is no longer local-only SCA: .github/workflows/vulnerability-scan.yml
-# runs the same audit weekly and on any PR touching requirements.txt, where it **blocks**. This run
-# stays warn-only on purpose — it is a pre-push convenience, and a transient PyPI failure must not
-# stop a developer pushing — but the ignore list below is kept byte-identical to the workflow's
-# PIP_AUDIT_IGNORE, and tests/unit/platform/test_scanning_config.py fails the build if the two
-# drift. A CVE ignored in one place and not the other is how "but it passed locally" starts.
+# Local-only by design for now (scripts/README.md): CI (.github/workflows/ci.yml, Issue 9) mirrors
+# every other stage but not this one. Warn-only on purpose: it is a pre-push convenience, and a
+# transient PyPI failure must not stop a developer pushing. Issue 97 schedules the same audit in
+# .github/workflows/vulnerability-scan.yml; from then the ignore list below must stay byte-identical
+# to that workflow's, and tests/unit/platform/test_scanning_config.py (pending on Issue 97 until
+# the file exists) fails the build if the two drift. A CVE ignored in one place and not the other
+# is how "but it passed locally" starts.
 PIP_AUDIT_IGNORE_PYGMENTS=(--ignore-vuln CVE-2026-4539)
 stage "pip-audit"
 if $SKIP_PIP_AUDIT; then
@@ -265,9 +266,9 @@ else
 fi
 
 # ─── STEP 1c: secret scan (gitleaks; FAILS the script) ───
-# Unlike pip-audit above this is not warn-only, and it matches the workflow exactly: a committed
-# credential is actionable immediately and always, by rotating it, so there is no "unfixable
-# finding" case to be tolerant of. Catching it before the push is the whole point — afterwards the
+# Unlike pip-audit above this is not warn-only, and CI's quality job runs this exact command (the
+# guard test compares them): a committed credential is actionable immediately and always, by
+# rotating it, so there is no "unfixable finding" case to be tolerant of. Catching it before the push is the whole point — afterwards the
 # secret is in history and rotation stops being optional.
 #
 # Skipped with a notice when gitleaks is not installed: a missing local tool must not block a push

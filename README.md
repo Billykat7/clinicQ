@@ -247,9 +247,11 @@ make check
 `make check-compose` adds a smoke test of this stack (PostGIS and Redis answer, `/health/live` is
 up), in a separate compose project on other ports so it never touches your local data.
 
-Until the CI and security issues land, 24 of the kernel's guard tests fail in `make test`, because
-the files they inspect do not exist yet: `.github/workflows/` (Issue 9), `.gitleaks.toml` (Issue 7) and
-`docs/SECURITY/`. Everything else must be green.
+The pull request then runs the same gate in GitHub Actions against real PostgreSQL + PostGIS and
+Redis, and cannot merge until its **CI gate** check is green
+([`docs/CICD/PIPELINES.md`](docs/CICD/PIPELINES.md)). A few kernel guard tests still wait for files a
+later issue creates (the deploy and scan workflows, `docs/SECURITY/`); they run as strict expected
+failures (`PENDING_ON_LATER_ISSUES` in `tests/conftest.py`), so `make test` is green meanwhile.
 
 ## Contributing (team workflow)
 
