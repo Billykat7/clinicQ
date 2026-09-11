@@ -10,6 +10,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.commons.enums import ConsentPurpose
+
 
 class OtpRequestIn(BaseModel):
     """Ask for a sign-in code for a phone number."""
@@ -66,3 +68,32 @@ class PatientUpdateIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     display_name: str | None = Field(default=None, max_length=80)
+
+
+class ConsentAnswerOut(BaseModel):
+    """One consent question, the words the patient was shown, and their current answer."""
+
+    purpose: ConsentPurpose
+    question: str = Field(description="The plain-language question, as shown.")
+    granted: bool = Field(
+        description="False until the patient says yes, on every channel."
+    )
+
+
+class ConsentStateOut(BaseModel):
+    """Everything a patient is asked, and what they have answered so far."""
+
+    intro: str
+    wording_version: str
+    answers: list[ConsentAnswerOut]
+    notice: str | None = Field(
+        default=None, description="What just happened, after an answer was changed."
+    )
+
+
+class ConsentUpdateIn(BaseModel):
+    """A patient's answer to one question. Anything else is refused (422)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    granted: bool

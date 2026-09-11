@@ -180,6 +180,33 @@ def _quiet_until(preference: NotificationPreference, now: datetime) -> datetime 
     return candidate.astimezone(APP_TIMEZONE)
 
 
+def _patient_consent_denies(
+    db: Session, recipient: str, template: NotificationTemplate
+) -> bool:
+    """Whether this message needs a patient's consent and does not have it (Issue 21).
+
+    The one place a send is checked against consent, and it is here rather than in a send path
+    because *every* send path resolves through this function — so no transport, queue or retry can
+    skip it. A recipient who is not a patient (a staff email address, a number nobody has verified)
+    is not consent-gated; a sign-in code is not either, because the patient asked for it by typing
+    their number.
+    """
+    from src.commons.phone import InvalidPhoneNumberError
+    from src.modules.patients import service as patients
+    from src.modules.patients.consent import consent_required_for, has_consent
+
+    purpose = consent_required_for(template)
+    if purpose is None:
+        return False
+    try:
+        patient = patients.find_patient(db, recipient)
+    except InvalidPhoneNumberError:
+        return False  # not a number at all: an email recipient, so not a patient record
+    if patient is None:
+        return False
+    return not has_consent(db, patient.id, purpose)
+
+
 def resolve(
     db: Session,
     *,
@@ -188,16 +215,30 @@ def resolve(
     channel: NotificationChannel,
     now: datetime | None = None,
 ) -> DeliveryDecision:
-    """Decide how one send should be handled against the recipient's preferences.
+    """Decide how one send should be handled against the recipient's consent and preferences.
 
     ``channel`` is the origin channel of the send (email for the transactional email path, sms for
-    the SMS path). The decision honours the recipient's per-category channel choice, defers
-    non-urgent mail that lands in their quiet hours, and never drops essential (``ACCOUNT`` /
-    ``FINANCIAL``) mail. A recipient with no account or no preferences takes the defaults.
+    the SMS path). **Consent first** (Issue 21): a message to a patient that needs their agreement
+    and does not have it is suppressed, whatever their preferences say and whatever category it is
+    in — a patient who has not agreed to be messaged is not "opted out of a category", they never
+    opted in. Then the recipient's per-category channel choice, quiet hours (deferred, not dropped)
+    and the rule that essential mail to an *account holder* is never dropped.
     """
     now = now or _now()
     category = notification_category_for(template)
     essential = is_essential_category(category)
+    if _patient_consent_denies(db, recipient_email, template):
+        logger.info(
+            "Notification suppressed: no patient consent for %s (%s)",
+            template.value,
+            category.value,
+        )
+        return DeliveryDecision(
+            outcome=DeliveryOutcome.SUPPRESS,
+            category=category,
+            essential=essential,
+            reason="no-patient-consent",
+        )
     preference = load_preference(db, recipient_email)
     choice = chosen_channel(preference, category)
 

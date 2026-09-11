@@ -32,6 +32,7 @@ from src.database.models.notification_preference import NotificationPreference
 # Alembic autogenerate only sees what this file imports: a model missing from it reflects
 # as a table to *drop*.
 from src.database.models.patient import Patient
+from src.database.models.patient_consent import PatientConsent, PatientConsentEvent
 from src.database.models.paystack_event import PaystackEvent
 from src.database.models.permission import Permission
 from src.database.models.permission_audit_log import PermissionAuditLog
@@ -74,6 +75,8 @@ __all__ = [
     "Notification",
     "NotificationPreference",
     "Patient",
+    "PatientConsent",
+    "PatientConsentEvent",
     "PaystackEvent",
     "Permission",
     "PermissionAuditLog",

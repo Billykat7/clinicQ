@@ -37,6 +37,7 @@ from starlette.templating import Jinja2Templates
 
 from src.commons.enums import GrantScope, PermissionVerb, S3LogListingLevel
 from src.commons.time import APP_TIMEZONE
+from src.core.config import get_settings
 from src.core.nav_visibility import (
     nav_visibility_for_request,
     peek_user_from_refresh_cookie,
@@ -49,6 +50,7 @@ from src.core.rbac import (
 from src.core.rbac_language import scope_tier_label, scope_tier_meaning
 from src.core.s3_logs_query import warm_logs_listing
 from src.core.scope import ASSIGNMENT_SCOPE_TYPE, scope_tiers_for_roles
+from src.core.security import decode_patient_session_token
 from src.database.session import get_db
 from src.web.components import register_components
 from src.web.context import (
@@ -334,6 +336,27 @@ async def account_notifications(
             active_nav="account",
             page_title="Account",
             account_section="notifications",
+        ),
+    )
+
+
+@router.get("/me/consent", response_class=HTMLResponse)
+async def patient_consent_page(request: Request) -> HTMLResponse:
+    """The patient's own consent page (Issue 21): what we may do, in plain words.
+
+    The page renders from the patient's session cookie alone — no database read — and the questions
+    and answers come from ``/api/v1/patients/me/consents``, so the words a patient sees are the
+    words recorded with their answer. Without a session it renders the signed-out version rather
+    than redirecting: a patient has no password to be sent to, and the sign-in page is M9's.
+    """
+    token = request.cookies.get(get_settings().patient_session_cookie_name)
+    return templates.TemplateResponse(
+        request,
+        "patient/consent.html",
+        public_page_context(
+            request,
+            page_title="Your choices",
+            signed_in=decode_patient_session_token(token or "") is not None,
         ),
     )
 

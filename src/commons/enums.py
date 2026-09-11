@@ -355,6 +355,27 @@ GATEWAY_TRUSTED_CHANNELS: frozenset[PatientChannel] = frozenset(
 )
 
 
+class ConsentPurpose(StrEnum):
+    """What a patient is being asked to agree to (Issue 21). Consent is per purpose, never one flag.
+
+    Each is a separate question because they have different answers: someone may be glad to be
+    texted and not want their name on a screen in a waiting room. Every purpose **defaults to the
+    most private answer** (not granted), on every channel.
+
+    - ``DISPLAY_NAME``: show my name on the waiting-room board instead of my ticket number.
+    - ``DISPLAY_COMMENT``: show the reason I gave beside it. Health information on a public screen,
+      so it is asked separately and means nothing without ``DISPLAY_NAME``.
+    - ``NOTIFICATIONS``: send me messages about my place in the queue. The code that proves my
+      number is not this: I asked for that one by typing my number (see ``has_consent``).
+    - ``FEEDBACK_SURVEY``: ask me afterwards how the visit went.
+    """
+
+    DISPLAY_NAME = "display_name"
+    DISPLAY_COMMENT = "display_comment"
+    NOTIFICATIONS = "notifications"
+    FEEDBACK_SURVEY = "feedback_survey"
+
+
 class OtpSubjectKind(StrEnum):
     """What a one-time code proves control of (Issue 17): one store, keyed by kind and identifier."""
 
@@ -1079,6 +1100,7 @@ class AuditEntityType(StrEnum):
 
     USER = "user"
     PATIENT = "patient"
+    PATIENT_CONSENT = "patient_consent"
     SITE = "site"
     AUDIT_LOG = "audit_log"
     DATA_SUBJECT = "data_subject"
