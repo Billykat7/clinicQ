@@ -3,6 +3,9 @@
 **Milestone:** [Milestone 3: Identity, Auth, RBAC & Consent](https://github.com/Billykat7/clinicQ/milestone/3) ·
 **Issue:** [#16](https://github.com/Billykat7/clinicQ/issues/16) · **Builds on:** #15 (PR #129)
 
+> **Merge order:** after #129. Until #129 is merged this branch also carries its two `Issue 15:`
+> commits, so the Conventions check fails on them; re-run it once #129 is in.
+
 Almost all of Issue 16 existed: password and OTP sign-in, refresh rotation with a reuse check,
 sign-out, forgot and reset password, the sessions list with per-session and all-session revocation,
 the CSRF middleware and the sign-in rate limit. So the work was to check each criterion on a real
