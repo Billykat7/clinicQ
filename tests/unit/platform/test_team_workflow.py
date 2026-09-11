@@ -156,3 +156,20 @@ def test_merging_needs_one_code_owner_approval_unless_an_admin_merges() -> None:
             "bypass_mode": "pull_request",
         }
     ]
+
+
+def test_the_ruleset_sync_ignores_github_defaults_but_not_a_changed_rule() -> None:
+    """`make gh-sync-rulesets` must say "unchanged" after a sync, and notice a real change."""
+    from scripts.gh_sync_rulesets import differences
+
+    desired = _ruleset("main-review.json")
+    as_github_returns = json.loads(json.dumps(desired))
+    as_github_returns |= {"id": 22946886, "source": "Billykat7/clinicQ"}
+    as_github_returns["rules"][0]["parameters"] |= {
+        "required_reviewers": [],
+        "require_extra_approval_for_unattributed_changes": True,
+    }
+    assert differences(desired, as_github_returns) == []
+
+    as_github_returns["rules"][0]["parameters"]["required_approving_review_count"] = 0
+    assert differences(desired, as_github_returns) == ["rules"]

@@ -65,12 +65,41 @@ def _canonical(value: Any) -> Any:
     return value
 
 
+def _project(current: Any, desired: Any) -> Any:
+    """``current`` cut down to the shape of ``desired``: only the keys the file sets.
+
+    GitHub fills in defaults a file does not mention (``required_reviewers: []`` on a pull-request
+    rule, for one), and new ones appear as GitHub adds features. Comparing only what the file
+    states keeps a synced ruleset "unchanged" instead of forever "would update". Rules are matched
+    by their ``type``.
+    """
+    if isinstance(desired, dict) and isinstance(current, dict):
+        return {
+            key: _project(current.get(key), value) for key, value in desired.items()
+        }
+    if (
+        isinstance(desired, list)
+        and isinstance(current, list)
+        and all(isinstance(item, dict) and "type" in item for item in desired)
+    ):
+        by_type = {item.get("type"): item for item in current if isinstance(item, dict)}
+        projected = [_project(by_type.get(item["type"]), item) for item in desired]
+        extra = [
+            item
+            for item in current
+            if item.get("type") not in {i["type"] for i in desired}
+        ]
+        return projected + extra
+    return current
+
+
 def differences(desired: dict[str, Any], current: dict[str, Any]) -> list[str]:
     """The top-level parts of a ruleset that GitHub has differently from the file."""
     return [
         key
         for key in COMPARED_KEYS
-        if _canonical(desired.get(key)) != _canonical(current.get(key))
+        if _canonical(desired.get(key))
+        != _canonical(_project(current.get(key), desired.get(key)))
     ]
 
 
