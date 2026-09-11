@@ -77,6 +77,19 @@ def test_every_problem_is_reported_in_one_error() -> None:
         assert setting in message
 
 
+def test_a_refused_boot_does_not_print_the_values_it_refused() -> None:
+    """Boot logs keep the error; pydantic's usual ``input_value={...}`` dump would add secrets."""
+    password = "hunter2-not-a-real-password"
+    with pytest.raises(ValidationError) as caught:
+        _settings(
+            environment=AppEnvironment.PRODUCTION,
+            database_url=f"postgresql://clinicq:{password}@db.internal/clinicq",
+            bcrypt_rounds=99,
+        )
+    assert password not in str(caught.value)
+    assert "input_value" not in str(caught.value)
+
+
 def test_db_parts_alone_build_the_database_url() -> None:
     """Before Issue 12, DB_HOST and DB_NAME without DATABASE_URL were ignored for localhost."""
     settings = _settings(
