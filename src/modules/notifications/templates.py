@@ -55,11 +55,33 @@ def _render_generic_sms(context: dict[str, Any]) -> RenderedMessage:
     return RenderedMessage(text=str(context["text"]))
 
 
+def _render_staff_invitation_sms(context: dict[str, Any]) -> RenderedMessage:
+    """Render a staff invitation as one SMS line: what it is, the link, and how long it lasts.
+
+    The link is a credential (whoever opens it sets that account's password), so it is a secret
+    field on the ledger — the row keeps the send, never the link (Issue 22). Expects ``link`` and
+    ``hours``.
+    """
+    app_name = get_settings().app_name
+    hours = context.get("hours")
+    tail = f" It expires in {hours} hours." if hours else ""
+    return RenderedMessage(
+        text=(
+            f"{app_name}: you have been invited to join a clinic. "
+            f"Open {context['link']} to set your password.{tail} Do not share this link."
+        )
+    )
+
+
 # Context renderers, keyed by (channel, template). New SMS templates (and any future
 # context-rendered email) are registered here — the single registry the issue calls for.
 _RENDERERS: dict[tuple[NotificationChannel, NotificationTemplate], Renderer] = {
     (NotificationChannel.SMS, NotificationTemplate.OTP_SIGN_IN): _render_otp_sms,
     (NotificationChannel.SMS, NotificationTemplate.GENERIC): _render_generic_sms,
+    (
+        NotificationChannel.SMS,
+        NotificationTemplate.STAFF_INVITATION,
+    ): _render_staff_invitation_sms,
 }
 
 

@@ -70,6 +70,12 @@ _UNGATED_PAGES: dict[str, str] = {
         "/api/v1/patients/me/consents behind require_patient, and without a session it renders "
         "the signed-out version rather than anything of theirs"
     ),
+    "/invite": (
+        "a staff invitation link (Issue 22): the person opening it has no account yet, so there "
+        "is no grant to hold. The page is a shell — the token is checked by "
+        "/api/v1/staff/invitations/preview, which answers the same way for a link that is used, "
+        "revoked, expired or unknown"
+    ),
     "/portal/documents/{document_id}": "ownership-scoped signed-link mint; the portal page above it is gated",
     "/jobs/{work_order_id}": "gated by `portal.jobs` inside the handler via _page_gate_denied",
     "/owner/properties/{property_id}": "owner-scoped drill-down; /owner is gated and this 403s a non-owner",

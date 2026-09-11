@@ -158,3 +158,14 @@
 .consent-label input[type="checkbox"] { width: 1.35rem; height: 1.35rem; margin-top: .15rem; flex: none; accent-color: var(--brand); }
 .consent-question { color: var(--ink); }
 .consent-version { color: var(--muted); font-size: var(--step--1); text-align: center; }
+
+/* Accepting a staff invitation (Issue 22): a short form on the public narrow layout, which loads
+   this file rather than the admin stylesheet, so it carries its own field styles. */
+.invite-field label { display: block; font-size: var(--step--1); color: var(--muted); margin-bottom: .3rem; }
+.invite-field input {
+  width: 100%; min-height: 2.75rem; padding: 0 .75rem;
+  color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--radius);
+}
+.invite-field input:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.invite-hint { color: var(--muted); font-size: var(--step--1); margin-top: .35rem; }

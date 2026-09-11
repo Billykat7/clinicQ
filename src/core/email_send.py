@@ -25,7 +25,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import make_msgid
 
-from src.commons.enums import NotificationTemplate
+from src.commons.enums import AppEnvironment, NotificationTemplate
 from src.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -225,6 +225,104 @@ The {app_name} Team
             subject,
         )
         logger.info("Activation link (dev): %s", activation_link)
+
+
+def send_staff_invitation_email(
+    to_email: str,
+    invite_link: str,
+    role: str,
+    expire_hours: int | None = None,
+) -> None:
+    """Send a staff invitation (HTML + plain text) — Issue 22.
+
+    The link is a credential: whoever opens it sets the password for the account it creates. So it
+    is never logged outside development, and the copy says plainly what to do if the invitation was
+    unexpected — an invitation that arrives out of the blue is the shape a social-engineering
+    attempt takes.
+    """
+    settings = get_settings()
+    app_name = settings.app_name
+    hours = expire_hours or settings.staff_invite_expire_hours
+    from src.core.rbac_language import role_label
+
+    readable_role = role_label(role)
+    subject = f"You have been invited to {app_name}"
+    plain_body = f"""Hello,
+
+You have been invited to join a clinic on {app_name} as a {readable_role}.
+
+To accept and choose your password, open the link below:
+
+{invite_link}
+
+This invitation expires in {hours} hours, and can be used once. If you were not expecting it,
+ignore this email and tell the clinic that invited you.
+
+Best regards,
+The {app_name} Team
+"""
+    html_body = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>You have been invited</title>
+<style>
+  body {{ font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; line-height: 1.6; color: #1a1d2e; max-width: 600px; margin: 0 auto; padding: 24px; background: #f5f5f7; }}
+  .card {{ background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }}
+  .header {{ background: linear-gradient(135deg, #0e7c5a 0%, #0a5d43 100%); color: #fff; padding: 28px 32px; text-align: center; }}
+  .header h1 {{ margin: 0; font-size: 1.5rem; font-weight: 600; letter-spacing: 0.02em; }}
+  .body {{ padding: 32px; }}
+  .body p {{ margin: 0 0 16px; color: #3d4257; }}
+  .cta-wrap {{ text-align: center; margin: 28px 0; }}
+  .cta {{ display: inline-block; background: #0e7c5a; color: #ffffff !important; padding: 14px 28px; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 1rem; }}
+  .link-fallback {{ margin-top: 20px; font-size: 0.875rem; color: #6b7280; word-break: break-all; }}
+  .footer {{ padding: 24px 32px; border-top: 1px solid #e8eaf0; background: #f9fafb; font-size: 0.875rem; color: #6b7280; }}
+  .company {{ font-weight: 600; color: #1a1d2e; margin-bottom: 4px; }}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="header">
+    <h1>{app_name}</h1>
+  </div>
+  <div class="body">
+    <p>Hello,</p>
+    <p>You have been invited to join a clinic on <strong>{app_name}</strong> as a
+       <strong>{readable_role}</strong>. Accept the invitation to choose your password.</p>
+    <div class="cta-wrap">
+      <a href="{invite_link}" class="cta">Accept the invitation</a>
+    </div>
+    <p>This invitation expires in <strong>{hours} hours</strong> and can be used once. If you were
+       not expecting it, ignore this email and tell the clinic that invited you.</p>
+    <p class="link-fallback">If the button does not work, copy and paste this link into your browser:<br>{invite_link}</p>
+  </div>
+  <div class="footer">
+    <p class="company">{app_name}</p>
+    <p>Best regards,<br>The {app_name} Team</p>
+  </div>
+</div>
+</body>
+</html>
+"""
+    sent = send(
+        to=to_email,
+        subject=subject,
+        text=plain_body,
+        html=html_body,
+        template=NotificationTemplate.STAFF_INVITATION,
+    )
+    if not sent:
+        logger.info(
+            "Email (SMTP not configured) to %s — %s. Set SMTP_HOST etc. to send.",
+            to_email,
+            subject,
+        )
+        if settings.environment is AppEnvironment.DEVELOPMENT:
+            # Development only: without it there is no way to accept an invitation locally. A
+            # deployment with no SMTP configured is a misconfiguration, not a reason to write a
+            # credential into the log.
+            logger.info("Invitation link (dev): %s", invite_link)
 
 
 def send_password_reset_email(

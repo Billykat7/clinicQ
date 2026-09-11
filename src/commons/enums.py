@@ -459,6 +459,10 @@ class TokenType(StrEnum):
     # recipient email and the notification category it unsubscribes, signed so the endpoint can act
     # on it without a session and without a lookup that would reveal whether an account exists.
     UNSUBSCRIBE = "unsub"
+    # A staff invitation link (Issue 22). Names one ``staff_invitation`` row and nothing else: the
+    # role, the clinic and the expiry live on that row, so a link cannot claim a role it was not
+    # issued for and accepting it once closes it for good.
+    STAFF_INVITE = "staff_invite"
 
 
 class AuthScope(StrEnum):
@@ -774,6 +778,7 @@ class NotificationTemplate(StrEnum):
     PASSWORD_RESET = "password_reset"
     EMAIL_CHANGE_VERIFICATION = "email_change_verification"
     OTP_SIGN_IN = "otp_sign_in"
+    STAFF_INVITATION = "staff_invitation"
     # Applications & screening (M5)
     APPLICATION_ACKNOWLEDGEMENT = "application_acknowledgement"
     APPLICATION_IN_SCREENING = "application_in_screening"
@@ -871,6 +876,7 @@ NOTIFICATION_TEMPLATE_CATEGORY: dict[NotificationTemplate, NotificationCategory]
     NotificationTemplate.PASSWORD_RESET: NotificationCategory.ACCOUNT,
     NotificationTemplate.EMAIL_CHANGE_VERIFICATION: NotificationCategory.ACCOUNT,
     NotificationTemplate.OTP_SIGN_IN: NotificationCategory.ACCOUNT,
+    NotificationTemplate.STAFF_INVITATION: NotificationCategory.ACCOUNT,
     NotificationTemplate.GENERIC: NotificationCategory.ACCOUNT,
     # Applications & screening
     NotificationTemplate.APPLICATION_ACKNOWLEDGEMENT: NotificationCategory.APPLICATIONS,
@@ -925,6 +931,7 @@ NOTIFICATION_URGENT_TEMPLATES: frozenset[NotificationTemplate] = frozenset(
         NotificationTemplate.PASSWORD_RESET,
         NotificationTemplate.EMAIL_CHANGE_VERIFICATION,
         NotificationTemplate.OTP_SIGN_IN,
+        NotificationTemplate.STAFF_INVITATION,
     }
 )
 
@@ -934,6 +941,9 @@ NOTIFICATION_URGENT_TEMPLATES: frozenset[NotificationTemplate] = frozenset(
 #: once, and it is never retried (a retry would render the placeholder, and a late code is no use).
 NOTIFICATION_SECRET_FIELDS: dict[NotificationTemplate, frozenset[str]] = {
     NotificationTemplate.OTP_SIGN_IN: frozenset({"code"}),
+    # An invitation link is a credential: whoever opens it sets the password for that account
+    # (Issue 22). The ledger keeps the row, never the link.
+    NotificationTemplate.STAFF_INVITATION: frozenset({"link"}),
 }
 
 
@@ -1102,6 +1112,7 @@ class AuditEntityType(StrEnum):
     PATIENT = "patient"
     PATIENT_CONSENT = "patient_consent"
     SITE = "site"
+    STAFF_INVITATION = "staff_invitation"
     AUDIT_LOG = "audit_log"
     DATA_SUBJECT = "data_subject"
     DOCUMENT = "document"

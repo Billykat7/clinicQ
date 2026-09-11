@@ -1,0 +1,56 @@
+{% extends "layouts/patient.html" %}
+{#- Accepting a staff invitation (Issue 22): see what it is for, then choose a password.
+
+    Rendered for someone with no account and no session, so it carries no nav and no sign-in
+    chrome — the narrow public layout is the right shell. The page renders from the token in the
+    URL alone; what the invitation is for comes from
+    /api/v1/staff/invitations/preview, and staff-invitation.js posts the acceptance. A link that
+    is used, revoked, expired or unknown gets one message, here as in the API. -#}
+{% from "components/card.html" import card %}
+
+{% block title %}Accept your invitation{% endblock %}
+
+{% block scripts %}
+  <script src="/static/js/staff-invitation.js" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="stack">
+  <div>
+    <h1>Accept your invitation</h1>
+    <p class="lead">Choose a password and your account is ready. The link works once, and only
+      until it expires.</p>
+  </div>
+
+  {% call card() %}
+    <p id="invite-loading" class="msg msg-muted">
+      <span class="spinner" aria-hidden="true"></span> Checking your invitation…
+    </p>
+
+    <p id="invite-summary" class="msg msg-muted" hidden></p>
+
+    <form id="invite-form" class="stack" hidden>
+      <div class="invite-field">
+        <label for="invite-first-name">First name</label>
+        <input id="invite-first-name" name="first_name" type="text" autocomplete="given-name"
+               maxlength="100">
+      </div>
+      <div class="invite-field">
+        <label for="invite-last-name">Last name</label>
+        <input id="invite-last-name" name="last_name" type="text" autocomplete="family-name"
+               maxlength="100">
+      </div>
+      <div class="invite-field">
+        <label for="invite-password">Choose a password</label>
+        <input id="invite-password" name="password" type="password" autocomplete="new-password"
+               minlength="8" required aria-describedby="invite-password-hint">
+        <p id="invite-password-hint" class="invite-hint">At least 8 characters. Nobody at the clinic can
+          see it.</p>
+      </div>
+      <button type="submit" class="btn btn-primary">Create my account</button>
+    </form>
+
+    <p id="invite-msg" class="msg" role="status" hidden></p>
+  {% endcall %}
+</div>
+{% endblock %}

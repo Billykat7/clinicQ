@@ -186,6 +186,35 @@ def create_activation_token(user_id: str, email: str) -> str:
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
+def create_staff_invite_token(invitation_id: str, *, expires_at: datetime) -> str:
+    """Create a typed STAFF_INVITE JWT naming one invitation row (Issue 22).
+
+    The token carries the invitation id and nothing else — no role, no clinic, no email — so a link
+    can never claim more than the row it names, and the row is what decides whether it may still be
+    used. ``exp`` is the row's own deadline, so the signature and the record expire together.
+    """
+    settings = get_settings()
+    return jwt.encode(
+        {
+            "sub": invitation_id,
+            "type": TokenType.STAFF_INVITE.value,
+            "exp": int(expires_at.timestamp()),
+            "iat": int(datetime.now(UTC).timestamp()),
+        },
+        settings.jwt_secret,
+        algorithm=settings.jwt_algorithm,
+    )
+
+
+def decode_staff_invite_token(token: str) -> str | None:
+    """Return the invitation id a STAFF_INVITE JWT names, or ``None`` if it is not one."""
+    payload = decode_token(token)
+    if payload is None or payload.get("type") != TokenType.STAFF_INVITE.value:
+        return None
+    invitation_id = str(payload.get("sub") or "").strip()
+    return invitation_id or None
+
+
 def password_fingerprint(password_hash: str | None) -> str:
     """A keyed fingerprint of an account's current password hash (Issue 16).
 
@@ -459,6 +488,20 @@ async def get_current_user_optional(
     if payload is not None:
         _bind_actor(payload)
     return payload
+
+
+def account_for_email(db: Session, email: str) -> User | None:
+    """The account at ``email``, whatever state it is in, or ``None`` (Issue 22).
+
+    Deliberately **not** filtered by ``is_active``: the callers are the ones asking "does an account
+    already exist for this address" — an invitation being accepted by someone who already works at
+    another clinic, say — and a deactivated account still occupies its address. Anything deciding
+    whether an account may *act* uses :func:`find_active_user` instead.
+    """
+    address = email.strip().lower()
+    if not address:
+        return None
+    return db.execute(select(User).where(User.email == address)).scalar_one_or_none()
 
 
 def find_active_user(db: Session, claims: Mapping[str, Any]) -> User | None:
