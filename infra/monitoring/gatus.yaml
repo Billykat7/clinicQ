@@ -42,7 +42,7 @@ endpoints:
         description: >-
           ClinicQ STAGING is not answering /health. Responsible: DevOps/QA Lead (role E), backup
           Data & Research Lead (role F). Act within the working day: see
-          docs/CICD/RUNBOOK_ALERTS.md, "Staging or production is down".
+          docs/CICD/RUNBOOK_ALERTS.md, section Staging or production is down.
 
   - name: production
     group: clinicq
@@ -59,4 +59,4 @@ endpoints:
         description: >-
           ClinicQ PRODUCTION is not answering /health: clinics cannot queue. Responsible:
           DevOps/QA Lead (role E), backup Data & Research Lead (role F). Act now: see
-          docs/CICD/RUNBOOK_ALERTS.md, "Staging or production is down".
+          docs/CICD/RUNBOOK_ALERTS.md, section Staging or production is down.

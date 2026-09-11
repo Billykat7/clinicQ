@@ -65,6 +65,8 @@ def test_every_alert_names_the_responsible_role_and_the_runbook() -> None:
         assert alert["type"] == provider, endpoint["name"]
         assert NAMES_A_ROLE.search(alert["description"]), endpoint["name"]
         assert RUNBOOK.name in alert["description"], endpoint["name"]
+        # Gatus refuses to start on a description holding " or \ (found running it, Issue 14).
+        assert not set(alert["description"]) & {'"', "\\"}, endpoint["name"]
 
 
 def test_an_outage_alerts_within_five_minutes() -> None:
