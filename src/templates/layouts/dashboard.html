@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{#- The dashboard layout (Issue 5): the dense desktop console staff work in all day.
+
+    It is the kernel's signed-in shell, moved here from base.html unchanged: the icon rail (each
+    link gated by RBAC), the auth corner with the theme toggle, notifications and account menu,
+    and a wide content column. Every console page extends this layout. The dashboard screens of M7
+    (Issue 48 adds role-aware navigation and the site switcher) build inside it.
+
+    Dense by design: admin.css sizes controls and tables for a desk, and the content column widens
+    with the monitor instead of floating in a narrow strip. -#}
+
+{% block styles %}
+  <link rel="stylesheet" href="/static/css/admin.css">
+{% endblock %}
+
+{% block layout_head %}
+  <script src="/static/js/session-refresh.js" defer></script>
+  <script src="/static/js/login-modal.js" defer></script>
+  {# Notification centre: bell unread badge and adaptive preview dropdown (Issue #113). #}
+  <script src="/static/js/notification-center.js" defer></script>
+  {# Shared accessible dropdown/combobox: upgrades every select[data-combobox] (Issue #108). #}
+  <script src="/static/js/combobox.js" defer></script>
+{% endblock %}
+
+{% block body_class %}app layout-dashboard{% if not show_side_bar %} app--no-rail{% endif %}{% endblock %}
+
+{% block body %}
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  {# Icon rail (signed-in shell only; RBAC gates each link). #}
+  {% if show_side_bar %}
+  {% include "partials/app_nav.html" %}
+  {% endif %}
+
+  {# Auth corner: sign-in button (signed-out) or avatar (signed-in). #}
+  <div class="auth-corner">
+    {% include "components/theme_toggle.html" %}
+    {# Notification bell: between the theme toggle and the profile button (Issue #113). #}
+    {% include "partials/notification_center.html" %}
+    <button type="button" class="btn btn-sm" id="signin-btn" data-open-signin hidden>Sign in</button>
+    <button type="button" class="avatar-btn" id="avatar-btn" aria-haspopup="dialog" aria-expanded="false" aria-label="Account menu" hidden><span id="avatar-initial" aria-hidden="true"></span></button>
+  </div>
+
+  {# User menu. #}
+  <div class="user-menu-backdrop" id="user-menu-backdrop" role="dialog" aria-modal="true" aria-label="Account menu" aria-hidden="true">
+    <div class="user-menu">
+      <div class="user-menu-head">
+        <div class="user-menu-avatar" id="user-menu-avatar"><span id="user-menu-initial" aria-hidden="true"></span></div>
+        <div>
+          <div class="user-menu-name" id="user-menu-name"></div>
+          <div class="user-menu-email" id="user-menu-email"></div>
+        </div>
+      </div>
+      <ul>
+        <li><a href="/account/profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg><span>Profile</span></a></li>
+        <li><a href="/account/security"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span>Security</span></a></li>
+        <li><button type="button" class="signout" data-signout><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg><span>Sign out</span></button></li>
+      </ul>
+    </div>
+  </div>
+
+  <main id="main" class="app-main">
+    {% block content %}{% endblock %}
+  </main>
+
+  {% include "partials/login_modal.html" %}
+{% endblock %}

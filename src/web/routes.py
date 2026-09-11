@@ -50,6 +50,7 @@ from src.core.rbac_language import scope_tier_label, scope_tier_meaning
 from src.core.s3_logs_query import warm_logs_listing
 from src.core.scope import ASSIGNMENT_SCOPE_TYPE, scope_tiers_for_roles
 from src.database.session import get_db
+from src.web.components import register_components
 from src.web.context import (
     can_explain_denial,
     page_context,
@@ -68,6 +69,8 @@ TEMPLATES_DIR = PACKAGE_DIR / "templates"
 LEGAL_PAGES_LAST_UPDATED = "9 September 2026"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+# The component vocabulary (badge tones, ticket-status badges) every template may use (Issue 5).
+register_components(templates.env)
 
 router = APIRouter(tags=["web"])
 

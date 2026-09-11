@@ -50,8 +50,8 @@ kernel with a `src/` layout, and the file paths in every spec now point at the r
 | A migration | `alembic/versions/NNNN_<slug>.py` (`scripts/db/alembic-revision.sh`, then `make migrate-up`) | `alembic/versions/0001_baseline.py` |
 | An API router | registered in `src/api/v1/router.py` (one import, one `include_router`); served under `/api/v1/` | the existing routers there |
 | The module's permissions | registered in `src/core/rbac_manifest_registry.py`, then `make seed-rbac` | `src/modules/widgets/rbac_manifest.py` |
-| A server-rendered page | `src/web/<area>.py` (or `src/web/<area>/` once there are several) plus `src/templates/<area>/` | `src/web/routes.py` |
-| CSS or JavaScript | `src/static/css/`, `src/static/js/`, third-party code in `src/static/vendor/`. No inline styles or scripts: the CSP forbids them and guard tests enforce it | `src/static/css/site.css` (the design tokens) |
+| A server-rendered page | `src/web/<area>.py` (or `src/web/<area>/` once there are several) plus `src/templates/<area>/`, extending one of the three layouts in `src/templates/layouts/` (patient, dashboard, board) and built from the macros in `src/templates/components/` | `src/web/routes.py`; `/dev/components` in development |
+| CSS or JavaScript | `src/static/css/`, `src/static/js/`, third-party code in `src/static/vendor/`. No inline styles or scripts: the CSP forbids them and guard tests enforce it. Colours only as tokens from `site.css` (decision 2) | `src/static/css/site.css` (the design tokens), `components.css` |
 | Shared enums, errors, helpers | `src/commons/`: `enums.py` (wire values), `exceptions.py` (domain errors and the error envelope), `time.py` (`now_sast()`, `business_date()`), `ids.py` (`new_id()`) | A domain error subclasses a category in `exceptions.py` (`NotFoundError`, `ConflictError`…); `src/core/error_handlers.py` answers it |
 | Cross-cutting infrastructure | `src/core/` (config, security, audit, scoping, rate limits, scheduler) | |
 | A scheduled job | a `run_*` function in the module's `service.py`, registered in `src/core/scheduler.py` | the notification retry and document retention sweeps |
@@ -70,13 +70,25 @@ Places where the specs and the repository disagree. None blocks sprint 1, but ea
 | # | Decision | The specs say | The repository has | Affects |
 |---|----------|---------------|--------------------|---------|
 | 1 | Background jobs | `arq` workers | APScheduler with a PostgreSQL advisory lock (`src/core/scheduler.py`), already running the notification retry and retention sweeps | 36, 43, 63, 81, 82, 85, 88, 91, 95, 99 |
-| 2 | Styling | Tailwind, compiled | Hand-written CSS design tokens (`site.css`, `admin.css`, `landing.css`) with light and dark themes | 5 and every UI issue |
+| 2 | Styling (**decided in Issue 5**) | Tailwind, compiled; Alpine.js for local state | Hand-written CSS design tokens (`site.css`, `admin.css`, `landing.css`) with light and dark themes. **Kept, with htmx and no Alpine**: see the note below the table | 5 and every UI issue |
 | 3 | Packaging and layout (**decided in Issue 1**) | `uv` and `uv sync`; an `app/` package | `requirements.txt` with setuptools (`pyproject.toml`); a `src/` package. **Kept as is**: see the note below the table | 1, 7, 9 |
 | 4 | PostgreSQL version (**decided in Issue 2**) | 18 | `postgis/postgis:16-3.4` in `infra/docker/docker-compose.db.yml`. **Now `postgis/postgis:18-3.6`**: see the note below the table | 2, 3, 9, 102 |
 | 5 | Database sessions | Async everywhere | Both; most kernel routes use the sync `get_db` | 3 and every new module |
 | 6 | Seeding roles and grants | By migration | By module manifests and `make seed-rbac` (idempotent) | 18 |
 | 7 | Database topology | A production database of its own | A schema (`clinicq`) in a shared platform database, which `scripts/db/backup.sh` assumes | 102, 103 |
 | 8 | API paths | `/api/...` (for example `/api/clinics/nearby`) | Everything under `/api/v1/` | 31 and every API issue |
+
+**Decision 2, recorded in Issue 5:** the hand-written design tokens stay, and grow into the one
+token set all three layouts read (colour, a type scale, spacing, layers); there is no Tailwind and no
+Alpine.js. Tailwind would add a build step to every laptop, the Docker image and CI, and would leave
+the kernel's console on the tokens until someone rewrote it, so the project would carry two design
+systems, the thing Issue 5 exists to prevent. Alpine's standard build evaluates expressions with
+`new Function`, which the CSP (no `'unsafe-eval'`) blocks, and its CSP build cannot run the
+expressions that make it worth having; small modules in `src/static/js/` do the same job under the
+same policy. The components are Jinja macros in `src/templates/components/` over
+`src/static/css/components.css`, and the fonts are self-hosted, so no page loads CSS, JavaScript or
+fonts from another host. Specs that say Tailwind or Alpine mean the tokens and a module in
+`src/static/js/`; `/dev/components` shows what exists.
 
 **Decision 3, recorded in Issue 1:** the project keeps `requirements.txt` with setuptools and the
 `src/` package it was scaffolded with. Every script, Dockerfile, CI stage and guard test already

@@ -1,0 +1,21 @@
+{#- Empty state (Issue 5): what a list shows when it has nothing, instead of a blank space.
+
+    {% from "components/empty_state.html" import empty_state %}
+    {{ empty_state("No one is waiting", body="New tickets appear here as patients join.") }}
+
+    title         what is empty, in a few words
+    body          optional: why, or what happens next
+    action_label  optional link text, shown with action_href as a quiet button
+    action_href   where that link goes -#}
+{% macro empty_state(title, body=None, action_label=None, action_href=None) -%}
+<div class="empty-state">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+  <p class="empty-state-title">{{ title }}</p>
+  {%- if body %}
+  <p class="empty-state-body">{{ body }}</p>
+  {%- endif %}
+  {%- if action_label and action_href %}
+  <a class="btn btn-quiet btn-sm" href="{{ action_href }}">{{ action_label }}</a>
+  {%- endif %}
+</div>
+{%- endmacro %}

@@ -12,7 +12,15 @@
  * ``kind`` is ``'ok' | 'error' | 'info'`` (default info). An ``action`` ({ label, onClick }) renders
  * an inline button — the seam an *undo* affordance for reversible writes plugs into. Toasts live in
  * one ``aria-live`` region so a screen reader announces them (errors assertively); every toast is
- * keyboard-dismissible and auto-expires. Styling lives in ``admin.css`` on the shared tokens.
+ * keyboard-dismissible and auto-expires. Styling lives in ``components.css`` on the shared tokens.
+ *
+ * The server can raise a toast without writing any script (Issue 5), three ways:
+ *
+ *   <template data-toast data-toast-kind="ok">Saved</template>   (the toast() macro) is shown on
+ *       load and after every htmx swap, then removed;
+ *   an htmx response carrying ``HX-Trigger: {"bkp:toast": {"message", "kind"}}``
+ *       (``src.web.components.toast_trigger``) shows one when it lands;
+ *   a button with ``data-toast-message`` (and optional ``data-toast-kind``) shows one on click.
  *
  * No inline handlers or styles — external file only (CSP ``script-src 'self'``).
  */
@@ -118,6 +126,43 @@
       tbody.appendChild(tr);
     }
   };
+
+  var KINDS = { info: true, ok: true, error: true };
+
+  /** The toast kind named by ``value``, or ``info`` for anything unknown. */
+  function kindOf(value) {
+    return KINDS[value] ? value : "info";
+  }
+
+  /** Show, then remove, every server-rendered ``<template data-toast>`` under ``root``. */
+  function showTemplateToasts(root) {
+    var found = (root || document).querySelectorAll("template[data-toast]");
+    Array.prototype.forEach.call(found, function (tpl) {
+      var message = (tpl.content.textContent || "").trim();
+      if (message) ns.toast(message, { kind: kindOf(tpl.getAttribute("data-toast-kind")) });
+      tpl.parentNode.removeChild(tpl);
+    });
+  }
+
+  // The page as rendered (this file is deferred, so the document is already parsed).
+  showTemplateToasts(document);
+  // Content an htmx swap brought in.
+  document.addEventListener("htmx:afterSettle", function (evt) {
+    showTemplateToasts(evt.target);
+  });
+  // A toast the server asked for through the HX-Trigger response header.
+  document.addEventListener("bkp:toast", function (evt) {
+    var detail = evt.detail || {};
+    if (detail.message) ns.toast(String(detail.message), { kind: kindOf(detail.kind) });
+  });
+  // A button that announces something on click, with no page script of its own.
+  document.addEventListener("click", function (evt) {
+    var trigger = evt.target.closest ? evt.target.closest("[data-toast-message]") : null;
+    if (!trigger) return;
+    ns.toast(trigger.getAttribute("data-toast-message"), {
+      kind: kindOf(trigger.getAttribute("data-toast-kind")),
+    });
+  });
 
   /** Remove skeleton placeholders (and clear ``aria-busy``) before rendering real content. */
   ns.clearSkeleton = function clearSkeleton(el) {

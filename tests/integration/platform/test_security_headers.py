@@ -94,17 +94,24 @@ def test_style_src_has_no_unsafe_inline(client: TestClient) -> None:
     assert "'unsafe-inline'" not in style_src, style_src
 
 
-def test_style_src_keeps_the_named_font_host(client: TestClient) -> None:
-    """Tightening the directive must not break the font stylesheet.
+def test_styles_and_fonts_come_only_from_this_origin(client: TestClient) -> None:
+    """No third-party host serves CSS or fonts (Issue 5).
 
-    `https://fonts.googleapis.com` is a named, audited host — not a wildcard, and not something an
-    injected style attribute can reach through. Self-hosting the font is a separate change with its
-    own trade-off, and Issue #181 names removing this host a non-goal; the test says so out loud so
-    a later "tighten it further" does not silently unstyle every page.
+    Issue #181 kept `https://fonts.googleapis.com` and named self-hosting "a separate change with
+    its own trade-off". Issue 5 made that change: the fonts are self-hosted under `/static/fonts/`,
+    because a runtime CDN request for CSS is exactly what its acceptance criteria forbid, a clinic's
+    board must render offline, and a visitor's address should not go to a font CDN. So both
+    directives now name this origin alone, plus the style nonce.
     """
     csp = client.get("/health/live").headers["Content-Security-Policy"]
-    assert "https://fonts.googleapis.com" in csp
-    assert "font-src 'self' https://fonts.gstatic.com" in csp
+    directives = {
+        part.strip().split(" ", 1)[0]: part.strip()
+        for part in csp.split(";")
+        if part.strip()
+    }
+    assert directives["style-src"].startswith("style-src 'self' 'nonce-")
+    assert "https:" not in directives["style-src"]
+    assert directives["font-src"] == "font-src 'self'"
 
 
 def test_script_src_is_still_nonce_locked(client: TestClient) -> None:

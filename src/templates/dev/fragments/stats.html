@@ -1,0 +1,8 @@
+{#- The dashboard's stat tiles (Issue 5 demo), lazy-loaded over a skeleton by hx-trigger="load".
+    Replaces the placeholder it was asked for from (hx-swap="outerHTML"). -#}
+<div class="stat-grid">
+  <div class="stat"><div class="num">{{ waiting }}</div><div class="label">Waiting now</div></div>
+  <div class="stat"><div class="num">{{ longest_wait }} min</div><div class="label">Longest wait</div></div>
+  <div class="stat"><div class="num">{{ no_shows }}</div><div class="label">No-shows today</div></div>
+  <div class="stat"><div class="num">{{ remote_share }}%</div><div class="label">Joined remotely</div></div>
+</div>

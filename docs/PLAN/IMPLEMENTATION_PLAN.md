@@ -50,7 +50,7 @@ flowchart TB
 ```
 
 **Stack:** Python 3.14 · FastAPI · PostgreSQL 18 with PostGIS · SQLAlchemy 2.x async + Alembic ·
-Jinja2 + htmx + Alpine + Tailwind · Redis + `arq` · Docker Compose · GitHub Actions.
+Jinja2 + htmx + hand-written design tokens (decision 2) · Redis + `arq` · Docker Compose · GitHub Actions.
 
 **One codebase, no separate JavaScript build.** The same FastAPI application renders the patient pages,
 the clinic dashboard and the display board; htmx swaps fragments and SSE pushes live updates. For a

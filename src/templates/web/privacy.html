@@ -25,9 +25,8 @@
 <meta name="description" content="How ClinicQ collects, uses, shares, protects and deletes personal information under the Protection of Personal Information Act 4 of 2013 (POPIA), and how to exercise your rights.">
 <meta name="theme-color" content="#0f6e56">
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+{# Self-hosted fonts (Issue 5): site.css declares them; this starts the body face early. #}
+<link rel="preload" href="/static/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/static/css/site.css">
 <link rel="stylesheet" href="/static/css/landing.css">
 {# Read by csrf-htmx.js to mirror the CSRF cookie into X-CSRF-Token. #}

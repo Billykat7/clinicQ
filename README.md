@@ -86,8 +86,8 @@ anonymised district-level dashboards for health-department planning.
 |-------|--------|
 | Language | **Python 3.14** |
 | API + web | **FastAPI** (ASGI) with **Jinja2** templates |
-| Interactivity | **htmx** + a little **Alpine.js** + **SSE**, no separate JS build |
-| Styling | **Tailwind CSS** (compiled) |
+| Interactivity | **htmx** + small modules in `src/static/js/` + **SSE**, no separate JS build |
+| Styling | Hand-written **CSS design tokens**: one set for the patient, dashboard and board layouts, light and dark, fonts self-hosted (decision 2) |
 | Database | **PostgreSQL 18** with **PostGIS** |
 | ORM / migrations | **SQLAlchemy 2.x (async)** + **Alembic** |
 | Cache / jobs | **Redis** + `arq` |
@@ -251,6 +251,8 @@ the files they inspect do not exist yet: `.github/workflows/` (Issue 9), `.gitle
 - Commit: `Issue 39: add concurrency-safe ticket sequence`
 - PR description in `docs/GITHUB/PR/M<MS>/PR_<N>_DESCRIPTION.md`, ending with `Closes #N`
 - One issue, one PR, merged within 3 days. Rebase daily.
+- New screens extend a layout in `src/templates/layouts/` and use the component macros; with
+  `make run`, [`/dev/components`](http://127.0.0.1:8000/dev/components) shows them all (development only).
 - Review within 24 hours on a weekday, or the backup reviewer may merge.
 
 Full detail: [engineering non-negotiables](docs/guideline.md) and

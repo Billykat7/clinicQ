@@ -1,0 +1,17 @@
+{#- Badges (Issue 5): a short label with a colour role.
+
+    {% from "components/badge.html" import badge, status_badge %}
+    {{ badge("Public", BadgeTone.OK) }}
+    {{ status_badge(ticket.status) }}
+
+    badge(label, tone)    tone is a BadgeTone: OK, WARN, MUTED (the default) or CURRENT
+    status_badge(status)  a TicketStatus, drawn with the words and tone every surface shares
+                          (TICKET_STATUS_BADGES in src/web/components.py) -#}
+{% macro badge(label, tone=BadgeTone.MUTED) -%}
+<span class="badge badge-{{ tone }}">{{ label }}</span>
+{%- endmacro %}
+
+{% macro status_badge(status) -%}
+  {%- set shown = TICKET_STATUS_BADGES[status] -%}
+  {{ badge(shown.label, shown.tone) }}
+{%- endmacro %}
