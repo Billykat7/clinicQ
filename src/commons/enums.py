@@ -77,6 +77,7 @@ class BoundedContext(StrEnum):
     DOCUMENTS = "documents"
     WIDGETS = "widgets"
     PATIENTS = "patients"
+    STAFF = "staff"
 
 
 class LogLevel(StrEnum):
@@ -624,10 +625,14 @@ class AssignmentScopeType(StrEnum):
     - ``SITE``: the clinic a staff member works at (Issue 15). A staff member's site is never a
       column on ``user``: it is a role held at a site, so one person can hold different roles at
       two clinics, and every site-scoped query resolves "which sites" from these rows (Issue 19).
+    - ``QUEUE``: the queue a nurse or doctor was put on (Issue 19, filled in by Issue 28). Narrower
+      than a site: it is what makes a nurse's ``own``-tier call-next grant reach their own room's
+      queue and no other.
     """
 
     INSTANCE = "instance"
     SITE = "site"
+    QUEUE = "queue"
 
 
 class ScopeShape(StrEnum):
@@ -646,6 +651,14 @@ class ScopeShape(StrEnum):
     INSTANCE_DERIVED = "instance_derived"
     #: Rows are shared conversations — narrow to the threads ``user_id`` participates in.
     THREAD_PARTICIPANT = "thread_participant"
+    #: The row **is** a clinic, or carries its ``site_id``: narrow by
+    #: :attr:`~src.core.scope.ScopeNarrowing.site_ids`, the sites the caller holds a role at
+    #: (Issue 19). Tickets and everything else hanging off a clinic share this shape.
+    SITE = "site"
+    #: The row is a queue, or carries its ``queue_id``: at ``own`` narrow by
+    #: :attr:`~src.core.scope.ScopeNarrowing.queue_ids` (the queues the caller is assigned to), at
+    #: ``assigned`` by the sites those queues belong to (Issue 19).
+    QUEUE = "queue"
 
     # Your own shapes go here — one per "whose rows are these" question your domain asks, e.g. a
     # row carrying a customer identity or an assigned technician. Add the member, declare it on the
@@ -1066,6 +1079,7 @@ class AuditEntityType(StrEnum):
 
     USER = "user"
     PATIENT = "patient"
+    SITE = "site"
     AUDIT_LOG = "audit_log"
     DATA_SUBJECT = "data_subject"
     DOCUMENT = "document"

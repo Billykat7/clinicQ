@@ -20,6 +20,7 @@ from src.modules.documents.router import router as documents_router
 from src.modules.messaging.router import router as messaging_router
 from src.modules.notifications.router import router as notifications_router
 from src.modules.patients.router import router as patients_router
+from src.modules.staff.router import router as staff_router
 from src.modules.widgets.router import router as widgets_router
 
 # ── your routers ─────────────────────────────────────────────────────────────
@@ -39,3 +40,4 @@ api_v1_router.include_router(documents_router)
 api_v1_router.include_router(esign_router)
 api_v1_router.include_router(widgets_router)
 api_v1_router.include_router(patients_router)
+api_v1_router.include_router(staff_router)

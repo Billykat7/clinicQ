@@ -127,9 +127,20 @@ def test_a_second_run_creates_no_duplicates(migrated_database: URL) -> None:
                     "ON u.id = r.user_id WHERE u.email LIKE '%@clinicq.example'"
                 )
             ).scalar_one()
+            at_a_site = conn.execute(
+                text(
+                    'SELECT count(*) FROM clinicq.user_roles r JOIN clinicq."user" u '
+                    "ON u.id = r.user_id WHERE u.email LIKE '%@clinicq.example' "
+                    "AND r.scope_type = 'site'"
+                )
+            ).scalar_one()
     finally:
         engine.dispose()
-    assert users == assignments == len(DEMO_STAFF)
+    assert users == len(DEMO_STAFF)
+    # One unscoped assignment each, plus a site assignment for everyone but the platform admin,
+    # who reaches a clinic only through the audited cross-site hatch (Issue 19).
+    assert at_a_site == len(DEMO_STAFF) - 1
+    assert assignments == len(DEMO_STAFF) + at_a_site
 
 
 @pytest.mark.postgres

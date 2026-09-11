@@ -17,7 +17,8 @@ password into a real database is never the intent.
 second run creates nothing: it updates what differs from the dataset and leaves the rest.
 
 **What it seeds today.** One staff account per ClinicQ staff role, printed with its development
-password. The clinics, queues and the day of ticket history (``scripts/db/demo_dataset.py``) are
+password, each (except the platform admin) assigned to the first demo clinic so the site-scoped
+routes work locally. The clinics, queues and the day of ticket history (``scripts/db/demo_dataset.py``) are
 built and summarised, and are written as their tables land: sites with Issue 23, queues with
 Issue 25, tickets with Issue 39. Each of those issues adds its step to :func:`seed`.
 """
@@ -34,7 +35,12 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from scripts.db.demo_dataset import CLINICS, queues_for, ticket_history
-from src.commons.enums import AppEnvironment, TicketStatus, UserRole
+from src.commons.enums import (
+    AppEnvironment,
+    AssignmentScopeType,
+    TicketStatus,
+    UserRole,
+)
 from src.commons.time import APP_TIMEZONE, business_date
 from src.core.config import Settings, get_settings
 from src.core.security import hash_password, verify_password
@@ -57,6 +63,11 @@ class DemoStaff:
     first_name: str
     last_name: str
 
+
+#: The clinic the demo staff work at, until Issue 23 gives sites real ids: the first demo clinic's
+#: slug, used as the ``scope_id`` of their site-scoped role assignment (Issue 19). Without one, a
+#: seeded account reaches no site route at all, which is the guard working, not a bug.
+DEMO_SITE_ID: Final = CLINICS[0].slug
 
 #: One account per staff role. ``.example`` is reserved by RFC 2606 and never delegated, so mail
 #: to it cannot be delivered. Not ``.test``: that one is reserved too, but the email validator the
@@ -159,6 +170,26 @@ def seed_staff(session: Session, *, password: str) -> SeedReport:
         ).first()
         if has_assignment is None:
             session.add(UserRoleAssignment(user_id=user.id, role=staff.role.value))
+        # Where they work (Issue 19). The platform admin is assigned to no clinic on purpose: the
+        # operator reaches one only through the audited cross-site hatch.
+        if staff.role is UserRole.PLATFORM_ADMIN:
+            continue
+        has_site = session.execute(
+            select(UserRoleAssignment.id).where(
+                UserRoleAssignment.user_id == user.id,
+                UserRoleAssignment.scope_type == AssignmentScopeType.SITE.value,
+                UserRoleAssignment.scope_id == DEMO_SITE_ID,
+            )
+        ).first()
+        if has_site is None:
+            session.add(
+                UserRoleAssignment(
+                    user_id=user.id,
+                    role=staff.role.value,
+                    scope_type=AssignmentScopeType.SITE.value,
+                    scope_id=DEMO_SITE_ID,
+                )
+            )
     session.flush()
     return report
 
