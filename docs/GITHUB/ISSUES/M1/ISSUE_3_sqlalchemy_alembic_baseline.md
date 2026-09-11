@@ -23,6 +23,7 @@ PostGIS extension; enabling it later in the migration chain would break a fresh 
 
 - Most of this exists: sync and async sessions (`get_db`, `get_async_db`) in `src/database/session.py`, a constraint naming convention in `src/database/models/base.py`, mixins in `src/database/models/mixins/`, and a baseline (`alembic/versions/0001_baseline.py`) that already runs `CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA public`.
 - The spec assumes async everywhere; the kernel serves most requests through the sync session. Pick one convention for new modules; see [open decisions](../README.md#open-decisions).
+- **Decided (decision 5):** new modules use the sync `get_db`; `get_async_db` only for long-lived or streaming handlers. Alembic stays on the sync engine, so "configured for async" below does not apply.
 - What is left: confirm each acceptance criterion with a test, especially the downgrade round-trip and the empty autogenerate diff.
 
 ## Scope
@@ -58,8 +59,9 @@ PostGIS extension; enabling it later in the migration chain would break a fresh 
 - `src/database/session.py`
 - `src/database/models/base.py`
 - `src/database/models/mixins/`
-- `alembic/env.py`
+- `alembic/env.py`, `alembic.ini`
 - `alembic/versions/0001_baseline.py`
+- `tests/conftest.py` (the throwaway-database fixtures), `tests/integration/database/`
 
 ---
 

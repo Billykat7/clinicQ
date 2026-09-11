@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Create a new Alembic revision.
 # Usage:
-#   ./scripts/database/alembic-revision.sh "add users table"
+#   ./scripts/db/alembic-revision.sh "add users table"
 
 usage() {
   cat <<'EOF'

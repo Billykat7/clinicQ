@@ -3,9 +3,9 @@ set -euo pipefail
 
 # Roll back migrations.
 # Usage:
-#   ./scripts/database/alembic-downgrade.sh -1        # rollback a single step
-#   ./scripts/database/alembic-downgrade.sh base      # rollback all the way to base
-#   ./scripts/database/alembic-downgrade.sh <rev>     # rollback to a specific revision
+#   ./scripts/db/alembic-downgrade.sh -1        # rollback a single step
+#   ./scripts/db/alembic-downgrade.sh base      # rollback all the way to base
+#   ./scripts/db/alembic-downgrade.sh <rev>     # rollback to a specific revision
 
 # Colors for output
 RED='\033[0;31m'

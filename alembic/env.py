@@ -9,7 +9,7 @@ from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import pool
-from sqlalchemy.engine import create_engine
+from sqlalchemy.engine import Connection, create_engine
 
 # Importing the package is what registers every model on ``Base.metadata``; naming them one by
 # one here would be a second list to keep in sync, and a model missing from it reflects to
@@ -23,8 +23,13 @@ from src.database.schema import create_schema_sql, ensure_postgres_schema
 # Alembic Config object
 config = context.config
 
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+# The CLI gets alembic.ini's logging. A caller that runs Alembic inside its own process (the
+# migration tests) sets ``configure_logger`` to False and keeps its own; and existing loggers are
+# never disabled, so the ``src`` modules imported above keep logging either way.
+if config.config_file_name is not None and config.attributes.get(
+    "configure_logger", True
+):
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 
@@ -79,27 +84,37 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def _run_on(connection: Connection) -> None:
+    """Configure the context on ``connection`` and run the migrations."""
+    if connection.dialect.name != "postgresql":
+        raise RuntimeError(
+            "BK ClinicQ requires PostgreSQL with PostGIS. Set DATABASE_URL to a PostgreSQL connection."
+        )
+    ensure_postgres_schema(connection, get_settings().db_schema)
+    context.configure(connection=connection, **_alembic_context_kwargs())
+    with context.begin_transaction():
+        context.run_migrations()
+
+
 def run_migrations_online() -> None:
-    """Run migrations in online mode. Requires PostgreSQL with PostGIS."""
+    """Run migrations in online mode. Requires PostgreSQL with PostGIS.
+
+    A caller that already holds a connection (the migration tests, Issue 3) passes it in
+    ``config.attributes["connection"]``, the pattern from Alembic's cookbook, and the migrations run
+    on it, against whatever database it points at. Otherwise they run against ``DATABASE_URL``.
+    """
+    given = config.attributes.get("connection")
+    if given is not None:
+        _run_on(given)
+        return
     _configure_sqlalchemy_url_from_env()
-    settings = get_settings()
     connectable = create_engine(
         config.get_main_option("sqlalchemy.url"),
         poolclass=pool.NullPool,
         future=True,
     )
     with connectable.begin() as connection:
-        if connection.dialect.name != "postgresql":
-            raise RuntimeError(
-                "BK ClinicQ requires PostgreSQL with PostGIS. Set DATABASE_URL to a PostgreSQL connection."
-            )
-        ensure_postgres_schema(connection, settings.db_schema)
-        context.configure(
-            connection=connection,
-            **_alembic_context_kwargs(),
-        )
-        with context.begin_transaction():
-            context.run_migrations()
+        _run_on(connection)
 
 
 if context.is_offline_mode():

@@ -25,6 +25,9 @@ dev = ["pre-commit>=4.6.1,<5"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "postgres: runs against a real PostgreSQL + PostGIS server (TEST_DATABASE_URL; Issue 3)",
+]
 
 [tool.mypy]
 # Stated rather than inherited from whichever interpreter invoked mypy, so a stray

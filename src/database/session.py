@@ -2,6 +2,16 @@
 
 Uses ``DATABASE_URL`` from settings. Models are imported so
 ``Base.metadata`` is populated for ``create_all`` and Alembic.
+
+**Which session a module uses (decision 5, Issue 3).** New modules take the **sync** session,
+``get_db``, like the kernel: the RBAC dependencies, the tenancy scoping, the audit writer and every
+kernel router are sync, and FastAPI runs a sync route in its worker pool, so it never blocks the
+event loop. ``get_async_db`` is for the few handlers that must not hold a worker for long: the
+board's server-sent events (M8) and similar long-lived streams. Do not mix the two in one request.
+
+Both dependencies roll back when the request raises and always close the session, which returns
+the connection to the pool; ``tests/integration/database/test_session_lifecycle.py`` proves it
+against PostgreSQL.
 """
 
 from __future__ import annotations
@@ -66,10 +76,19 @@ def get_session_factory() -> sessionmaker[Session]:
 
 
 def get_db() -> Generator[Session]:
-    """FastAPI dependency that yields a DB session and closes it after the request."""
+    """FastAPI dependency: one sync session per request, the default for new modules.
+
+    A route commits what it means to keep. If the request raises (a domain error, an
+    ``HTTPException``, a crash), FastAPI throws the exception in here, and the session rolls back
+    before it closes, so nothing half-written is left in the transaction. Closing returns the
+    connection to the pool in every case.
+    """
     db = get_session_factory()()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 
@@ -134,9 +153,17 @@ def get_async_session_factory() -> async_sessionmaker[AsyncSession]:
 
 
 async def get_async_db() -> AsyncGenerator[AsyncSession]:
-    """FastAPI dependency that yields an async DB session and closes it after the request."""
+    """FastAPI dependency: an async session, for long-lived or streaming handlers only.
+
+    Same contract as :func:`get_db`: rolled back if the request raises, closed (and its
+    connection returned to the pool) when the ``async with`` block exits.
+    """
     async with get_async_session_factory()() as db:
-        yield db
+        try:
+            yield db
+        except Exception:
+            await db.rollback()
+            raise
 
 
 @asynccontextmanager
