@@ -21,7 +21,6 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.api.rbac_deps import require
@@ -40,7 +39,7 @@ from src.core.rbac import (
     granted_covers_required,
 )
 from src.core.scope import resolve_scope
-from src.core.security import get_current_user
+from src.core.security import find_active_user, get_current_user
 from src.database.models import Message, MessageThread, User
 from src.database.session import get_db
 from src.modules.account.users import find_user_id_by_email
@@ -413,10 +412,7 @@ def _is_manager(
     checked against ``communications.announcements``, not messages. A caller without it stays
     strictly participant-scoped.
     """
-    email = (current_user.get("email") or "").strip().lower()
-    if not email:
-        return False
-    user = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
+    user = find_active_user(db, current_user)
     if user is None:
         return False
     role = (user.role or "").strip()

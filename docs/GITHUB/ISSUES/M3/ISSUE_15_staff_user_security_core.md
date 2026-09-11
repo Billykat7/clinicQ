@@ -27,10 +27,10 @@ access JWT, and an opaque refresh token stored only as a hash so a database leak
 
 ## Scope
 
-- `staff_users` model: id, site_id, email, password hash, role, active, verified, last login, timestamps
-- `refresh_tokens` model storing a SHA-256 hash, expiry, revocation and device metadata
-- `app/core/security.py`: password hashing/verification, access-token creation and decoding, typed token claims
-- `get_current_staff()` dependency resolving a user from a Bearer header or an httpOnly access cookie
+- Staff accounts are the kernel's `user` table: id, email, password hash, role mirror, active, verified, last login, timestamps. **No `staff_users` table** (decided in this issue): a second identity table is how two sign-in paths drift apart. A staff member's site is a role assignment scoped to that site (`user_roles` with `scope_type='site'`), never a column on the user
+- `refresh_token` stores a SHA-256 hash, expiry, revocation and device metadata
+- `src/core/security.py`: password hashing/verification, access-token creation and decoding, typed token claims
+- `get_current_staff()` dependency resolving an active account from a Bearer header or an httpOnly access cookie
 - Production guard refusing to boot with the development signing secret
 
 ## Out of scope
@@ -41,7 +41,7 @@ access JWT, and an opaque refresh token stored only as a hash so a database leak
 
 ## Acceptance criteria
 
-- [ ] `alembic upgrade head` creates `staff_users` and `refresh_tokens`
+- [ ] `alembic upgrade head` creates `user` and `refresh_token` (the staff tables; see Scope)
 - [ ] Passwords round-trip through bcrypt at cost 12 and are never stored or logged in plain text
 - [ ] An access token is a decodable HS256 JWT carrying subject, role, site and expiry
 - [ ] Refresh tokens are unrecoverable from the database (hash only)

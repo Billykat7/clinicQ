@@ -1,9 +1,20 @@
-"""User model: email identity, optional password, verification, role, OAuth linkage.
+"""User model: the staff account (Issue 15).
 
-Ported from the ``maps`` project. OTP-only / OAuth users have ``password`` NULL
-until they set one. ``role`` is a string for verb-based RBAC (see later issues).
-Includes TimestampMixin (created_at/modified_at), ActiveMixin (is_active), and
-SoftDeleteMixin (is_deleted).
+Staff are the only people who sign in with an account, and this is their table: there is no
+separate ``staff_users``, because two identity tables are how two sign-in paths drift apart.
+Patients are a phone number and a one-time code, never a row here (Issue 17).
+
+* ``password`` is a bcrypt hash (cost 12), NULL for an OTP-only account until one is set. The
+  plaintext is never stored; ``tests/integration/database/test_credentials_at_rest.py`` reads the
+  raw rows to prove it.
+* ``role`` is a mirror of the account's unscoped role for display; RBAC resolves roles from
+  ``user_roles`` (:class:`~src.database.models.user_role_assignment.UserRoleAssignment`).
+* **A staff member's site is not a column.** It is a role held at that site: a ``user_roles`` row
+  with ``scope_type='site'`` (:attr:`~src.commons.enums.AssignmentScopeType.SITE`), so one person
+  can hold different roles at two clinics.
+* ``is_active`` (ActiveMixin) switches an account off without deleting it: sign-in refuses it, and
+  :func:`~src.core.security.find_active_user` refuses its still-unexpired access token on the next
+  request. ``is_deleted`` (SoftDeleteMixin) keeps the row, so audit rows stay attributable.
 """
 
 from datetime import date, datetime

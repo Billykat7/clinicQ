@@ -32,7 +32,7 @@ have to check them before they act.
 
 ## Scope
 
-- `staff_users` model, password hashing, short-lived access JWT + rotating refresh cookie, CSRF
+- Staff accounts on the kernel's `user` table (no `staff_users`: Issue 15), password hashing, short-lived access JWT + rotating refresh cookie, CSRF
 - Staff sign-in, sessions list, logout, password reset and staff invitation flow
 - Patient identity: phone-first records, OTP verification, rate-limited resend, no password
 - RBAC: roles `patient`, `receptionist`, `nurse_doctor`, `clinic_manager`, `platform_admin`; verb-based permissions enforced by FastAPI dependencies

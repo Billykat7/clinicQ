@@ -35,7 +35,7 @@ from src.core.rbac import (
 from src.core.refresh_token_policy import get_valid_refresh_token_row
 from src.core.request_logging import bind_request_context
 from src.core.scope import scope_tiers_for_roles
-from src.core.security import decode_token
+from src.core.security import decode_access_token
 from src.database.models import NavGateOverride, RefreshToken, User
 from src.database.session import get_db_context
 
@@ -655,7 +655,7 @@ def peek_access_subject_from_access_cookie(request: Request) -> str | None:
     raw = request.cookies.get(get_settings().access_token_cookie_name)
     if not raw or not raw.strip():
         return None
-    payload = decode_token(raw.strip())
+    payload = decode_access_token(raw.strip())
     if payload is None:
         return None
     subject = str(payload.get("sub") or "").strip()

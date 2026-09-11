@@ -547,20 +547,14 @@ def raise_forbidden_action(
 
 
 def _resolve_user_for_rbac(db: Session, current_user: dict[str, Any]) -> User:
-    """Return the signed-in ``User`` row; raise 401 if unauthenticated or unknown."""
-    email = (current_user.get("email") or current_user.get("sub") or "").strip().lower()
-    if not email or email == "anonymous":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-        )
-    user = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
-    return user
+    """Return the signed-in ``User`` row; raise 401 if unauthenticated, unknown or switched off.
+
+    Delegates to :func:`src.core.security.resolve_active_user`, the one identity resolution every
+    authenticated path shares (Issue 15), so a deactivated account is refused here too.
+    """
+    from src.core.security import resolve_active_user
+
+    return resolve_active_user(db, current_user)
 
 
 def _resolve_role_for_rbac(db: Session, current_user: dict[str, Any]) -> str:

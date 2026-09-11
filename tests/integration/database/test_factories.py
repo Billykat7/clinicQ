@@ -8,8 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from scripts.db.demo_dataset import CLINICS, PatientStub, SiteStub, TicketStub
-from src.commons.enums import SiteSector, TicketStatus, UserRole
-from src.core.scope import ASSIGNMENT_SCOPE_TYPE
+from src.commons.enums import AssignmentScopeType, SiteSector, TicketStatus, UserRole
 from src.core.security import verify_password
 from src.database.models import User, UserRoleAssignment
 from tests.factories import (
@@ -34,7 +33,7 @@ def test_a_staff_member_is_persisted_with_no_arguments(
         assert stored is not None
         assert stored.role == UserRole.RECEPTIONIST
         assert stored.is_verified and stored.is_active
-        assert stored.email.endswith("@clinicq.test")
+        assert stored.email.endswith("@clinicq.example")
         assert verify_password(FACTORY_STAFF_PASSWORD, stored.password or "")
         roles = db.execute(
             select(UserRoleAssignment.role, UserRoleAssignment.scope_type).where(
@@ -65,7 +64,10 @@ def test_overrides_and_a_site_scope_apply(
                 ).where(UserRoleAssignment.user_id == manager.id)
             ).all()
         )
-        assert scopes == {(None, None), (ASSIGNMENT_SCOPE_TYPE, "hillbrow-chc")}
+        assert scopes == {
+            (None, None),
+            (AssignmentScopeType.SITE.value, "hillbrow-chc"),
+        }
 
 
 def test_unique_fields_stay_unique_across_many_calls(

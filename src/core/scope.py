@@ -46,7 +46,12 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.commons.enums import GrantScope, PermissionEffect, ScopeShape
+from src.commons.enums import (
+    AssignmentScopeType,
+    GrantScope,
+    PermissionEffect,
+    ScopeShape,
+)
 from src.core.rbac import (
     Trace,
     TraceOutcome,
@@ -60,10 +65,10 @@ from src.core.rbac import (
 from src.database.models import RbacRole, RolePermission, User
 
 #: The ``UserRoleAssignment.scope_type`` value the RBAC console writes when an admin assigns a role
-#: over specific instances rather than the whole business. One generic type ships; a project that
-#: scopes assignments over more than one kind of thing adds its own values and branches on them in
-#: :func:`assignment_instance_ids`.
-ASSIGNMENT_SCOPE_TYPE = "instance"
+#: over specific instances rather than the whole business. A project that scopes assignments over
+#: more than one kind of thing adds members to :class:`~src.commons.enums.AssignmentScopeType` and
+#: branches on them in :func:`assignment_instance_ids`.
+ASSIGNMENT_SCOPE_TYPE = AssignmentScopeType.INSTANCE.value
 
 
 def is_scope_exempt(db: Session, role: str) -> bool:
@@ -443,11 +448,14 @@ def resolve_scope(
 
 
 def _user_from_claims(db: Session, current_user: dict) -> User | None:
-    """Resolve the signed-in ``User`` row from JWT claims, or ``None`` when unresolvable."""
-    email = (current_user.get("email") or current_user.get("sub") or "").strip().lower()
-    if not email or email == "anonymous":
-        return None
-    return db.execute(select(User).where(User.email == email)).scalar_one_or_none()
+    """Resolve the signed-in ``User`` row from JWT claims, or ``None`` when it may not act.
+
+    :func:`src.core.security.find_active_user`: the same resolution the RBAC gate uses, so the two
+    can never disagree about who the caller is.
+    """
+    from src.core.security import find_active_user
+
+    return find_active_user(db, current_user)
 
 
 def _closed_narrowing(resource_key: str) -> ScopeNarrowing:
