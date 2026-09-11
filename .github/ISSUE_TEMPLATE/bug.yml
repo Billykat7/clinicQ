@@ -1,0 +1,59 @@
+name: Bug
+description: Something is not working the way it should.
+title: "<what is broken, in a few words>"
+labels: ["TYPE: Bug", "STATUS: Needs Review"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Never paste a secret, a patient's details or a full log line with personal data: redact first.
+        A security problem goes to the DevOps/QA Lead privately, not in an issue.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, including any error message.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should have happened
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Sign in as a clinic manager
+        2. …
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Where
+      options:
+        - local
+        - staging
+        - production
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version and commit
+      description: From /health on that environment, e.g. 0.2.0 / 0e8d517.
+      placeholder: "0.2.0 / 0e8d517"
+  - type: input
+    id: request-id
+    attributes:
+      label: Request id
+      description: The X-Request-ID of a failing request (response header, or the error page), if you have one.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Redacted log lines around the failure.
+      render: text

@@ -1,0 +1,83 @@
+# CODEOWNERS (Issue 13): who reviews what. GitHub requests a review from the owner of every path a
+# pull request touches, and the "main: review" ruleset requires that owner's approval.
+#
+# Encoded from docs/TEAM/WORKLOAD_SPLIT.md §2, translated to this repository's layout (§2 was
+# written for an `app/` package; the code lives in `src/`). Every path has exactly one owner. Where
+# §2 names two roles, the first owns the path and the second is its backup reviewer.
+#
+# Roles and handles (WORKLOAD_SPLIT §1). Until the team fills in §1, every role routes to the
+# DevOps/QA Lead, who reassigns the review. To hand a role over, replace its handle on the lines
+# tagged with that role; tests/unit/platform/test_team_workflow.py checks every owner is in §1.
+#
+#   Role                      Handle        Backup reviewer (§1)
+#   A  Backend Lead           @Billykat7    B
+#   B  Backend/Integrations   @Billykat7    A
+#   C  Frontend/Patient       @Billykat7    D
+#   D  Frontend/Clinic        @Billykat7    C
+#   E  DevOps/QA Lead         @Billykat7    F
+#   F  Data & Research        @Billykat7    E
+#
+# Review SLA: 24 hours on a weekday; after that the backup reviewer may approve (CONTRIBUTING.md).
+# The last matching line wins, so the catch-all comes first and the most specific paths last.
+# Comments sit on their own lines: CODEOWNERS has no trailing comments.
+
+# E: anything not claimed below
+*                                  @Billykat7
+
+# E: the repository, pipelines, environments, test infrastructure and dependencies
+/.github/                          @Billykat7
+/infra/                            @Billykat7
+/scripts/                          @Billykat7
+/tests/                            @Billykat7
+/docs/CICD/                        @Billykat7
+/docs/GITHUB/                      @Billykat7
+/requirements.txt                  @Billykat7
+/pyproject.toml                    @Billykat7
+/Makefile                          @Billykat7
+/.env.example                      @Billykat7
+
+# A: the domain core and the kernel; every migration goes through A
+/src/core/                         @Billykat7
+/src/commons/                      @Billykat7
+/src/database/                     @Billykat7
+/src/api/                          @Billykat7
+/src/schemas/                      @Billykat7
+/src/modules/                      @Billykat7
+/alembic/                          @Billykat7
+
+# A only: the queue engine is the critical path
+/src/modules/queue*/               @Billykat7
+
+# A, backup C: discovery sits between the backend and the patient UI
+/src/modules/discovery*/           @Billykat7
+
+# B: everything that talks to the outside world
+/src/modules/notifications/        @Billykat7
+/src/modules/communications/       @Billykat7
+/src/modules/messaging/            @Billykat7
+/src/modules/channels*/            @Billykat7
+
+# B, backup F: background workers
+/src/workers/                      @Billykat7
+
+# F: reporting
+/src/modules/report*/              @Billykat7
+
+# C, backup D: what a patient touches, and the shared templates and assets
+/src/web/                          @Billykat7
+/src/templates/                    @Billykat7
+/src/static/                       @Billykat7
+/tests/a11y/                       @Billykat7
+
+# D, backup C: what staff touch
+/src/web/dashboard/                @Billykat7
+/src/web/display/                  @Billykat7
+/src/templates/dashboard*          @Billykat7
+/src/templates/display/            @Billykat7
+
+# E: load tests
+/tests/load/                       @Billykat7
+
+# F, backup E: product and capstone documents
+/docs/PRODUCT/                     @Billykat7
+/docs/CAPSTONE/                    @Billykat7

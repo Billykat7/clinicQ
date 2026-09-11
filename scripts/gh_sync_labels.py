@@ -10,6 +10,11 @@ By default nothing is deleted. Pass `--prune` to also remove labels that exist o
 GitHub but are absent from the YAML file — this detaches them from every issue and
 PR, so it is opt-in and off by the `make gh-sync-labels` default.
 
+Label names are compared without regard to case, as GitHub compares them: a label that differs
+only in case (GitHub's default `good first issue` against the file's `Good First Issue`) is the same
+label, renamed to the file's spelling, never created twice or pruned (Issue 13 lost two labels to
+that before the comparison was fixed).
+
 `gh` must be installed and authenticated (`gh auth status`).
 
 Usage:
@@ -90,17 +95,27 @@ def fetch_existing() -> dict[str, dict[str, str]]:
     }
 
 
+def find(name: str, existing: dict[str, dict[str, str]]) -> str | None:
+    """The existing label's exact name that ``name`` refers to, ignoring case, or None."""
+    folded = name.casefold()
+    return next((current for current in existing if current.casefold() == folded), None)
+
+
 def upsert(label: dict[str, str], existing: dict[str, dict[str, str]]) -> str:
-    """Create the label, or update it in place with --force. Returns an action tag."""
+    """Create the label, rename it to the file's spelling, or update it. Returns an action tag."""
     name, color, desc = label["name"], label["color"], label["description"]
-    current = existing.get(name)
+    found = find(name, existing)
+    current = existing[found] if found is not None else None
     if current is None:
         action = "create"
-    elif current["color"] == color and current["description"] == desc:
+    elif found == name and current["color"] == color and current["description"] == desc:
         return "unchanged"
     else:
         action = "update"
-    cmd = ["gh", "label", "create", name, "--force"]
+    if found is not None and found != name:
+        cmd = ["gh", "label", "edit", found, "--name", name]
+    else:
+        cmd = ["gh", "label", "create", name, "--force"]
     if color:
         cmd += ["--color", color]
     if desc:
@@ -132,12 +147,14 @@ def main() -> int:
     created = updated = unchanged = 0
     for label in desired:
         if args.dry_run:
-            current = existing.get(label["name"])
+            found = find(label["name"], existing)
+            current = existing[found] if found is not None else None
             if current is None:
                 verb = "would create"
                 created += 1
             elif (
-                current["color"] == label["color"]
+                found == label["name"]
+                and current["color"] == label["color"]
                 and current["description"] == label["description"]
             ):
                 verb = "unchanged"
@@ -159,7 +176,8 @@ def main() -> int:
                 unchanged += 1
 
     pruned = 0
-    stale = sorted(name for name in existing if name not in desired_names)
+    folded_desired = {name.casefold() for name in desired_names}
+    stale = sorted(name for name in existing if name.casefold() not in folded_desired)
     for name in stale:
         if args.prune:
             if args.dry_run:
