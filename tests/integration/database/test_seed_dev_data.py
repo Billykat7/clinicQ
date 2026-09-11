@@ -12,6 +12,7 @@ subprocess, configured only by environment variables (which beat the local ``.en
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -25,22 +26,28 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _run_seed(**env: str) -> subprocess.CompletedProcess[str]:
-    """Run the seed script as a developer would, with ``env`` on top of a clean environment."""
+    """Run the seed script as a developer would, with ``env`` on top of a clean environment.
+
+    From an empty working directory, so the developer's ``.env`` (read relative to the working
+    directory) cannot add settings the test did not choose: Issue 12's boot guard would otherwise
+    refuse a local ``DEBUG=true`` before the seed's own refusal is reached.
+    """
     base = {
         "PATH": os.environ["PATH"],
         "PYTHONPATH": str(REPO_ROOT),
         "ENVIRONMENT": "development",
         "AWS_S3_LOGGING_ENABLED": "false",
     }
-    return subprocess.run(
-        [sys.executable, "-m", "scripts.db.seed_dev_data"],
-        cwd=REPO_ROOT,
-        env=base | env,
-        capture_output=True,
-        text=True,
-        timeout=120,
-        check=False,
-    )
+    with tempfile.TemporaryDirectory() as no_env_file_here:
+        return subprocess.run(
+            [sys.executable, "-m", "scripts.db.seed_dev_data"],
+            cwd=no_env_file_here,
+            env=base | env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
 
 
 @pytest.mark.parametrize(

@@ -8,11 +8,12 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Response
 from fastapi import status as http_status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from src.api.v1.router import api_v1_router
 from src.commons.enums import AppEnvironment, DependencyStatus, HealthStatus
-from src.core.config import Settings, get_settings
+from src.core.config import CORS_ANY_ORIGIN, Settings, get_settings
 from src.core.csrf_middleware import CsrfProtectMiddleware
 from src.core.error_handlers import ERROR_RESPONSES, install_error_handlers
 from src.core.health import (
@@ -51,6 +52,8 @@ def create_app(settings_obj: Settings | None = None) -> FastAPI:
     app = FastAPI(
         title=cfg.app_name,
         version=cfg.version,
+        # Tracebacks in error responses. Development only: the settings refuse DEBUG elsewhere.
+        debug=cfg.debug,
         docs_url=None if is_prod else "/docs",
         redoc_url=None if is_prod else "/redoc",
         openapi_url=None if is_prod else "/openapi.json",
@@ -60,6 +63,17 @@ def create_app(settings_obj: Settings | None = None) -> FastAPI:
     # and its log lines their context, including a request the CSRF middleware refuses (Issue 6).
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(CsrfProtectMiddleware)
+    # Cross-origin browser access only for the origins CORS_ORIGINS names (Issue 12); none by
+    # default, so the app stays same-origin. Outside CSRF, so a preflight is answered before the
+    # CSRF check. Credentials are never offered to the development-only wildcard.
+    if cfg.cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cfg.cors_origins,
+            allow_credentials=CORS_ANY_ORIGIN not in cfg.cors_origins,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
     app.add_middleware(
         RequestLoggingMiddleware, trust_proxy_headers=cfg.trust_proxy_headers
     )

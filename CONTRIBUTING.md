@@ -141,6 +141,14 @@ Some kernel guard tests check files that later issues create: the deploy and sca
 strict expected failures. When your issue creates the file, the test starts passing, and strict
 xfail reports that as a failure: delete its entry in the same PR.
 
+## Adding a setting
+
+Settings live in `src/core/config.py`. Give the new `Field` a description and a default that is safe
+on a laptop, then run `make env-example` and commit `.env.example` with it:
+`tests/unit/platform/test_env_example.py` fails while the two disagree. A value staging or
+production must never run with gets a rule in `Settings.configuration_problems()`, the one place
+the boot guard and `scripts/check_config.py` both read ([`docs/CICD/ENVIRONMENTS.md`](docs/CICD/ENVIRONMENTS.md)).
+
 ## Branches, commits and pull requests
 
 - Branch `Issue/<N>/<short-slug>`; every commit message starts `Issue <N>: `.

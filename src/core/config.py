@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import json
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated, ClassVar, NamedTuple
 
-from pydantic import AliasChoices, Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import AliasChoices, Field, PrivateAttr, field_validator, model_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from sqlalchemy.engine.url import make_url
+from sqlalchemy.exc import ArgumentError
 
 from src.commons.enums import (
     AppEnvironment,
@@ -24,6 +27,25 @@ from src.commons.enums import (
 # Default JWT secret shipped for local development only. The production guard
 # below refuses to boot outside development when this value is still in use.
 _DEFAULT_JWT_SECRET = "clinicq-dev-secret-change-me-min-32-chars"
+
+#: The CORS origin that admits every site. Development only (Issue 12).
+CORS_ANY_ORIGIN = "*"
+
+#: The prefix Stripe and Paystack give a secret key that moves real money.
+_LIVE_SECRET_KEY_PREFIX = "sk_live_"
+
+#: The lowest bcrypt cost allowed outside development.
+_MIN_BCRYPT_ROUNDS_OUTSIDE_DEVELOPMENT = 12
+
+#: A DATABASE_URL still holding ``${...}`` placeholders, to be built from the DB_* parts.
+_URL_PLACEHOLDER = "${"
+
+
+class ConfigProblem(NamedTuple):
+    """One value the app must not run with: the setting (its env var) and why, never the value."""
+
+    setting: str
+    message: str
 
 
 class Settings(BaseSettings):
@@ -45,6 +67,21 @@ class Settings(BaseSettings):
     environment: AppEnvironment = Field(
         default=AppEnvironment.DEVELOPMENT,
         description="Runtime environment (env: ENVIRONMENT)",
+    )
+    debug: bool = Field(
+        default=False,
+        description=(
+            "FastAPI debug mode: tracebacks in error responses (env: DEBUG). Development only; "
+            "the app refuses to start with it in staging or production."
+        ),
+    )
+    cors_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        description=(
+            "Origins allowed to call the app from a page on another origin, comma-separated, e.g. "
+            "'https://clinicq.example.org' (env: CORS_ORIGINS). Empty: same-origin only, no CORS "
+            "headers at all. '*' admits every site and is refused outside development."
+        ),
     )
     log_level: LogLevel = Field(
         default=LogLevel.INFO,
@@ -220,13 +257,63 @@ class Settings(BaseSettings):
         """Accept ``info`` as well as ``INFO``: the level was a free string before it was an enum."""
         return value.strip().upper() if isinstance(value, str) else value
 
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def split_cors_origins(cls, value: object) -> object:
+        """Read ``a,b`` (how an env file writes a list) or a JSON array; drop blanks and a trailing /."""
+        if isinstance(value, str):
+            text = value.strip()
+            items = json.loads(text) if text.startswith("[") else text.split(",")
+            return [
+                str(item).strip().rstrip("/") for item in items if str(item).strip()
+            ]
+        return value
+
+    @field_validator("database_url")
+    @classmethod
+    def database_url_parses(cls, value: str) -> str:
+        """A malformed DATABASE_URL is a validation error naming the setting, not a crash later.
+
+        A URL still holding ``${...}`` placeholders is built from the DB_* parts below, so it is
+        checked after that. The message never repeats the URL: it can carry a password.
+        """
+        if _URL_PLACEHOLDER not in value:
+            try:
+                make_url(value)
+            except ArgumentError as exc:
+                raise ValueError("DATABASE_URL is not a valid database URL") from exc
+        return value
+
+    # The DB_* parts that disagreed with an explicit DATABASE_URL and were therefore ignored.
+    # Recorded by the validator below, read by configuration_problems().
+    _ignored_database_parts: tuple[str, ...] = PrivateAttr(default=())
+
     @model_validator(mode="after")
     def build_database_url_from_components(self) -> Settings:
-        """If DB_HOST and DB_NAME are set, build database_url from DB_USER, DB_PASSWORD, DB_HOST, DB_NAME, DB_OPTS."""
-        if not self.db_host or not self.db_name:
+        """Build database_url from DB_USER, DB_PASSWORD, DB_HOST, DB_NAME and DB_OPTS.
+
+        Only when DB_HOST and DB_NAME are set and DATABASE_URL was not given as a literal URL: it
+        was left unset, or it still holds ``${...}`` placeholders. Before Issue 12 an unset
+        DATABASE_URL still won with its default, so DB_HOST/DB_NAME alone were silently ignored
+        and the app connected to localhost. When both are given, DATABASE_URL wins, and parts
+        that disagree with it are recorded as a configuration problem.
+        """
+        explicit_literal_url = (
+            "database_url" in self.model_fields_set
+            and _URL_PLACEHOLDER not in self.database_url
+        )
+        if explicit_literal_url:
+            url = make_url(self.database_url)
+            self._ignored_database_parts = tuple(
+                name
+                for name, given, actual in (
+                    ("DB_HOST", self.db_host, url.host or ""),
+                    ("DB_NAME", self.db_name, url.database or ""),
+                )
+                if name.lower() in self.model_fields_set and given != actual
+            )
             return self
-        # Avoid overwriting an explicit literal URL (e.g. no ${VAR} in it)
-        if "${" not in self.database_url and self.database_url.startswith("postgresql"):
+        if not self.db_host or not self.db_name:
             return self
         from urllib.parse import quote_plus
 
@@ -451,6 +538,7 @@ class Settings(BaseSettings):
     # Session lifetime policy (optional server-enforced caps on refresh sessions)
     session_absolute_max_days: int | None = Field(
         default=None,
+        ge=1,
         description=(
             "If set, refresh sessions older than this many days from session_started_at "
             "require sign-in again (env: SESSION_ABSOLUTE_MAX_DAYS). None disables."
@@ -466,16 +554,6 @@ class Settings(BaseSettings):
             "(env: SESSION_SERVER_IDLE_TIMEOUT_MINUTES)."
         ),
     )
-
-    @model_validator(mode="after")
-    def session_absolute_max_days_positive_when_set(self) -> Settings:
-        """Absolute max, when set, must be at least one day."""
-        if (
-            self.session_absolute_max_days is not None
-            and self.session_absolute_max_days < 1
-        ):
-            raise ValueError("SESSION_ABSOLUTE_MAX_DAYS must be >= 1 when set")
-        return self
 
     # Email transport (stdlib smtplib + STARTTLS). When SMTP_HOST is unset the app logs
     # the activation link instead of sending (development fallback).
@@ -857,60 +935,6 @@ class Settings(BaseSettings):
         ),
     )
 
-    @model_validator(mode="after")
-    def validate_stripe_configuration(self) -> Settings:
-        """Require keys when Stripe is on, and forbid a live secret key outside production.
-
-        Two rules keep the gateway safe:
-
-        * When ``STRIPE_ENABLED`` is true the secret and webhook-signing keys must be present —
-          an enabled gateway with no keys would accept unsigned webhooks or fail every charge.
-        * A **live** secret key (``sk_live_``) may be used only in production, so every non-production
-          environment necessarily runs Stripe in test mode and can never move real money.
-        """
-        if self.stripe_enabled and not (
-            self.stripe_secret_key and self.stripe_webhook_secret
-        ):
-            raise ValueError(
-                "STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET must be set when STRIPE_ENABLED "
-                "is true."
-            )
-        if (
-            self.stripe_secret_key.startswith("sk_live_")
-            and self.environment != AppEnvironment.PRODUCTION
-        ):
-            raise ValueError(
-                "A live Stripe secret key (sk_live_…) may only be used in production; use a test "
-                "key (sk_test_…) outside production."
-            )
-        return self
-
-    @model_validator(mode="after")
-    def validate_paystack_configuration(self) -> Settings:
-        """Require the secret key when Paystack is on, and forbid a live key outside production.
-
-        Two rules keep the gateway safe, mirroring the Stripe guard:
-
-        * When ``PAYSTACK_ENABLED`` is true the secret key must be present — it authenticates every
-          API call and signs (verifies) every webhook, so an enabled gateway without it would accept
-          unsigned webhooks or fail every charge.
-        * A **live** secret key (``sk_live_``) may be used only in production, so every non-production
-          environment necessarily runs Paystack in test mode and can never move real money.
-        """
-        if self.paystack_enabled and not self.paystack_secret_key:
-            raise ValueError(
-                "PAYSTACK_SECRET_KEY must be set when PAYSTACK_ENABLED is true."
-            )
-        if (
-            self.paystack_secret_key.startswith("sk_live_")
-            and self.environment != AppEnvironment.PRODUCTION
-        ):
-            raise ValueError(
-                "A live Paystack secret key (sk_live_…) may only be used in production; use a test "
-                "key (sk_test_…) outside production."
-            )
-        return self
-
     @property
     def database_url_async(self) -> str:
         """The request-path async DSN: ``database_url`` with an async driver (Issue #81).
@@ -949,32 +973,140 @@ class Settings(BaseSettings):
         }
         return mapping.get(self.environment, "dev")
 
-    @model_validator(mode="after")
-    def reject_default_jwt_secret_outside_development(self) -> Settings:
-        """Fail fast if the shipped default JWT secret is used outside development."""
-        if (
-            self.environment != AppEnvironment.DEVELOPMENT
-            and self.jwt_secret == _DEFAULT_JWT_SECRET
-        ):
-            raise ValueError(
-                "JWT_SECRET must be set to a secure value outside development. "
-                "Do not use the default secret."
-            )
-        return self
+    # ── The one validation path (Issues 1 and 12) ────────────────────────────────────────────
+    #
+    # Every rule a configuration must pass lives in configuration_problems(), and nowhere else. The
+    # boot guard below raises with the whole list at once, so a bad deploy learns everything wrong
+    # with it from one failed start; scripts/check_config.py reports the same list for an env file
+    # without starting the app. A new rule goes into that method, never into a validator of its own.
 
-    @model_validator(mode="after")
-    def reject_weak_bcrypt_outside_development(self) -> Settings:
-        """Fail fast if a bcrypt cost below 12 is configured outside development.
+    #: scripts/check_config.py turns this off to collect the problems instead of stopping at them.
+    raise_on_configuration_problems: ClassVar[bool] = True
 
-        A low cost is a legitimate speed-up for local/CI test runs (bcrypt dominates the
-        auth suites), but must never reach staging or production, where 12 is the floor.
+    def configuration_problems(self) -> list[ConfigProblem]:
+        """Return every value this environment must not run with, naming the setting, never its value.
+
+        Anywhere: an enabled payment gateway needs its keys, and a live key belongs to production
+        only, so no test environment can move real money. Outside development: no default JWT
+        secret, no bcrypt cost under 12, no debug mode, no CORS open to every origin, and no DB_*
+        part silently contradicting DATABASE_URL.
         """
-        if self.environment != AppEnvironment.DEVELOPMENT and self.bcrypt_rounds < 12:
+        problems: list[ConfigProblem] = []
+        is_production = self.environment is AppEnvironment.PRODUCTION
+        if self.stripe_enabled and not (
+            self.stripe_secret_key and self.stripe_webhook_secret
+        ):
+            problems.append(
+                ConfigProblem(
+                    "STRIPE_SECRET_KEY",
+                    "STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET must be set when "
+                    "STRIPE_ENABLED is true.",
+                )
+            )
+        if (
+            self.stripe_secret_key.startswith(_LIVE_SECRET_KEY_PREFIX)
+            and not is_production
+        ):
+            problems.append(
+                ConfigProblem(
+                    "STRIPE_SECRET_KEY",
+                    "A live Stripe secret key (sk_live_…) may only be used in production; use a "
+                    "test key (sk_test_…) outside production.",
+                )
+            )
+        if self.paystack_enabled and not self.paystack_secret_key:
+            problems.append(
+                ConfigProblem(
+                    "PAYSTACK_SECRET_KEY",
+                    "PAYSTACK_SECRET_KEY must be set when PAYSTACK_ENABLED is true.",
+                )
+            )
+        if (
+            self.paystack_secret_key.startswith(_LIVE_SECRET_KEY_PREFIX)
+            and not is_production
+        ):
+            problems.append(
+                ConfigProblem(
+                    "PAYSTACK_SECRET_KEY",
+                    "A live Paystack secret key (sk_live_…) may only be used in production; use "
+                    "a test key (sk_test_…) outside production.",
+                )
+            )
+        if self.environment is AppEnvironment.DEVELOPMENT:
+            return problems
+
+        if self.jwt_secret == _DEFAULT_JWT_SECRET:
+            problems.append(
+                ConfigProblem(
+                    "JWT_SECRET",
+                    "JWT_SECRET must be set to a secure value outside development. "
+                    "Do not use the default secret.",
+                )
+            )
+        if self.bcrypt_rounds < _MIN_BCRYPT_ROUNDS_OUTSIDE_DEVELOPMENT:
+            problems.append(
+                ConfigProblem(
+                    "BCRYPT_ROUNDS",
+                    "BCRYPT_ROUNDS must be >= 12 outside development. "
+                    "A lower cost is only for development/test speed.",
+                )
+            )
+        if self.debug:
+            problems.append(
+                ConfigProblem(
+                    "DEBUG",
+                    "DEBUG must be false outside development: debug mode sends tracebacks "
+                    "to whoever triggered the error.",
+                )
+            )
+        if CORS_ANY_ORIGIN in self.cors_origins:
+            problems.append(
+                ConfigProblem(
+                    "CORS_ORIGINS",
+                    "CORS_ORIGINS must list exact origins outside development, never '*', "
+                    "which lets every website call the app.",
+                )
+            )
+        problems.extend(
+            ConfigProblem(
+                part,
+                f"{part} disagrees with DATABASE_URL, which wins, so {part} is ignored. Set "
+                "DATABASE_URL alone, or the DB_* parts without it.",
+            )
+            for part in self._ignored_database_parts
+        )
+        return problems
+
+    @model_validator(mode="after")
+    def refuse_unsafe_configuration(self) -> Settings:
+        """Refuse to start with any configuration problem, listing all of them in one error."""
+        problems = self.configuration_problems()
+        if problems and self.raise_on_configuration_problems:
             raise ValueError(
-                "BCRYPT_ROUNDS must be >= 12 outside development. "
-                "A lower cost is only for development/test speed."
+                "refusing to start with this configuration: "
+                + " | ".join(problem.message for problem in problems)
             )
         return self
+
+
+def setting_env_names() -> dict[str, tuple[str, ...]]:
+    """Map each setting to the environment variables that set it, the canonical one first.
+
+    That is the field's validation aliases when it has them (``VERSION``, then ``APP_VERSION``),
+    otherwise its name in capitals. ``.env.example``, its drift test and
+    ``scripts/check_config.py`` all read the names from here, so none of them can disagree with
+    the class about what a setting is called.
+    """
+    names: dict[str, tuple[str, ...]] = {}
+    for name, field in Settings.model_fields.items():
+        alias = field.validation_alias
+        if isinstance(alias, AliasChoices):
+            names[name] = tuple(str(choice).upper() for choice in alias.choices)
+        elif isinstance(alias, str):
+            names[name] = (alias.upper(),)
+        else:
+            names[name] = (name.upper(),)
+    return names
 
 
 @lru_cache
