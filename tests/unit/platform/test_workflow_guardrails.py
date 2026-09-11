@@ -76,7 +76,6 @@ class Workflow(StrEnum):
 #: Workflow files a later issue creates. An entry comes out in the PR that adds the file, and
 #: `test_every_workflow_file_is_covered` fails while a listed file exists, so none can linger.
 NOT_YET_CREATED: dict[Workflow, str] = {
-    Workflow.DEPLOY: "Issue 11: staging on a tag, production behind approval",
     Workflow.VULNERABILITY_SCAN: "Issue 97: dependency and secret scanning",
 }
 
@@ -727,3 +726,53 @@ def test_the_conventions_check_is_its_own_job_that_blocks_nothing_but_the_gate(
     )
     for job_name, job in jobs.items():
         assert CiJob.CONVENTIONS not in job.get("needs", []) or job_name == CiJob.GATE
+
+
+# ── Issue 11: the deploy ──────────────────────────────────────────────────────────────────────
+
+
+def _deploy_steps(workflows: dict[Workflow, dict[str, Any]]) -> list[dict[str, Any]]:
+    """The steps of deploy.yml's one job, in order."""
+    (job,) = _jobs(workflows[Workflow.DEPLOY]).values()
+    return job["steps"]
+
+
+def test_only_staging_deploys_by_itself_and_only_after_a_release(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """A successful Release run deploys staging; production is only ever a manual, approved run."""
+    deploy = workflows[Workflow.DEPLOY]
+    triggers = _triggers(deploy)
+    assert set(triggers) == {"workflow_run", Trigger.WORKFLOW_DISPATCH}
+    assert triggers["workflow_run"] == {
+        "workflows": ["Release"],
+        "types": ["completed"],
+    }
+    (job,) = _jobs(deploy).values()
+    assert job["environment"]["name"] == "${{ inputs.environment || 'staging' }}"
+    assert "github.event.workflow_run.conclusion == 'success'" in job["if"]
+
+
+def test_migrations_run_before_the_new_image_serves_and_never_on_a_rollback(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """Migrate, then a candidate nothing routes to, then the swap; a rollback skips the migrations."""
+    runs = [str(step.get("run", "")) for step in _deploy_steps(workflows)]
+    (migrate,) = [i for i, run in enumerate(runs) if DEPLOY_SEQUENCE_SCRIPT in run]
+    (candidate,) = [i for i, run in enumerate(runs) if "deploy.sh candidate" in run]
+    (swap,) = [i for i, run in enumerate(runs) if "deploy.sh swap" in run]
+    assert migrate < candidate < swap
+    assert "env.ROLLBACK != 'true'" in _deploy_steps(workflows)[migrate]["if"]
+
+
+def test_the_app_settings_reach_the_host_privately(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """APP_ENV holds every secret: it is written with umask 077 and never echoed to the log."""
+    for step in _deploy_steps(workflows):
+        if "secrets.APP_ENV" not in str(step.get("env", {})):
+            continue
+        run = str(step["run"])
+        assert 'echo "$APP_ENV"' not in run and "cat .env" not in run
+        if "$APP_ENV" in run and "printf" in run:
+            assert "umask 077" in run

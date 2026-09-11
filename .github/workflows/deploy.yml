@@ -1,0 +1,187 @@
+# Deploy (Issue 11): put a released image on staging or production, safely.
+#
+#   A release (release.yml) succeeds  →  staging, with no human action
+#   Run workflow, environment=production  →  waits for the DevOps/QA Lead's approval (the GitHub
+#                                             Environment "production"), then deploys
+#   Run workflow with an older version and "rollback"  →  that tag, without its migrations
+#
+# The work happens on the host, in scripts/cd/deploy.sh, one visible step at a time: pre-flight (the
+# image's own settings check), the migrations as their own step before any traffic, a candidate on a
+# side port nothing routes to, the swap with a live smoke check that rolls back by itself, and a
+# message to the team channel. A failure at any step leaves the previous version serving.
+# docs/CICD/RUNBOOK_DEPLOY.md is the runbook, including the timed rollback.
+#
+# Each environment needs, in its GitHub Environment: secrets DEPLOY_HOST, DEPLOY_USER,
+# DEPLOY_SSH_KEY, DEPLOY_KNOWN_HOSTS and APP_ENV (the whole .env), optionally TEAM_WEBHOOK_URL; and
+# the variable DEPLOY_DIR. Until they exist the deploy says so and changes nothing.
+
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Where to deploy
+        type: choice
+        options: [staging, production]
+        required: true
+      version:
+        description: "The released version to deploy, e.g. 0.2.0 (an older one rolls back)"
+        type: string
+        required: true
+      rollback:
+        description: "Rolling back: skip the migrations (they only ever move forward)"
+        type: boolean
+        default: false
+
+# One deploy per environment at a time, never cancelled half-way: a half-applied deploy is worse than
+# a slow one. The group names the environment, not the ref, so two tags queue for the same host.
+concurrency:
+  group: deploy-${{ inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.version || github.event.workflow_run.head_branch }} to ${{ inputs.environment || 'staging' }}
+    # A manual run, or a release that published successfully from a tag push.
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: ${{ inputs.environment || 'staging' }}
+      url: ${{ vars.PUBLIC_URL }}
+    env:
+      ENVIRONMENT: ${{ inputs.environment || 'staging' }}
+      ROLLBACK: ${{ inputs.rollback || false }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Check out the deploy scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: Which image
+        id: release
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          TAG: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          version="${INPUT_VERSION:-${TAG#v}}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]; then
+            echo "::error title=Not a version::'$version' is not a released version (e.g. 0.2.0)"
+            exit 1
+          fi
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/clinicq:$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "### $ENVIRONMENT ← \`$image\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Is this environment provisioned?
+        id: target
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          APP_ENV: ${{ secrets.APP_ENV }}
+          DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
+        run: |
+          missing=()
+          for name in DEPLOY_HOST DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS APP_ENV DEPLOY_DIR; do
+            [[ -n "${!name}" ]] || missing+=("$name")
+          done
+          if (( ${#missing[@]} )); then
+            echo "provisioned=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=$ENVIRONMENT not provisioned::missing ${missing[*]}; nothing was deployed (docs/CICD/RUNBOOK_DEPLOY.md)"
+            echo "Not provisioned (missing ${missing[*]}): nothing was deployed." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "provisioned=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Connect to the host (pinned host key)
+        if: steps.target.outputs.provisioned == 'true'
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          install -m 700 -d ~/.ssh
+          install -m 600 /dev/null ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf 'Host target\n  HostName %s\n  User %s\n  IdentityFile ~/.ssh/id_ed25519\n  StrictHostKeyChecking yes\n  BatchMode yes\n  ConnectTimeout 15\n' \
+            "$DEPLOY_HOST" "${DEPLOY_USER:-deploy}" > ~/.ssh/config
+          ssh target true
+
+      # The app's settings come from the Environment's APP_ENV secret, written straight to the host
+      # with mode 600; they are never echoed, and never on the runner's disk outside a private file.
+      - name: Copy the compose file, the deploy scripts and the settings
+        if: steps.target.outputs.provisioned == 'true'
+        env:
+          APP_ENV: ${{ secrets.APP_ENV }}
+          DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
+        run: |
+          ssh target "mkdir -p '$DEPLOY_DIR'"
+          scp -q infra/docker/docker-compose.prod.yml scripts/cd/deploy.sh \
+            scripts/cd/prune-old-app-images.sh "target:$DEPLOY_DIR/"
+          printf '%s\n' "$APP_ENV" | ssh target "umask 077 && cat > '$DEPLOY_DIR/.env'"
+
+      - name: Pre-flight (pull the image, check the settings with its own rules)
+        if: steps.target.outputs.provisioned == 'true'
+        env:
+          DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
+          IMAGE: ${{ steps.release.outputs.image }}
+        run: ssh target "cd '$DEPLOY_DIR' && export DEPLOY_ENV='$ENVIRONMENT' && ./deploy.sh preflight '$IMAGE' '$ENVIRONMENT'"
+
+      # Before the new image serves anything: the one deploy sequence CI also runs on every pull
+      # request (Issue 9), inside the new image. Migrations must stay backward compatible with the
+      # previous release, which keeps serving through this step and after a failed deploy.
+      - name: Migrations (scripts/db/deploy-sequence.sh in the new image)
+        if: steps.target.outputs.provisioned == 'true' && env.ROLLBACK != 'true'
+        env:
+          DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
+          IMAGE: ${{ steps.release.outputs.image }}
+        run: ssh target "cd '$DEPLOY_DIR' && export DEPLOY_ENV='$ENVIRONMENT' && ./deploy.sh run-new '$IMAGE' ./scripts/db/deploy-sequence.sh"
+
+      - name: Smoke-test the new image on a side port (no traffic)
+        if: steps.target.outputs.provisioned == 'true'
+        env:
+          DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
+          IMAGE: ${{ steps.release.outputs.image }}
+        run: ssh target "cd '$DEPLOY_DIR' && export DEPLOY_ENV='$ENVIRONMENT' && ./deploy.sh candidate '$IMAGE'"
+
+      - name: Swap it in and smoke-test it live (rolls back by itself on failure)
+        if: steps.target.outputs.provisioned == 'true'
+        env:
+          DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
+          IMAGE: ${{ steps.release.outputs.image }}
+        run: ssh target "cd '$DEPLOY_DIR' && export DEPLOY_ENV='$ENVIRONMENT' && ./deploy.sh swap '$IMAGE' && ./deploy.sh status" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Tell the team channel
+        if: ${{ always() && steps.release.outputs.version != '' }}
+        env:
+          TEAM_WEBHOOK_URL: ${{ secrets.TEAM_WEBHOOK_URL }}
+          TEAM_WEBHOOK_KIND: ${{ vars.TEAM_WEBHOOK_KIND }}
+          VERSION: ${{ steps.release.outputs.version }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          RESULT: ${{ steps.target.outputs.provisioned == 'false' && 'skipped' || job.status }}
+        run: >-
+          python scripts/cd/notify_deploy.py --environment "$ENVIRONMENT" --version "$VERSION"
+          --sha "$SHA" --result "$RESULT" --run-url "$RUN_URL"

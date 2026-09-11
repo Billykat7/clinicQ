@@ -16,11 +16,16 @@ Usage::
     python scripts/check_config.py                      # ./.env
     python scripts/check_config.py /opt/btk/clinicq/.env
     python scripts/check_config.py .env.staging --environment staging
+    python scripts/check_config.py - --environment production < .env   # from stdin
+
+Reading from stdin is how a deploy checks a host's .env with the *new* image's rules: the file is
+mode 600 and belongs to the deploy user, whom the container does not run as (Issue 11).
 
 Exit status: 0 no problems (warnings allowed), 1 at least one problem, 2 the file does not exist.
 """
 
 import argparse
+import io
 import sys
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -102,13 +107,18 @@ def _accepted_names() -> tuple[dict[str, str], dict[str, str]]:
     return keyword, canonical
 
 
-def check(path: Path, environment: AppEnvironment | None = None) -> Report:
-    """Check one env file; ``environment`` checks it as if it named that environment."""
+def check(
+    path: Path,
+    environment: AppEnvironment | None = None,
+    stream: io.TextIOBase | None = None,
+) -> Report:
+    """Check one env file (or ``stream``); ``environment`` checks it as that environment."""
     keyword, canonical = _accepted_names()
     field_env_name = {
         field_name: names[0] for field_name, names in setting_env_names().items()
     }
-    raw = {key.strip(): value for key, value in dotenv_values(path).items()}
+    parsed = dotenv_values(stream=stream) if stream is not None else dotenv_values(path)
+    raw = {key.strip(): value for key, value in parsed.items()}
 
     values: dict[str, Any] = {}
     unknown: list[str] = []
@@ -197,7 +207,11 @@ def main(argv: list[str] | None = None) -> int:
     """Check the file named on the command line and print the report."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
-        "env_file", nargs="?", default=".env", type=Path, help="default: ./.env"
+        "env_file",
+        nargs="?",
+        default=".env",
+        type=Path,
+        help="default: ./.env; - reads standard input",
     )
     parser.add_argument(
         "--environment",
@@ -205,11 +219,16 @@ def main(argv: list[str] | None = None) -> int:
         help="check the file as this environment, whatever ENVIRONMENT it names",
     )
     args = parser.parse_args(argv)
-    if not args.env_file.is_file():
+    environment = AppEnvironment(args.environment) if args.environment else None
+    if str(args.env_file) == "-":
+        report = check(
+            Path("<stdin>"), environment, stream=io.StringIO(sys.stdin.read())
+        )
+    elif not args.env_file.is_file():
         print(f"check_config: {args.env_file} does not exist", file=sys.stderr)
         return int(ExitCode.NO_FILE)
-    environment = AppEnvironment(args.environment) if args.environment else None
-    report = check(args.env_file, environment)
+    else:
+        report = check(args.env_file, environment)
     print(render(report))
     return int(ExitCode.OK if report.ok else ExitCode.PROBLEMS)
 

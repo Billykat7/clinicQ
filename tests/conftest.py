@@ -231,7 +231,6 @@ _UNIT_ROOT = Path(__file__).resolve().parent / "unit"
 #: They run as ``xfail(strict=True)``: the day the file appears the test passes, strict reports
 #: that as a failure, and the entry below has to be deleted by the issue that made it pass. Nothing
 #: here is hidden: each one says what it waits for, and ``make check`` stays a real gate meanwhile.
-_DEPLOY_WORKFLOW = "needs .github/workflows/deploy.yml, which Issue 11 creates"
 _SCAN_WORKFLOW = (
     "needs .github/workflows/vulnerability-scan.yml, which Issue 97 creates (pip-audit and Trivy "
     "are local-only until then: scripts/README.md)"
@@ -241,13 +240,6 @@ _SECURITY_DOCS = (
     "creates yet (raised in PR #110)"
 )
 PENDING_ON_LATER_ISSUES: dict[str, str] = {
-    **{
-        f"tests/unit/platform/test_workflow_guardrails.py::{name}": _DEPLOY_WORKFLOW
-        for name in (
-            "test_deploys_are_never_cancelled_mid_flight",
-            "test_the_deploy_sequence_is_identical_in_both_workflows",
-        )
-    },
     "tests/unit/platform/test_workflow_guardrails.py::"
     "test_the_scheduled_scan_runs_weekly_not_more_often": _SCAN_WORKFLOW,
     **{
