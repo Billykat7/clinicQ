@@ -27,7 +27,14 @@ qrcode==8.0
 
 # HTTP client
 httpx==0.28.1
-httpx2==2.9.1
+# httpx2 backs starlette's TestClient. 2.12.0 is the first release clear of every known advisory:
+# PYSEC-2026-3845 (wss:// through a SOCKS5 proxy sent without TLS, fixed 2.10.0), PYSEC-2026-3848
+# (multipart part-header CRLF injection, fixed 2.11.0) and PYSEC-2026-3846 / CVE-2026-84382
+# (decompression memory amplification, fixed 2.12.0). httpcore2 comes in only through httpx2, which
+# requires it at the same version; 2.10.0+ fixes PYSEC-2026-3844 / CVE-2026-84381. Pinned alongside
+# for a reproducible build, like greenlet above. Raise the two together.
+httpx2==2.12.0
+httpcore2==2.12.0
 idna>=3.18
 requests>=2.33.0
 fast-flights>=0.5.0
