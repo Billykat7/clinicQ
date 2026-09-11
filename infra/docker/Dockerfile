@@ -112,6 +112,9 @@ COPY --chown=appuser:appuser alembic.ini ./alembic.ini
 COPY --chown=appuser:appuser alembic/ ./alembic/
 COPY --chown=appuser:appuser scripts/__init__.py ./scripts/__init__.py
 COPY --chown=appuser:appuser scripts/db/ ./scripts/db/
+# The settings check (Issue 12), so a deploy judges the host's .env by this image's own rules before
+# anything changes (scripts/cd/deploy.sh preflight, Issue 11).
+COPY --chown=appuser:appuser scripts/check_config.py ./scripts/check_config.py
 
 # Writable matplotlib config (avoids slow temp dir fallback if ~/.config is ever tight)
 ENV MPLCONFIGDIR=/tmp/mplconfig

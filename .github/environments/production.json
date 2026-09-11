@@ -1,0 +1,5 @@
+{
+  "name": "production",
+  "reviewers": ["Billykat7"],
+  "deploy_from_branches": ["main"]
+}

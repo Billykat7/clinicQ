@@ -11,6 +11,11 @@ Scripts for **BK ClinicQ**.
 - **`generate_env_example.py`** – `make env-example`: writes `.env.example` from the `Settings` class (`--check` reports drift); the drift test runs it.
 - **`ci_test_summary.py`** – used by CI's `report` job: renders the shards' pytest JUnit reports as the Markdown test summary on the run page and in the pull-request comment.
 - **`db/deploy-sequence.sh`** – the deploy sequence (`alembic upgrade head`, the RBAC seed and its `--check`), defined once: CI runs it on the PostGIS service of every PR, and the deploy (Issue 11) runs it inside the new image before the swap.
+- **`check_pr_conventions.py`** – CI's `conventions` job (Issue 13): the branch name, every commit's `Issue N: ` prefix, `Closes #N` (or `Refs #N`) and a screenshot for UI changes, read live from the pull request.
+- **`gh_sync_rulesets.py`** – `make gh-sync-rulesets`: applies `.github/rulesets/*.json` to `main`, matched by name, idempotent (`--dry-run`).
+- **`gh_sync_environments.py`** – `make gh-sync-environments`: applies `.github/environments/*.json` (required reviewers, the branches that may deploy); never touches secrets.
+- **`cd/deploy.sh`** – runs on the deploy host (Issue 11): `preflight`, `run-new` (the migrations), `candidate` (smoke-tested on a side port), `swap` (live smoke, rolls back by itself), `rollback`, `status`. Called step by step by `.github/workflows/deploy.yml`; see [docs/CICD/RUNBOOK_DEPLOY.md](../docs/CICD/RUNBOOK_DEPLOY.md).
+- **`cd/notify_deploy.py`** – posts a deploy's environment, version, result and release-notes link to the team channel (Slack or Discord webhook, `TEAM_WEBHOOK_URL`).
 - **`gh_sync_docs.py`** – create **and update** GitHub milestones and issues from `docs/GITHUB/MILESTONES/*.md` and `docs/GITHUB/ISSUES/M*/ISSUE_*.md` (`--dry-run`, `--milestone M4`). Preferred over the create-only helper.
 - **`gh_sync_issues.py`** – legacy create-only helper using the `gh` CLI (`--dry-run`, `--milestone M4`). See [docs/GITHUB/README.md](../docs/GITHUB/README.md).
 - **`db/alembic-upgrade.sh`**, **`db/alembic-downgrade.sh`**, **`db/alembic-revision.sh`** – Alembic migration helpers (activate `.venv` automatically).

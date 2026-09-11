@@ -9,6 +9,7 @@ Every Settings here is built with ``_env_file=None`` so a developer's ``.env`` c
 outcome (``.cursor/rules/testing-strategy.mdc``).
 """
 
+import io
 from pathlib import Path
 
 import pytest
@@ -166,3 +167,15 @@ def test_check_config_ignores_the_process_environment(
 def test_check_config_exits_2_for_a_missing_file(tmp_path: Path) -> None:
     """A typo in the path is not a clean bill of health."""
     assert check_config([str(tmp_path / "missing.env")]) == 2
+
+
+def test_check_config_reads_standard_input(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``-`` checks a file fed on stdin: how a deploy checks a host .env it cannot mount (Issue 11)."""
+    monkeypatch.setattr(
+        "sys.stdin", io.StringIO("ENVIRONMENT=production\nDEBUG=true\n")
+    )
+    assert check_config(["-"]) == 1
+    out = capsys.readouterr().out
+    assert "<stdin> (as production)" in out and "✗ DEBUG:" in out
