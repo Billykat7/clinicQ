@@ -22,13 +22,14 @@ possible, and the health probes are what the deploy in M2 and the monitoring in 
 ## Starting point
 
 - `src/core/logging_config.py` (JSON logging), `src/core/request_logging.py` (request id, path, client IP) and `src/core/health.py` (`/health`, `/health/live`, `/health/ready`) already exist.
-- What is missing: `site_id` and `actor_id` in the log context, a Redis check in readiness, redaction of phone numbers and OTPs, and returning the request id in a response header.
+- What is missing: `site_id` and `actor_id` in the log context, a Redis check in readiness, redaction of phone numbers and OTPs, and returning the request id in a response header. The console handler also wrote plain text, not JSON (only the S3 handler wrote JSON).
+- The kernel serves readiness at `/health/ready`, which the compose health checks and the gateway poller already use; the spec's `/ready` means that path.
 
 ## Scope
 
 - JSON structured logging with level, timestamp, logger, message and a context dict
 - Request-context middleware injecting `request_id`, `site_id`, `actor_id` and path into every log line
-- `/health` (liveness, no dependencies) and `/ready` (checks database and Redis) endpoints
+- `/health` and `/health/live` (liveness, no dependencies) and `/health/ready` (readiness: database, migrations, Redis and S3 log storage)
 - Log redaction for phone numbers, OTPs and tokens
 - Configurable log level per environment, defaulting to INFO in production
 
@@ -41,7 +42,7 @@ possible, and the health probes are what the deploy in M2 and the monitoring in 
 
 - [ ] Every log line emitted during a request carries the same `request_id`
 - [ ] `/health` responds in under 50 ms and never touches the database
-- [ ] `/ready` returns 503 with a reason when Postgres or Redis is unavailable
+- [ ] `/health/ready` returns 503 with a reason when Postgres or Redis is unavailable
 - [ ] A phone number or OTP written to a log is redacted, proven by a test
 - [ ] Log output is valid newline-delimited JSON parseable by `jq`
 - [ ] The request id is returned in a response header so a user can quote it in a support message
@@ -56,8 +57,10 @@ possible, and the health probes are what the deploy in M2 and the monitoring in 
 
 - `src/core/logging_config.py`
 - `src/core/request_logging.py`
+- `src/core/log_redaction.py`
 - `src/core/health.py`
 - `tests/unit/platform/test_logging_redaction.py`
+- `tests/integration/platform/test_request_context.py`
 
 ---
 

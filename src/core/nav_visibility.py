@@ -33,6 +33,7 @@ from src.core.rbac import (
     role_has_named_action,
 )
 from src.core.refresh_token_policy import get_valid_refresh_token_row
+from src.core.request_logging import bind_request_context
 from src.core.scope import scope_tiers_for_roles
 from src.core.security import decode_token
 from src.database.models import NavGateOverride, RefreshToken, User
@@ -789,6 +790,9 @@ def nav_visibility_for_request(db: Session, request: Request) -> NavVisibility:
                 extra={"path": str(request.url.path), "user_id": str(session_user.id)},
             )
             return nav_visibility_for_user(db, None, auth_enabled=True)
+    if session_user is not None:
+        # The page's log lines name who asked for it (Issue 6): the user's id, never the email.
+        bind_request_context(actor_id=str(session_user.id))
     return nav_visibility_for_user(db, session_user, auth_enabled=settings.auth_enabled)
 
 

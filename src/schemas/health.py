@@ -57,6 +57,9 @@ class DependencyChecks(BaseModel):
     migrations: DependencyStatus = Field(
         description="Whether the database is stamped at the latest Alembic revision."
     )
+    redis: DependencyStatus = Field(
+        description="Redis PING status (skipped when REDIS_URL is not configured)."
+    )
     storage: DependencyStatus = Field(
         description="S3 log-storage write status (skipped when S3 logging is off)."
     )

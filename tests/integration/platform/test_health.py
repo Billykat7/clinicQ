@@ -25,7 +25,12 @@ from fastapi.testclient import TestClient
 import src.core.health as health
 from src.commons.enums import DependencyStatus, HealthStatus
 from src.core.config import Settings
-from src.core.health import database_status, migrations_status, storage_status
+from src.core.health import (
+    database_status,
+    migrations_status,
+    redis_status,
+    storage_status,
+)
 from src.main import create_app
 
 #: The deployment hostname the readiness probe reports off the edge certificate.
@@ -41,10 +46,16 @@ def app_client() -> Iterator[tuple[TestClient, object]]:
 
 
 def _override(app: object, **statuses: DependencyStatus) -> None:
-    """Pin each readiness dependency to a fixed status for the test."""
+    """Pin each readiness dependency to a fixed status for the test.
+
+    Redis is pinned to ``skipped`` unless a test names it, so an outcome never depends on
+    whether the developer's ``.env`` points ``REDIS_URL`` at a running Redis.
+    """
+    statuses.setdefault("redis", DependencyStatus.SKIPPED)
     mapping = {
         "database": database_status,
         "migrations": migrations_status,
+        "redis": redis_status,
         "storage": storage_status,
     }
     for name, status in statuses.items():
@@ -88,6 +99,7 @@ def test_readiness_all_healthy_returns_ok(
     assert body["checks"] == {
         "database": DependencyStatus.OK.value,
         "migrations": DependencyStatus.OK.value,
+        "redis": DependencyStatus.SKIPPED.value,
         "storage": DependencyStatus.SKIPPED.value,
     }
 
@@ -169,7 +181,7 @@ def test_readiness_does_not_leak_internals(
     body = client.get("/health/ready").json()
 
     assert set(body) == {"status", "checks"}
-    assert set(body["checks"]) == {"database", "migrations", "storage"}
+    assert set(body["checks"]) == {"database", "migrations", "redis", "storage"}
     allowed = {s.value for s in DependencyStatus}
     assert all(value in allowed for value in body["checks"].values())
 

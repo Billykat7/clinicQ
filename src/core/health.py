@@ -1,7 +1,7 @@
 """Dependency probes behind the readiness health check (Issue #65).
 
 ``/health/ready`` (readiness) reports one status per dependency — database reachable,
-migrations at head, S3 log storage writable — while ``/health`` and ``/health/live``
+migrations at head, Redis answering (Issue 6), S3 log storage writable — while ``/health`` and ``/health/live``
 (liveness) only answer "the process is up". Splitting the two means a dependency outage
 (e.g. a stopped database) fails readiness so an external monitor alerts and the
 orchestrator stops routing, without failing liveness and triggering a pointless restart
@@ -109,6 +109,35 @@ def probe_migrations(db: Session) -> DependencyStatus:
     except Exception:
         logger.warning("Readiness: migration probe failed", exc_info=True)
         return DependencyStatus.DOWN
+
+
+def probe_redis(cfg: Settings) -> DependencyStatus:
+    """Return ``OK`` when Redis answers ``PING``, ``DOWN`` when it does not (Issue 6).
+
+    ``SKIPPED`` when no ``REDIS_URL`` is configured: a deployment without Redis is not unready
+    for lack of one. Configured but unreachable is ``DOWN``, not ``DEGRADED``: queued work and the
+    board's live updates depend on it. Connect and read are both bounded by
+    ``REDIS_PROBE_TIMEOUT_SECONDS``, so a hung Redis fails the probe quickly instead of holding
+    the readiness request open. The client is closed every time; nothing is cached.
+    """
+    url = (cfg.redis_url or "").strip()
+    if not url:
+        return DependencyStatus.SKIPPED
+    import redis
+
+    client = redis.Redis.from_url(
+        url,
+        socket_connect_timeout=cfg.redis_probe_timeout_seconds,
+        socket_timeout=cfg.redis_probe_timeout_seconds,
+    )
+    try:
+        return DependencyStatus.OK if client.ping() else DependencyStatus.DOWN
+    except Exception:
+        # The exception names the host and port; it goes to the log, never the response body.
+        logger.warning("Readiness: Redis probe failed", exc_info=True)
+        return DependencyStatus.DOWN
+    finally:
+        client.close()
 
 
 def _probe_storage_uncached(cfg: Settings) -> DependencyStatus:
@@ -239,17 +268,12 @@ def probe_cert(cfg: Settings) -> CertInfo | None:
     return info
 
 
-def aggregate_status(
-    database: DependencyStatus,
-    migrations: DependencyStatus,
-    storage: DependencyStatus,
-) -> HealthStatus:
+def aggregate_status(*values: DependencyStatus) -> HealthStatus:
     """Fold per-dependency statuses into one readiness verdict.
 
     Any ``DOWN`` makes the whole readiness ``DOWN``; otherwise any ``DEGRADED`` makes it
     ``DEGRADED``; ``SKIPPED`` dependencies are ignored. Everything healthy is ``OK``.
     """
-    values = (database, migrations, storage)
     if DependencyStatus.DOWN in values:
         return HealthStatus.DOWN
     if DependencyStatus.DEGRADED in values:
@@ -268,6 +292,11 @@ def database_status(db: Session = Depends(get_db)) -> DependencyStatus:
 def migrations_status(db: Session = Depends(get_db)) -> DependencyStatus:
     """Readiness dependency: the migrations-at-head probe result."""
     return probe_migrations(db)
+
+
+def redis_status(cfg: Settings = Depends(get_settings)) -> DependencyStatus:
+    """Readiness dependency: the Redis probe result."""
+    return probe_redis(cfg)
 
 
 def storage_status(cfg: Settings = Depends(get_settings)) -> DependencyStatus:

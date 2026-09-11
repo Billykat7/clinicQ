@@ -18,6 +18,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from src.commons.enums import AuthScope, TokenType
 from src.core.config import get_settings
+from src.core.request_logging import bind_request_context
 
 security_scheme = HTTPBearer(auto_error=False)
 
@@ -206,6 +207,17 @@ def _token_from_request(
     return request.cookies.get(get_settings().access_token_cookie_name)
 
 
+def _bind_actor(payload: dict[str, Any]) -> None:
+    """Put the signed-in user's id on the request's log context (Issue 6).
+
+    The ``uid`` claim (``user.id``), never ``sub``: ``sub`` is the email address, and an email in
+    every log line is personal data the logs have no need of. A token without ``uid`` binds nothing.
+    """
+    uid = payload.get("uid")
+    if uid:
+        bind_request_context(actor_id=str(uid))
+
+
 async def get_current_user(
     request: Request,
     credentials: Annotated[
@@ -235,6 +247,7 @@ async def get_current_user(
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    _bind_actor(payload)
     return payload
 
 
@@ -251,4 +264,7 @@ async def get_current_user_optional(
     token = _token_from_request(request, credentials)
     if not token:
         return None
-    return decode_token(token)
+    payload = decode_token(token)
+    if payload is not None:
+        _bind_actor(payload)
+    return payload
