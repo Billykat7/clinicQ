@@ -50,9 +50,13 @@ jobs:
     name: Changed paths
     runs-on: ubuntu-24.04
     timeout-minutes: 3
+    permissions:
+      contents: read
+      pull-requests: read # the conventions check reads the description, commits and files
     outputs:
       code: ${{ steps.classify.outputs.code }}
       image: ${{ steps.classify.outputs.image }}
+      conventions: ${{ steps.conventions.outcome }}
     steps:
       - name: Check out the merge commit and its base
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -70,7 +74,8 @@ jobs:
           # "/" are folders, the rest exact files. test_workflow_guardrails.py fails if a test
           # starts reading one of them.
           PROSE_PATHS: >-
-            docs/GITHUB/ docs/PLAN/ docs/PRODUCT/ docs/PROJECTS/ docs/TEAM/ docs/DEMO/ docs/IDE/
+            docs/GITHUB/ISSUES/ docs/GITHUB/MILESTONES/ docs/GITHUB/RELEASES/ docs/GITHUB/RUNNER/
+            docs/GITHUB/README.md docs/PLAN/ docs/PRODUCT/ docs/PROJECTS/ docs/DEMO/ docs/IDE/
             README.md CONTRIBUTING.md
           # The docker job's inputs: the Dockerfile, what it installs and the build-context filter.
           IMAGE_INPUTS: infra/docker/Dockerfile requirements.txt .dockerignore
@@ -110,6 +115,28 @@ jobs:
             done
           done
           emit "$code" "$image" "${#changed[@]} files changed · code: $code · image inputs: $image"
+
+      - name: Set up Python 3.14
+        if: github.event_name == 'pull_request'
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      # Issue 13: Issue/<N>/<slug> branches, `Issue N: ` commits, `Closes #N`, a screenshot for a UI
+      # change (scripts/check_pr_conventions.py). continue-on-error: a naming slip must not stop the
+      # tests running; the gate fails on this outcome instead. The branch name reaches the script
+      # through the environment, never the shell text, because a fork chooses it.
+      - name: Branch, commits and description follow the conventions
+        id: conventions
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BRANCH: ${{ github.head_ref }}
+        run: >-
+          python scripts/check_pr_conventions.py
+          --repo "$GITHUB_REPOSITORY" --pr "$PR_NUMBER" --branch "$BRANCH"
 
   quality:
     name: Quality and secrets
@@ -414,20 +441,21 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
-      - name: Every job passed, or was skipped for a prose-only or draft change
+      - name: Every job passed, the conventions hold, and nothing was skipped without a reason
         env:
           NEEDS: ${{ toJSON(needs) }}
         run: |
           jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<<"$NEEDS"
           if ! jq -e '
             (.changes.result == "success")
+            and (.changes.outputs.conventions != "failure")
             and ([.[] | .result] | all(. == "success" or . == "skipped"))
             and (if .changes.outputs.code == "true"
                  then ([.quality, .test, .report] | all(.result == "success")) else true end)
             and (if .changes.outputs.image == "true"
                  then .docker.result == "success" else true end)
           ' <<<"$NEEDS" > /dev/null; then
-            echo "::error title=CI gate::A required job failed, was cancelled or did not run."
+            echo "::error title=CI gate::A required job failed, was cancelled or did not run, or the conventions check failed."
             exit 1
           fi
           echo "All required jobs passed."

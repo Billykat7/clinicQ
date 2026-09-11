@@ -1,0 +1,80 @@
+name: Feature
+description: A new capability, specified the way docs/GITHUB/ISSUES specs are.
+title: "<short imperative title>"
+labels: ["TYPE: Feature", "STATUS: Needs Decision"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One issue, one pull request, merged within three days of starting (CONTRIBUTING.md). If this
+        is bigger than that, split it. Planned milestone work already has a spec in docs/GITHUB/ISSUES.
+  - type: textarea
+    id: in-short
+    attributes:
+      label: In short
+      description: One sentence. What changes, and for whom?
+      placeholder: A patient can see their place in the queue without refreshing the page.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why now? What happens today without it?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What this issue delivers, as a list.
+      placeholder: "- …"
+    validations:
+      required: true
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: What it deliberately leaves alone, and which issue has it.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Each one something a reviewer can see working, not a sentence to agree with.
+      value: |
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: verify
+    attributes:
+      label: How to verify
+      description: The steps that demonstrate each criterion.
+      placeholder: "1. …"
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Where the work lives (the AREA label a triager adds).
+      options:
+        - Auth
+        - Clinics
+        - Discovery
+        - Queue
+        - Dashboard
+        - Display
+        - Notifications
+        - Channels
+        - Appointments
+        - Reporting
+        - Infra
+        - Frontend
+        - Database
+    validations:
+      required: true
+  - type: input
+    id: depends-on
+    attributes:
+      label: Depends on
+      description: Issues that must merge first, or "nothing".
+      placeholder: "#9, #10"

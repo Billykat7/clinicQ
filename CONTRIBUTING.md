@@ -151,8 +151,47 @@ the boot guard and `scripts/check_config.py` both read ([`docs/CICD/ENVIRONMENTS
 
 ## Branches, commits and pull requests
 
-- Branch `Issue/<N>/<short-slug>`; every commit message starts `Issue <N>: `.
+- Branch `Issue/<N>/<short-slug>` (two to four lower-case words); every commit message starts
+  `Issue <N>: ` and says what it does. A release note's branch is `Release/v<X.Y.Z>`, its commits
+  `Release v<X.Y.Z>: `.
 - One issue, one pull request, merged within three days of starting. Rebase onto `main` daily.
-- The PR description lives in `docs/GITHUB/PR/M<milestone>/PR_<N>_DESCRIPTION.md`, ends with
-  `Closes #<N>`, and proves each acceptance criterion by showing it working.
-- Review within 24 hours on a weekday, or the backup reviewer may merge.
+- The PR description lives in `docs/GITHUB/PR/M<milestone>/PR_<N>_DESCRIPTION.md`, follows
+  [the template](docs/GITHUB/PR/PR_TEMPLATE.md) (the same one GitHub pre-fills), ends with
+  `Closes #<N>`, and proves each acceptance criterion by showing it working. A change to a
+  template, stylesheet or script under `src/` shows a screenshot. A follow-up to an issue an
+  earlier PR closed says `Refs #<N>` instead.
+
+CI checks all four: the branch name, every commit's prefix, the closing line and the screenshot
+(`scripts/check_pr_conventions.py`). A slip fails the **CI gate** without stopping the tests; fix the
+description (or the branch) and re-run the failed job.
+
+## What `main` accepts
+
+Two rulesets protect `main` ([`.github/rulesets/`](.github/rulesets/README.md), applied with
+`make gh-sync-rulesets`):
+
+- **Everyone, administrators included:** no direct push, no force-push, no deletion; changes arrive
+  through a pull request whose **CI gate** check is green.
+- **One approval from the code owner** of the paths the pull request changes. A new push dismisses
+  an approval given before it.
+
+## Reviews
+
+GitHub requests a review from the owner of every path you change: `.github/CODEOWNERS`, which
+encodes the ownership map in [`docs/TEAM/WORKLOAD_SPLIT.md`](docs/TEAM/WORKLOAD_SPLIT.md) §2 with
+one owner per path. Review within 24 hours on a weekday; after that, the owner's backup (§1) may
+approve instead. Approve only what you have read and could explain.
+
+Until the team fills in the handles in §1, every path routes to the DevOps/QA Lead, who reassigns
+the review. The code owner cannot approve their own pull request, so a repository administrator
+may merge without an approval, through the pull request only (the ruleset never lets anyone push
+past it). Use that for your own PRs only when no other code owner exists for the paths, never to
+skip a review someone else owes you; each bypass is logged under **Settings → Rules → Insights**.
+
+## Issues
+
+New issues open from a form: **Feature**, **Bug** or **Spike** (`.github/ISSUE_TEMPLATE/`), each
+asking the questions that make it reviewable without a conversation, with its type label applied.
+Planned milestone work is not opened by hand: it is written as a spec in `docs/GITHUB/ISSUES/` and
+synced with `make gh-sync`. Labels come from `docs/GITHUB/LABELS/labels.yml` only
+(`make gh-sync-labels`); a label made in the GitHub UI is removed by the next `--prune`.

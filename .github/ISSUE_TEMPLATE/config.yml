@@ -1,0 +1,7 @@
+# Issue forms only (Issue 13): every new issue starts from feature, bug or spike, pre-filled with
+# the questions that make it reviewable without a conversation.
+blank_issues_enabled: false
+contact_links:
+  - name: Planned work (issue specs)
+    url: https://github.com/Billykat7/clinicQ/tree/main/docs/GITHUB/ISSUES
+    about: Issues 1–109 are written as specs in docs/GITHUB/ISSUES and synced with `make gh-sync`; change the spec, not the GitHub issue.

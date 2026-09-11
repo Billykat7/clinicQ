@@ -701,3 +701,22 @@ def test_the_release_enforces_an_agreed_size_ceiling(
         and "IMAGE_SIZE_CEILING_MB" in str(step.get("run", ""))
         for step in _release_steps(workflows)
     )
+
+
+def test_the_gate_fails_on_a_convention_problem_without_stopping_the_tests(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """Issue 13: the conventions check reports to the gate, and never blocks the jobs after it."""
+    jobs = _jobs(workflows[Workflow.CI])
+    (step,) = [
+        step
+        for step in jobs[CiJob.CHANGES]["steps"]
+        if "check_pr_conventions.py" in str(step.get("run", ""))
+    ]
+    assert step["continue-on-error"] is True
+    assert "steps.conventions.outcome" in jobs[CiJob.CHANGES]["outputs"]["conventions"]
+    gate_script = str(jobs[CiJob.GATE]["steps"][0]["run"])
+    assert '.changes.outputs.conventions != "failure"' in gate_script
+    assert "github.head_ref" not in str(step["run"]), (
+        "the branch name must come via env"
+    )

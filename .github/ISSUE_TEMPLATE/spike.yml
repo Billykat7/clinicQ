@@ -1,0 +1,44 @@
+name: Spike
+description: A timeboxed investigation that ends in a decision, not in production code.
+title: "Spike: <the question>"
+labels: ["TYPE: Spike", "STATUS: Needs Decision"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: The question
+      description: What do we need to know that we do not know now?
+    validations:
+      required: true
+  - type: textarea
+    id: decision
+    attributes:
+      label: The decision it unblocks
+      description: Which issue or choice waits on the answer?
+    validations:
+      required: true
+  - type: dropdown
+    id: timebox
+    attributes:
+      label: Timebox
+      options:
+        - half a day
+        - one day
+        - two days
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: Where the answer will be written down (a doc path, a decision in docs/GITHUB/ISSUES/README.md).
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      value: |
+        - [ ] The question is answered, with the evidence
+        - [ ] The decision is recorded
+        - [ ] Throwaway code is deleted, not merged
