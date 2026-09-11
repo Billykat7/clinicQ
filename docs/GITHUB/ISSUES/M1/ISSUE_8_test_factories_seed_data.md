@@ -24,6 +24,7 @@ and gives the demo a dataset that looks real on screen.
 - `tests/conftest.py` exists; there are no factories yet.
 - The kernel's seeding lives in `scripts/db/seed-dev-user.py` (one dev user) and `scripts/db/seed_rbac.py` (`make seed-rbac`). Follow the same pattern for `seed_dev_data.py`.
 - Sites, queues and tickets do not exist until Issues 23, 25 and 39, so build the factories for them as those land, or against agreed stubs.
+- **Done in Issue 8 against agreed stubs:** `SiteStub`, `QueueStub`, `TicketStub` and `PatientStub` in `scripts/db/demo_dataset.py` carry the fields those specs (and Issue 17) name; each issue swaps its stub for the model and adds its step to `seed()` in `scripts/db/seed_dev_data.py`. The script runs as `make seed-dev-data` (`python -m scripts.db.seed_dev_data`), since the project does not use `uv` (decision 3).
 
 ## Scope
 
@@ -58,6 +59,7 @@ and gives the demo a dataset that looks real on screen.
 - `tests/factories.py`
 - `tests/conftest.py`
 - `scripts/db/seed_dev_data.py`
+- `scripts/db/demo_dataset.py` (the clinics, queues and ticket history, and the stubs)
 
 ---
 

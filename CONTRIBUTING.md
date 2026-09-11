@@ -14,6 +14,7 @@ brew install gitleaks trivy      # the secret scan (required) and the image scan
 make hooks                       # install the git hooks from .pre-commit-config.yaml
 cp .env.example .env
 make db-up && make migrate-up    # PostgreSQL 18 + PostGIS and Redis, then the schema
+make seed-rbac && make seed-dev-data   # the kernel's roles, then the ClinicQ demo world
 ```
 
 On Linux, install gitleaks from its [releases page](https://github.com/gitleaks/gitleaks/releases)
@@ -55,6 +56,10 @@ pytest -m unit                                        # all unit tests (under 10
 pytest -m "not slow"                                  # make test-fast
 pytest -x --lf                                        # stop at the first failure; rerun last failures
 ```
+
+Build test data with the factories in `tests/factories.py` rather than by hand: one call, no
+arguments, any field overridden (`StaffFactory.create(db, role=UserRole.CLINIC_MANAGER)`,
+`TicketFactory.build_batch(5, queue=QueueFactory.build())`).
 
 Markers are applied by location in `tests/conftest.py`, so you rarely write one yourself:
 
