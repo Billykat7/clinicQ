@@ -18,7 +18,7 @@ called something else, a "generated constants" module, or a fresh crop of
    backstop that carries a small, deliberately awkward allowlist.
 3. No module-level constant under ``src/`` enumerates a large set of resource keys — the
    generated-constants module shape — outside the manifest layer that is *supposed* to.
-4. ``src/api/rbac_deps.py`` defines only the three generic factories, and nothing anywhere is named
+4. ``src/api/rbac_deps.py`` defines only the generic factories, and nothing anywhere is named
    like a per-``(resource, verb)`` dependency function.
 
 **What this cannot catch, by construction.** A guard that keys on names and shapes cannot recognise
@@ -78,7 +78,16 @@ _MANIFEST_PATHS = (
 _CONSTANT_KEY_LIMIT = 8
 
 
-_ALLOWED_RBAC_DEPS_FUNCTIONS = {"require", "require_action", "require_management"}
+#: The generic factories, and nothing per resource. ``require_patient`` (Issue 18) is generic too:
+#: it gates any resource for the other kind of principal, a patient; ``_tag`` marks what each
+#: factory builds for the API route guard.
+_ALLOWED_RBAC_DEPS_FUNCTIONS = {
+    "require",
+    "require_action",
+    "require_management",
+    "require_patient",
+    "_tag",
+}
 
 
 _VERB_AND_ACTION_SUFFIXES = (
@@ -261,7 +270,7 @@ def test_rbac_deps_defines_only_the_three_generic_factories() -> None:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
     assert defined == _ALLOWED_RBAC_DEPS_FUNCTIONS, (
-        "src/api/rbac_deps.py must define exactly require/require_action/require_management "
+        "src/api/rbac_deps.py must define exactly the generic factories "
         f"(Issue #154). Found: {sorted(defined)}"
     )
 

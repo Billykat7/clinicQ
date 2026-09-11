@@ -276,10 +276,19 @@ def test_ensure_permission_401_for_unknown_user(
     assert exc.value.status_code == status.HTTP_401_UNAUTHORIZED
 
 
-def test_default_system_roles_are_user_and_admin() -> None:
-    """The seeded system roles are exactly ``user`` and ``admin``."""
+def test_the_seeded_roles_are_the_kernels_two_and_clinicqs_five() -> None:
+    """``user`` and ``admin``, and ClinicQ's five (Issue 18): no portal role survives."""
     names = {name for name, _ in default_system_roles()}
-    assert names == {_USER, _ADMIN}
+    assert names == {role.value for role in UserRole}
+    assert names == {
+        _USER,
+        _ADMIN,
+        "patient",
+        "receptionist",
+        "nurse_doctor",
+        "clinic_manager",
+        "platform_admin",
+    }
 
 
 def test_default_role_permissions_grant_admin_delete_everywhere() -> None:
@@ -481,10 +490,12 @@ def test_inheriting_a_management_role_carries_its_tier_too(db: Session) -> None:
         )
     )
     db.commit()
-    owner = _make_user(db, "owner.inherit@example.com", role=UserRole.OWNER.value)
+    owner = _make_user(
+        db, "owner.inherit@example.com", role=UserRole.NURSE_DOCTOR.value
+    )
     assert resolve_scope_tier(db, owner, "orders") is GrantScope.OWN
 
-    _inherit(db, UserRole.OWNER.value, "mgmt")
+    _inherit(db, UserRole.NURSE_DOCTOR.value, "mgmt")
     db.commit()
     assert resolve_scope_tier(db, owner, "orders") is GrantScope.BUSINESS
 

@@ -30,6 +30,8 @@ from src.core.rbac_manifest import ModuleManifest, RoleGrant, iter_resources
 from src.modules.communications.rbac_manifest import MANIFEST as COMMUNICATIONS_MANIFEST
 from src.modules.documents.rbac_manifest import MANIFEST as DOCUMENTS_MANIFEST
 from src.modules.patients.rbac_manifest import MANIFEST as PATIENTS_MANIFEST
+from src.modules.queues.rbac_manifest import MANIFEST as QUEUES_MANIFEST
+from src.modules.sites.rbac_manifest import MANIFEST as SITES_MANIFEST
 from src.modules.widgets.rbac_manifest import MANIFEST as WIDGETS_MANIFEST
 
 # ── your manifests ───────────────────────────────────────────────────────────
@@ -43,6 +45,8 @@ ALL_MANIFESTS: tuple[ModuleManifest, ...] = (
     DOCUMENTS_MANIFEST,
     WIDGETS_MANIFEST,
     PATIENTS_MANIFEST,
+    SITES_MANIFEST,
+    QUEUES_MANIFEST,
 )
 
 

@@ -77,10 +77,10 @@ _SIMULATE_URL = "/api/v1/admin/rbac/simulate"
 #: The seeded roles the grid parity test sweeps. Every one a fresh deployment ships with.
 _SEEDED_ROLES = (
     UserRole.ADMIN.value,
-    UserRole.MANAGER.value,
-    UserRole.OWNER.value,
-    UserRole.TENANT.value,
-    UserRole.VENDOR.value,
+    UserRole.PLATFORM_ADMIN.value,
+    UserRole.NURSE_DOCTOR.value,
+    UserRole.PATIENT.value,
+    UserRole.RECEPTIONIST.value,
     UserRole.USER.value,
 )
 
@@ -210,14 +210,14 @@ def test_the_resource_verb_form_answers_for_a_user_principal(
     response = _simulate(
         ctx,
         {
-            "principal": {"email": f"{UserRole.TENANT.value}.sim@example.com"},
+            "principal": {"email": f"{UserRole.PATIENT.value}.sim@example.com"},
             "target": {"resource": "orders", "verb": PermissionVerb.DELETE.value},
         },
     )
     assert response.status_code == status.HTTP_200_OK
     body = response.json()
     assert body["decision"] == "deny"
-    assert body["principal_roles"] == [UserRole.TENANT.value]
+    assert body["principal_roles"] == [UserRole.PATIENT.value]
 
 
 def test_a_path_no_destination_declares_is_a_400_not_a_deny(
@@ -227,7 +227,7 @@ def test_a_path_no_destination_declares_is_a_400_not_a_deny(
     response = _simulate(
         ctx,
         {
-            "principal": {"role": UserRole.MANAGER.value},
+            "principal": {"role": UserRole.PLATFORM_ADMIN.value},
             "target": {"path": "/admin/no-such-console"},
         },
     )
@@ -253,7 +253,7 @@ def test_a_principal_with_no_grant_anywhere_has_no_deciding_statement(
     body = _simulate(
         ctx,
         {
-            "principal": {"role": UserRole.TENANT.value},
+            "principal": {"role": UserRole.PATIENT.value},
             "target": {"resource": "rbac", "verb": PermissionVerb.READ.value},
         },
     ).json()
@@ -359,7 +359,7 @@ def test_a_caller_without_rbac_read_is_refused_by_the_endpoint_itself(
             "principal": {"role": UserRole.ADMIN.value},
             "target": {"resource": "rbac", "verb": PermissionVerb.READ.value},
         },
-        email=f"{UserRole.TENANT.value}.sim@example.com",
+        email=f"{UserRole.PATIENT.value}.sim@example.com",
     )
     assert response.status_code == status.HTTP_403_FORBIDDEN
 
@@ -383,7 +383,7 @@ def test_every_trace_step_carries_an_operator_facing_stage_label(
     body = _simulate(
         ctx,
         {
-            "principal": {"role": UserRole.MANAGER.value},
+            "principal": {"role": UserRole.PLATFORM_ADMIN.value},
             "target": {"resource": "orders", "verb": PermissionVerb.UPDATE.value},
         },
     ).json()
@@ -406,21 +406,21 @@ def test_user_effective_access_lists_expired_and_scoped_assignments_as_inactive(
             User(
                 id="user-mixed",
                 email="mixed.sim@example.com",
-                role=UserRole.TENANT.value,
+                role=UserRole.PATIENT.value,
                 is_verified=True,
             )
         )
         db.add(
             UserRoleAssignment(
                 user_id="user-mixed",
-                role=UserRole.TENANT.value,
+                role=UserRole.PATIENT.value,
                 granted_at=datetime.now(UTC),
             )
         )
         db.add(
             UserRoleAssignment(
                 user_id="user-mixed",
-                role=UserRole.MANAGER.value,
+                role=UserRole.PLATFORM_ADMIN.value,
                 granted_at=datetime.now(UTC),
                 expires_at=datetime.now(UTC) - timedelta(days=3),
             )
@@ -428,7 +428,7 @@ def test_user_effective_access_lists_expired_and_scoped_assignments_as_inactive(
         db.add(
             UserRoleAssignment(
                 user_id="user-mixed",
-                role=UserRole.MANAGER.value,
+                role=UserRole.PLATFORM_ADMIN.value,
                 scope_type="property",
                 scope_id="prop-1",
                 granted_at=datetime.now(UTC),
@@ -446,7 +446,7 @@ def test_user_effective_access_lists_expired_and_scoped_assignments_as_inactive(
     scoped = next(row for row in body["assignments"] if row["status"] == "scoped")
     assert "property prop-1" in scoped["status_label"]
     # Only the unscoped, unexpired assignment resolves without a scope of its own.
-    assert body["active_roles"] == [UserRole.TENANT.value]
+    assert body["active_roles"] == [UserRole.PATIENT.value]
 
 
 def test_user_effective_access_is_gated_like_the_rest_of_the_console(
@@ -454,8 +454,8 @@ def test_user_effective_access_is_gated_like_the_rest_of_the_console(
 ) -> None:
     """A caller without ``rbac:READ`` cannot read anyone's effective access."""
     response = ctx.client.get(
-        f"/api/v1/admin/rbac/users/user-{UserRole.MANAGER.value}/effective-access",
-        headers=_bearer(f"{UserRole.TENANT.value}.sim@example.com"),
+        f"/api/v1/admin/rbac/users/user-{UserRole.PLATFORM_ADMIN.value}/effective-access",
+        headers=_bearer(f"{UserRole.PATIENT.value}.sim@example.com"),
     )
     assert response.status_code == status.HTTP_403_FORBIDDEN
 

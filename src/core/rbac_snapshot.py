@@ -127,9 +127,9 @@ def _surface_lines(db: Session, roles: Iterable[str]) -> list[str]:
 NavDestination` of its own, and a console sub-tab that has none and is gated by
     :meth:`~src.core.nav_visibility.NavVisibility.can_surface` against its manifest-declared tier.
 
-    The half M28 #164 turned on. A resource+verb-only snapshot would have recorded the tenant role's
-    ``leases:read`` (which it genuinely holds, for its own lease) and said nothing at all about
-    whether ``/admin/leases`` opened for them.
+    The half M28 #164 turned on. A resource+verb-only snapshot would have recorded a nurse's
+    ``queues:read`` (which they genuinely hold, for their own clinic) and said nothing at all about
+    whether a whole-platform console opened for them.
     """
     from src.core.rbac_manifest_registry import manifest_nav_scope_map
 
@@ -209,7 +209,8 @@ def _decisions(text: str) -> dict[str, str]:
     """Index a snapshot's decision lines by everything left of the verdict.
 
     The key is the *question* (role, target, verb) and the value the *answer* (verdict + tier), so a
-    diff can report ``tenant, /admin/leases : deny -> allow`` instead of two opaque line changes.
+    diff can report ``receptionist, sites.display : deny -> allow`` instead of two opaque line
+    changes.
     """
     indexed: dict[str, str] = {}
     for line in text.splitlines():

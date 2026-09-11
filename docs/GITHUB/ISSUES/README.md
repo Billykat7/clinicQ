@@ -74,10 +74,24 @@ Places where the specs and the repository disagree. None blocks sprint 1, but ea
 | 3 | Packaging and layout (**decided in Issue 1**) | `uv` and `uv sync`; an `app/` package | `requirements.txt` with setuptools (`pyproject.toml`); a `src/` package. **Kept as is**: see the note below the table | 1, 7, 9 |
 | 4 | PostgreSQL version (**decided in Issue 2**) | 18 | `postgis/postgis:16-3.4` in `infra/docker/docker-compose.db.yml`. **Now `postgis/postgis:18-3.6`**: see the note below the table | 2, 3, 9, 102 |
 | 5 | Database sessions (**decided in Issue 3**) | Async everywhere | Both; most kernel routes use the sync `get_db`. **Sync by default, async for streams**: see the note below the table | 3 and every new module |
-| 6 | Seeding roles and grants | By migration | By module manifests and `make seed-rbac` (idempotent) | 18 |
+| 6 | Seeding roles and grants (**decided in Issue 18**) | By migration | By module manifests and `make seed-rbac` (idempotent). **Kept, and run automatically**: see the note below the table | 18 |
 | 7 | Database topology | A production database of its own | A schema (`clinicq`) in a shared platform database, which `scripts/db/backup.sh` assumes | 102, 103 |
 | 8 | API paths | `/api/...` (for example `/api/clinics/nearby`) | Everything under `/api/v1/` | 31 and every API issue |
 | 9 | USSD and WhatsApp identity (**decided in Issue 17**) | "A USSD session is trusted via the gateway MSISDN without a second OTP" | `patient_for_gateway()` in `src/modules/patients/service.py`. **Trusted, with conditions**: see the note below the table | 17, 73, 75 |
+
+**Decision 6, recorded in Issue 18:** roles and grants are seeded from the module manifests by
+`make seed-rbac` (`scripts/db/seed_rbac.py` → `sync_rbac_catalog`), not by an Alembic migration.
+What the criterion "created by migration, not by a manual script" protects against is a deployment
+whose permissions depend on someone remembering to run something by hand, and that holds: the
+deploy sequence (`scripts/db/deploy-sequence.sh`) runs the seed right after `alembic upgrade head`
+and then `seed_rbac --check`, in the new image, before it serves traffic, and CI runs the same
+sequence on every pull request, so drift fails a PR rather than a deploy. A migration would be the
+worse home: grants live next to the resources they gate, in each module's `rbac_manifest.py`, and
+a migration freezes the values of its day, so a later manifest edit would need a second, hand-written
+data migration to reach a database; the seed is idempotent and insert-only, so an operator's grant
+edit from `/admin/rbac` survives a deploy. The roles it seeds, and what each may do, are in
+`docs/architecture/rbac-matrix.md` (generated from a seeded database, with a drift test), and every
+decision is pinned by `tests/snapshots/rbac_decisions.txt`.
 
 **Decision 9, recorded in Issue 17:** a USSD session, and a WhatsApp conversation, identify the
 patient by the number the gateway reports, **with no second OTP**. The mobile network authenticated

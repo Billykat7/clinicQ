@@ -81,8 +81,9 @@ def trace_stage_label(stage: str) -> str:
 def inheritance_phrase(role: str, inherited_via: str | None) -> str:
     """Describe where a grant came from: held directly, or inherited through the role closure.
 
-    ``inherited_via`` is the simulator's ``agent→manager`` path. Rendered as "inherited from
-    *manager* (agent → manager)" rather than as ``role_closure``, which is a fact about the
+    ``inherited_via`` is the simulator's ``nurse_doctor→receptionist`` path. Rendered as "inherited
+    from *receptionist* (nurse_doctor → receptionist)" rather than as ``role_closure``, which is a
+    fact about the
     implementation and not about the operator's problem.
     """
     if not inherited_via:
@@ -104,8 +105,8 @@ def deciding_sentence(
 ) -> str:
     """One sentence naming the grant that decided, the way an operator would say it out loud.
 
-    "manager may update leases for the whole business — inherited from manager, cascading down to
-    lease.details." Everything in it is already-resolved data from the simulator's deciding
+    "clinic_manager may update sites for the sites assigned to them — held directly, cascading
+    down to sites.display." Everything in it is already-resolved data from the simulator's deciding
     statement; this only arranges it.
     """
     verb = (max_verb or "").upper() or "nothing"

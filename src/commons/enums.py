@@ -231,37 +231,37 @@ class SecurityAuditEvent(StrEnum):
 
 
 class UserRole(StrEnum):
-    """User role for RBAC. Stored in ``user.role``.
+    """User role for RBAC: one vocabulary for staff and patients alike (Issues 4, 18).
 
-    One role vocabulary for staff and patients alike: ClinicQ extends this enum rather than adding
-    a second ``StaffRole`` (Issue 4), so a role in a token, a grant or a column is always a member
-    of this one type.
+    A role in a token, a grant or an assignment is always a member of this one type.
 
-    - ``user`` and ``admin`` are the kernel's system roles, seeded by ``make seed-rbac``.
-    - ``patient``, ``receptionist``, ``nurse_doctor``, ``clinic_manager`` and ``platform_admin``
-      are ClinicQ's five roles. They are vocabulary only until Issue 18 seeds their grants; a
-      staff member's site is a scoped role assignment, never a column (Issue 15).
-    - ``tenant``, ``owner``, ``manager`` and ``vendor`` are the portal roles of the property
-      project the kernel came from. Issue 18 retires them together with the grants and tests that
-      still name them.
+    - ``user`` and ``admin`` are the kernel's system roles. ``user`` is the base signed-in role
+      (the dashboard, the notification bell); ``admin`` configures the platform (users, RBAC, logs)
+      and is the one role seeded scope-exempt, so a deployment always has a way back in.
+    - ClinicQ's five roles (Issue 18), each seeded from the module manifests by ``make seed-rbac``:
 
-    RBAC decides *what* verb a role holds on a resource; scoping is the second gate that decides
-    *whose* rows the role may touch.
+      * ``patient``: a phone number with a session (Issue 17), acting on their own record only;
+      * ``receptionist``: runs the front desk of their clinic: issues and moves tickets, calls next
+        on any queue there, reads the clinic's settings but cannot change them;
+      * ``nurse_doctor``: calls next on the queues they are assigned to, and nothing wider;
+      * ``clinic_manager``: runs their clinic: its profile, settings, display mode, staff, queues
+        and reports;
+      * ``platform_admin``: the ClinicQ operator's cross-clinic role: onboarding, support,
+        aggregate reports. Not scope-exempt: reading another clinic is explicit and audited
+        (Issue 19), never implicit.
+
+    A staff member's clinic is a role held **at a site** (``user_roles`` with ``scope_type='site'``,
+    Issue 15), never a column. RBAC decides *what* a role may do; the grant's tier and the site guard
+    decide *whose* rows (Issue 19).
     """
 
     USER = "user"
     ADMIN = "admin"
-    # ClinicQ (Issue 4; grants seeded by Issue 18).
     PATIENT = "patient"
     RECEPTIONIST = "receptionist"
     NURSE_DOCTOR = "nurse_doctor"
     CLINIC_MANAGER = "clinic_manager"
     PLATFORM_ADMIN = "platform_admin"
-    # Kernel portal roles, retired by Issue 18.
-    TENANT = "tenant"
-    OWNER = "owner"
-    MANAGER = "manager"
-    VENDOR = "vendor"
 
 
 # --------------------------------------------------------------------------------------
@@ -538,22 +538,21 @@ class GrantScope(StrEnum):
     """How wide a ``role_permission`` grant reaches — the *scope tier* condition (Issue #156, M28).
 
     RBAC's verb answers *what* a role may do; this answers *over whose rows it may do it*, as a
-    property of the **grant** rather than of the role's name. Before M28 that second question was
-    answered by :func:`~src.core.rbac.is_management_role` — a hardcoded check against a fixed set of
-    three portal role names — so no grant, however broad, could open a whole-business console for a
-    portal role and no grant could narrow a management role below the whole business either.
+    property of the **grant** rather than of the role's name, so no role's name decides how wide
+    it reaches, anywhere.
+
+    In ClinicQ (Issue 18):
 
     - ``OWN`` — strictly the rows the caller is the *subject* of, resolved per resource shape by
-      :func:`src.core.scope.resolve_scope`: the clinicq they own, their own lease, the work
-      orders assigned to them as a vendor, the threads they participate in. First-person only —
-      an ``own`` grant never reaches a row the caller was merely *assigned to manage*.
-    - ``ASSIGNED`` — ``own`` **plus** the rows reachable through the caller's explicit
-      assignments (Issue #171, M28): today ``UserRoleAssignment(scope_type='property')`` and the
-      units, tenants, leases and work orders hanging off those clinicq. The agent /
-      property-manager breadth — "my own portal, and the portfolio slice I was given" — which
-      before this tier existed had no expression of its own and worked only as a side effect of
-      ``own`` unioning the assignment rows in. Fail-closed: assigned to nothing reaches nothing.
-    - ``BUSINESS`` — the whole business: every row the resource has, the management/console view.
+      :func:`src.core.scope.resolve_scope`: a patient's own record; for a nurse, the queues they
+      are personally assigned to. First-person only — an ``own`` grant never reaches a row the
+      caller was merely *assigned to manage*.
+    - ``ASSIGNED`` — ``own`` **plus** the rows reachable through the caller's explicit assignments:
+      the sites a receptionist, nurse or clinic manager holds a role at
+      (``UserRoleAssignment(scope_type='site')``) and the queues and tickets at those sites.
+      Fail-closed: assigned to nothing reaches nothing.
+    - ``BUSINESS`` — the whole platform: every row the resource has, the operator's view
+      (``platform_admin``; reading a clinic it is not assigned to is audited, Issue 19).
 
     **Members are declared narrowest first, and that declaration order *is* the tier ladder**
     (Issue #165, M28): :attr:`tier_rank` and :meth:`satisfies` read it, so the middle tier

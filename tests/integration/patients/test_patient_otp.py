@@ -32,6 +32,7 @@ from starlette import status
 from src.commons.enums import AppEnvironment, PatientChannel
 from src.core import email_send, otp_store, refresh_token_policy, security
 from src.core.config import Settings, get_settings
+from src.core.rbac_manifest_sync import sync_rbac_catalog
 from src.database.models import Base, Patient
 from src.database.schema import sqlite_schema_translate_map
 from src.database.session import get_db
@@ -74,6 +75,11 @@ def make_ctx(monkeypatch: pytest.MonkeyPatch) -> Iterator[object]:
         Base.metadata.create_all(engine)
         engines.append(engine)
         factory = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+        with (
+            factory() as db
+        ):  # the catalog and grants a deployment has (make seed-rbac)
+            sync_rbac_catalog(db)
+            db.commit()
 
         def _db() -> Generator[Session]:
             with factory() as db:
@@ -146,7 +152,9 @@ def test_one_number_written_three_ways_is_one_patient_signed_in_with_a_code(
     assert first.status_code == status.HTTP_200_OK, first.text
     assert first.json()["phone"] == "+27 ** *** 4567"
     assert ctx.client.cookies.get(ctx.settings.patient_session_cookie_name)
-    assert ctx.client.get("/api/v1/patients/me").json()["id"] == first.json()["id"]
+    me = ctx.client.get("/api/v1/patients/me")
+    assert me.status_code == status.HTTP_200_OK, me.text
+    assert me.json()["id"] == first.json()["id"]
 
     returning = TestClient(ctx.client.app)
     assert (

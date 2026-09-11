@@ -24,17 +24,30 @@ from typing import Annotated
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
-from src.commons.enums import GrantScope
+from src.commons.enums import GrantScope, UserRole
 from src.core.rbac import (
     ensure_management_permission_key,
     ensure_named_action_permission_key,
     ensure_permission_key,
+    ensure_roles_hold_permission,
 )
 from src.core.security import get_current_user
+from src.database.models import Patient
 from src.database.session import get_db
 
 DbSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[dict, Depends(get_current_user)]
+
+#: The attribute every gate dependency carries: ``(resource_key, verb or action)``. The API route
+#: guard (``tests/unit/security/test_api_route_gates.py``, Issue 18) reads it to prove every protected
+#: route declares its permission through one of these factories.
+RBAC_GATE_ATTRIBUTE = "__rbac_gate__"
+
+
+def _tag[F](dependency: F, resource_key: str, verb: str) -> F:
+    """Mark ``dependency`` as an RBAC gate on ``(resource_key, verb)`` and return it."""
+    setattr(dependency, RBAC_GATE_ATTRIBUTE, (resource_key, verb))
+    return dependency
 
 
 def require(resource_key: str, verb: str, *, scope: GrantScope = GrantScope.OWN):
@@ -65,7 +78,7 @@ def require(resource_key: str, verb: str, *, scope: GrantScope = GrantScope.OWN)
             db, current_user, resource_key, verb, required_scope=scope
         )
 
-    return dependency
+    return _tag(dependency, resource_key, verb)
 
 
 def require_action(resource_key: str, action_key: str):
@@ -78,7 +91,7 @@ def require_action(resource_key: str, action_key: str):
     async def dependency(db: DbSession, current_user: CurrentUser) -> None:
         ensure_named_action_permission_key(db, current_user, resource_key, action_key)
 
-    return dependency
+    return _tag(dependency, resource_key, action_key)
 
 
 def require_management(resource_key: str, verb: str):
@@ -95,4 +108,26 @@ def require_management(resource_key: str, verb: str):
     async def dependency(db: DbSession, current_user: CurrentUser) -> None:
         ensure_management_permission_key(db, current_user, resource_key, verb)
 
-    return dependency
+    return _tag(dependency, resource_key, verb)
+
+
+def require_patient(resource_key: str, verb: str):
+    """Dependency factory: a signed-in **patient** whose role holds ``verb`` on ``resource_key``.
+
+    Patients are not ``user`` rows (Issue 17), so the staff factories cannot resolve them; this one
+    takes the patient session (:func:`~src.modules.patients.sessions.get_current_patient`, 401
+    without one) and checks the ``patient`` role's grants through the same resolver (Issue 18), so
+    the patient role's grants are load-bearing rather than decorative. Returns the patient, so a
+    route can take it straight from the gate.
+    """
+    from src.modules.patients.sessions import get_current_patient
+
+    # ``Depends`` in the default, not in an ``Annotated`` hint: this module defers annotations, and
+    # the lazily imported dependency is not a module global a string hint could resolve against.
+    def dependency(
+        db: DbSession, patient: Patient = Depends(get_current_patient)
+    ) -> Patient:
+        ensure_roles_hold_permission(db, [UserRole.PATIENT.value], resource_key, verb)
+        return patient
+
+    return _tag(dependency, resource_key, verb)

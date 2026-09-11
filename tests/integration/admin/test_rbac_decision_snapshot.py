@@ -143,7 +143,7 @@ def owner_grants_widened_to_business() -> Iterator[None]:
     original = rbac_snapshot.seeded_grant_scope
 
     def _widened(role: str | None) -> GrantScope:
-        if (role or "").strip() == UserRole.OWNER.value:
+        if (role or "").strip() == UserRole.NURSE_DOCTOR.value:
             return GrantScope.BUSINESS
         return original(role)
 

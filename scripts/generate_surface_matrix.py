@@ -63,9 +63,6 @@ _ENFORCING_ROUTE: dict[str, str] = {
     "notifications": "`GET /admin/notifications` (web) + `GET /api/v1/notifications`",
     "announcements": "`GET /admin/announcements/{tab}` (web) + `GET /api/v1/messaging/announcement-threads`",
     "alerts": "`GET /admin/alerts/{tab}` (web) + `GET /api/v1/alerts`",
-    "portal": "`GET /portal` (web)",
-    "owner": "`GET /owner` (web)",
-    "jobs": "`GET /jobs` (web)",
     "rbac": "`GET /admin/rbac/{tab}` (web) + `GET /api/v1/admin/rbac/roles`",
     "logs": "`GET /admin/logs` (web) + `GET /api/v1/admin/logs`",
 }

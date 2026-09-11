@@ -780,8 +780,8 @@ def test_roles_list_paginates_with_offset_limit_and_reports_total(
     ctx = make_admin_client()
     _admin(ctx)
     hdr = _bearer(_ADMIN_EMAIL)
-    # Two system roles are seeded; add eight custom ones for ten total.
-    for i in range(8):
+    # Seven system roles are seeded (Issue 18); add three custom ones for ten total.
+    for i in range(10 - len(default_system_roles())):
         _add_role(ctx.session, f"role_{i:02d}")
 
     first = ctx.client.get(

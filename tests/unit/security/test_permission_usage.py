@@ -55,8 +55,8 @@ from src.database.models import PermissionUsage, RbacRole, RolePermission, User
 
 _ROLES = (
     UserRole.ADMIN.value,
-    UserRole.MANAGER.value,
-    UserRole.TENANT.value,
+    UserRole.PLATFORM_ADMIN.value,
+    UserRole.PATIENT.value,
 )
 
 
@@ -138,7 +138,7 @@ def test_a_denied_request_records_nothing(
     settings_for(usage=True)
     with pytest.raises(HTTPException):
         ensure_permission_key(
-            db, _claims(db, UserRole.TENANT.value), "rbac", PermissionVerb.DELETE.value
+            db, _claims(db, UserRole.PATIENT.value), "rbac", PermissionVerb.DELETE.value
         )
     assert buffered() == {}
 
@@ -155,13 +155,13 @@ def test_a_multi_role_caller_records_every_active_role(
     """
     settings_for(usage=True)
     record_allow(
-        [UserRole.MANAGER.value, UserRole.TENANT.value],
+        [UserRole.PLATFORM_ADMIN.value, UserRole.PATIENT.value],
         "orders",
         PermissionVerb.READ.value,
     )
     assert {key.role for key in buffered()} == {
-        UserRole.MANAGER.value,
-        UserRole.TENANT.value,
+        UserRole.PLATFORM_ADMIN.value,
+        UserRole.PATIENT.value,
     }
 
 
@@ -170,12 +170,13 @@ def test_a_flush_writes_the_buffer_and_empties_it(
 ) -> None:
     """One row per grant, and the buffer starts clean for the next window."""
     settings_for(usage=True)
-    record_allow([UserRole.MANAGER.value], "orders", PermissionVerb.READ.value)
+    record_allow([UserRole.PLATFORM_ADMIN.value], "orders", PermissionVerb.READ.value)
     assert flush(db) == 1
     db.commit()
     assert buffered() == {}
     row = db.get(
-        PermissionUsage, (UserRole.MANAGER.value, "orders", PermissionVerb.READ.value)
+        PermissionUsage,
+        (UserRole.PLATFORM_ADMIN.value, "orders", PermissionVerb.READ.value),
     )
     assert row is not None
     assert row.hit_count == 1
@@ -188,21 +189,22 @@ def test_a_second_flush_accumulates_rather_than_replacing(
     settings_for(usage=True)
     early = datetime.now(APP_TIMEZONE) - timedelta(days=2)
     record_allow(
-        [UserRole.MANAGER.value], "orders", PermissionVerb.READ.value, now=early
+        [UserRole.PLATFORM_ADMIN.value], "orders", PermissionVerb.READ.value, now=early
     )
     flush(db)
     db.commit()
     later = datetime.now(APP_TIMEZONE)
     record_allow(
-        [UserRole.MANAGER.value], "orders", PermissionVerb.READ.value, now=later
+        [UserRole.PLATFORM_ADMIN.value], "orders", PermissionVerb.READ.value, now=later
     )
     record_allow(
-        [UserRole.MANAGER.value], "orders", PermissionVerb.READ.value, now=later
+        [UserRole.PLATFORM_ADMIN.value], "orders", PermissionVerb.READ.value, now=later
     )
     flush(db)
     db.commit()
     row = db.get(
-        PermissionUsage, (UserRole.MANAGER.value, "orders", PermissionVerb.READ.value)
+        PermissionUsage,
+        (UserRole.PLATFORM_ADMIN.value, "orders", PermissionVerb.READ.value),
     )
     assert row.hit_count == 3
     assert row.last_used_at.replace(tzinfo=None) >= later.replace(tzinfo=None)
@@ -220,18 +222,19 @@ def test_last_used_at_never_moves_backwards(
     settings_for(usage=True)
     recent = datetime.now(APP_TIMEZONE)
     record_allow(
-        [UserRole.MANAGER.value], "orders", PermissionVerb.READ.value, now=recent
+        [UserRole.PLATFORM_ADMIN.value], "orders", PermissionVerb.READ.value, now=recent
     )
     flush(db)
     db.commit()
     stale = recent - timedelta(days=7)
     record_allow(
-        [UserRole.MANAGER.value], "orders", PermissionVerb.READ.value, now=stale
+        [UserRole.PLATFORM_ADMIN.value], "orders", PermissionVerb.READ.value, now=stale
     )
     flush(db)
     db.commit()
     row = db.get(
-        PermissionUsage, (UserRole.MANAGER.value, "orders", PermissionVerb.READ.value)
+        PermissionUsage,
+        (UserRole.PLATFORM_ADMIN.value, "orders", PermissionVerb.READ.value),
     )
     assert row.last_used_at.replace(tzinfo=None) >= recent.replace(tzinfo=None)
 
@@ -248,16 +251,17 @@ def test_a_lost_buffer_leaves_stale_but_correct_data(
     settings_for(usage=True)
     first = datetime.now(APP_TIMEZONE) - timedelta(days=1)
     record_allow(
-        [UserRole.MANAGER.value], "orders", PermissionVerb.READ.value, now=first
+        [UserRole.PLATFORM_ADMIN.value], "orders", PermissionVerb.READ.value, now=first
     )
     flush(db)
     db.commit()
-    record_allow([UserRole.MANAGER.value], "orders", PermissionVerb.READ.value)
+    record_allow([UserRole.PLATFORM_ADMIN.value], "orders", PermissionVerb.READ.value)
     reset_buffer()  # the shutdown
     flush(db)
     db.commit()
     row = db.get(
-        PermissionUsage, (UserRole.MANAGER.value, "orders", PermissionVerb.READ.value)
+        PermissionUsage,
+        (UserRole.PLATFORM_ADMIN.value, "orders", PermissionVerb.READ.value),
     )
     assert row.hit_count == 1
     assert row.last_used_at.replace(tzinfo=None) == first.replace(tzinfo=None)
@@ -277,7 +281,7 @@ def test_the_first_flush_stamps_the_collection_window(
 ) -> None:
     """A grant reads "never used" on a young deployment for reasons unrelated to the grant."""
     settings_for(usage=True)
-    record_allow([UserRole.MANAGER.value], "orders", PermissionVerb.READ.value)
+    record_allow([UserRole.PLATFORM_ADMIN.value], "orders", PermissionVerb.READ.value)
     flush(db)
     db.commit()
     assert collection_started_at(db) is not None
@@ -296,7 +300,7 @@ def test_the_window_is_stamped_once_and_kept(
     settings_for(usage=True)
     first = ensure_window(db)
     db.commit()
-    record_allow([UserRole.MANAGER.value], "orders", PermissionVerb.READ.value)
+    record_allow([UserRole.PLATFORM_ADMIN.value], "orders", PermissionVerb.READ.value)
     flush(db)
     db.commit()
     # SQLite does not preserve the tzinfo the column declares, so compare the instants.
@@ -308,10 +312,12 @@ def test_an_unrelated_resource_is_not_marked_used(
 ) -> None:
     """The roll-up follows the tree, not the whole catalog."""
     settings_for(usage=True)
-    record_allow([UserRole.MANAGER.value], "order.details", PermissionVerb.READ.value)
+    record_allow(
+        [UserRole.PLATFORM_ADMIN.value], "order.details", PermissionVerb.READ.value
+    )
     flush(db)
     db.commit()
-    assert "crates" not in usage_for_role(db, UserRole.MANAGER.value)
+    assert "crates" not in usage_for_role(db, UserRole.PLATFORM_ADMIN.value)
 
 
 def test_revoking_a_grant_removes_its_usage_row(
@@ -319,12 +325,12 @@ def test_revoking_a_grant_removes_its_usage_row(
 ) -> None:
     """A row that outlives its grant would lend a re-granted cell a history it never had."""
     settings_for(usage=True)
-    record_allow([UserRole.MANAGER.value], "orders", PermissionVerb.READ.value)
+    record_allow([UserRole.PLATFORM_ADMIN.value], "orders", PermissionVerb.READ.value)
     flush(db)
     db.commit()
-    revoke_usage(db, UserRole.MANAGER.value, "orders")
+    revoke_usage(db, UserRole.PLATFORM_ADMIN.value, "orders")
     db.commit()
-    assert usage_for_role(db, UserRole.MANAGER.value) == {}
+    assert usage_for_role(db, UserRole.PLATFORM_ADMIN.value) == {}
 
 
 def test_deleting_a_role_removes_all_of_its_usage(
@@ -332,13 +338,13 @@ def test_deleting_a_role_removes_all_of_its_usage(
 ) -> None:
     """Same rule at role granularity."""
     settings_for(usage=True)
-    record_allow([UserRole.MANAGER.value], "orders", PermissionVerb.READ.value)
-    record_allow([UserRole.MANAGER.value], "crates", PermissionVerb.READ.value)
+    record_allow([UserRole.PLATFORM_ADMIN.value], "orders", PermissionVerb.READ.value)
+    record_allow([UserRole.PLATFORM_ADMIN.value], "crates", PermissionVerb.READ.value)
     flush(db)
     db.commit()
-    revoke_role_usage(db, UserRole.MANAGER.value)
+    revoke_role_usage(db, UserRole.PLATFORM_ADMIN.value)
     db.commit()
-    assert usage_for_role(db, UserRole.MANAGER.value) == {}
+    assert usage_for_role(db, UserRole.PLATFORM_ADMIN.value) == {}
 
 
 def test_collection_is_on_by_default() -> None:

@@ -37,7 +37,7 @@ from src.database.models import RolePermission, User
 _ADMIN = UserRole.ADMIN.value
 
 
-_TENANT = UserRole.TENANT.value
+_TENANT = UserRole.PATIENT.value
 
 
 _ADMIN_EMAIL = "admin.keyed@example.com"
