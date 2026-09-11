@@ -333,10 +333,13 @@ jobs:
           path: reports
 
       - name: Test summary
+        env:
+          # The pushed commit, not the merge commit GITHUB_SHA names on a pull request.
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           {
             echo "<!-- clinicq-ci-report -->"
-            echo "## CI report for ${GITHUB_SHA::7}"
+            echo "## CI report for ${HEAD_SHA::7}"
             echo
             python scripts/ci_test_summary.py reports/junit-*.xml || true
           } > summary.md
