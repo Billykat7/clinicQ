@@ -164,12 +164,16 @@ rollback() {
   compose "$previous" up -d --no-deps --wait --wait-timeout "$SMOKE_TIMEOUT" app
   smoke "$APP_PORT" "$previous"
   echo "$previous" >"$STATE/current"
+  # One step back only: rolling back again would mean choosing a version, which is a deploy of that
+  # tag with rollback set (deploy.yml), not a guess made here.
+  rm -f "$STATE/previous"
   log "rollback: $previous serves again"
 }
 
 swap() {
-  local image="$1" previous
+  local image="$1" previous earlier
   previous="$(serving_image || true)"
+  earlier="$(cat "$STATE/previous" 2>/dev/null || true)"
   if [[ -n "$previous" && "$previous" != "$image" ]]; then
     echo "$previous" >"$STATE/previous"
   fi
@@ -179,6 +183,10 @@ swap() {
     log "swap: $image failed live"
     if [[ -n "$previous" ]]; then
       rollback
+      # The failed image never counted: what was serving is current again, with its own previous.
+      if [[ -n "$earlier" ]]; then
+        echo "$earlier" >"$STATE/previous"
+      fi
     fi
     return 1
   fi

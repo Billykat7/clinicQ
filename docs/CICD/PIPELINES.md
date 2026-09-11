@@ -10,7 +10,8 @@ pull request to `main` and blocks the merge when one of them fails. Deployment h
 | Before every push | `make check`: quality, pip-audit, secrets, tests, coverage, docker + Trivy | your machine |
 | Pull request to `main` | **CI**: the same stages minus pip-audit, Trivy and the compose smoke | GitHub Actions |
 | Push to any branch, including `main` | nothing | — |
-| Tag `v*.*.*` | `release.yml`: build once, check, publish to GHCR ([`RELEASE.md`](RELEASE.md)); then deploy (Issue 11) | GitHub Actions |
+| Tag `v*.*.*` | `release.yml`: build once, check, publish to GHCR ([`RELEASE.md`](RELEASE.md)); then `deploy.yml` deploys staging ([`RUNBOOK_DEPLOY.md`](RUNBOOK_DEPLOY.md)) | GitHub Actions |
+| Manual (`Run workflow` on Deploy) | production (after the DevOps/QA Lead approves), or a rollback | GitHub Actions |
 | Manual (`Run workflow` on CI) | the whole CI run, image build included | GitHub Actions |
 
 ## The CI workflow, job by job

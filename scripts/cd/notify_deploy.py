@@ -73,7 +73,7 @@ def message(
     """The one message the team channel gets for a deploy."""
     commit = f" ({sha[:7]})" if sha else ""
     return (
-        f"{HEADLINE[result]}: ClinicQ {version}{commit} → **{environment}**\n"
+        f"{HEADLINE[result]}: ClinicQ {version}{commit} → {environment}\n"
         f"Release notes: {release_notes_url(version)}\n"
         f"Run: {run_url}"
     )
