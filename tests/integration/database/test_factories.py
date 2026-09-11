@@ -7,10 +7,11 @@ session); the stubs are built. Each test checks what the next issue's author wil
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from scripts.db.demo_dataset import CLINICS, PatientStub, SiteStub, TicketStub
+from scripts.db.demo_dataset import CLINICS, SiteStub, TicketStub
 from src.commons.enums import AssignmentScopeType, SiteSector, TicketStatus, UserRole
+from src.commons.phone import normalize_phone
 from src.core.security import verify_password
-from src.database.models import User, UserRoleAssignment
+from src.database.models import Patient, User, UserRoleAssignment
 from tests.factories import (
     FACTORY_STAFF_PASSWORD,
     PatientFactory,
@@ -85,12 +86,17 @@ def test_unique_fields_stay_unique_across_many_calls(
     assert len(set(numbers)) == 20
 
 
-def test_a_patient_is_phone_first_and_reachable_by_no_real_mobile() -> None:
-    """E.164, in the Johannesburg landline range, with no name shown on a board by default."""
-    patient = PatientFactory.build()
-    assert isinstance(patient, PatientStub)
-    assert patient.phone_e164.startswith("+2710555") and len(patient.phone_e164) == 12
-    assert patient.consent_display_name is False
+def test_a_patient_is_phone_first_and_reachable_by_no_real_mobile(
+    session_factory: sessionmaker[Session],
+) -> None:
+    """E.164 in the Johannesburg landline range, persisted as Issue 17's model, already normalised."""
+    with session_factory() as db:
+        patient = PatientFactory.create(db)
+        assert isinstance(patient, Patient)
+        assert (
+            patient.phone_e164.startswith("+2710555") and len(patient.phone_e164) == 12
+        )
+        assert normalize_phone(patient.phone_e164) == patient.phone_e164
 
 
 def test_sites_cycle_through_the_real_clinics_with_unique_slugs() -> None:

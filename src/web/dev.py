@@ -6,6 +6,8 @@
   ``.cursor/rules``); the bare ``/dev/layouts`` and an unknown layout redirect to the patient one.
 * ``/dev/fragments/*`` are the htmx fragments those pages swap in: a queue refresh that also
   raises a toast from the server, and stat tiles that lazy-load behind a skeleton.
+* ``/dev/outbox`` lists the messages the logging SMS provider and the no-SMTP email fallback
+  would have sent (Issue 17): where a developer reads a one-time code, since the log never has it.
 
 The router is included by :func:`src.main.create_app` **only in development**, so in staging and
 production these paths do not exist at all (404), rather than existing behind a check. The data is
@@ -21,6 +23,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from src.commons.enums import TicketSource, TicketStatus
 from src.commons.time import now_sast
+from src.modules.notifications import dev_outbox
 from src.web.components import ToastKind, toast_trigger
 from src.web.context import public_page_context
 from src.web.routes import templates
@@ -173,3 +176,13 @@ def stats_fragment(request: Request) -> Response:
             ),
         },
     )
+
+
+@router.get("/outbox")
+def outbox() -> dict[str, list[dict[str, object]]]:
+    """The last messages that would have been sent, newest first (Issue 17).
+
+    Where a developer reads a one-time code without an SMS account or SMTP server, instead of the
+    log, where a code must never be. Exists only in development, like every ``/dev`` route.
+    """
+    return {"messages": dev_outbox.messages()}

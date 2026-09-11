@@ -44,22 +44,32 @@ _BCRYPT_12 = re.compile(r"^\$2b\$12\$[./A-Za-z0-9]{53}$")
 
 
 class _Everything(logging.Handler):
-    """Keep every record, at every level, from every logger — unredacted, as the app emits it."""
+    """Keep every record from every logger as it was emitted: before any filter could redact it.
+
+    Installed **first** on the root logger (see :func:`_capture_first`). The app's handlers carry
+    the ``RedactionFilter``, which rewrites a record in place; a capture that ran after them would
+    see the redacted text and could not tell a leak from its mask. So each record's message and
+    extras are copied the moment it arrives.
+    """
 
     def __init__(self) -> None:
         """Start empty."""
         super().__init__(level=logging.DEBUG)
-        self.records: list[logging.LogRecord] = []
+        self.snapshots: list[str] = []
 
     def emit(self, record: logging.LogRecord) -> None:
-        """Keep the record."""
-        self.records.append(record)
+        """Copy the record's rendered message and every attribute, now, before it moves on."""
+        self.snapshots.append(f"{record.name}: {record.getMessage()} {vars(record)!r}")
 
     def text(self) -> str:
-        """Every message and every ``extra`` value, as one searchable string."""
-        return "\n".join(
-            f"{record.getMessage()} {vars(record)!r}" for record in self.records
-        )
+        """Every captured record, as one searchable string."""
+        return "\n".join(self.snapshots)
+
+
+def _capture_first(handler: logging.Handler) -> None:
+    """Put ``handler`` ahead of the root logger's other handlers, so it sees records unfiltered."""
+    root = logging.getLogger()
+    root.handlers.insert(0, handler)
 
 
 @pytest.fixture
@@ -68,7 +78,7 @@ def logs() -> Iterator[_Everything]:
     handler = _Everything()
     root = logging.getLogger()
     previous = root.level
-    root.addHandler(handler)
+    _capture_first(handler)
     root.setLevel(logging.DEBUG)
     yield handler
     root.removeHandler(handler)

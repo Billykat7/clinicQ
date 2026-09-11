@@ -290,12 +290,45 @@ def decode_access_token(token: str) -> dict[str, Any] | None:
     return payload
 
 
-def session_id_from_access_token(token: str | None) -> str | None:
-    """Return the ``sid`` of a genuinely signed access token, **ignoring its expiry**, or None.
+def create_patient_session_token(patient_id: str, sid: str, version: int) -> str:
+    """Create a patient's web-session JWT, typed ``patient`` (Issue 17).
 
-    The CSRF check needs to know which session a request's access cookie belongs to even in the
-    second before a route turns an expired token into a 401; the signature and the type are still
-    verified, so the answer cannot be forged.
+    ``sub`` is the patient id (never the phone number), ``sid`` the session the CSRF token is bound
+    to, ``ver`` the patient's ``session_version`` when it was issued. It lives
+    ``PATIENT_SESSION_HOURS``; a patient has no refresh token, and signing out increments the
+    version, which refuses it.
+    """
+    settings = get_settings()
+    now = datetime.now(UTC)
+    payload = {
+        "sub": patient_id,
+        "sid": sid,
+        "ver": version,
+        "type": TokenType.PATIENT_SESSION.value,
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(hours=settings.patient_session_hours)).timestamp()),
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def decode_patient_session_token(token: str) -> dict[str, Any] | None:
+    """Decode and validate a PATIENT_SESSION JWT. Return the payload, or None.
+
+    A staff access token is not a patient session, and a patient session is not a staff one
+    (:func:`decode_access_token` refuses it): the two identities never open each other's routes.
+    """
+    payload = decode_token(token)
+    if payload is None or payload.get("type") != TokenType.PATIENT_SESSION.value:
+        return None
+    return payload
+
+
+def session_id_from_access_token(token: str | None) -> str | None:
+    """Return the ``sid`` of a genuinely signed session token, **ignoring its expiry**, or None.
+
+    The CSRF check needs to know which session a request's session cookie belongs to even in the
+    second before a route turns an expired token into a 401; the signature and the type (a staff
+    ``access`` token or a ``patient`` session) are still verified, so the answer cannot be forged.
     """
     if not token:
         return None
@@ -309,7 +342,10 @@ def session_id_from_access_token(token: str | None) -> str | None:
         )
     except jwt.PyJWTError:
         return None
-    if payload.get("type") != TokenType.ACCESS.value:
+    if payload.get("type") not in (
+        TokenType.ACCESS.value,
+        TokenType.PATIENT_SESSION.value,
+    ):
         return None
     sid = payload.get("sid")
     return str(sid) if sid else None
