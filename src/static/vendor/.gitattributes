@@ -1,0 +1,5 @@
+# Vendored third-party releases are stored verbatim (Issue #129): no line-ending
+# normalisation, so each file still matches its upstream artifact byte-for-byte and can be
+# re-fetched or checksum-verified without a diff. The pre-commit hygiene hooks skip this
+# directory for the same reason (see .pre-commit-config.yaml).
+** -text
