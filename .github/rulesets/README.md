@@ -1,6 +1,6 @@
 # Rulesets on `main`
 
-The branch rules GitHub enforces, kept here as code (Issues 9 and 13). GitHub does not read these
+The branch rules GitHub enforces on main, kept here as code (Issues 9 and 13). GitHub does not read these
 files; `make gh-sync-rulesets` (`scripts/gh_sync_rulesets.py`) applies them, matched by `name`, and
 `ARGS=--dry-run` shows the difference first. Change a rule here, in a pull request, then sync;
 never only in the GitHub settings page, or this file stops being true.
