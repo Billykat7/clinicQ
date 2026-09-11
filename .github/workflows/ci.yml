@@ -1,0 +1,433 @@
+# CI (Issue 9): the merge gate. Every pull request to main runs the checks of
+# scripts/ci-local.sh against real PostgreSQL 18 + PostGIS and Redis 8 service containers, and the
+# one check branch protection requires, "CI gate", is green only when every one of them passed.
+#
+#   ci-local.sh stage  →  job here          what runs
+#   quality            →  quality           ruff check, ruff format --check, mypy src/, ruff pin
+#   secrets            →  quality           gitleaks over the whole history, the same command
+#   tests              →  test (3 shards)   pytest with coverage; the deploy sequence first
+#   coverage           →  report            the fail_under floor, over the combined shards
+#   docker             →  docker            the image builds, when one of its inputs changed
+#   pip-audit, Trivy and the --compose smoke stay local-only by design (scripts/README.md).
+#
+# tests/unit/platform/test_workflow_guardrails.py holds that map, the timeouts, the concurrency
+# group and the action pins; docs/CICD/PIPELINES.md explains them and what a month of runs costs.
+# Every third-party action is pinned to a full commit SHA, with its release in a comment.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+    # ready_for_review: a draft is skipped (see the changes job) until it is marked ready.
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+# One run per pull request: a new push cancels the run it supersedes. Only pull-request runs are
+# ever cancelled; a manual run is left to finish.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    # Explicit bash runs every step with -eo pipefail; the implicit default has no pipefail.
+    shell: bash
+
+env:
+  FORCE_COLOR: "1"
+  # Where uv keeps downloads. Set here, not by setup-uv, so the actions/cache path below is the
+  # directory uv really writes to (a workflow-level env is not overridden by an action).
+  UV_CACHE_DIR: /home/runner/.cache/uv
+  # ruff check annotates the pull request's diff instead of only printing to the log.
+  RUFF_OUTPUT_FORMAT: github
+
+jobs:
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+      image: ${{ steps.classify.outputs.image }}
+    steps:
+      - name: Check out the merge commit and its base
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Classify the change
+        id: classify
+        env:
+          EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+          # Prose that no test reads. A change made only of these skips every job below and the
+          # gate still passes, so a docs-only pull request costs one short job. Entries ending in
+          # "/" are folders, the rest exact files. test_workflow_guardrails.py fails if a test
+          # starts reading one of them.
+          PROSE_PATHS: >-
+            docs/GITHUB/ docs/PLAN/ docs/PRODUCT/ docs/PROJECTS/ docs/TEAM/ docs/DEMO/ docs/IDE/
+            README.md CONTRIBUTING.md
+          # The docker job's inputs: the Dockerfile, what it installs and the build-context filter.
+          IMAGE_INPUTS: infra/docker/Dockerfile requirements.txt .dockerignore
+        run: |
+          emit() {
+            echo "code=$1" >> "$GITHUB_OUTPUT"
+            echo "image=$2" >> "$GITHUB_OUTPUT"
+            echo "$3" | tee -a "$GITHUB_STEP_SUMMARY"
+          }
+          if [[ "$EVENT" != "pull_request" ]]; then
+            emit true true "Not a pull request: every job runs."
+            exit 0
+          fi
+          if [[ "$DRAFT" == "true" ]]; then
+            emit false false "Draft pull request: CI runs when it is marked ready for review."
+            exit 0
+          fi
+          # On a pull_request event the checkout is the merge commit, whose first parent is main.
+          mapfile -t changed < <(git diff --name-only HEAD^1 HEAD)
+          code=false
+          image=false
+          for file in "${changed[@]}"; do
+            prose=false
+            for entry in $PROSE_PATHS; do
+              if [[ "$entry" == */ && "$file" == "$entry"* ]] || [[ "$file" == "$entry" ]]; then
+                prose=true
+                break
+              fi
+            done
+            if [[ "$prose" == false ]]; then
+              code=true
+            fi
+            for input in $IMAGE_INPUTS; do
+              if [[ "$file" == "$input" ]]; then
+                image=true
+              fi
+            done
+          done
+          emit "$code" "$image" "${#changed[@]} files changed · code: $code · image inputs: $image"
+
+  quality:
+    name: Quality and secrets
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the whole history (gitleaks scans every commit)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The four steps below are anchored here and reused by the test and report jobs, so every
+      # job installs requirements.txt the same way.
+      - &setup-python
+        name: Set up Python 3.14
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - &setup-uv
+        name: Set up uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: "0.12.13"
+          # actions/cache below owns ~/.cache/uv; two caches of one directory would race.
+          enable-cache: false
+
+      - &uv-cache
+        name: Cache uv downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-py3.14-${{ hashFiles('requirements.txt', 'pyproject.toml') }}
+          restore-keys: uv-${{ runner.os }}-py3.14-
+
+      - &install
+        name: Install requirements.txt
+        id: install
+        # The same file ci-local.sh and the Docker image install; uv only makes it faster.
+        run: uv pip install --system -r requirements.txt
+
+      - name: Cache ruff and mypy
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .ruff_cache
+            .mypy_cache
+          key: lint-${{ runner.os }}-${{ hashFiles('requirements.txt', 'pyproject.toml') }}-${{ hashFiles('src/**/*.py') }}
+          restore-keys: lint-${{ runner.os }}-${{ hashFiles('requirements.txt', 'pyproject.toml') }}-
+
+      # Each check runs even when the one before it failed, as ci-local.sh runs them side by side:
+      # one push shows every quality problem, not the first.
+      - name: ruff check .
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: ruff check .
+
+      - name: ruff format --check .
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: ruff format --check .
+
+      - name: mypy src/
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: mypy src/
+
+      - name: ruff version pin
+        if: ${{ !cancelled() }}
+        run: ./scripts/check-ruff-pin.sh
+
+      - name: Install gitleaks (checksum-verified)
+        id: gitleaks
+        if: ${{ !cancelled() }}
+        env:
+          # The version the pre-commit hook pins (.pre-commit-config.yaml); the guard test fails if
+          # the two differ. The checksum is from the release's gitleaks_<version>_checksums.txt.
+          GITLEAKS_VERSION: "8.27.2"
+          GITLEAKS_SHA256: 141c3b2dede46d8b3a53b47116da756bd223decc0374797559a6b50ecba5590c
+        run: |
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$archive"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/$archive" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" gitleaks
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - name: gitleaks over the whole history
+        if: ${{ !cancelled() && steps.gitleaks.outcome == 'success' }}
+        run: gitleaks detect --source . --config .gitleaks.toml --baseline-path .gitleaks-baseline.json --redact --no-banner
+
+  test:
+    name: Tests (${{ matrix.name }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      # Every shard reports, so one red shard does not hide another's failures.
+      fail-fast: false
+      matrix:
+        include:
+          - name: unit
+            paths: tests/unit
+          - name: integration
+            paths: tests/integration
+          # The cross-domain flow files at the top of tests/, and any added later: the whole tree
+          # with both layer folders ignored. The guard test fails if this shard disappears.
+          - name: flows
+            paths: tests --ignore=tests/unit --ignore=tests/integration
+    services:
+      # The images the dev stack pins (decision 4; infra/docker/docker-compose.db.yml), with its
+      # default credentials. test_dev_stack_compose.py fails if the PostgreSQL image differs, and
+      # the guard test if the Redis image does.
+      db:
+        image: postgis/postgis:18-3.6
+        env:
+          POSTGRES_USER: btk_user
+          POSTGRES_PASSWORD: change-me
+          POSTGRES_DB: btk
+        ports:
+          - 5432:5432
+        # Over TCP, like the compose health check: on first boot a socket-only server installs
+        # PostGIS, and a socket check would call it ready too early.
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U btk_user -d btk"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      # The server the postgres-marked tests create throwaway databases on, and the Redis the
+      # redis-marked ones use. REQUIRE_* turns "no server" into a failure, so a service container
+      # that never started cannot pass as a skip. DATABASE_URL and REDIS_URL are deliberately not
+      # set for pytest: tests build their own Settings, and a global URL would leak into them.
+      TEST_DATABASE_URL: postgresql://btk_user:change-me@localhost:5432/btk
+      TEST_REDIS_URL: redis://localhost:6379/15
+      REQUIRE_POSTGRES_TESTS: "1"
+      REQUIRE_REDIS_TESTS: "1"
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - *setup-python
+      - *setup-uv
+      - *uv-cache
+      - *install
+
+      # What a deploy does to a database (Issue 11 runs the same script inside the new image), on
+      # the service container: a migration or seed that fails, fails here, not during a release.
+      - name: Deploy sequence on the service database
+        if: matrix.name == 'integration'
+        env:
+          DATABASE_URL: postgresql://btk_user:change-me@localhost:5432/btk
+        run: ./scripts/db/deploy-sequence.sh
+
+      - name: pytest ${{ matrix.paths }}
+        env:
+          PYTEST_PATHS: ${{ matrix.paths }}
+          SHARD: ${{ matrix.name }}
+        # PYTEST_PATHS is split on purpose: it holds paths and --ignore flags. Coverage is only
+        # collected here; the report job checks the floor over all three shards together.
+        run: >-
+          pytest $PYTEST_PATHS -q -n auto --dist loadscope
+          --cov --cov-report= --cov-fail-under=0 --junitxml="junit-$SHARD.xml"
+
+      - name: Keep this shard's coverage data
+        if: ${{ !cancelled() }}
+        env:
+          SHARD: ${{ matrix.name }}
+        run: |
+          if [[ -f .coverage ]]; then
+            mv .coverage ".coverage.$SHARD"
+          fi
+
+      - name: Upload the report and coverage data
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-${{ matrix.name }}
+          path: |
+            junit-${{ matrix.name }}.xml
+            .coverage.${{ matrix.name }}
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
+
+  report:
+    name: Test report and coverage
+    needs: [changes, test]
+    if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write # the one comment below
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - *setup-python
+      - *setup-uv
+      - *uv-cache
+      - *install
+
+      - name: Download the shards' reports
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: test-*
+          merge-multiple: true
+          path: reports
+
+      - name: Test summary
+        env:
+          # The pushed commit, not the merge commit GITHUB_SHA names on a pull request.
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          {
+            echo "<!-- clinicq-ci-report -->"
+            echo "## CI report for ${HEAD_SHA::7}"
+            echo
+            python scripts/ci_test_summary.py reports/junit-*.xml || true
+          } > summary.md
+
+      - name: Coverage summary
+        if: needs.test.result == 'success'
+        run: |
+          coverage combine reports/
+          floor="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["tool"]["coverage"]["report"]["fail_under"])')"
+          total="$(coverage report --format=total --fail-under=0)"
+          {
+            echo
+            echo "### Coverage: ${total}% of src/ (floor ${floor}%)"
+            echo
+            echo "<details><summary>Files not fully covered</summary>"
+            echo
+            coverage report --format=markdown --fail-under=0
+            echo
+            echo "</details>"
+          } >> summary.md
+
+      - name: Publish the summary on the run page
+        if: ${{ !cancelled() }}
+        run: cat summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      # One comment per pull request, edited in place on every run rather than stacked up.
+      # Skipped for a fork, whose token cannot write to this repository.
+      - name: Comment on the pull request
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --edit-last --create-if-none --body-file summary.md
+
+      - name: Coverage floor (fail_under in pyproject.toml)
+        if: needs.test.result == 'success'
+        run: coverage report
+
+  docker:
+    name: Image builds
+    needs: changes
+    if: needs.changes.outputs.image == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      # ci-local.sh's `docker build --pull -f infra/docker/Dockerfile .`, built and thrown away:
+      # publishing is the release workflow's job (Issue 10), on a tag, never on a pull request.
+      - name: docker build -f infra/docker/Dockerfile .
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: infra/docker/Dockerfile
+          pull: true
+          push: false
+          cache-from: type=gha,scope=clinicq-image
+          cache-to: type=gha,mode=max,scope=clinicq-image
+
+  gate:
+    # The one check branch protection requires. It needs every other job, so a job added later is
+    # covered as soon as it is listed here, and the guard test fails if one is left out.
+    name: CI gate
+    needs: [changes, quality, test, report, docker]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Every job passed, or was skipped for a prose-only or draft change
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<<"$NEEDS"
+          if ! jq -e '
+            (.changes.result == "success")
+            and ([.[] | .result] | all(. == "success" or . == "skipped"))
+            and (if .changes.outputs.code == "true"
+                 then ([.quality, .test, .report] | all(.result == "success")) else true end)
+            and (if .changes.outputs.image == "true"
+                 then .docker.result == "success" else true end)
+          ' <<<"$NEEDS" > /dev/null; then
+            echo "::error title=CI gate::A required job failed, was cancelled or did not run."
+            exit 1
+          fi
+          echo "All required jobs passed."

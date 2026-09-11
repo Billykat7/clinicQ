@@ -1,8 +1,8 @@
-"""The pipeline guardrails from Issue 15, asserted against the workflow files themselves.
+"""The pipeline guardrails, asserted against the workflow files themselves.
 
-Every rule here protects the monthly GitHub Actions allowance or a deploy in flight, and
-every one of them is a single YAML line that a later PR can drop without anything failing
-until the bill (or the outage) arrives. These tests are that missing failure.
+Every rule here protects the monthly GitHub Actions allowance, the merge gate or a deploy in
+flight, and every one of them is a single YAML line that a later PR can drop without anything
+failing until the bill (or the outage) arrives. These tests are that missing failure.
 
 Offline and dependency-free: the workflows are parsed, never run.
 
@@ -13,7 +13,17 @@ Note on `on:` — PyYAML reads YAML 1.1, where a bare `on` key is the boolean `T
 # ── kernel half ──────────────────────────────────────────────────────────────────────────
 # The business-logic tests this file carried in the source project are gone: they asserted
 # against records the kernel does not have. What is left tests the kernel's own behaviour.
+#
+# ── ClinicQ's pipeline (Issue 9) ─────────────────────────────────────────────────────────
+# The source project ran CI on tags only, with quality left entirely to the local gate. ClinicQ's
+# M2 chose the other shape (docs/GITHUB/README.md, "Pipeline strategy"): `ci-local.sh` before the
+# push, **CI on every pull request to main as the merge gate**, and deployment on tags only. Issue 9
+# therefore rewrote exactly the assertions that encoded "CI never runs on a pull request" and "CI
+# publishes the image"; every other guard below is the source project's, unchanged, and the new
+# ones pin what the PR-time gate must keep true. The workflow list is ClinicQ's own.
 
+import ast
+import re
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -21,23 +31,45 @@ from typing import Any
 import pytest
 import yaml
 
-WORKFLOW_DIR = Path(__file__).resolve().parents[3] / ".github" / "workflows"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
+CI_LOCAL = REPO_ROOT / "scripts" / "ci-local.sh"
+PRE_COMMIT_CONFIG = REPO_ROOT / ".pre-commit-config.yaml"
+DEV_STACK_SERVICES = REPO_ROOT / "infra" / "docker" / "docker-compose.db.yml"
+TESTS_DIR = REPO_ROOT / "tests"
+
+#: The one script that migrates and seeds a database before a new image serves traffic.
+DEPLOY_SEQUENCE_SCRIPT = "scripts/db/deploy-sequence.sh"
 
 
 # GitHub's default job timeout. A job wedged at this ceiling burns 360 of the 2,000 free
 # private-repo minutes in one run, which is the whole reason `timeout-minutes` is mandatory.
 GITHUB_DEFAULT_TIMEOUT_MINUTES = 360
 
+#: Issue 9's own ceiling for a CI job: a typical run takes under five minutes end to end, so a job
+#: still going at fifteen is stuck, and stopping it there caps a wedged run's cost.
+CI_JOB_TIMEOUT_CEILING_MINUTES = 15
+
+#: The branch every pull request merges into, and the only one CI gates.
+MAIN_BRANCH = "main"
+
 
 class Workflow(StrEnum):
-    """The six workflow files, by filename."""
+    """The workflow files, by filename."""
 
     CI = "ci.yml"
-    CD = "cd.yml"
-    SMOKE = "smoke.yml"
+    RELEASE = "release.yml"
+    DEPLOY = "deploy.yml"
     VULNERABILITY_SCAN = "vulnerability-scan.yml"
-    DEPLOY_SEQUENCE = "deploy-sequence.yml"
-    SYNC_ISSUES = "sync-issues.yml"
+
+
+#: Workflow files a later issue creates. An entry comes out in the PR that adds the file, and
+#: `test_every_workflow_file_is_covered` fails while a listed file exists, so none can linger.
+NOT_YET_CREATED: dict[Workflow, str] = {
+    Workflow.RELEASE: "Issue 10: image build and GHCR publish on a tag",
+    Workflow.DEPLOY: "Issue 11: staging on a tag, production behind approval",
+    Workflow.VULNERABILITY_SCAN: "Issue 97: dependency and secret scanning",
+}
 
 
 class Trigger(StrEnum):
@@ -49,13 +81,61 @@ class Trigger(StrEnum):
     WORKFLOW_DISPATCH = "workflow_dispatch"
 
 
-#: The workflows Issue 180 gave a **path-filtered** `pull_request` trigger, and why each earns its
-#: minutes. Anything not listed may not carry one at all — Issue 15's rule is unchanged for
-#: `ci.yml`, which remains the expensive workflow.
+class CiJob(StrEnum):
+    """The jobs of `ci.yml` these tests reason about."""
+
+    CHANGES = "changes"
+    QUALITY = "quality"
+    TEST = "test"
+    REPORT = "report"
+    DOCKER = "docker"
+    GATE = "gate"
+
+
+#: The one workflow with an unfiltered `pull_request` trigger: the merge gate. It skips its own
+#: heavy jobs for a prose-only change (the `changes` job) instead of filtering by path, because a
+#: required check that never starts leaves the pull request blocked for good.
+MERGE_GATE = Workflow.CI
+
+#: Workflows given a **path-filtered** `pull_request` trigger, and why each earns its minutes.
+#: Anything not listed here and not the merge gate may not carry one at all.
 PR_TRIGGERED: dict[Workflow, str] = {
     Workflow.VULNERABILITY_SCAN: "scans the inputs of a dependency or image vulnerability",
-    Workflow.DEPLOY_SEQUENCE: "runs alembic upgrade head when a migration or seed changes",
 }
+
+#: Every stage of `ci-local.sh`, and the CI job that runs it; `None` marks a local-only stage.
+STAGE_JOBS: dict[str, CiJob | None] = {
+    "quality": CiJob.QUALITY,
+    "pip-audit": None,  # local-only by design (scripts/README.md); scheduled in CI by Issue 97
+    "secrets": CiJob.QUALITY,
+    "tests": CiJob.TEST,
+    "coverage": CiJob.REPORT,
+    "docker": CiJob.DOCKER,
+    "compose": None,  # the optional --compose smoke test needs a Docker host of its own
+}
+
+#: The commands each mirrored stage runs, which must appear in both `ci-local.sh` and its CI job.
+STAGE_COMMANDS: dict[str, tuple[str, ...]] = {
+    "quality": (
+        "ruff check .",
+        "ruff format --check .",
+        "mypy src/",
+        "scripts/check-ruff-pin.sh",
+    ),
+    "secrets": (
+        "gitleaks detect --source . --config .gitleaks.toml "
+        "--baseline-path .gitleaks-baseline.json --redact --no-banner",
+    ),
+    "tests": ("pytest", "--cov", "-n auto --dist loadscope"),
+    "coverage": ("coverage report",),
+    "docker": ("infra/docker/Dockerfile",),
+}
+
+#: The scans `ci-local.sh` runs that CI must not, until Issue 97 schedules them deliberately.
+LOCAL_ONLY_TOOLS = ("pip-audit", "trivy")
+
+#: A step reference pinned to a full commit SHA: `owner/repo@<40 hex>`.
+_PINNED_ACTION = re.compile(r"^[\w.-]+/[\w./-]+@[0-9a-f]{40}$")
 
 
 def _load(workflow: Workflow) -> dict[str, Any]:
@@ -73,23 +153,35 @@ def _jobs(workflow: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return workflow.get("jobs", {})
 
 
+def _job_text(job: dict[str, Any]) -> str:
+    """Every `run:` script and `with:` input of one job, as one searchable string."""
+    parts: list[str] = []
+    for step in job.get("steps", []):
+        parts.append(str(step.get("run", "")))
+        parts.extend(str(value) for value in step.get("with", {}).values())
+    return "\n".join(parts)
+
+
 # Fully commented-out workflow files (kept on disk for reference) are not active GitHub
 # Actions definitions, so they are skipped in the structural guardrail checks. There are
-# none right now — vulnerability-scan.yml is an on-demand (workflow_dispatch, keyword-gated)
-# active workflow — but the set is kept so a future disabled reference workflow is covered.
+# none right now, but the set is kept so a future disabled reference workflow is covered.
 DISABLED_WORKFLOWS: frozenset[Workflow] = frozenset()
 
 
 @pytest.fixture(scope="module")
 def workflows() -> dict[Workflow, dict[str, Any]]:
     """Every active workflow file, parsed once."""
-    return {name: _load(name) for name in Workflow if name not in DISABLED_WORKFLOWS}
+    return {
+        name: _load(name)
+        for name in Workflow
+        if name not in DISABLED_WORKFLOWS and name not in NOT_YET_CREATED
+    }
 
 
 def test_every_workflow_file_is_covered() -> None:
     """A workflow added without a `Workflow` member would skip every check below."""
     on_disk = {path.name for path in WORKFLOW_DIR.glob("*.yml")}
-    assert on_disk == {str(name) for name in Workflow}
+    assert on_disk == {str(name) for name in Workflow if name not in NOT_YET_CREATED}
 
 
 def test_disabled_workflows_are_fully_commented_out() -> None:
@@ -112,31 +204,30 @@ def test_every_workflow_declares_a_concurrency_group(
         assert workflow.get("concurrency", {}).get("group"), name
 
 
-def test_nothing_runs_unfiltered_on_an_ordinary_push_or_pull_request(
+def test_nothing_runs_on_an_ordinary_push_and_only_the_gate_runs_on_every_pull_request(
     workflows: dict[Workflow, dict[str, Any]],
 ) -> None:
-    """Quality is a local gate (`ci-local.sh`); Actions minutes are spent on releases.
+    """Minutes go to the merge gate and to releases, never to a branch push.
 
-    This is also what makes a docs-only PR free, and why there is no branch-vs-PR double
-    run: the branch trigger that would duplicate a `pull_request` run does not exist.
-    `sync-issues.yml` is the one allowed branch push, and it is path-filtered to the
-    issue specs.
-
-    **Issue 180 (M30) narrowed this rule rather than relaxing it.** Two workflows now carry a
-    `pull_request` trigger, because "nothing runs on a PR" also meant nothing scanned and nothing
-    executed a migration outside a release — which is how migrations 0066/0067 reached a
-    developer's laptop unexecuted and how the code behind v1.2.1-v1.2.4 went unscanned. Both are
-    **path-filtered**; the guard is that they stay filtered, and that no *other* workflow grows a
-    `pull_request` trigger at all.
+    **Rewritten by Issue 9.** The source project asserted that nothing at all ran on a pull
+    request; ClinicQ's merge gate does, so the rule became: the gate (`ci.yml`) is the one workflow
+    with an unfiltered `pull_request` trigger, any other pull-request workflow is path-filtered,
+    and no workflow runs on a branch push, so there is no branch-versus-PR double run. The
+    source project's one allowed branch push (`sync-issues.yml`) does not exist here, so that
+    exception is gone.
     """
     for name, workflow in workflows.items():
         triggers = _triggers(workflow)
         pull_request = triggers.get(Trigger.PULL_REQUEST)
-        if name in PR_TRIGGERED:
+        if name is MERGE_GATE:
+            assert pull_request is not None, (
+                f"{name}: the merge gate needs pull_request"
+            )
+        elif name in PR_TRIGGERED:
             assert pull_request is not None, f"{name}: expected a pull_request trigger"
             assert pull_request.get("paths"), (
                 f"{name}: a pull_request trigger must be path-filtered — an unfiltered one runs on "
-                f"every PR, the cost Issue 15's guardrails exist to avoid ({PR_TRIGGERED[name]})"
+                f"every PR, the cost the guardrails exist to avoid ({PR_TRIGGERED[name]})"
             )
             assert "branches" not in pull_request, (
                 f"{name}: filter by path, not by branch"
@@ -150,24 +241,29 @@ def test_nothing_runs_unfiltered_on_an_ordinary_push_or_pull_request(
         push = triggers.get(Trigger.PUSH)
         if push is None:
             continue
-        if name is Workflow.SYNC_ISSUES:
-            assert push["paths"], name
-            continue
         # Everything else may only be triggered by a semver tag.
         assert "branches" not in push, name
         assert push["tags"], name
 
 
-def test_ci_itself_never_runs_on_a_pull_request(
+def test_ci_runs_on_pull_requests_to_main_and_on_nothing_else_automatic(
     workflows: dict[Workflow, dict[str, Any]],
 ) -> None:
-    """The expensive workflow stays tag-only, asserted separately so it cannot relax by accident.
+    """The gate runs where merges happen, and nowhere that would pay for the same commit twice.
 
-    `ci.yml` runs eight sharded test jobs plus quality plus a PostgreSQL drift job. Giving it a
-    `pull_request` trigger — even a path-filtered one — is the change Issue 180's non-goals name
-    explicitly, so it gets its own assertion rather than depending on someone reading a dict.
+    **Rewritten by Issue 9** from the source project's "CI never runs on a pull request". The
+    trigger is not path-filtered: a docs-only change still reports the required check (its heavy
+    jobs are skipped inside the run), and a push to `main` after the merge runs nothing.
     """
-    assert Trigger.PULL_REQUEST not in _triggers(workflows[Workflow.CI])
+    triggers = _triggers(workflows[Workflow.CI])
+    pull_request = triggers[Trigger.PULL_REQUEST]
+    assert pull_request["branches"] == [MAIN_BRANCH]
+    assert "paths" not in pull_request and "paths-ignore" not in pull_request, (
+        "a path filter leaves the required check pending on a skipped pull request"
+    )
+    assert set(triggers) <= {Trigger.PULL_REQUEST, Trigger.WORKFLOW_DISPATCH}, (
+        f"ci.yml gained an automatic trigger: {sorted(map(str, triggers))}"
+    )
 
 
 def test_the_scheduled_scan_runs_weekly_not_more_often(
@@ -190,23 +286,25 @@ def test_the_scheduled_scan_runs_weekly_not_more_often(
 def test_the_deploy_sequence_is_identical_in_both_workflows(
     workflows: dict[Workflow, dict[str, Any]],
 ) -> None:
-    """`ci.yml` and `deploy-sequence.yml` must run the *same* commands.
+    """`ci.yml` and `deploy.yml` must run the *same* deploy sequence.
 
     Otherwise "what a deploy does" has two definitions and the PR-time one can drift into checking
-    something else, which is exactly the failure this issue is correcting. Compared on the shell
-    body rather than the whole job, because the two legitimately differ in what they check out.
+    something else. **Retargeted by Issue 9:** the source project compared inline `alembic upgrade
+    head` bodies in `ci.yml` and `deploy-sequence.yml`; ClinicQ keeps the sequence in one script,
+    so both workflows must call it, and the script must still run the migrations.
     """
+    script = (REPO_ROOT / DEPLOY_SEQUENCE_SCRIPT).read_text(encoding="utf-8")
+    assert "alembic upgrade head" in script
 
-    def _sequence(workflow: dict[str, Any]) -> str:
-        for job in _jobs(workflow).values():
-            for step in job.get("steps", []):
-                if "alembic upgrade head" in str(step.get("run", "")):
-                    return str(step["run"])
-        raise AssertionError("no step runs `alembic upgrade head`")
+    def _calls_the_sequence(workflow: dict[str, Any]) -> bool:
+        return any(
+            DEPLOY_SEQUENCE_SCRIPT in str(step.get("run", ""))
+            for job in _jobs(workflow).values()
+            for step in job.get("steps", [])
+        )
 
-    assert _sequence(workflows[Workflow.CI]) == _sequence(
-        workflows[Workflow.DEPLOY_SEQUENCE]
-    )
+    assert _calls_the_sequence(workflows[Workflow.CI])
+    assert _calls_the_sequence(workflows[Workflow.DEPLOY])
 
 
 def test_runner_jobs_cap_their_own_runtime(
@@ -220,6 +318,14 @@ def test_runner_jobs_cap_their_own_runtime(
             timeout = job.get("timeout-minutes")
             assert timeout is not None, f"{name}:{job_name}"
             assert 0 < timeout < GITHUB_DEFAULT_TIMEOUT_MINUTES, f"{name}:{job_name}"
+
+
+def test_ci_jobs_stay_well_inside_the_default_timeout(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """Issue 9: "every job has an explicit timeout well below the GitHub default"."""
+    for job_name, job in _jobs(workflows[Workflow.CI]).items():
+        assert job["timeout-minutes"] <= CI_JOB_TIMEOUT_CEILING_MINUTES, job_name
 
 
 def test_reusable_workflow_callers_set_no_timeout(
@@ -240,24 +346,48 @@ def test_deploys_are_never_cancelled_mid_flight(
     The group must also stay ref-independent: the contended resource is the single
     platform slot, so two different tags have to serialise against each other.
     """
-    concurrency = workflows[Workflow.CD]["concurrency"]
+    concurrency = workflows[Workflow.DEPLOY]["concurrency"]
     assert concurrency["cancel-in-progress"] is False
     assert "github.ref" not in concurrency["group"]
 
 
-def test_ci_never_cancels_a_run_that_can_publish_an_image(
+def test_ci_cancels_only_superseded_pull_request_runs(
     workflows: dict[Workflow, dict[str, Any]],
 ) -> None:
-    """Cancelling mid-push to GHCR can leave `:latest` on a half-written manifest.
+    """Pushing twice in a minute cancels the first run; a manual run is never cut short.
 
-    So `cancel-in-progress` has to be an expression that excludes tag pushes and manual
-    releases — a bare `true` would cancel the publish, and a bare `false` would waste
-    minutes on superseded `quality` / `test` dispatches.
+    **Rewritten by Issue 9** from "CI never cancels a run that can publish an image": ClinicQ's CI
+    cannot publish (next test), so what is left to protect is the other half, spending no minutes
+    on a superseded push. The group is keyed on the pull request, so two PRs never cancel each
+    other.
     """
-    cancel = workflows[Workflow.CI]["concurrency"]["cancel-in-progress"]
+    concurrency = workflows[Workflow.CI]["concurrency"]
+    assert "github.event.pull_request.number" in concurrency["group"]
+    cancel = concurrency["cancel-in-progress"]
     assert isinstance(cancel, str), cancel
-    assert Trigger.WORKFLOW_DISPATCH in cancel
-    assert "release" in cancel
+    assert Trigger.PULL_REQUEST in cancel
+    assert Trigger.WORKFLOW_DISPATCH not in cancel
+
+
+def test_ci_can_never_publish_an_image(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """A cancellable run must not be able to write to GHCR: publishing is the release's job.
+
+    Cancelling mid-push can leave `:latest` on a half-written manifest, which is why the source
+    project kept image publishing out of reach of a cancellable run. Here that is structural: CI
+    holds no `packages: write`, logs in to no registry and pushes nothing.
+    """
+    ci = workflows[Workflow.CI]
+    scopes = [ci.get("permissions", {})] + [
+        job.get("permissions", {}) for job in _jobs(ci).values()
+    ]
+    assert all(scope.get("packages") != "write" for scope in scopes)
+    for job_name, job in _jobs(ci).items():
+        for step in job.get("steps", []):
+            assert "docker/login-action" not in str(step.get("uses", "")), job_name
+            assert step.get("with", {}).get("push") in (None, False), job_name
+            assert "docker push" not in str(step.get("run", "")), job_name
 
 
 def test_uv_jobs_cache_uv_rather_than_pip(
@@ -311,3 +441,185 @@ def test_ci_still_runs_the_top_level_flow_tests(
     assert "tests" in tokens, "no shard collects the top-level tests/ directory"
     assert "--ignore=tests/unit" in tokens
     assert "--ignore=tests/integration" in tokens
+
+
+# ── Issue 9: what the PR-time gate must keep true ──────────────────────────────────────────
+
+
+def _ci_local_stages() -> set[str]:
+    """The stage names `ci-local.sh` declares with `stage "<name>"`."""
+    return set(
+        re.findall(r'^\s*stage "([\w-]+)"', CI_LOCAL.read_text(), flags=re.MULTILINE)
+    )
+
+
+def test_every_ci_local_stage_is_mirrored_or_declared_local_only() -> None:
+    """A stage added to `ci-local.sh` must be placed in CI, or named local-only, on purpose."""
+    assert _ci_local_stages() == set(STAGE_JOBS)
+
+
+def test_ci_runs_the_same_commands_as_ci_local(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """The workflow is the same set of checks as `ci-local.sh`: each command appears in both."""
+    ci_local = CI_LOCAL.read_text(encoding="utf-8")
+    jobs = _jobs(workflows[Workflow.CI])
+    for stage, commands in STAGE_COMMANDS.items():
+        job = STAGE_JOBS[stage]
+        assert job is not None, stage
+        job_text = _job_text(jobs[job])
+        for command in commands:
+            assert command in ci_local, (
+                f"ci-local.sh no longer runs {command!r} ({stage})"
+            )
+            assert command in job_text, (
+                f"ci.yml:{job} does not run {command!r} ({stage})"
+            )
+
+
+def test_the_local_only_scans_stay_out_of_ci(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """pip-audit and Trivy are local-only by design until Issue 97 schedules them."""
+    raw = (WORKFLOW_DIR / Workflow.CI).read_text(encoding="utf-8").lower()
+    body = "\n".join(
+        line for line in raw.splitlines() if not line.lstrip().startswith("#")
+    )
+    for tool in LOCAL_ONLY_TOOLS:
+        assert tool not in body, f"ci.yml runs {tool}, which is local-only"
+
+
+def test_ci_uses_the_gitleaks_version_the_hook_pins(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """The commit hook and CI scan with one gitleaks, or a finding appears on only one side."""
+    hooks = yaml.safe_load(PRE_COMMIT_CONFIG.read_text(encoding="utf-8"))
+    (hook_rev,) = [
+        repo["rev"] for repo in hooks["repos"] if repo["repo"].endswith("/gitleaks")
+    ]
+    versions = [
+        step["env"]["GITLEAKS_VERSION"]
+        for step in _jobs(workflows[Workflow.CI])[CiJob.QUALITY]["steps"]
+        if "GITLEAKS_VERSION" in step.get("env", {})
+    ]
+    assert versions == [hook_rev.removeprefix("v")]
+
+
+def test_ci_tests_run_against_postgis_and_redis_never_sqlite(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """The test job's database is the dev stack's PostGIS, and its tests cannot skip past it."""
+    dev_stack = yaml.safe_load(DEV_STACK_SERVICES.read_text(encoding="utf-8"))[
+        "services"
+    ]
+    test = _jobs(workflows[Workflow.CI])[CiJob.TEST]
+    images = {name: service["image"] for name, service in test["services"].items()}
+    assert sorted(images.values()) == sorted(
+        [dev_stack["db"]["image"], dev_stack["redis"]["image"]]
+    )
+
+    env = test["env"]
+    assert env["REQUIRE_POSTGRES_TESTS"] == "1"
+    assert env["REQUIRE_REDIS_TESTS"] == "1"
+    assert env["TEST_DATABASE_URL"].startswith("postgresql://")
+    assert env["TEST_REDIS_URL"].startswith("redis://")
+    urls = [
+        str(value)
+        for scope in [env] + [step.get("env", {}) for step in test["steps"]]
+        for key, value in scope.items()
+        if "DATABASE_URL" in key
+    ]
+    assert urls and all(url.startswith("postgresql://") for url in urls), urls
+
+
+def test_the_merge_gate_needs_every_other_job(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """The required check waits for every job, and reports even when one of them failed."""
+    jobs = _jobs(workflows[Workflow.CI])
+    gate = jobs[CiJob.GATE]
+    assert set(gate["needs"]) == set(jobs) - {CiJob.GATE}
+    assert "always()" in gate["if"]
+
+
+def test_every_action_is_pinned_to_a_commit(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """A tag can be moved to other code after review; a commit SHA cannot."""
+    for name, workflow in workflows.items():
+        for job_name, job in _jobs(workflow).items():
+            references = [job["uses"]] if "uses" in job else []
+            references += [
+                step["uses"] for step in job.get("steps", []) if "uses" in step
+            ]
+            for reference in references:
+                if reference.startswith(("./", "docker://")):
+                    continue
+                assert _PINNED_ACTION.match(reference), (
+                    f"{name}:{job_name}: {reference}"
+                )
+
+
+def _paths_named_in(source: str) -> set[str]:
+    """Every path a Python file spells out: string literals and `a / "b" / "c"` chains.
+
+    Docstrings are left out; they describe files without reading them.
+    """
+    tree = ast.parse(source)
+    docstrings = {
+        id(node.body[0].value)
+        for node in ast.walk(tree)
+        if isinstance(
+            node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef
+        )
+        and node.body
+        and isinstance(node.body[0], ast.Expr)
+        and isinstance(node.body[0].value, ast.Constant)
+    }
+    named: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+            parts: list[str] = []
+            stack: list[ast.expr] = [node]
+            while stack:
+                current = stack.pop()
+                if isinstance(current, ast.BinOp) and isinstance(current.op, ast.Div):
+                    stack += [current.right, current.left]
+                elif isinstance(current, ast.Constant) and isinstance(
+                    current.value, str
+                ):
+                    parts.append(current.value)
+            named.add("/".join(parts))
+        elif (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and id(node) not in docstrings
+        ):
+            named.add(node.value)
+    return named
+
+
+def test_the_prose_only_fast_path_skips_nothing_a_test_reads(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """A pull request touching only PROSE_PATHS skips the tests, so no test may read those paths.
+
+    If this fails, a test has started reading one of them: drop that entry from PROSE_PATHS in
+    ci.yml (the change then runs the full suite), rather than excluding the test from this check.
+    """
+    step = next(
+        step
+        for step in _jobs(workflows[Workflow.CI])[CiJob.CHANGES]["steps"]
+        if "PROSE_PATHS" in step.get("env", {})
+    )
+    prose = step["env"]["PROSE_PATHS"].split()
+    offenders = []
+    for path in sorted(TESTS_DIR.rglob("*.py")):
+        for named in _paths_named_in(path.read_text(encoding="utf-8")):
+            for entry in prose:
+                folder = entry.endswith("/")
+                if (folder and named.startswith(entry.rstrip("/"))) or (
+                    not folder and (named == entry or named.endswith(f"/{entry}"))
+                ):
+                    offenders.append(f"{path.relative_to(REPO_ROOT)} reads {named}")
+    assert offenders == []

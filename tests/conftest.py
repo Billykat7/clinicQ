@@ -3,6 +3,7 @@
 import os
 from collections.abc import Generator
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
 from alembic import command
@@ -180,6 +181,40 @@ def migrated_engine(migrated_database: URL) -> Generator[Engine]:
     engine.dispose()
 
 
+# ── Redis (Issue 9) ──────────────────────────────────────────────────────────────────────────
+#
+# The same contract as PostgreSQL above. Tests marked ``redis`` talk to the server named by
+# ``TEST_REDIS_URL`` and are skipped without it, unless ``REQUIRE_REDIS_TESTS=1`` (CI sets it)
+# turns the skip into a failure. The URL is never guessed either. The tests write only keys they
+# made unique and delete them afterwards, so a spare database number (CI and ``make
+# test-services`` use ``/15``) is enough; nothing is flushed.
+
+
+def _redis_unavailable(reason: str) -> NoReturn:
+    """Skip, or fail when the run requires Redis."""
+    if os.environ.get("REQUIRE_REDIS_TESTS") == "1":
+        pytest.fail(f"Redis tests are required here: {reason}")
+    pytest.skip(f"{reason}. Set TEST_REDIS_URL to a Redis 8 server (make db-up).")
+
+
+@pytest.fixture(scope="session")
+def redis_server_url() -> str:
+    """The Redis the ``redis``-marked tests use; skips (or fails) when there is none."""
+    import redis
+
+    url = os.environ.get("TEST_REDIS_URL", "").strip()
+    if not url:
+        _redis_unavailable("TEST_REDIS_URL is not set")
+    client = redis.Redis.from_url(url, socket_connect_timeout=2, socket_timeout=2)
+    try:
+        client.ping()
+    except redis.RedisError as exc:
+        _redis_unavailable(f"cannot reach Redis at {url}: {exc}")
+    finally:
+        client.close()
+    return url
+
+
 # ── Markers (Issue 7) ────────────────────────────────────────────────────────────────────────
 #
 # Applied by location, so nobody has to remember to: everything under tests/unit/ is ``unit``,
@@ -196,45 +231,37 @@ _UNIT_ROOT = Path(__file__).resolve().parent / "unit"
 #: They run as ``xfail(strict=True)``: the day the file appears the test passes, strict reports
 #: that as a failure, and the entry below has to be deleted by the issue that made it pass. Nothing
 #: here is hidden: each one says what it waits for, and ``make check`` stays a real gate meanwhile.
-_WORKFLOWS = "needs .github/workflows/, which Issue 9 creates (Issues 10, 11 and 97 add the rest)"
+_DEPLOY_WORKFLOW = "needs .github/workflows/deploy.yml, which Issue 11 creates"
+_SCAN_WORKFLOW = (
+    "needs .github/workflows/vulnerability-scan.yml, which Issue 97 creates (pip-audit and Trivy "
+    "are local-only until then: scripts/README.md)"
+)
 _SECURITY_DOCS = (
     "needs docs/SECURITY/{THREAT-MODEL,SECURITY-CHECKLIST,AUTHZ-BOUNDARIES}.md, which no issue "
     "creates yet (raised in PR #110)"
 )
 PENDING_ON_LATER_ISSUES: dict[str, str] = {
     **{
-        f"tests/unit/platform/test_workflow_guardrails.py::{name}": _WORKFLOWS
+        f"tests/unit/platform/test_workflow_guardrails.py::{name}": _DEPLOY_WORKFLOW
         for name in (
-            "test_ci_itself_never_runs_on_a_pull_request",
-            "test_ci_never_cancels_a_run_that_can_publish_an_image",
-            "test_ci_still_runs_the_top_level_flow_tests",
             "test_deploys_are_never_cancelled_mid_flight",
-            "test_every_workflow_declares_a_concurrency_group",
-            "test_every_workflow_file_is_covered",
-            "test_nothing_runs_unfiltered_on_an_ordinary_push_or_pull_request",
-            "test_reusable_workflow_callers_set_no_timeout",
-            "test_runner_jobs_cap_their_own_runtime",
             "test_the_deploy_sequence_is_identical_in_both_workflows",
-            "test_the_scheduled_scan_runs_weekly_not_more_often",
-            "test_uv_jobs_cache_uv_rather_than_pip",
         )
     },
+    "tests/unit/platform/test_workflow_guardrails.py::"
+    "test_the_scheduled_scan_runs_weekly_not_more_often": _SCAN_WORKFLOW,
     **{
-        f"tests/unit/platform/test_scanning_config.py::{name}": _WORKFLOWS
+        f"tests/unit/platform/test_scanning_config.py::{name}": _SCAN_WORKFLOW
         for name in (
             "test_every_ignored_cve_carries_a_written_reason",
             "test_the_cve_ignore_list_is_identical_locally_and_in_ci",
         )
     },
-    "tests/integration/admin/test_rbac_decision_snapshot.py::"
-    "test_no_ci_workflow_regenerates_the_snapshot": _WORKFLOWS,
     **{
-        f"tests/integration/security/test_m30_exit_criteria.py::{name}": _WORKFLOWS
+        f"tests/integration/security/test_m30_exit_criteria.py::{name}": _SCAN_WORKFLOW
         for name in (
             "test_all_three_scanners_are_present_and_blocking",
-            "test_ci_itself_is_still_tag_only",
             "test_scanning_runs_on_a_schedule_and_on_the_files_that_can_break_it",
-            "test_the_deploy_sequence_runs_on_migration_changes",
         )
     },
     "tests/integration/security/test_m30_exit_criteria.py::"

@@ -139,3 +139,5 @@ Free plan allowance. Every tag gets a release note in [`RELEASES/`](RELEASES/).
 
 The local gate is the primary one. CI on pull requests is the enforcement, and deployment is
 tag-only: the shape that keeps the team inside the 2,000 free Actions minutes a month.
+[`docs/CICD/PIPELINES.md`](../CICD/PIPELINES.md) describes each CI job, the one required check
+(**CI gate**) and the measured minutes behind that claim.

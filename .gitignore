@@ -218,3 +218,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# The vendored front-end releases the app serves itself (Issue 5: nothing from a CDN) are part of
+# the build. A personal global ignore of `vendor/` (common in ~/.gitignore_global) silently left
+# them out of every clone, CI run and image until Issue 9's CI caught the 404: re-include them here,
+# which wins over any global excludes file.
+!src/static/vendor/

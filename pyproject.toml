@@ -33,6 +33,7 @@ markers = [
     "integration: HTTP, database or several modules together (applied by location)",
     "slow: seconds, not milliseconds: timing tests and anything needing a server; excluded by make test-fast",
     "postgres: runs against a real PostgreSQL + PostGIS server (TEST_DATABASE_URL; Issue 3)",
+    "redis: runs against a real Redis server (TEST_REDIS_URL; Issue 9)",
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────

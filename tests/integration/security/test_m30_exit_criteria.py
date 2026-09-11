@@ -153,19 +153,38 @@ def test_all_three_scanners_are_present_and_blocking() -> None:
 
 
 def test_the_deploy_sequence_runs_on_migration_changes() -> None:
-    """The M29 incident's guard: migrations 0066/0067 first ran on a laptop."""
-    triggers = _triggers(_workflow("deploy-sequence.yml"))
-    paths = triggers["pull_request"]["paths"]
-    assert "alembic/**" in paths
-    assert "scripts/db/**" in paths
+    """The M29 incident's guard: migrations 0066/0067 first ran on a laptop.
+
+    **Retargeted by Issue 9.** The source project ran the sequence from a path-filtered
+    `deploy-sequence.yml`; ClinicQ runs it in `ci.yml` on every pull request to main, so a change
+    under `alembic/` or `scripts/db/` reaches it unless the prose-only fast path skips the run,
+    which it never may for those folders.
+    """
+    ci = _workflow("ci.yml")
+    assert "paths" not in _triggers(ci)["pull_request"]
+    prose = next(
+        step["env"]["PROSE_PATHS"].split()
+        for step in ci["jobs"]["changes"]["steps"]
+        if "PROSE_PATHS" in step.get("env", {})
+    )
+    for migration_path in (
+        "alembic/versions/0002_example.py",
+        "scripts/db/seed_rbac.py",
+    ):
+        assert not any(migration_path.startswith(entry) for entry in prose)
+    runs = [str(step.get("run", "")) for step in ci["jobs"]["test"]["steps"]]
+    assert any("scripts/db/deploy-sequence.sh" in run for run in runs)
 
 
-def test_ci_itself_is_still_tag_only() -> None:
-    """The guardrail Issue 180 had to work *inside*, re-derived rather than taken on trust."""
+def test_ci_gates_every_pull_request_to_main() -> None:
+    """The guardrail the pipeline works inside, re-derived rather than taken on trust.
+
+    **Rewritten by Issue 9.** The source project's CI was tag-only ("ci_itself_is_still_tag_only");
+    ClinicQ's M2 made CI the merge gate on every pull request to main, with nothing on a branch push.
+    """
     triggers = _triggers(_workflow("ci.yml"))
-    assert "pull_request" not in triggers
-    assert triggers["push"]["tags"]
-    assert "branches" not in triggers["push"]
+    assert triggers["pull_request"]["branches"] == ["main"]
+    assert "push" not in triggers
 
 
 def test_no_directive_in_the_shipped_policy_allows_unsafe_inline() -> None:

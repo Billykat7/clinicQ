@@ -35,13 +35,19 @@ naming it (`✗ ci-local.sh failed at stage: coverage`). Fix that stage and run 
 on green:
 
 1. **quality**: `ruff check`, `ruff format --check`, `mypy src/`, and the ruff version pin
-2. **pip-audit**: known CVEs in `requirements.txt` (a warning here; blocking in CI)
+2. **pip-audit**: known CVEs in `requirements.txt` (a warning, and local-only: CI does not run it)
 3. **secrets**: gitleaks over the whole git history
 4. **tests**: the whole suite in parallel, coverage collected
 5. **coverage**: at least the floor in `pyproject.toml` (see below)
-6. **docker**: the production image builds, and Trivy scans it (Trivy warns only)
+6. **docker**: the production image builds, and Trivy scans it (Trivy warns only, and is local-only)
 
 `make check-compose` adds the compose smoke test (up, `/health/live`, PostGIS, Redis, down).
+
+The pull request then runs the same stages in GitHub Actions (`.github/workflows/ci.yml`), minus
+pip-audit, Trivy and the compose smoke test, against real PostgreSQL + PostGIS and Redis
+containers. Its one required check, **CI gate**, must be green to merge. What each job does, why a
+docs-only or draft pull request skips the tests, and what it all costs in Actions minutes:
+[`docs/CICD/PIPELINES.md`](docs/CICD/PIPELINES.md).
 
 Never push with `--no-verify`, and never commit with it. If a hook is wrong, fix the hook in its own
 PR.
@@ -69,6 +75,7 @@ Markers are applied by location in `tests/conftest.py`, so you rarely write one 
 | `integration` | HTTP, the database, or several modules together | everything else |
 | `slow` | seconds rather than milliseconds | PostgreSQL tests, and timing tests mark themselves |
 | `postgres` | needs a real PostgreSQL + PostGIS server | written on the test module (`pytestmark`) |
+| `redis` | needs a real Redis server | written on the test module (`pytestmark`) |
 
 An unknown marker is an error (`--strict-markers`), so a typo cannot silently select nothing.
 
@@ -84,6 +91,15 @@ make test-postgres DB_PORT=5433                       # if you moved it
 
 Without `TEST_DATABASE_URL`, `make test` and `make check` skip them and say why. The URL is never
 guessed: whatever answers on port 5432 on your laptop may be another project's database.
+
+Tests marked `redis` follow the same rule with `TEST_REDIS_URL`. `make test-services` runs both
+kinds against the compose stack, with a missing server a failure rather than a skip, which is
+exactly what CI's service containers do:
+
+```bash
+make test-services                                    # localhost:5432 and localhost:6379
+make test-services DB_PORT=5433 REDIS_PORT=6380       # if you moved them
+```
 
 ## Coverage
 
@@ -120,8 +136,8 @@ keys included, and `tests/unit/platform/test_scanning_config.py` fails if one ap
 
 ## Tests that wait for a later issue
 
-Some kernel guard tests check files that later issues create: the CI workflows (Issue 9 onwards)
-and the security documents. They are listed in `PENDING_ON_LATER_ISSUES` in `tests/conftest.py` as
+Some kernel guard tests check files that later issues create: the deploy and scan workflows
+(Issues 11 and 97) and the security documents. They are listed in `PENDING_ON_LATER_ISSUES` in `tests/conftest.py` as
 strict expected failures. When your issue creates the file, the test starts passing, and strict
 xfail reports that as a failure: delete its entry in the same PR.
 
