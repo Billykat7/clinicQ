@@ -190,6 +190,12 @@ password you chose:
 make seed-rbac && ./scripts/db/seed-dev-user.sh --password 'choose-a-password'
 ```
 
+**For demo data**, `make seed-dev-data` adds one staff account per ClinicQ role (printed with their
+development password) and reports the demo clinics, queues and ticket history in
+`scripts/db/demo_dataset.py`: eleven real Gauteng and KwaZulu-Natal clinics, written to the database
+as their tables land (Issues 23, 25 and 39). It is idempotent, and refuses any database that is not
+a local development one.
+
 If something is already using a port: `DB_PORT=5433 make db-up` starts the database on another port
 (put the same port in `DATABASE_URL`), `REDIS_PORT` does the same for Redis (and `REDIS_URL`), and
 `make run PORT=8001` moves the app. To keep a port for every `make` target, put `DB_PORT=5433` (and
