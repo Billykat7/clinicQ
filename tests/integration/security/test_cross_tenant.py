@@ -83,6 +83,13 @@ CASES: dict[str, dict[str, object]] = {
         "reader": "a@clinicq.example",
         "paths": lambda site, _row: (f"/api/v1/sites/{site}",),
     },
+    "clinicservice": {
+        # What a clinic offers (Issue 26). Part of the profile: the front desk reads the catalogue
+        # (it is what a walk-in is asked which of), the manager decides what is on it.
+        "resource": "sites.profile",
+        "reader": "a@clinicq.example",
+        "paths": lambda site, _row: (f"/api/v1/sites/{site}/services",),
+    },
     "sites.display": {
         # What the waiting-room board may show (Issue 27, non-negotiable 4). A receptionist reads
         # it and cannot change it; naming ``sites.settings`` here covers that sibling too, whose

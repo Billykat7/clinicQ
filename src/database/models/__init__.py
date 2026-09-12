@@ -12,6 +12,7 @@ from src.database.models.alert_draft import AlertDraft
 from src.database.models.alert_recipient import AlertRecipient
 from src.database.models.audit_event import AuditEvent
 from src.database.models.base import Base, metadata
+from src.database.models.clinic_service import ClinicService, queue_clinic_service
 from src.database.models.document import Document
 from src.database.models.effective_role_permission import EffectiveRolePermission
 from src.database.models.esign_envelope import EsignEnvelope
@@ -70,6 +71,7 @@ __all__ = [
     "AlertRecipient",
     "AuditEvent",
     "Base",
+    "ClinicService",
     "Document",
     "EffectiveRolePermission",
     "EsignEnvelope",
@@ -111,4 +113,5 @@ __all__ = [
     "UserRoleAssignment",
     "Widget",
     "metadata",
+    "queue_clinic_service",
 ]
