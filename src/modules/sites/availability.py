@@ -43,6 +43,18 @@ class JoinGate:
 #: platform's, not a stranger's.
 NOT_ACCEPTING = "This clinic is not accepting patients through ClinicQ at the moment."
 
+#: The listing statuses that refuse a join outright, whatever the clock says (Issue 29).
+#:
+#: ``PENDING_VERIFICATION`` is deliberately **not** here, and the line is worth naming because it
+#: looks arbitrary otherwise. Issue 29's rule is that an unverified clinic is invisible in
+#: discovery "and the rest are reachable by direct link for testing" — a clinic waiting to be
+#: checked has to be able to walk through its own queue before it goes live, and it can only be
+#: reached by somebody who already has its link. ``DRAFT`` is different: it has not been put
+#: forward at all, so there is nothing to test yet and nobody to test it.
+NOT_TAKING_PATIENTS: frozenset[SiteStatus] = frozenset(
+    {SiteStatus.SUSPENDED, SiteStatus.DRAFT}
+)
+
 
 def join_gate(
     site: Site, schedule: OpeningSchedule, moment: datetime | None = None
@@ -63,7 +75,7 @@ def join_gate(
     moment = moment or now_sast()
     if site.is_deleted or not site.is_active:
         return JoinGate(allowed=False, reason=NOT_ACCEPTING)
-    if site.status_enum in {SiteStatus.SUSPENDED, SiteStatus.DRAFT}:
+    if site.status_enum in NOT_TAKING_PATIENTS:
         return JoinGate(allowed=False, reason=NOT_ACCEPTING)
 
     state: OpenState = open_state(schedule, moment)

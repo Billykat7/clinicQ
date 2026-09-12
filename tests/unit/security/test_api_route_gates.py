@@ -50,6 +50,12 @@ PUBLIC: dict[str, str] = {
     "GET /api/v1/widgets/info": "module metadata",
     "GET /api/v1/patients/info": "module metadata",
     "GET /api/v1/sites/info": "module metadata",
+    "POST /api/v1/sites/register": (
+        "the public clinic-registration form (Issue 29): whoever fills it in has no account, and "
+        "a submission grants nothing at all — the clinic it creates is pending_verification, "
+        "invisible to every patient-facing surface, and no role, session or staff membership comes "
+        "with it. The worst a stranger can do is put an entry in a queue a platform admin reads"
+    ),
     "GET /api/v1/sites/queues/info": "module metadata",
     "GET /api/v1/sites/staff/info": "module metadata",
     "GET /api/v1/documents/download": "a signed, expiring, single-document link is the capability",

@@ -100,10 +100,7 @@
     const response = await fetch(`/api/v1/sites/${siteId}/settings/display`, {
       method: 'PUT',
       credentials: 'same-origin',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-Token': (document.cookie.match(/(?:^|; )csrf_token=([^;]*)/) || [])[1] || '',
-      },
+      headers: window.BKP.writeHeaders(),
       body: JSON.stringify({
         display_mode: selectedMode(),
         display_show_comment: el('ds-show-comment').checked,

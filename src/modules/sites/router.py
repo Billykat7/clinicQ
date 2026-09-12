@@ -47,7 +47,7 @@ from src.core.site_scope import (
     site_not_found,
 )
 from src.database.models.site import Site
-from src.modules.sites import catalogue, hours_service, service
+from src.modules.sites import catalogue, hours_service, onboarding, service
 from src.modules.sites import settings as display_settings
 from src.modules.sites.availability import join_gate
 from src.modules.sites.geocoding import GeocodingUnavailableError, geocode_address
@@ -74,6 +74,11 @@ from src.modules.sites.schemas import (
     SiteListOut,
     SiteLocationOut,
     SiteOut,
+    SiteRegistrationIn,
+    SiteRegistrationOut,
+    VerificationDecisionIn,
+    VerificationQueueItemOut,
+    VerificationQueueOut,
     WeeklyHoursIn,
     WeeklyHoursOut,
 )
@@ -218,6 +223,154 @@ def geocode_for_site(payload: GeocodeIn, _access: SiteProfileUpdate) -> GeocodeO
     is checked before the lookup, so another clinic's id is a 404 here too.
     """
     return _geocode(payload.address)
+
+
+# --------------------------------------------------------------------------------------
+# Onboarding and verification (Issue 29)
+#
+# Declared **before** ``/{site_id}``: FastAPI matches in declaration order, so a literal segment
+# that could also be read as an id has to come first.
+# --------------------------------------------------------------------------------------
+
+#: What a submitter is told. Server-side, so the page, a channel and a curl all say the same thing.
+SUBMITTED_MESSAGE = (
+    "Thank you. A ClinicQ administrator will check these details and get in touch. Your clinic "
+    "will not appear to patients until it has been checked."
+)
+
+
+@router.post(
+    "/register",
+    response_model=SiteRegistrationOut,
+    status_code=status.HTTP_201_CREATED,
+    operation_id="sitesRegisterPublic",
+    summary="Submit a clinic for checking",
+)
+def register_clinic(
+    payload: SiteRegistrationIn, db: DbSession, request: Request
+) -> SiteRegistrationOut:
+    """The public registration form's endpoint. **No session, and it grants nothing.**
+
+    A submission creates a clinic in ``pending_verification`` with the submitter's contact details
+    on it, and no account, no role and nothing visible to a patient. It is safe to leave open for
+    exactly that reason: the worst a stranger can do is put an entry in a queue a platform admin
+    reads, and a rejected entry is invisible for its whole life.
+    """
+    try:
+        site = onboarding.submit_registration(db, payload)
+    except service.SlugAlreadyUsedError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    record_audit_event(
+        db,
+        action=AuditAction.CREATE,
+        entity_type=AuditEntityType.SITE,
+        entity_id=site.id,
+        actor=str(payload.contact_email),
+        actor_id=None,
+        ip_address=resolve_client_ip(request),
+        context=f"submitted {site.slug} for verification",
+    )
+    db.commit()
+    db.refresh(site)
+    return SiteRegistrationOut(
+        id=site.id,
+        slug=site.slug,
+        name=site.name,
+        status=site.status_enum,
+        submitted_at=site.submitted_at,
+        message=SUBMITTED_MESSAGE,
+    )
+
+
+@router.get(
+    "/verification",
+    response_model=VerificationQueueOut,
+    operation_id="sitesVerificationQueue",
+    summary="Clinics waiting for a platform admin",
+)
+def verification_queue(
+    db: DbSession,
+    _authz: SitesDirectory,
+    queue_status: Annotated[SiteStatus | None, Query(alias="status")] = None,
+    q: Annotated[str | None, Query(max_length=120)] = None,
+) -> VerificationQueueOut:
+    """The operator's queue, oldest submission first.
+
+    Behind a ``business``-tier grant on ``sites``, which only ``platform_admin`` holds. This is a
+    cross-clinic console by nature, so it is not behind the site guard: that guard's job is to stop
+    one clinic reading another, and it would 404 the operator, who is assigned to none of them.
+    """
+    wanted = queue_status or SiteStatus.PENDING_VERIFICATION
+    rows = list(
+        db.execute(onboarding.pending_queue(db, status=wanted, query=q)).scalars()
+    )
+    return VerificationQueueOut(
+        total=len(rows),
+        status=wanted,
+        items=[_queue_item(row) for row in rows],
+    )
+
+
+def _queue_item(site: Site) -> VerificationQueueItemOut:
+    """One clinic as the verification console lists it."""
+    return VerificationQueueItemOut(
+        id=site.id,
+        slug=site.slug,
+        name=site.name,
+        sector=SiteSector(site.sector),
+        status=site.status_enum,
+        city=site.city,
+        suburb=site.suburb,
+        province=site.province_enum,
+        contact_name=site.contact_name,
+        contact_email=site.contact_email,
+        contact_phone=site.contact_phone,
+        submitted_at=site.submitted_at,
+        reviewed_at=site.reviewed_at,
+        review_note=site.review_note,
+    )
+
+
+@router.put(
+    "/{site_id}/verification",
+    response_model=VerificationQueueItemOut,
+    operation_id="sitesDecideVerification",
+    summary="Approve, reject, ask for more, or suspend",
+)
+def decide_verification(
+    site_id: str,
+    payload: VerificationDecisionIn,
+    request: Request,
+    db: DbSession,
+    staff: CurrentStaff,
+    _authz: SitesDelete,
+) -> VerificationQueueItemOut:
+    """Move one clinic's listing. The only route that writes ``site.status``.
+
+    Approving makes it visible to patients; suspending stops joins **immediately**, because the
+    join gate and the patient-facing search both read the status on every request rather than from
+    a list somebody has to rebuild. Rejecting or asking for more information must say what is
+    wrong: the submitter is shown exactly what the admin writes.
+    """
+    site = service.get_site(db, site_id)
+    if site is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found.")
+    try:
+        onboarding.transition(
+            db,
+            site,
+            payload.status,
+            decided_by=staff,
+            note=payload.note,
+            ip_address=resolve_client_ip(request),
+        )
+    except onboarding.TransitionNotAllowedError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except onboarding.ReviewNoteRequiredError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    db.commit()
+    db.refresh(site)
+    return _queue_item(site)
 
 
 @router.get("", response_model=SiteListOut, operation_id="sitesList")

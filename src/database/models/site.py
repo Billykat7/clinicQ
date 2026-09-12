@@ -26,7 +26,9 @@ site-scope guard's model discovery. Its routes go through
 asserts over HTTP.
 """
 
-from sqlalchemy import Boolean, Index, Integer, String, Text
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.commons.enums import (
@@ -61,6 +63,8 @@ class Site(Base, TimestampMixin, ActiveMixin, SoftDeleteMixin):
         # The directory's own filter: "public clinics that are verified", before distance narrows
         # it. A composite over the two columns every listing restricts on.
         Index("ix_clinicq_site_sector_status", "sector", "status"),
+        # The verification console's own read: this status, oldest submission first (Issue 29).
+        Index("ix_clinicq_site_status_submitted_at", "status", "submitted_at"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -88,6 +92,34 @@ class Site(Base, TimestampMixin, ActiveMixin, SoftDeleteMixin):
     """The clinic's own switchboard, in E.164. Not a patient's number; not personal data."""
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     """Free text for the operator: "entrance on the Klein Street side", and the like."""
+
+    # ── Onboarding and verification (Issue 29) ────────────────────────────────────────────
+    #
+    # A directory is only trustworthy if the entries are real, so anyone may submit a clinic and a
+    # platform admin checks it before it is visible to a patient. These columns are the submission
+    # and the decision; the transitions and their audit rows are src.modules.sites.onboarding's.
+    #
+    # The contact is a **person at the clinic**, not a patient: a name, a work address and a work
+    # number, held so the platform can reach whoever is responsible for the entry. It is still
+    # personal information, which is why it is named in the audit module's redaction set through
+    # the field names it shares (``email``, ``phone_e164``) and why Issue 95's data map lists it.
+
+    contact_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    """Who is responsible for this entry at the clinic."""
+    contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    contact_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    submitted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """When it was put forward for checking. ``None`` for a clinic an operator typed in."""
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    reviewed_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    """The platform admin who decided. No foreign key: the decision outlives their account."""
+    review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    """Why it was rejected, or what more is needed. Shown to the submitter, so it is written for
+    them rather than for the operator's own notes."""
 
     # ── Display and privacy (Issue 27, non-negotiable 4) ──────────────────────────────────
     #

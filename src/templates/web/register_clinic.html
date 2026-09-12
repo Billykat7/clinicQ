@@ -1,0 +1,194 @@
+{#
+  Public clinic-registration form (`/register-clinic`), rendered by
+  :func:`src.web.routes.register_clinic_page`.
+
+  On the front door, so it follows `/privacy`: the `landing.css` design system, the shared
+  `lp_header` and `lp_footer` partials, no inline styles or handlers (CSP), and
+  `public_page_context`, which takes no database session of its own and degrades to a signed-out
+  shell, so the page a clinic reaches us through stays up during an outage.
+
+  The form posts to `/api/v1/sites/register`, which grants nothing: a submission creates a clinic
+  that is waiting to be checked, invisible to every patient-facing surface, with no account and no
+  role attached to it.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>List your clinic · {{ app_name }}</title>
+<meta name="description" content="Put your clinic on ClinicQ. Tell us where it is and who to speak to; a ClinicQ administrator checks the details before patients can see it.">
+<meta name="theme-color" content="#0f6e56">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="preload" href="/static/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/static/css/site.css">
+<link rel="stylesheet" href="/static/css/landing.css">
+{# Read by csrf-htmx.js to mirror the CSRF cookie into X-CSRF-Token. #}
+<meta name="bkp-csrf-cookie" content="{{ settings.csrf_cookie_name }}">
+<script src="/static/js/theme.js"></script>
+<script src="/static/js/site.js" defer></script>
+<script src="/static/js/landing.js" defer></script>
+<script src="/static/js/csrf-htmx.js" defer></script>
+<script src="/static/js/login-modal.js" defer></script>
+<script src="/static/js/register-clinic.js" defer></script>
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+{% include "web/partials/lp_header.html" %}
+
+<main id="main" class="lp-main">
+
+  <div class="lp-wrap lp-page-head">
+    <div class="lp-eyebrow">For clinics</div>
+    <h1>List your clinic</h1>
+    <p class="lp-lede">
+      Tell us where your clinic is and who to speak to. A {{ app_name }} administrator checks the
+      details before patients can see it, so nothing you enter here appears to anyone until it has
+      been checked.
+    </p>
+  </div>
+
+  <div class="lp-wrap lp-doc-grid">
+
+    <aside class="lp-toc" aria-label="What happens next">
+      <h2>What happens next</h2>
+      <nav>
+        <a href="#form">1. You send us the details</a>
+        <a href="#form">2. We check them</a>
+        <a href="#form">3. Your clinic goes live</a>
+      </nav>
+      <p class="lp-updated">
+        We only ask for details about the clinic and the person responsible for it. Do not enter
+        anything about a patient on this form.
+      </p>
+    </aside>
+
+    <article class="lp-doc">
+      <section id="form">
+        <h2>The clinic</h2>
+
+        <form id="rc-form" novalidate>
+          <div class="lp-field">
+            <label for="rc-name">Clinic name</label>
+            <input type="text" id="rc-name" name="name" maxlength="200" required
+                   autocomplete="organization" placeholder="Zola Clinic">
+          </div>
+
+          <div class="lp-field">
+            <label for="rc-slug">Web address</label>
+            <input type="text" id="rc-slug" name="slug" maxlength="80" required
+                   placeholder="zola-clinic" pattern="[a-z0-9]+(-[a-z0-9]+)*">
+            <p class="lp-hint">Lowercase letters, numbers and hyphens. Patients will see
+              <span class="lp-mono">clinicq.co.za/<span id="rc-slug-preview">zola-clinic</span></span>.</p>
+          </div>
+
+          <div class="lp-field">
+            <label for="rc-sector">Type of clinic</label>
+            <select id="rc-sector" name="sector" required>
+              <option value="public">Public facility</option>
+              <option value="private">Private practice</option>
+            </select>
+          </div>
+
+          <h2>Where it is</h2>
+
+          <div class="lp-field">
+            <label for="rc-address">Street address</label>
+            <input type="text" id="rc-address" name="address_line" maxlength="200" required
+                   autocomplete="street-address" placeholder="Zola North, Soweto">
+          </div>
+
+          <div class="lp-field">
+            <label for="rc-suburb">Suburb</label>
+            <input type="text" id="rc-suburb" name="suburb" maxlength="120" placeholder="Zola">
+          </div>
+
+          <div class="lp-field">
+            <label for="rc-city">City or town</label>
+            <input type="text" id="rc-city" name="city" maxlength="120" required
+                   autocomplete="address-level2" placeholder="Johannesburg">
+          </div>
+
+          <div class="lp-field">
+            <label for="rc-province">Province</label>
+            <select id="rc-province" name="province" required>
+              {% for province in provinces %}
+              <option value="{{ province }}">{{ province }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="lp-field">
+            <label for="rc-latitude">Latitude</label>
+            <input type="text" id="rc-latitude" name="latitude" required
+                   inputmode="decimal" placeholder="-26.26840">
+            <p class="lp-hint">A negative number: South Africa is south of the equator.</p>
+          </div>
+
+          <div class="lp-field">
+            <label for="rc-longitude">Longitude</label>
+            <input type="text" id="rc-longitude" name="longitude" required
+                   inputmode="decimal" placeholder="27.84720">
+            <p class="lp-hint">Open your clinic in a map app, press and hold on the building, and
+              copy the two numbers it shows. We check that they fall inside South Africa.</p>
+          </div>
+
+          <div class="lp-field">
+            <label for="rc-phone">Clinic telephone number</label>
+            <input type="tel" id="rc-phone" name="phone_e164" placeholder="+27115551234">
+            <p class="lp-hint">The clinic's own switchboard, with the country code.</p>
+          </div>
+
+          <h2>Who to speak to</h2>
+          <p>
+            The person responsible for this listing at the clinic. We use these details to tell
+            you what happens next, and nothing else.
+          </p>
+
+          <div class="lp-field">
+            <label for="rc-contact-name">Full name</label>
+            <input type="text" id="rc-contact-name" name="contact_name" maxlength="120" required
+                   autocomplete="name">
+          </div>
+
+          <div class="lp-field">
+            <label for="rc-contact-email">Work email address</label>
+            <input type="email" id="rc-contact-email" name="contact_email" maxlength="255" required
+                   autocomplete="email">
+          </div>
+
+          <div class="lp-field">
+            <label for="rc-contact-phone">Work telephone number</label>
+            <input type="tel" id="rc-contact-phone" name="contact_phone" placeholder="+27821234567">
+          </div>
+
+          <div class="lp-callout" id="rc-error" role="alert" hidden></div>
+
+          <p>
+            <button type="submit" class="lp-btn lp-btn-primary" id="rc-submit">Send for checking</button>
+          </p>
+          <p class="lp-hint">
+            By sending this you confirm you are authorised to list this clinic. See our
+            <a href="/privacy">privacy notice</a> and <a href="/terms">terms of service</a>.
+          </p>
+        </form>
+
+        <div class="lp-callout" id="rc-done" role="status" hidden>
+          <b>Thank you.</b>
+          <p id="rc-done-message"></p>
+          <p id="rc-done-link"></p>
+        </div>
+      </section>
+    </article>
+  </div>
+
+</main>
+
+{% include "web/partials/lp_footer.html" %}
+
+{% include "partials/login_modal.html" %}
+
+</body>
+</html>

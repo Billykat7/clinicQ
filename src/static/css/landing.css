@@ -880,3 +880,34 @@
   .lp-live .lp-blip, .lp-now.is-flash { animation: none; }
   .lp-btn:hover, .lp-f:hover, .lp-door:hover { transform: none; }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Front-door forms (Issue 29)
+
+   The clinic-registration form is the first form on the front door: everything else out here is
+   reading material, so there were no field styles at all. These are deliberately plain and wide,
+   because the person filling this in is typing an address off a sign and is quite possibly doing
+   it on a phone in a corridor. Same tokens as the rest of landing.css, so it needs no new colours.
+   ───────────────────────────────────────────────────────────────────────────── */
+.lp-field { margin-top: 1.15rem; }
+.lp-field label {
+  display: block; margin-bottom: .35rem;
+  font-size: .9rem; font-weight: 600; color: var(--ink);
+}
+.lp-field input,
+.lp-field select,
+.lp-field textarea {
+  width: 100%; min-height: 2.75rem;
+  padding: .55rem .8rem;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); color: var(--ink);
+  font: inherit; font-size: 1rem;   /* 1rem: iOS zooms a smaller field on focus */
+}
+.lp-field input:focus,
+.lp-field select:focus,
+.lp-field textarea:focus {
+  outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--focus-ring);
+}
+.lp-field input:invalid:not(:placeholder-shown) { border-color: var(--danger-ink); }
+.lp-hint { margin-top: .35rem; font-size: .85rem; color: var(--muted); }
+.lp-mono { font-family: var(--lp-mono); font-size: .9em; }
