@@ -15,10 +15,17 @@ Read the files in this order:
   Content-Security-Policy allows ``connect-src 'self'`` and a browser cannot reach a geocoder;
 * :mod:`.settings` — what the waiting-room board may show, and what it takes to change it. This
   is where non-negotiable 4 lives, and the warning text lives next to the rule it describes;
+* :mod:`.catalogue` — what a clinic offers and how long each thing takes, which is the wait
+  estimator's prior until it has real samples;
+* :mod:`.onboarding` — a clinic signs itself up and a platform admin checks it. The listing's
+  lifecycle is a small state machine with one writer, for the same reason a ticket's status has
+  one; :mod:`.discovery` is the narrowing that keeps an unchecked clinic out of every
+  patient-facing surface;
 * :mod:`.router` — the HTTP surface: platform routes behind a ``business``-tier grant, and
   per-clinic routes behind the site guard (Issue 19).
 
 The ``sites`` model and its CRUD landed with Issue 23, opening hours and closures with Issue 24,
-and the display and privacy settings with Issue 27. The services catalogue comes with Issue 26 and
-onboarding with Issue 29.
+the services catalogue with Issue 26, the display and privacy settings with Issue 27, and
+onboarding and verification with Issue 29. The radius search in :mod:`.service` and the narrowing
+in :mod:`.discovery` are what M5's discovery API (Issue 31) is built on.
 """

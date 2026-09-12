@@ -1,0 +1,149 @@
+{% extends "layouts/dashboard.html" %}
+
+{#
+  The platform admin's clinic-verification queue (Issue 29).
+
+  An admin console, so it follows .cursor/rules/list-view-ui-pattern.mdc:
+
+  * every tab is its own URL (`/admin/verification/{pending|verified|suspended|rejected}`), so a
+    refresh or a deep link lands on the right view and the bare group URL redirects to the default;
+  * a collapsible filter bar with its own remembered state (`data-filter-key`);
+  * click-to-sort columns (`data-sort-key`);
+  * clicking a row opens a slideover beside the list rather than navigating away, which is what
+    lets an admin read the details and decide in one place.
+
+  This is a fully server-rendered list: the whole result set is in the HTML for the request, so the
+  sort and the quick view work client-side against the rows already in the DOM (the second of the
+  two valid wiring styles). The decision itself is a real request to
+  `PUT /api/v1/sites/{id}/verification`, because it changes something.
+#}
+
+{% set section = section | default('pending') %}
+
+{% block layout_head %}
+  {{ super() }}
+  {# The kernel's console toolkit: the filter bar, the sortable headers and the anchored
+     slideover this page uses are all its, so the console behaves like every other one. #}
+  <script src="/static/js/admin-crud.js" defer></script>
+  <script src="/static/js/admin-verification.js" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Clinic verification</h1>
+  <p class="lead">Clinics that have asked to be listed. A clinic is invisible to patients until it
+  is verified here, and suspending one stops new joins at once.</p>
+  {% include "partials/breadcrumbs.html" %}
+</div>
+
+<div class="tabs-branch">
+  <div class="tabs-scroll">
+    <div class="tabs tabs-sub" role="tablist">
+      <a class="tab{% if section == 'pending' %} active{% endif %}" href="/admin/verification/pending"
+         role="tab"{% if section == 'pending' %} aria-current="page"{% endif %}>Waiting</a>
+      <a class="tab{% if section == 'verified' %} active{% endif %}" href="/admin/verification/verified"
+         role="tab"{% if section == 'verified' %} aria-current="page"{% endif %}>Verified</a>
+      <a class="tab{% if section == 'draft' %} active{% endif %}" href="/admin/verification/draft"
+         role="tab"{% if section == 'draft' %} aria-current="page"{% endif %}>Sent back</a>
+      <a class="tab{% if section == 'suspended' %} active{% endif %}" href="/admin/verification/suspended"
+         role="tab"{% if section == 'suspended' %} aria-current="page"{% endif %}>Suspended</a>
+    </div>
+  </div>
+</div>
+
+<form class="filter-bar" data-filter-key="verification" method="get">
+  <div class="field">
+    <label for="vq-q">Name, suburb or city</label>
+    <input type="search" id="vq-q" name="q" value="{{ query or '' }}" maxlength="120">
+  </div>
+  <div class="form-actions">
+    <button type="submit" class="btn btn-sm">Filter</button>
+    <a class="btn btn-quiet btn-sm" href="/admin/verification/{{ section }}">Clear</a>
+  </div>
+</form>
+
+<div class="split split-full" id="vq-split">
+  <div class="card">
+    <div class="table-wrap table-scroll">
+      <table class="data" id="vq-table">
+        <thead>
+          <tr>
+            <th data-sort-key="name">Clinic</th>
+            <th data-sort-key="city">Where</th>
+            <th data-sort-key="sector">Type</th>
+            <th data-sort-key="contact">Contact</th>
+            <th data-sort-key="submitted">Submitted</th>
+          </tr>
+        </thead>
+        <tbody id="vq-body">
+          {% for item in queue.items %}
+          <tr data-id="{{ item.id }}"
+              data-name="{{ item.name }}"
+              data-slug="{{ item.slug }}"
+              data-city="{{ item.city }}"
+              data-suburb="{{ item.suburb or '' }}"
+              data-province="{{ item.province }}"
+              data-sector="{{ item.sector }}"
+              data-status="{{ item.status }}"
+              data-contact-name="{{ item.contact_name or '' }}"
+              data-contact-email="{{ item.contact_email or '' }}"
+              data-contact-phone="{{ item.contact_phone or '' }}"
+              data-submitted="{{ item.submitted_at.isoformat() if item.submitted_at else '' }}"
+              data-note="{{ item.review_note or '' }}">
+            <td>{{ item.name }}</td>
+            <td>{{ item.suburb ~ ', ' if item.suburb }}{{ item.city }}</td>
+            <td>{{ item.sector }}</td>
+            <td>{{ item.contact_name or '—' }}</td>
+            <td>{{ item.submitted_at.strftime('%d %b %Y') if item.submitted_at else '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if not queue.items %}
+    <p class="empty">Nothing here. Clinics appear in <a href="/admin/verification/pending">Waiting</a>
+      as they are submitted through <a href="/register-clinic">the registration form</a>.</p>
+    {% endif %}
+    <p class="card-sub">{{ queue.total }} clinic{{ '' if queue.total == 1 else 's' }}.</p>
+  </div>
+</div>
+
+<div class="slideover slideover-inset" id="vq-detail" data-anchor="#vq-split">
+  <div class="slideover-panel" role="dialog" aria-modal="false" aria-labelledby="vqd-title" tabindex="-1">
+    <div class="slideover-head">
+      <div class="slideover-titles">
+        <p class="detail-eyebrow">Clinic</p>
+        <h2 id="vqd-title"></h2>
+        <p class="hint" id="vqd-meta"></p>
+      </div>
+      <button type="button" class="btn btn-quiet btn-sm slideover-close" data-slideover-close
+              aria-label="Close clinic">Close</button>
+    </div>
+    <div class="slideover-body">
+      <dl class="detail-list">
+        <dt>Web address</dt><dd id="vqd-slug"></dd>
+        <dt>Where</dt><dd id="vqd-where"></dd>
+        <dt>Responsible person</dt><dd id="vqd-contact"></dd>
+        <dt>Status</dt><dd id="vqd-status"></dd>
+        <dt>Last note</dt><dd id="vqd-note"></dd>
+      </dl>
+      <div class="field">
+        <label for="vqd-decision-note">What to tell them</label>
+        <textarea id="vqd-decision-note" rows="3" maxlength="1000"></textarea>
+        <p class="hint">Required when you send a clinic back or suspend it. The person who
+          submitted it is shown exactly what you write.</p>
+      </div>
+    </div>
+    <div class="slideover-foot form-actions">
+      {# Every control is gated on the grant the API enforces, so a reader never sees a button that
+         would 403 on click. The route re-checks it regardless. #}
+      {% if can('sites', 'delete') %}
+      <button type="button" class="btn btn-sm" id="vqd-approve" data-status="verified">Verify</button>
+      <button type="button" class="btn btn-quiet btn-sm" id="vqd-more" data-status="draft">Send back</button>
+      <button type="button" class="btn btn-danger btn-sm" id="vqd-suspend" data-status="suspended">Suspend</button>
+      {% endif %}
+      <span class="msg" id="vqd-msg" aria-live="polite"></span>
+    </div>
+  </div>
+</div>
+{% endblock %}

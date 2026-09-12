@@ -155,3 +155,28 @@ class SiteClosureLifted(DomainEvent):
     site_id: str
     closure_id: str
     lifted_by: str
+
+
+@dataclass(frozen=True, slots=True)
+class SiteStatusChanged(DomainEvent):
+    """A clinic's listing moved, and whoever submitted it should be told (Issue 29).
+
+    The event carries the decision and the note, not a message: what to send and how to reach the
+    submitter is the notification service's (Issue 63). The same reasoning as
+    :class:`SiteClosureAnnounced` — a platform admin must be able to reject a clinic while the SMS
+    gateway is down.
+    """
+
+    site_id: str
+    site_name: str
+    #: :class:`~src.commons.enums.SiteStatus` values, as strings on the wire.
+    from_status: str
+    to_status: str
+    #: The platform admin who decided, or ``"submitter"`` for the submission itself.
+    decided_by: str
+    #: What they wrote, shown to the submitter. ``None`` for an approval with nothing to add.
+    note: str | None
+    #: Where to reach whoever put the clinic forward. May be ``None`` for a clinic an operator
+    #: typed in, which nobody is waiting to hear about.
+    contact_email: str | None
+    contact_phone: str | None

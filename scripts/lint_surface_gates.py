@@ -59,6 +59,11 @@ _GATE_CALLS = frozenset(
 #: gated is a finding.
 _UNGATED_PAGES: dict[str, str] = {
     "/": "the public front door — a visitor has no account",
+    "/register-clinic": (
+        "the public clinic-registration form (Issue 29): whoever fills it in has no account, and "
+        "the submission it makes grants nothing — a clinic pending verification, invisible to "
+        "every patient-facing surface, with no role or session attached"
+    ),
     "/search": "public property search — anonymous by design",
     "/apply/{unit_id}": "public application form — the applicant has no account",
     "/account/profile": "self-service: identity from the session, never a client-supplied id",

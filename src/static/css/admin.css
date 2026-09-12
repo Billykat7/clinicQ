@@ -2125,3 +2125,15 @@ details.collapsible[open] > summary .chev { transform: rotate(180deg); }
    is a consequence to understand, not an error to fix. */
 .alert { padding: .8rem .95rem; border-radius: var(--radius); font-size: .9rem; line-height: 1.5; margin-bottom: 1rem; }
 .alert-warn { background: var(--warn-bg); color: var(--warn-ink); border: 1px solid var(--warn-ink); }
+
+/* A slideover's label/value pairs (Issue 29). A bare `dl` stacks its terms and definitions with no
+   visual difference between them, so a reader has to work out which line is the label: the grid
+   below puts the label in a narrow left column, quiet, and the value beside it. Collapses to
+   stacked pairs on a narrow panel, where two columns would leave neither enough room. */
+.detail-list { display: grid; grid-template-columns: minmax(7rem, auto) 1fr; gap: .45rem .9rem; margin: 0 0 1.25rem; }
+.detail-list dt { color: var(--muted); font-size: .85rem; }
+.detail-list dd { margin: 0; color: var(--ink); font-size: .9rem; overflow-wrap: anywhere; }
+@media (max-width: 30rem) {
+  .detail-list { grid-template-columns: 1fr; gap: .15rem; }
+  .detail-list dd { margin-bottom: .5rem; }
+}

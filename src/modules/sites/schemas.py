@@ -20,6 +20,7 @@ from itertools import pairwise
 from pydantic import (
     BaseModel,
     ConfigDict,
+    EmailStr,
     Field,
     field_validator,
     model_validator,
@@ -467,3 +468,90 @@ class ClinicServiceListOut(BaseModel):
     site_id: str
     total: int = Field(ge=0)
     items: list[ClinicServiceOut]
+
+
+# --------------------------------------------------------------------------------------
+# Onboarding and verification (Issue 29)
+# --------------------------------------------------------------------------------------
+
+
+class SiteRegistrationIn(BaseModel):
+    """The public clinic-registration form.
+
+    Deliberately **not** :class:`SiteIn` with extra fields: this is filled in by a stranger, so it
+    asks for a responsible person and it cannot set anything an operator sets. ``status`` is not
+    here at all; a submission is always ``pending_verification``.
+    """
+
+    name: str = Field(min_length=2, max_length=200)
+    slug: str = Field(min_length=2, max_length=80, pattern=SLUG_PATTERN)
+    sector: SiteSector
+    location: SiteLocationIn
+    address_line: str = Field(min_length=3, max_length=200)
+    suburb: str | None = Field(default=None, max_length=120)
+    city: str = Field(min_length=2, max_length=120)
+    province: SaProvince
+    phone_e164: str | None = Field(default=None, pattern=PHONE_PATTERN)
+
+    contact_name: str = Field(min_length=2, max_length=120)
+    """Who at the clinic is responsible for this entry. A person, so there is somebody to ask."""
+    contact_email: EmailStr
+    contact_phone: str | None = Field(default=None, pattern=PHONE_PATTERN)
+
+    @field_validator("location")
+    @classmethod
+    def _inside_the_operating_area(cls, value: SiteLocationIn) -> SiteLocationIn:
+        """The same bounding-box rule the operator's path gets (Issue 23)."""
+        value.to_coordinates()
+        return value
+
+
+class SiteRegistrationOut(BaseModel):
+    """What a submitter is told: their clinic is in, and what happens next.
+
+    Carries the id and the slug so they can check their own entry by direct link, and **nothing**
+    about any other clinic — a stranger filling in a form learns only about the one they submitted.
+    """
+
+    id: str
+    slug: str
+    name: str
+    status: SiteStatus
+    submitted_at: datetime | None
+    #: A sentence for the page to show. Server-side, so every channel says the same thing.
+    message: str
+
+
+class VerificationDecisionIn(BaseModel):
+    """A platform admin's decision on one submitted clinic."""
+
+    status: SiteStatus
+    note: str | None = Field(default=None, max_length=1000)
+    """What the submitter is shown. Required when rejecting or asking for more information."""
+
+
+class VerificationQueueItemOut(BaseModel):
+    """One clinic waiting for a decision, as the console lists it."""
+
+    id: str
+    slug: str
+    name: str
+    sector: SiteSector
+    status: SiteStatus
+    city: str
+    suburb: str | None
+    province: SaProvince
+    contact_name: str | None
+    contact_email: str | None
+    contact_phone: str | None
+    submitted_at: datetime | None
+    reviewed_at: datetime | None
+    review_note: str | None
+
+
+class VerificationQueueOut(BaseModel):
+    """The verification queue, oldest submission first."""
+
+    total: int = Field(ge=0)
+    status: SiteStatus
+    items: list[VerificationQueueItemOut]

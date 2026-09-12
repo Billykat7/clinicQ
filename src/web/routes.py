@@ -35,7 +35,13 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from starlette.templating import Jinja2Templates
 
-from src.commons.enums import GrantScope, PermissionVerb, S3LogListingLevel
+from src.commons.enums import (
+    GrantScope,
+    PermissionVerb,
+    S3LogListingLevel,
+    SaProvince,
+    SiteStatus,
+)
 from src.commons.time import APP_TIMEZONE
 from src.core.config import get_settings
 from src.core.nav_visibility import (
@@ -66,6 +72,9 @@ logger = logging.getLogger(__name__)
 #: The resource whose grants gate the waiting-room screen settings page (Issue 27). Named here so
 #: the page gate and the API gate cannot drift to different resources.
 SITE_DISPLAY_RESOURCE = "sites.display"
+
+#: And the one gating the operator's clinic-verification console (Issue 29), at ``business`` tier.
+SITES_RESOURCE = "sites"
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = PACKAGE_DIR / "templates"
@@ -393,6 +402,83 @@ async def site_display_settings_page(
         return _not_found_html(request, db)
     ctx["site"] = site
     return templates.TemplateResponse(request, "dashboard/settings_display.html", ctx)
+
+
+#: The verification console's tabs. Each is its own URL and its own ``SiteStatus``; the bare group
+#: URL redirects to the first, and an unrecognised section redirects there too rather than 404ing
+#: (the list-view convention, ``.cursor/rules/list-view-ui-pattern.mdc``).
+_VERIFICATION_SECTIONS: dict[str, SiteStatus] = {
+    "pending": SiteStatus.PENDING_VERIFICATION,
+    "verified": SiteStatus.VERIFIED,
+    "draft": SiteStatus.DRAFT,
+    "suspended": SiteStatus.SUSPENDED,
+}
+
+
+@router.get("/register-clinic", response_class=HTMLResponse)
+async def register_clinic_page(request: Request) -> HTMLResponse:
+    """The public clinic-registration form (Issue 29).
+
+    On the front door, and public by necessity: whoever fills it in has no account. It is safe to
+    leave open because a submission grants nothing — the clinic it creates is
+    ``pending_verification``, invisible to every patient-facing surface, with no role and no
+    session attached. Built on :func:`~src.web.context.public_page_context`, which takes no
+    database session, so the page a clinic reaches us through still renders during an outage.
+    """
+    return templates.TemplateResponse(
+        request,
+        "web/register_clinic.html",
+        public_page_context(
+            request, provinces=[province.value for province in SaProvince]
+        ),
+    )
+
+
+@router.get("/admin/verification", response_class=HTMLResponse)
+async def admin_verification(request: Request) -> RedirectResponse:
+    """Redirect the bare console URL to its default tab."""
+    return RedirectResponse(
+        url="/admin/verification/pending", status_code=status.HTTP_302_FOUND
+    )
+
+
+@router.get("/admin/verification/{section}", response_class=HTMLResponse)
+async def admin_verification_section(
+    section: str, request: Request, q: str = "", db: Session = Depends(get_db)
+) -> HTMLResponse:
+    """The platform admin's clinic-verification queue, one tab per listing status.
+
+    Gated on the same ``business``-tier grant on ``sites`` the API enforces — this is the operator's
+    cross-clinic console, so it is deliberately **not** behind the site guard, which would 404
+    somebody assigned to no clinic. The API re-checks the grant on every decision; this decides what
+    is offered.
+    """
+    if not require_authenticated_html(request, db):
+        return _redirect_to_sign_in(request)  # type: ignore[return-value]
+    if section not in _VERIFICATION_SECTIONS:
+        return RedirectResponse(  # type: ignore[return-value]
+            url="/admin/verification/pending", status_code=status.HTTP_302_FOUND
+        )
+    ctx = page_context(
+        request, db, active_nav="verification", page_title="Clinic verification"
+    )
+    if not ctx["nav"].can_surface(
+        SITES_RESOURCE, PermissionVerb.READ, GrantScope.BUSINESS
+    ):
+        return _forbidden_html(request, db)
+
+    from src.modules.sites.onboarding import pending_queue
+    from src.modules.sites.router import _queue_item
+    from src.modules.sites.schemas import VerificationQueueOut
+
+    wanted = _VERIFICATION_SECTIONS[section]
+    rows = list(db.execute(pending_queue(db, status=wanted, query=q or None)).scalars())
+    ctx["section"] = section
+    ctx["query"] = q
+    ctx["queue"] = VerificationQueueOut(
+        total=len(rows), status=wanted, items=[_queue_item(row) for row in rows]
+    )
+    return templates.TemplateResponse(request, "admin/verification.html", ctx)
 
 
 @router.get("/me/consent", response_class=HTMLResponse)
