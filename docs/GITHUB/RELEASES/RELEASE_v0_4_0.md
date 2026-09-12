@@ -242,6 +242,10 @@ and `REQUIRE_REDIS_TESTS` set so a missing service container fails rather than s
 until its predecessors merge; it clears as they land, and every other job is green.
 
 Beyond the suites, each issue's pull request carries a transcript of its own routes driven against a
-throwaway PostgreSQL database created, migrated and seeded for the purpose, and the two new pages
-(`/register-clinic` and `/admin/verification`) were driven in a real browser — which is how the CSRF
-cookie-name bug and the display-options gate bug were found, neither of which any test caught.
+throwaway PostgreSQL database created, migrated and seeded for the purpose, and the three new pages
+(`/register-clinic`, `/admin/verification` and the display settings) were driven in a real browser
+and photographed light and dark at 2x. **Everything the browser found, no test caught**: the CSRF
+cookie-name bug, the display-options gate bug, a slideover reaching for the wrong namespace, a
+registration form that painted two untouched fields red on load, and two elements shipped with no
+style at all. A passing suite says the routes answer correctly; it says nothing about whether the
+page is usable, and this milestone is the evidence for that.
