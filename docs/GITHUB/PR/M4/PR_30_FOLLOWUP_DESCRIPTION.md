@@ -20,6 +20,9 @@ No source file changes. Documentation only.
 - **`M4_clinics_queues_config.md` loses the note explaining why its two header rows disagreed** —
   it now argues against a number that no longer exists (below).
 - **Its Status row picks up the partial-exit-criterion clause** that M2 and M3 already carry.
+- **Three hand-written documents catch up with the generated ones** — the README's status block, the
+  sprint table in the workload split, and the delivery gantt (below). The generator only rewrites the
+  bars it owns; everything else is prose somebody has to remember, and nobody had.
 
 ## Why the note had to go
 
@@ -50,13 +53,36 @@ compares method, path and the *concrete* statuses FastAPI's own document declare
 instead by `tests/integration/sites/test_sites_module.py` driving each documented refusal over HTTP.
 The Status row now points at that the way the other two milestones do.
 
+## What the generator does not own
+
+Three documents track the same state **by hand**, and all three still described a milestone that had
+not started:
+
+- **`README.md`'s status block** said *"Sprint 4 of 14 complete, 22 of 109 issues closed"* and named
+  M4 as what comes **next**. The issue count was already one behind the generated table twelve lines
+  above it, which said 23 — a good illustration of why the bars were made generated in the first
+  place. It now reads **30 of 109**, sprints **1–4 done with 5 under way**, and names **M5** as next.
+  Its M4 checklist item is ticked as *"`v0.4.0` to cut"* rather than carrying a bare tag, because the
+  tag does not exist yet.
+- **`WORKLOAD_SPLIT.md`'s sprint table** had sprint 5 as **📋 next**. It is under way and **cannot yet
+  be ticked**: the sprint delivers M4 *and* M5, M4 is closed and M5 has not started. The rule printed
+  directly under that table — *a sprint is done when every issue its lanes deliver is closed* — is
+  what decides it, so the row and the summary now say so explicitly. A half-finished sprint should
+  read as a deliberate state, not as a row somebody forgot.
+- **The delivery gantt in `IMPLEMENTATION_PLAN.md`** marked only **M1** as `done`, though M2 and M3
+  had shipped tags some time ago. M2, M3 and M4 now carry `done` as well, combined with the `crit`
+  they already had.
+
 ## Changes
 
 - **`docs/GITHUB/MILESTONES/M4_clinics_queues_config.md`:** Progress bar 12% → 100%; the stale note
   removed; the Status row's partial-criterion clause added.
-- **`README.md`:** the delivery table's M4 row and the `v1.0.0` total.
+- **`README.md`:** the delivery table's M4 row and the `v1.0.0` total (generated), plus the status
+  block and its M4 checklist item (by hand).
 - **`docs/GITHUB/README.md`:** the milestone index's M4 row (**🚧 in progress → ✅ done**) and the
   footer total.
+- **`docs/TEAM/WORKLOAD_SPLIT.md`:** the sprint-5 row and the summary beneath the table.
+- **`docs/PLAN/IMPLEMENTATION_PLAN.md`:** three `done` tags in the gantt.
 
 ## Testing
 
@@ -80,6 +106,17 @@ python scripts/update_milestone_progress.py --check
 
 - [x] **The removed note was quoted from, not paraphrased.** The block above is the text as it stood
       in the file, so a reviewer can judge the removal without opening the diff.
+- [x] **The gantt edit was rendered, not eyeballed.** A `crit, done` task is valid mermaid, but a
+      broken diagram on the plan's front page is not worth guessing at, so the block was rendered
+      with **mermaid 10.9.1** before and after the change and the drawn `.task` elements counted:
+      **before = 14, after = 14**. The added tag parses and no bar was lost.
+
+      Worth knowing separately: that chart draws all fourteen bars but is **unreadable for a reason
+      that predates this PR** — it sets `dateFormat X` with start/duration values of `0`–`13`, which
+      are unix *seconds*, so every bar lands on 1 Jan 1970 and `axisFormat S%d` prints the day of the
+      month, giving fourteen columns all labelled `S01`. The data is right and the tags are now right;
+      the axis has never worked. Fixing it means choosing what that axis should show, which is a
+      decision for whoever owns the plan, not something to slip into a bookkeeping PR.
 - [x] No source file is touched, so the suites are unaffected; they were green on #145 at
       **1431 passed, 27 skipped, 9 xfailed**, and this branch adds no code to change that.
 
