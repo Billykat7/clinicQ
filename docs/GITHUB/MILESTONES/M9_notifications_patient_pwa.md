@@ -5,6 +5,7 @@
 | | |
 |---|---|
 | **Status** | 📋 Planned |
+| **Progress** | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/9 issues) |
 | **Sprints** | 9–10 (weeks 17–20), semester 2. The sprint plan spreads its issues over sprints 3–12: some start early against stubs and some are scheduled after this window, which moves the milestone's close (and its tag) to sprint 12 (see the table) |
 | **Release tag** | `v0.9.0` |
 | **Primary owner** | B, Integrations · C, Frontend/Patient |

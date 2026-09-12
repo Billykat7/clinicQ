@@ -5,7 +5,8 @@
 | | |
 |---|---|
 | **Status** | ✅ Done: issues 9–14 closed on 2026-09-11, release note [`v0.2.0`](../RELEASES/RELEASE_v0_2_0.md). Three exit criteria are met only in part until hosts and a team channel exist (below) |
-| **Sprints** | 2 (weeks 3–4), semester 1. The sprint plan spreads its issues over sprints 2–3: some are scheduled after this window, which moves the milestone's close (and its tag) to sprint 3 (see the table) |
+| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (6/6 issues) |
+| **Sprints** | 2 (weeks 3–4), semester 2. The sprint plan spreads its issues over sprints 2–3: some are scheduled after this window, which moves the milestone's close (and its tag) to sprint 3 (see the table) |
 | **Release tag** | `v0.2.0` |
 | **Primary owner** | E, DevOps/QA |
 | **Who does the work** | E: 6 issues (see each issue for the backup) |

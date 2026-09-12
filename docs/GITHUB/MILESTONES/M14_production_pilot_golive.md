@@ -5,6 +5,7 @@
 | | |
 |---|---|
 | **Status** | 📋 Planned |
+| **Progress** | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
 | **Sprints** | 13–14 (weeks 25–28), semester 2 |
 | **Release tag** | `v0.14.0`, then **`v1.0.0`** when Issue 109 closes |
 | **Primary owner** | E, DevOps/QA · whole team |

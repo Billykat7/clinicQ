@@ -5,7 +5,8 @@
 | | |
 |---|---|
 | **Status** | 📋 Planned |
-| **Sprints** | 4–5 (weeks 7–10), semester 1 |
+| **Progress** | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
+| **Sprints** | 4–5 (weeks 7–10), semester 2 |
 | **Release tag** | `v0.4.0` |
 | **Primary owner** | A, Backend Lead · D, Frontend/Clinic |
 | **Who does the work** | A: 7 issues · F: 1 issue (see each issue for the backup) |

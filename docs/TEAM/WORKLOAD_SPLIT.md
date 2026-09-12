@@ -35,7 +35,7 @@ issue's "Owner role" field refer to.
 | B | | | A |
 | C | | | D |
 | D | | | C |
-| E | Billy Tshilumba Katalayi | Billykat7 | F |
+| E | Billy Katalayi | Billykat7 | F |
 | F | | | E |
 
 **Every role has a named backup**: the person who reviews their PRs when the owner is unavailable and
@@ -83,25 +83,47 @@ bottleneck for five others.
 
 ## 3. Sprint-by-sprint lanes
 
-Fourteen two-week sprints. **Every column is a person, and no column is ever empty**: that is the whole
-design goal. Issue numbers in brackets.
+Fourteen two-week sprints, **all of them in semester 2**. Every column is a person, and no column is
+ever empty: that is the whole design goal. Issue numbers in brackets.
 
-### Semester 1
+### Where we are
+
+| Sprint | Weeks | Milestones | Status |
+|--------|-------|------------|--------|
+| **1** | 1–2 | M1 | ✅ done |
+| **2** | 3–4 | M1 · M2 | ✅ done |
+| **3** | 5–6 | M3 | ✅ done |
+| **4** | 7–8 | M3 · M4 | ✅ done — M3 closed, tag `v0.3.0` |
+| **5** | 9–10 | M4 · M5 | 📋 next |
+| **6** | 11–12 | M5 · M6 | 📋 planned |
+| **7** | 13–14 | M6 ⚠️ | 📋 planned |
+| **8** | 15–16 | M7 | 📋 planned |
+| **9** | 17–18 | M7 · M8 · M9 | 📋 planned |
+| **10** | 19–20 | M9 · M10 | 📋 planned |
+| **11** | 21–22 | M10 · M11 | 📋 planned |
+| **12** | 23–24 | M11 · M12 · M13 | 📋 planned |
+| **13** | 25–26 | M13 · M14 | 📋 planned |
+| **14** | 27–28 | M14 | 📋 planned |
+
+**4 of 14 sprints done** 🟩🟩🟩⬜⬜⬜⬜⬜⬜⬜ **29%**, carrying milestones M1–M3 (issues 1–22) and
+tags `v0.1.0`–`v0.3.0`.
+
+A sprint is **done** when every issue its lanes *deliver* is closed. That is marked by hand, not
+generated, because a lane also names issues it works **against** — a contract stub, a fixture, a
+forward reference such as `[→95]` — and those belong to a later sprint's delivery. The milestone bars
+in [the milestone index](../GITHUB/README.md#milestone-summary) are generated; these are not.
+
+### The lanes
 
 | Sprint | A: Backend Lead | B: Integrations | C: Frontend/Patient | D: Frontend/Clinic | E: DevOps/QA | F: Data & Research |
 |--------|------------------|------------------|----------------------|---------------------|---------------|---------------------|
-| **1** wk 1–2 | Shared kernel [4], SQLAlchemy + Alembic [3] | *Learning the stack;* channel provider research (Africa's Talking, Meta), no code yet | UI shell, design tokens, htmx [5] | Pairs with C on [5]; dashboard wireframes | Repo scaffold [1], Docker stack [2], logging [6] | Requirements write-up, benchmark research (NHS, Solv, Qminder), POPIA reading |
-| **2** wk 3–4 | Staff auth core [15] | Notification provider spike; sandbox accounts | Wireframes for discovery & ticket pages | Wireframes for board & dashboard | `ci-local` [7], factories & seed [8], CI [9], GHCR [10] | Data map draft [→95], translation sourcing, area/suburb dataset for [34] |
-| **3** wk 5–6 | Sign-in & sessions [16], patient OTP [17] | Notification service skeleton against the **contract stub** [63] | Discovery UI against **fixture data** [32] | Dashboard shell [48] against fixtures | CD [11], env matrix [12], **CODEOWNERS & workflow [13]**, monitoring [14] | Consent model & wording [21], services catalogue seed data [→26] |
-| **4** wk 7–8 | **RBAC [18] + site scoping [19] land by day 3**, audit [20], invitations [22] | Notification templates [66] | Map view [33], area search UI | Dashboard nav & settings scaffolding | Test harness for cross-tenant [19], CI tuning | Clinic onboarding flow [29], holiday dataset [→24] |
+| ✅ **1** wk 1–2 | Shared kernel [4], SQLAlchemy + Alembic [3] | *Learning the stack;* channel provider research (Africa's Talking, Meta), no code yet | UI shell, design tokens, htmx [5] | Pairs with C on [5]; dashboard wireframes | Repo scaffold [1], Docker stack [2], logging [6] | Requirements write-up, benchmark research (NHS, Solv, Qminder), POPIA reading |
+| ✅ **2** wk 3–4 | Staff auth core [15] | Notification provider spike; sandbox accounts | Wireframes for discovery & ticket pages | Wireframes for board & dashboard | `ci-local` [7], factories & seed [8], CI [9], GHCR [10] | Data map draft [→95], translation sourcing, area/suburb dataset for [34] |
+| ✅ **3** wk 5–6 | Sign-in & sessions [16], patient OTP [17] | Notification service skeleton against the **contract stub** [63] | Discovery UI against **fixture data** [32] | Dashboard shell [48] against fixtures | CD [11], env matrix [12], **CODEOWNERS & workflow [13]**, monitoring [14] | Consent model & wording [21], services catalogue seed data [→26] |
+| ✅ **4** wk 7–8 | **RBAC [18] + site scoping [19] land by day 3**, audit [20], invitations [22] | Notification templates [66] | Map view [33], area search UI | Dashboard nav & settings scaffolding | Test harness for cross-tenant [19], CI tuning | Clinic onboarding flow [29], holiday dataset [→24] |
 | **5** wk 9–10 | **`sites` [23] + `queues` [25] land by day 3**, hours [24], services [26], display settings [27], assignments [28] | Web push [64], SMS adapter [65] | Nearby search UI [31/32] wired to the real API, clinic detail [35] | Board layout [56] against fixtures | Contract drift-test harness [30] | Payment profile [37], sites contract review [30] |
 | **6** wk 11–12 | **Queue engine: tickets [39], join [40], lifecycle [41]** | Preferences & quiet hours [67] | Snapshot cache UI, discovery analytics [38] | Front-desk board [49] against the **queue contract** | Concurrency test harness [→47], load-test skeleton | Discovery contract [38], wait-estimate methodology |
-| **7** wk 13–14 | **Queue engine: estimates [42], timers [43], cancel [44], transfer [45], priority [46], contract [47]** | Adapter framework [72], simulators [78] | Ticket page [68], PWA shell [69] | Call-next actions [50], walk-in intake [51] | Concurrency & load tests [47], mid-project review | Sprint review pack, semester-1 report section |
-
-### Semester 2
-
-| Sprint | A: Backend Lead | B: Integrations | C: Frontend/Patient | D: Frontend/Clinic | E: DevOps/QA | F: Data & Research |
-|--------|------------------|------------------|----------------------|---------------------|---------------|---------------------|
+| **7** wk 13–14 | **Queue engine: estimates [42], timers [43], cancel [44], transfer [45], priority [46], contract [47]** | Adapter framework [72], simulators [78] | Ticket page [68], PWA shell [69] | Call-next actions [50], walk-in intake [51] | Concurrency & load tests [47], mid-project review | Sprint review pack, mid-project report section |
 | **8** wk 15–16 | Appointment slots [80] | USSD menu tree [73] | QR ticket [70], patient polish | Reorder UI [52], room view [53] | Security hardening [97] | i18n framework & translations [77] |
 | **9** wk 17–18 | Booking & auto-ticket [81] | USSD sessions & security [74] | Kiosk check-in [83] | Manager settings [54], **board SSE [57] + privacy [58]** | Encryption & PII [98] | Stats worker [88] |
 | **10** wk 19–20 | Proxy booking [84], virtual waiting room [86] | WhatsApp webhook [75], templates [76] | Accessibility audit [101] | Board a11y [59], audio [60], resilience [62] | Kiosk device registry [61], monitoring | Reports UI [89], KPIs [90] |

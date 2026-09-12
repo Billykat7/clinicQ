@@ -7,6 +7,7 @@
 </p>
 
 <p align="center">
+  <a href="docs/QUICKSTART.md"><strong>Quickstart</strong></a> ·
   <a href="docs/PLAN/IMPLEMENTATION_PLAN.md">Implementation plan</a> ·
   <a href="docs/GITHUB/README.md">Milestones &amp; issues</a> ·
   <a href="docs/TEAM/WORKLOAD_SPLIT.md">Workload split</a> ·
@@ -31,18 +32,44 @@ Find a nearby clinic, public or private, by geolocation, join its digital queue 
 home**, and watch your ticket number count down on the clinic's own waiting-room display, while staff
 run the whole line from one dashboard.
 
-```text
-        +------------------------- ClinicQ queue engine -------------------------+
-        |                                                                        |
-  Mobile PWA ---------|                                                          |
-  USSD menu ----------> JOIN QUEUE (ticket number, live position, ETA)           |
-  WhatsApp bot -------|                                                          |
-  Walk-in (reception) |                                                          |
-        |                                                                        |
-  Clinic dashboard --> CALL NEXT --> patient's phone + waiting-room display      |
-        +------------------------------------------------------------------------+
-            Same queue, same ticket number, no matter which door you came in
+```mermaid
+flowchart LR
+    subgraph ways["Four ways in"]
+        direction TB
+        PWA["Mobile PWA"]
+        USSD["USSD menu<br/><small>any phone, no data</small>"]
+        WA["WhatsApp bot"]
+        WALK["Walk-in<br/><small>reception or kiosk</small>"]
+    end
+
+    ENGINE["<b>ClinicQ queue engine</b><br/>one ticket number<br/>live position &middot; honest ETA"]
+
+    DASH["<b>Clinic dashboard</b><br/><small>CALL NEXT</small>"]
+
+    subgraph out["Called forward"]
+        direction TB
+        PHONE["Your phone<br/><small>you're #5 &rarr; next &rarr; come in</small>"]
+        BOARD["Waiting-room board<br/><small>number always, name only by consent</small>"]
+    end
+
+    PWA & USSD & WA & WALK ==> ENGINE
+    ENGINE ==> DASH
+    DASH ==> PHONE & BOARD
+
+    classDef door fill:#E8F5F0,stroke:#0F6B4F,stroke-width:1px,color:#0B3B2C
+    classDef engine fill:#0F6B4F,stroke:#0B3B2C,stroke-width:2px,color:#FFFFFF
+    classDef desk fill:#E7EEFB,stroke:#1F4E9C,stroke-width:1px,color:#10294F
+    classDef shout fill:#FFF4E0,stroke:#B26B00,stroke-width:1px,color:#4A2C00
+    class PWA,USSD,WA,WALK door
+    class ENGINE engine
+    class DASH desk
+    class PHONE,BOARD shout
+    style ways fill:none,stroke:#9BB8AE,stroke-dasharray:4 4,color:#0F6B4F
+    style out fill:none,stroke:#D8B071,stroke-dasharray:4 4,color:#B26B00
 ```
+
+<p align="center"><em>Same queue, same ticket number, no matter which door you came in.</em></p>
+
 
 ## Features
 
@@ -102,6 +129,7 @@ is there from day one, which is exactly what the USSD and WhatsApp adapters cons
 
 | Document | What's in it |
 |----------|--------------|
+| **[Quickstart](docs/QUICKSTART.md)** | Set up on Windows, macOS or Linux; run the stack; branch, commit and raise a pull request |
 | **[Implementation plan](docs/PLAN/IMPLEMENTATION_PLAN.md)** | The whole project on one page: architecture, sequence, features added beyond the brief, how we'll know it works |
 | **[Milestones & issues](docs/GITHUB/README.md)** | 14 milestones, 109 tracked issues, conventions, release tags, pipeline strategy |
 | **[Workload split](docs/TEAM/WORKLOAD_SPLIT.md)** | Six roles, sprint-by-sprint lanes, **who blocks whom and what to do about it**, risk register |
@@ -111,23 +139,23 @@ is there from day one, which is exactly what the USSD and WhatsApp adapters cons
 
 ## Delivery at a glance
 
-| | Milestone | Issues | Sprints | Tag |
-|---|-----------|--------|---------|-----|
-| 1 | [Foundation & Local CI](docs/GITHUB/MILESTONES/M1_foundation_local_ci.md) | 1–8 | 1–2 | `v0.1.0` |
-| 2 | [CI/CD & Team Workflow](docs/GITHUB/MILESTONES/M2_cicd_environments.md) | 9–14 | 2 | `v0.2.0` |
-| 3 | [Identity, Auth, RBAC & Consent](docs/GITHUB/MILESTONES/M3_identity_auth_rbac.md) | 15–22 | 3–4 | `v0.3.0` |
-| 4 | [Clinics, Queues & Configuration](docs/GITHUB/MILESTONES/M4_clinics_queues_config.md) | 23–30 | 4–5 | `v0.4.0` |
-| 5 | [Discovery & Geolocation](docs/GITHUB/MILESTONES/M5_discovery_geolocation.md) | 31–38 | 5–6 | `v0.5.0` |
-| 6 | [**Queue Engine Core**](docs/GITHUB/MILESTONES/M6_queue_engine_core.md) ⚠️ critical path | 39–47 | 6–7 | `v0.6.0` |
-| 7 | [Clinic Dashboard](docs/GITHUB/MILESTONES/M7_clinic_dashboard.md) | 48–55 | 8–9 | `v0.7.0` |
-| 8 | [Display Monitor](docs/GITHUB/MILESTONES/M8_display_monitor.md) | 56–62 | 9 | `v0.8.0` |
-| 9 | [Notifications & Patient PWA](docs/GITHUB/MILESTONES/M9_notifications_patient_pwa.md) | 63–71 | 9–10 | `v0.9.0` |
-| 10 | [USSD & WhatsApp Channels](docs/GITHUB/MILESTONES/M10_ussd_whatsapp_channels.md) | 72–79 | 10–11 | `v0.10.0` |
-| 11 | [Appointments & Check-in](docs/GITHUB/MILESTONES/M11_appointments_checkin_patient_care.md) | 80–87 | 11–12 | `v0.11.0` |
-| 12 | [Reporting & Analytics](docs/GITHUB/MILESTONES/M12_reporting_analytics.md) | 88–94 | 12 | `v0.12.0` |
-| 13 | [Security, Privacy & POPIA](docs/GITHUB/MILESTONES/M13_security_privacy_compliance.md) | 95–101 | 12–13 | `v0.13.0` |
-| 14 | [Production, Pilot & Go-live](docs/GITHUB/MILESTONES/M14_production_pilot_golive.md) | 102–109 | 13–14 | `v0.14.0` |
-| ⭐ | **First official release:** every issue 1–109 closed | - | end of 14 | **`v1.0.0`** |
+| | Milestone | Issues | Sprints | Tag | Progress |
+|---|-----------|--------|---------|-----|----------|
+| 1 | [Foundation & Local CI](docs/GITHUB/MILESTONES/M1_foundation_local_ci.md) | 1–8 | 1–2 | `v0.1.0` | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (8/8 issues) |
+| 2 | [CI/CD & Team Workflow](docs/GITHUB/MILESTONES/M2_cicd_environments.md) | 9–14 | 2 | `v0.2.0` | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (6/6 issues) |
+| 3 | [Identity, Auth, RBAC & Consent](docs/GITHUB/MILESTONES/M3_identity_auth_rbac.md) | 15–22 | 3–4 | `v0.3.0` | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (8/8 issues) |
+| 4 | [Clinics, Queues & Configuration](docs/GITHUB/MILESTONES/M4_clinics_queues_config.md) | 23–30 | 4–5 | `v0.4.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
+| 5 | [Discovery & Geolocation](docs/GITHUB/MILESTONES/M5_discovery_geolocation.md) | 31–38 | 5–6 | `v0.5.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
+| 6 | [**Queue Engine Core**](docs/GITHUB/MILESTONES/M6_queue_engine_core.md) ⚠️ critical path | 39–47 | 6–7 | `v0.6.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/9 issues) |
+| 7 | [Clinic Dashboard](docs/GITHUB/MILESTONES/M7_clinic_dashboard.md) | 48–55 | 8–9 | `v0.7.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
+| 8 | [Display Monitor](docs/GITHUB/MILESTONES/M8_display_monitor.md) | 56–62 | 9 | `v0.8.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/7 issues) |
+| 9 | [Notifications & Patient PWA](docs/GITHUB/MILESTONES/M9_notifications_patient_pwa.md) | 63–71 | 9–10 | `v0.9.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/9 issues) |
+| 10 | [USSD & WhatsApp Channels](docs/GITHUB/MILESTONES/M10_ussd_whatsapp_channels.md) | 72–79 | 10–11 | `v0.10.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
+| 11 | [Appointments & Check-in](docs/GITHUB/MILESTONES/M11_appointments_checkin_patient_care.md) | 80–87 | 11–12 | `v0.11.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
+| 12 | [Reporting & Analytics](docs/GITHUB/MILESTONES/M12_reporting_analytics.md) | 88–94 | 12 | `v0.12.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/7 issues) |
+| 13 | [Security, Privacy & POPIA](docs/GITHUB/MILESTONES/M13_security_privacy_compliance.md) | 95–101 | 12–13 | `v0.13.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/7 issues) |
+| 14 | [Production, Pilot & Go-live](docs/GITHUB/MILESTONES/M14_production_pilot_golive.md) | 102–109 | 13–14 | `v0.14.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
+| ⭐ | **First official release:** every issue 1–109 closed | - | end of 14 | **`v1.0.0`** | 🟩🟩⬜⬜⬜⬜⬜⬜⬜⬜ **20%** (22/109 issues) |
 
 ## Team
 
@@ -143,117 +171,25 @@ is there from day one, which is exactly what the USSD and WhatsApp adapters cons
 Each role has a **named backup** who reviews their PRs and picks up their work if they are unavailable;
 see the [workload split](docs/TEAM/WORKLOAD_SPLIT.md#1-the-six-roles).
 
-## Getting started
+## Quickstart
 
-You need **Python 3.14**, **Docker** (with Compose 2.24 or newer) and **make**. From a fresh clone,
-five commands take you from nothing to a running app:
+**Full guide, per platform: [`docs/QUICKSTART.md`](docs/QUICKSTART.md)** — what to install on
+Windows, macOS or Linux, how to run the stack, and how to take a change from a branch to a merged
+pull request.
 
-1. Create the virtual environment and install the dependencies:
-
-   ```bash
-   python3.14 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
-   ```
-
-2. Point the app at the local stack. `.env.example` lists every setting the app reads, each with
-   its description and default; only `DATABASE_URL` and `REDIS_URL` are active, matching the compose
-   defaults. What differs in staging and production, and what the app refuses to start with there,
-   is in [`docs/CICD/ENVIRONMENTS.md`](docs/CICD/ENVIRONMENTS.md):
-
-   ```bash
-   cp .env.example .env
-   ```
-
-3. Start PostgreSQL 18 with PostGIS, and Redis. The command returns once both health checks pass:
-
-   ```bash
-   make db-up
-   ```
-
-4. Create the schema (the `clinicq` schema, with PostGIS enabled):
-
-   ```bash
-   make migrate-up
-   ```
-
-5. Run the app with auto-reload:
-
-   ```bash
-   make run
-   ```
-
-Then open `http://127.0.0.1:8000` for the landing page, `http://127.0.0.1:8000/docs` for the API, and
-`http://127.0.0.1:8000/health/ready`, which should report the database and migrations as `ok`.
-After the first time, `make dev` does steps 3 and 5 in one go.
-
-**To sign in**, seed the roles and a development admin, then sign in as `admin@btk.com` with the
-password you chose:
+If you already have **Python 3.14**, **Docker** (Compose 2.24+) and **make**, it is five commands:
 
 ```bash
-make seed-rbac && ./scripts/db/seed-dev-user.sh --password 'choose-a-password'
+python3.14 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+cp .env.example .env
+make db-up        # PostgreSQL 18 + PostGIS and Redis, up when their health checks pass
+make migrate-up   # the clinicq schema
+make run          # http://127.0.0.1:8000 · /docs · /health/ready
 ```
 
-**For demo data**, `make seed-dev-data` adds one staff account per ClinicQ role (printed with their
-development password) and reports the demo clinics, queues and ticket history in
-`scripts/db/demo_dataset.py`: eleven real Gauteng and KwaZulu-Natal clinics, written to the database
-as their tables land (Issues 23, 25 and 39). It is idempotent, and refuses any database that is not
-a local development one.
-
-If something is already using a port: `DB_PORT=5433 make db-up` starts the database on another port
-(put the same port in `DATABASE_URL`), `REDIS_PORT` does the same for Redis (and `REDIS_URL`), and
-`make run PORT=8001` moves the app. To keep a port for every `make` target, put `DB_PORT=5433` (and
-`REDIS_PORT`, `HTTP_PORT`) in `infra/docker/.env` instead: it is git-ignored and Compose reads it on
-every command. Set `DATABASE_URL` itself rather than the separate `DB_HOST` / `DB_USER` /
-`DB_PASSWORD` / `DB_NAME` settings: those are only combined into a URL when `DATABASE_URL` is not a
-plain `postgresql://` URL, so on their own they are ignored. If you pass `--email` to the seed
-script, use a real-looking domain: the sign-in API rejects reserved ones such as `.local`.
-
-### The local Docker stack
-
-`infra/docker/docker-compose.yml` is one compose project, `clinicq`. It includes the database and
-Redis from `infra/docker/docker-compose.db.yml` and adds the API container behind nginx:
-
-| Service | Image | On the host | Data |
-|---------|-------|-------------|------|
-| `db` | `postgis/postgis:18-3.6` (PostgreSQL 18, PostGIS 3.6) | `127.0.0.1:5432` (`DB_PORT`) | volume `clinicq_pgdata` |
-| `redis` | `redis:8-alpine` | `127.0.0.1:6379` (`REDIS_PORT`) | volume `clinicq_redisdata` |
-| `app` + `nginx` | built from `infra/docker/Dockerfile` | `http://localhost:8000` (`HTTP_PORT`) | |
-
-- `make db-up` / `make db-down` start and stop `db` and `redis` (from `infra/docker`, plain
-  `docker compose up -d db redis` does the same). Stopping keeps the data; it is in the volumes.
-- `make docker-up` runs everything in containers, API included. The container is given the same
-  `DATABASE_URL` and `REDIS_URL` as `.env.example` with the host changed to `db` and `redis`, and
-  `make migrate-up` from the host migrates the same database.
-- **Wipe and recreate from scratch** (deletes all local data in both volumes):
-
-  ```bash
-  make db-reset
-  ```
-
-  It runs `down -v --remove-orphans` on the compose project, then `make db-up`. Follow it with
-  `make migrate-up`.
-- **Coming from PostgreSQL 16:** the stack used to run `postgis/postgis:16-3.4` as a project named
-  `clinicq-db`, whose data PostgreSQL 18 cannot open. The new stack starts in a new, empty volume and
-  leaves the old one alone. Local data is rebuilt by `make migrate-up` and the seeds, so once you
-  have nothing to keep, remove the old container and volume with `docker compose -p clinicq-db down -v`.
-  Until you do, the old container restarts with Docker and holds port 5432, so `make db-up` reports
-  the port as taken.
-- **Apple Silicon:** `postgis/postgis` publishes amd64 images only, so the compose file asks for
-  `linux/amd64` and Docker Desktop runs it under emulation. It works; the first start is slower.
-
-**Before every push**, run the same gate CI runs:
-
-```bash
-make check
-```
-
-`make check-compose` adds a smoke test of this stack (PostGIS and Redis answer, `/health/live` is
-up), in a separate compose project on other ports so it never touches your local data.
-
-The pull request then runs the same gate in GitHub Actions against real PostgreSQL + PostGIS and
-Redis, and cannot merge until its **CI gate** check is green
-([`docs/CICD/PIPELINES.md`](docs/CICD/PIPELINES.md)). A few kernel guard tests still wait for files a
-later issue creates (the deploy and scan workflows, `docs/SECURITY/`); they run as strict expected
-failures (`PENDING_ON_LATER_ISSUES` in `tests/conftest.py`), so `make test` is green meanwhile.
+Then `make seed-rbac && ./scripts/db/seed-dev-user.sh --password 'choose-a-password'` to sign in, and
+`make seed-dev-data` for demo staff and clinics. After the first time, **`make dev`** brings the
+stack up and runs the app in one command. **Before every push:** `make check`, the same gate CI runs.
 
 ## Contributing (team workflow)
 
@@ -274,15 +210,19 @@ Full detail: [engineering non-negotiables](docs/guideline.md) and
 
 ## Status
 
-**Phase:** planning complete. Implementation begins at M1.
+**Phase:** building. **Sprint 4 of 14 complete** (semester 2), 22 of 109 issues closed, latest tag
+`v0.3.0`. Next: sprint 5 — `sites` and `queues` (M4).
 
 - [x] Idea finalised (**ClinicQ**, selected from the shortlist)
 - [x] Requirements gathered ([product docs](docs/PRODUCT/README.md))
 - [x] Architecture agreed ([implementation plan](docs/PLAN/IMPLEMENTATION_PLAN.md))
 - [x] Milestones and issues defined (14 milestones, 109 issues)
 - [x] Workload split and dependency analysis ([workload split](docs/TEAM/WORKLOAD_SPLIT.md))
-- [ ] Repo structure set up (M1)
-- [ ] CI/CD pipeline running (M2)
+- [x] Repo structure set up (M1, `v0.1.0`)
+- [x] CI/CD pipeline running (M2, `v0.2.0`)
+- [x] Identity, RBAC, site scoping, audit and consent (M3, `v0.3.0`)
+- [ ] Clinics and queues configurable (M4)
+- [ ] Queue engine running (M6) ⚠️ critical path
 - [ ] MVP complete (M8)
 - [ ] Pilot clinic live (M14)
 - [ ] Demo-ready

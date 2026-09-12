@@ -4,8 +4,9 @@
 
 | | |
 |---|---|
-| **Status** | 📋 Planned |
-| **Sprints** | 3–4 (weeks 5–8), semester 1. The sprint plan spreads its issues over sprints 2–4: some start early against stubs (see the table) |
+| **Status** | ✅ Done: issues 15–22 closed on 2026-09-12, release note [`v0.3.0`](../RELEASES/RELEASE_v0_3_0.md). Two exit criteria are met only in part until queues and tickets exist (below) |
+| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (8/8 issues) |
+| **Sprints** | 3–4 (weeks 5–8), semester 2. The sprint plan spreads its issues over sprints 2–4: some start early against stubs (see the table) |
 | **Release tag** | `v0.3.0` |
 | **Primary owner** | A, Backend Lead |
 | **Who does the work** | A: 7 issues · F: 1 issue (see each issue for the backup) |
@@ -87,12 +88,12 @@ flowchart LR
 
 ## Exit criteria
 
-- [ ] A clinic manager can invite a receptionist, who activates the account and signs in
-- [ ] Access tokens expire in 15 minutes; refresh rotates and detects reuse; logout revokes
-- [ ] A patient joins a queue with a phone number and a 6-digit OTP, with no account created
-- [ ] A receptionist at Clinic A receives 404 (not 403) for any Clinic B resource, proven by tests
-- [ ] Every state-changing action writes one audit row that cannot be updated or deleted
-- [ ] Consent is stored per patient per purpose, is withdrawable, and withdrawal takes effect immediately
+- [x] A clinic manager can invite a receptionist, who activates the account and signs in (Issue 22: the invitation link carries only its id, acceptance is single-use and grants one role at that clinic)
+- [x] Access tokens expire in 15 minutes; refresh rotates and detects reuse; logout revokes (Issues 15, 16: a replayed token revokes the whole family, shown by a test that replays one)
+- [ ] A patient joins a queue with a phone number and a 6-digit OTP, with no account created. **Partly (Issue 17):** the identity half is done — one number is one patient, the code is single-use and never reaches a log, and no password column exists — but there is no queue to join until [M4](M4_clinics_queues_config.md) and [M6](M6_queue_engine_core.md)
+- [x] A receptionist at Clinic A receives 404 (not 403) for any Clinic B resource, proven by tests (Issue 19: one helper, 404 before any permission is considered, with a guard that fails on a query built outside it)
+- [ ] Every state-changing action writes one audit row that cannot be updated or deleted. **Partly (Issue 20):** `UPDATE`, `DELETE` and `TRUNCATE` are each refused by the database and proven against PostgreSQL, and a guard fails the build when a mutating route records nothing — but the priority reorder, display-mode change and no-show the issue names have no routes yet (Issues 46, 27, 43)
+- [x] Consent is stored per patient per purpose, is withdrawable, and withdrawal takes effect immediately (Issue 21: the default is no on every channel, and a withdrawal stops a message already queued). The wording ships as F's draft, `2026-09-v1-draft`, pending their review
 
 ## Demo at the end of the milestone
 

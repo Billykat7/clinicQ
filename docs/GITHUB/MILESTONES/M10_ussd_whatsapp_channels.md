@@ -5,6 +5,7 @@
 | | |
 |---|---|
 | **Status** | 📋 Planned |
+| **Progress** | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
 | **Sprints** | 10–11 (weeks 19–22), semester 2. The sprint plan spreads its issues over sprints 7–11: some start early against stubs (see the table) |
 | **Release tag** | `v0.10.0` |
 | **Primary owner** | B, Integrations |

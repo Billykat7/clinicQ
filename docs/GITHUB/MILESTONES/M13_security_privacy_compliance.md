@@ -5,6 +5,7 @@
 | | |
 |---|---|
 | **Status** | 📋 Planned |
+| **Progress** | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/7 issues) |
 | **Sprints** | 12–13 (weeks 23–26), semester 2. The sprint plan spreads its issues over sprints 8–13: some start early against stubs (see the table) |
 | **Release tag** | `v0.13.0` |
 | **Primary owner** | E, DevOps/QA · F, Data & Research |
