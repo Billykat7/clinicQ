@@ -68,8 +68,9 @@ The rule asked for: **every PR updates the docs and its milestone's status, and 
 milestone marks that milestone done, each showing a green progress bar with a percentage.**
 
 `make milestone-progress` reads issue states from GitHub — `gh issue list`, which counts issues and
-never pull requests — and writes into the milestone document's header table and the README's
-delivery table:
+never pull requests — and writes into three places: the milestone document's header table, the
+README's delivery table, and the **Milestone summary** table in `docs/GITHUB/README.md`, whose
+Status column read `📋 planned` for all fourteen milestones (three of which are finished):
 
 ```text
 | **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (8/8 issues) |
@@ -93,6 +94,9 @@ The rule itself lives in `.cursor/rules/milestone-progress.mdc` and is summarise
   workflow); a **Progress** column on the delivery table.
 - **`CONTRIBUTING.md`:** the milestone-progress step in "Branches, commits and pull requests".
 - **`Makefile`:** `milestone-progress`, `milestone-progress-check`.
+- **`docs/GITHUB/README.md`:** the *Milestone summary* table's **Status** column, and a generated
+  roll-up line under it (`🟩🟩⬜⬜⬜⬜⬜⬜⬜⬜ **20%** (22/109 issues) closed · **3 of 14 milestones
+  done**`).
 - **All 14 milestone documents:** a **Progress** row. M3 additionally: status, and its exit criteria.
 
 ## Testing

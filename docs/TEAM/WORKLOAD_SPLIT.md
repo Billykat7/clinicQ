@@ -35,7 +35,7 @@ issue's "Owner role" field refer to.
 | B | | | A |
 | C | | | D |
 | D | | | C |
-| E | Billy Tshilumba Katalayi | Billykat7 | F |
+| E | Billy Katalayi | Billykat7 | F |
 | F | | | E |
 
 **Every role has a named backup**: the person who reviews their PRs when the owner is unavailable and

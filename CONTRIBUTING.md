@@ -163,7 +163,8 @@ the boot guard and `scripts/check_config.py` both read ([`docs/CICD/ENVIRONMENTS
 
 - **The same pull request updates the docs and the milestone.** Run `make milestone-progress`: it
   reads the issue states from GitHub and writes the green progress bar and percentage into the
-  milestone document and the README's delivery table. `make milestone-progress-check` says whether
+  milestone document, the README's delivery table and the milestone summary in
+  `docs/GITHUB/README.md`. `make milestone-progress-check` says whether
   they are stale. When the pull request closes a milestone's **last** issue, it also ticks the exit
   criteria (leaving anything met only in part unticked, with the reason beside it), marks the
   milestone done and closes it on GitHub with

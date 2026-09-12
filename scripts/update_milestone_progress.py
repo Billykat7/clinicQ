@@ -2,19 +2,20 @@
 """Write each milestone's progress into the docs, from GitHub's own issue states.
 
 A milestone's completion is a fact about GitHub, not about a document, so this reads it from there
-(``gh issue list``, which counts issues and never pull requests) and writes it into the two places a
-reader looks:
+(``gh issue list``, which counts issues and never pull requests) and writes it into the three places
+a reader looks:
 
 * ``docs/GITHUB/MILESTONES/M<n>_*.md`` — a **Progress** row in the header table;
-* ``README.md`` — the *Delivery at a glance* table's **Progress** column.
+* ``README.md`` — the *Delivery at a glance* table's **Progress** column;
+* ``docs/GITHUB/README.md`` — the *Milestone summary* table's **Status** column, and the roll-up
+  line under it.
 
 The bar is ten emoji cells, green for done, so it renders as a green progress bar everywhere
 markdown is read — GitHub, an editor, a terminal preview — with no image host involved.
 
-Run it in the pull request that closes an issue (``make milestone-progress``, CONTRIBUTING.md),
-so the milestone's
-state is never staler than the work. ``--check`` fails when the docs disagree with GitHub, and
-``--close-completed`` also closes the GitHub milestone once its last issue is closed.
+Run it in the pull request that closes an issue (``make milestone-progress``, CONTRIBUTING.md), so
+the milestone's state is never staler than the work. ``--check`` fails when the docs disagree with
+GitHub, and ``--close-completed`` also closes the GitHub milestone once its last issue is closed.
 
 Usage:
     python scripts/update_milestone_progress.py [--check] [--close-completed] [--repo owner/name]
@@ -33,6 +34,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MILESTONE_DIR = ROOT / "docs" / "GITHUB" / "MILESTONES"
 README = ROOT / "README.md"
+#: The milestone index: its *Milestone summary* table has a Status column this script owns.
+INDEX = ROOT / "docs" / "GITHUB" / "README.md"
 
 #: Ten cells, because a percentage rounds to tenths cleanly and a wider bar wraps in a table.
 BAR_CELLS = 10
@@ -44,6 +47,13 @@ STATUS_ROW = re.compile(r"^\| \*\*Status\*\* \|.*\|$", re.MULTILINE)
 DELIVERY_HEADER = "| | Milestone | Issues | Sprints | Tag |"
 DELIVERY_ROW_START = "| | Milestone | Issues |"
 DELIVERY_DIVIDER = "|---|-----------|--------|---------|-----|"
+
+#: The *Milestone summary* table in the index, and how its rows name their milestone (``**[M3: …``).
+INDEX_ROW_START = "| Milestone | Focus | Issues |"
+INDEX_MILESTONE = re.compile(r"\[M(?P<number>\d+):")
+#: The generated roll-up under that table, and the hand-written total it sits below.
+INDEX_SUMMARY_PREFIX = "**Progress:**"
+INDEX_TOTAL_PREFIX = "**Total:"
 
 
 @dataclass(frozen=True)
@@ -75,6 +85,18 @@ class Milestone:
     def cell(self) -> str:
         """What both tables show: the bar, the percentage, and the count behind it."""
         return f"{self.bar} **{self.percent}%** ({self.closed}/{self.total} issues)"
+
+    @property
+    def state(self) -> str:
+        """``📋 planned`` until an issue closes, ``🚧 in progress``, then ``✅ done``."""
+        if self.done:
+            return "✅ done"
+        return "🚧 in progress" if self.closed else "📋 planned"
+
+    @property
+    def status_cell(self) -> str:
+        """The index's Status column: the same bar, the percentage, and where it stands."""
+        return f"{self.bar} **{self.percent}%** {self.state}"
 
 
 def _gh(*args: str) -> str:
@@ -184,6 +206,60 @@ def apply_to_readme(milestones: dict[int, Milestone]) -> str:
     )
 
 
+def apply_to_index(milestones: dict[int, Milestone]) -> str:
+    """The milestone index's *Milestone summary* table, with its Status column rewritten.
+
+    Only the last cell of each row changes, and only for a row whose first cell names a milestone
+    (``**[M3: …``), so the focus, issue range and owner stay exactly as they were written.
+    """
+    text = INDEX.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    try:
+        head = next(
+            i for i, line in enumerate(lines) if line.startswith(INDEX_ROW_START)
+        )
+    except StopIteration:
+        raise SystemExit(
+            f"{INDEX.name} has no 'Milestone summary' table to update"
+        ) from None
+
+    for index, line in enumerate(lines[head + 2 :], start=head + 2):
+        if not line.startswith("|"):
+            break
+        named = INDEX_MILESTONE.search(line)
+        milestone = milestones.get(int(named["number"])) if named else None
+        if milestone is None:
+            continue
+        cells = line.split("|")
+        cells[-2] = f" {milestone.status_cell} "
+        lines[index] = "|".join(cells)
+
+    overall = Milestone(
+        0,
+        "all",
+        sum(m.closed for m in milestones.values()),
+        sum(m.total for m in milestones.values()),
+    )
+    done = sum(1 for m in milestones.values() if m.done)
+    summary = (
+        f"{INDEX_SUMMARY_PREFIX} {overall.cell} closed · "
+        f"**{done} of {len(milestones)} milestones done**"
+    )
+    for index, line in enumerate(lines):
+        if line.startswith(INDEX_SUMMARY_PREFIX):
+            lines[index] = summary
+            break
+    else:  # first run: the line becomes its own paragraph under the table's hand-written total
+        total = next(
+            i for i, line in enumerate(lines) if line.startswith(INDEX_TOTAL_PREFIX)
+        )
+        blank = next(
+            i for i, line in enumerate(lines[total:], total) if not line.strip()
+        )
+        lines[blank + 1 : blank + 1] = [summary, ""]
+    return "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+
+
 def main(argv: list[str] | None = None) -> int:
     """Write (or check) every milestone's progress; report what moved."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -217,12 +293,14 @@ def main(argv: list[str] | None = None) -> int:
                 path.write_text(updated, encoding="utf-8")
         print(f"  M{milestone.number:<2} {milestone.cell}")
 
-    readme_current = README.read_text(encoding="utf-8")
-    readme_updated = apply_to_readme(by_number)
-    if readme_updated != readme_current:
-        stale.append("README.md")
-        if not args.check:
-            README.write_text(readme_updated, encoding="utf-8")
+    for path, updated in (
+        (README, apply_to_readme(by_number)),
+        (INDEX, apply_to_index(by_number)),
+    ):
+        if updated != path.read_text(encoding="utf-8"):
+            stale.append(str(path.relative_to(ROOT)))
+            if not args.check:
+                path.write_text(updated, encoding="utf-8")
 
     if args.close_completed and not args.check:
         for milestone in milestones:
