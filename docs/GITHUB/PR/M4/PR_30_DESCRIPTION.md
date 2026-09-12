@@ -85,9 +85,13 @@ its own milestone's, and each is one line in `CONTRACTS` plus a YAML file.
   documented `401`, `403`, `404`, `409` and `422`, and a read of the contract asserting every
   site-scoped operation promises a `404`.
 - **`requirements.txt`:** `jsonschema==4.26.0`, with the reason beside it.
-- **`docs/GITHUB/MILESTONES/M4_clinics_queues_config.md`:** the exit criteria ticked, with the
-  partial written out. **`docs/GITHUB/README.md`** and the milestone header: `make
-  milestone-progress` (the bar is generated from GitHub, never typed).
+- **`docs/GITHUB/RELEASES/RELEASE_v0_4_0.md`** (new): the release note for tag `v0.4.0`, from the
+  template in that directory's README — what shipped per issue, the seven migrations and what each
+  is reversible against, the upgrade notes, and eleven known issues recorded honestly.
+- **`docs/GITHUB/MILESTONES/M4_clinics_queues_config.md`:** the exit criteria ticked with the
+  partial written out, and the **Status** row marked done — which is this PR's job, because it is
+  the one that closes the milestone's last issue. **`docs/GITHUB/README.md`** and the milestone
+  header: `make milestone-progress` (the bar is generated from GitHub, never typed).
 
 ## Testing
 
@@ -135,6 +139,22 @@ its own milestone's, and each is one line in `CONTRACTS` plus a YAML file.
 - [ ] **Frontend and channel teams confirm they can build against the contract without reading the
       code.** Outstanding: C and B's sign-off, requested in this PR. Everything they need to give
       it is in `contracts/`.
+
+## Closing the milestone
+
+Per `.cursor/rules/milestone-progress.mdc`, the pull request that closes a milestone's last issue
+also marks the milestone done. This one does two of the three:
+
+- the milestone document's **Status** row, and its **exit criteria** ticked with the one partial
+  written out rather than ticked silently;
+- **`RELEASE_v0_4_0.md`**, written from the template.
+
+The third — `make milestone-progress ARGS='--close-completed'`, which closes the GitHub milestone —
+runs **after** this merges, because it reads the issue states and seven of the eight are open until
+then. For the same reason the **Progress** bar reads 12% beside a Status row that says done: the bar
+is generated from GitHub and is a fact, the Status row is true from the moment this lands, and the
+next generator run brings them together. There is a note in the milestone document saying exactly
+that, so a reader who arrives in the gap is not left guessing.
 
 ## Risk and rollback
 
