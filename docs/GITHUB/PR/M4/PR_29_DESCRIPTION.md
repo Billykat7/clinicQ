@@ -163,9 +163,21 @@ built on the `search_sites` narrowing added here.
       clicked — after which `/verification` reports 0 waiting and `/verification?status=verified`
       carries the clinic with the note and a `reviewed_at`. That run is what found the two bugs
       above; a clinic manager opening the console gets the *Access denied* page.
-- [ ] **Screenshot file: not attached.** There is no headless browser in this environment that can
-      write a PNG to disk (no Playwright, no Chromium binary), so the visual check is described
-      rather than pictured. Stated plainly rather than left implied.
+- [x] **Screenshots**, captured from that same run at 2x, light and dark.
+
+      The public form, `/register-clinic` — one column, section by section, with the sentence that
+      says nothing is visible until an administrator has checked it:
+
+      | Light | Dark |
+      |---|---|
+      | ![The public clinic registration form, light](https://github.com/Billykat7/clinicQ/blob/b372e2459936403b3891c6bcd786b1b121df1730/docs/GITHUB/PR/M4/assets/pr29/register-clinic-light.png?raw=true) | ![The public clinic registration form, dark](https://github.com/Billykat7/clinicQ/blob/b372e2459936403b3891c6bcd786b1b121df1730/docs/GITHUB/PR/M4/assets/pr29/register-clinic-dark.png?raw=true) |
+
+      The console, `/admin/verification/pending` — the waiting tab with the slideover open on the
+      submitted clinic, its contact details, the note field and **Verify / Send back / Suspend**:
+
+      | Light | Dark |
+      |---|---|
+      | ![The clinic verification console with a clinic open, light](https://github.com/Billykat7/clinicQ/blob/b372e2459936403b3891c6bcd786b1b121df1730/docs/GITHUB/PR/M4/assets/pr29/verification-light.png?raw=true) | ![The clinic verification console with a clinic open, dark](https://github.com/Billykat7/clinicQ/blob/b372e2459936403b3891c6bcd786b1b121df1730/docs/GITHUB/PR/M4/assets/pr29/verification-dark.png?raw=true) |
 
 ## Acceptance criteria
 
