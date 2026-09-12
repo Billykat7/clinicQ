@@ -164,15 +164,19 @@ window (Issue 95).
     manager@clinicq.example | display settings: reason_retention_days: 30 -> 90
 ```
 
-- [x] **The page was driven in a real browser** against that database, signed in as
-      `manager@clinicq.example`: it loads the current settings, renders the three modes with the
-      server's own descriptions, and — on selecting *Number and full name* **and** the comment
-      checkbox — shows the amber warning and reveals **both** confirmation checkboxes, the second
-      carrying the full-name sentence. That is the run that found the `display-options` gate bug
-      described above.
-- [ ] **Screenshot file: not attached.** There is no headless browser in this environment that can
-      write a PNG to disk (no Playwright, no Chromium binary), so the visual check above is
-      described rather than pictured. Stated plainly rather than left implied.
+- [x] **Screenshot** — `/dashboard/sites/{site_id}/settings/display`, signed in as
+      `manager@clinicq.example` against a migrated, seeded PostgreSQL database, with *Number
+      and full name* **and** the comment checkbox selected: the amber warning describes the
+      screen the clinic would actually get, and **both** confirmation checkboxes have appeared,
+      the second carrying the full-name sentence. Neither is ticked, so this is exactly the
+      state in which the server refuses the save with `409`. Files in
+      `docs/GITHUB/PR/M4/assets/pr27/`.
+
+| Light | Dark |
+|---|---|
+| ![The waiting-room screen settings, light](https://github.com/Billykat7/clinicQ/blob/7f3f15960d6e7a78c3ae3a0ae5ac01b7cc999892/docs/GITHUB/PR/M4/assets/pr27/settings-display-light.png?raw=true) | ![The waiting-room screen settings, dark](https://github.com/Billykat7/clinicQ/blob/7f3f15960d6e7a78c3ae3a0ae5ac01b7cc999892/docs/GITHUB/PR/M4/assets/pr27/settings-display-dark.png?raw=true) |
+
+      That same browser run is what found the `display-options` gate bug described above.
 
 ## Acceptance criteria
 
