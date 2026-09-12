@@ -92,3 +92,26 @@ def test_a_wait_is_a_range_or_nothing() -> None:
 def test_closed_always_says_when_it_opens(status: OpenStatus, label: str) -> None:
     """In Johannesburg wall-clock time, relative to when the search ran."""
     assert open_label(status, _TUESDAY_10AM) == label
+
+
+def test_a_span_of_equal_times_is_the_whole_day_and_none_is_closed() -> None:
+    """Issue 24's rule, in words: 00:00 to 00:00 is open all day, not open for no time."""
+    from datetime import time
+
+    from src.modules.sites.hours import TimeSpan
+    from src.web.discover import spans_label
+
+    assert spans_label(()) == "Closed"
+    assert spans_label((TimeSpan(time(0), time(0)),)) == "Open all day"
+    assert (
+        spans_label((TimeSpan(time(7), time(12, 30)), TimeSpan(time(13, 30), time(16))))
+        == "07:00–12:30, 13:30–16:00"
+    )
+
+
+def test_a_phone_number_is_grouped_for_reading_aloud() -> None:
+    """+27 10 555 0100; anything that is not a South African E.164 number is shown as stored."""
+    from src.web.discover import phone_label
+
+    assert phone_label("+27105550100") == "+27 10 555 0100"
+    assert phone_label("+442071234567") == "+442071234567"

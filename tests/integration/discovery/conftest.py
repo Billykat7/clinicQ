@@ -33,6 +33,7 @@ from src.core.rbac_manifest_sync import sync_rbac_catalog
 from src.database.models import SiteOpeningHours
 from src.database.session import get_db
 from src.main import create_app
+from src.modules.sites.catalogue import seed_default_catalogue
 from tests.factories import PatientFactory, QueueFactory, SiteFactory
 
 #: The Johannesburg city centre: Hillbrow CHC is about 1.4 km away, Medicross Melville about 5 km,
@@ -62,7 +63,7 @@ def add_verified_clinic(db: Session, **overrides: object) -> str:
 def directory(
     migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> Iterator[SimpleNamespace]:
-    """The eleven demo clinics, verified, with queues and hours; an app and a session factory.
+    """The eleven demo clinics, verified, with queues, hours and services; an app and a session factory.
 
     The RBAC catalogue is synced too, so a patient session opens the patient-only routes.
     ``directory.patient_client()`` returns a client signed in as a new patient.
@@ -86,6 +87,7 @@ def directory(
                 province=clinic.province,
             )
             ids[clinic.slug] = site_id
+            seed_default_catalogue(db, site_id)
             for order, queue in enumerate(queues_for(clinic)):
                 QueueFactory.create(
                     db,
