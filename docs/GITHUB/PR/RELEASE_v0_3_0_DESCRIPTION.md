@@ -50,8 +50,13 @@ a `#0d1117` page: identical, and the `<b>`/`<small>` labels survive the sanitise
 
 ## Quickstart
 
-`## Getting started` assumed you already had Python 3.14, Docker and `make`. The new section says
-how to get them, per platform, in a `<details>` block each:
+It is its own page — **[`docs/QUICKSTART.md`](../../QUICKSTART.md)** — and the **first link in the
+README's header nav**, before *Implementation plan*, because "how do I run this?" is the first
+question a new reader has. The README keeps a five-command summary that points at it, and
+`CONTRIBUTING.md` opens by sending a first-time setup there.
+
+`## Getting started` assumed you already had Python 3.14, Docker and `make`. The page says how to
+get them, per platform, in a `<details>` block each:
 
 - **Windows:** WSL2, and the reason it is not optional — `make` and everything in `scripts/` assume a
   Unix shell, so Git Bash alone will not do. Plus the trap that costs an afternoon: clone into the
@@ -109,8 +114,11 @@ and M2 unticked; it now reads sprint 4 of 14, 22 of 109 issues, `v0.3.0`.
 ## Changes
 
 - **New:** `docs/GITHUB/RELEASES/RELEASE_v0_3_0.md`, `scripts/update_milestone_progress.py`.
-- **`README.md`:** mermaid diagram; `## Quickstart` (prerequisites per OS, run locally, branch/PR
-  workflow); a **Progress** column on the delivery table.
+- **New:** `docs/QUICKSTART.md` — prerequisites per OS, run locally, branch/commit/PR, and the
+  troubleshooting and local-stack notes that used to sit in the README.
+- **`README.md`:** mermaid diagram; **Quickstart first in the header nav** and in the documentation
+  table; a five-command Quickstart section pointing at the page; a **Progress** column on the
+  delivery table.
 - **`CONTRIBUTING.md`:** the milestone-progress step in "Branches, commits and pull requests".
 - **`Makefile`:** `milestone-progress`, `milestone-progress-check`.
 - **`docs/GITHUB/README.md`:** the *Milestone summary* table's **Status** column, and a generated

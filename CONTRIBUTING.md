@@ -1,8 +1,10 @@
 # Contributing to ClinicQ
 
-How the six of us work in one repository without breaking `main` for the other five. The rules
-behind this page are in [the engineering non-negotiables](docs/guideline.md); how to pick up an
-issue is in [the issues guide](docs/GITHUB/ISSUES/README.md).
+How the six of us work in one repository without breaking `main` for the other five. **Setting up
+for the first time? Start with [the Quickstart](docs/QUICKSTART.md)**, which covers Windows, macOS
+and Linux. The rules behind this page are in
+[the engineering non-negotiables](docs/guideline.md); how to pick up an issue is in
+[the issues guide](docs/GITHUB/ISSUES/README.md).
 
 ## Once per clone
 
