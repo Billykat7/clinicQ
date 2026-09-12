@@ -103,6 +103,10 @@ pytest-xdist==3.8.0
 # Property-based testing — the ledger's allocation invariant (sum(allocations) never exceeds
 # the payment) is proven across generated inputs, not a handful of examples (M7, Issue #40).
 hypothesis==6.165.0
+# Validating the hand-written API contracts against their own schemas (M4 — Issue 30): every
+# example in `contracts/*.yaml` is checked against the schema it claims to be an example of, so an
+# example a consumer copies cannot be one the API would refuse. Test-time only.
+jsonschema==4.26.0
 
 # Development tools
 black==26.5.1

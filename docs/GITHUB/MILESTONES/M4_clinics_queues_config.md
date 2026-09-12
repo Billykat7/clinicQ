@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | **Status** | 📋 Planned |
-| **Progress** | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
+| **Progress** | 🟩⬜⬜⬜⬜⬜⬜⬜⬜⬜ **12%** (1/8 issues) |
 | **Sprints** | 4–5 (weeks 7–10), semester 2 |
 | **Release tag** | `v0.4.0` |
 | **Primary owner** | A, Backend Lead · D, Frontend/Clinic |
@@ -94,12 +94,22 @@ flowchart LR
 
 ## Exit criteria
 
-- [ ] A clinic can be created with a real coordinate and appears in a PostGIS distance query
-- [ ] A site carries 1..n named queues, and a queue can be deactivated without deleting its history
-- [ ] Opening hours drive an `is_open_now` flag that respects public holidays and ad-hoc closures
-- [ ] Display mode defaults to `number_only` on every newly created site, never anything else
-- [ ] A new clinic stays invisible in discovery until a platform admin verifies it
-- [ ] `sites.yaml` documents every route the sites router serves, enforced by a drift test
+- [x] A clinic can be created with a real coordinate and appears in a PostGIS distance query
+      (Issue 23). The GiST index is asserted from the query plan, not by eye.
+- [x] A site carries 1..n named queues, and a queue can be deactivated without deleting its history
+      (Issue 25). The "history stays" half is asserted through the agreed ticket fixture; it becomes
+      a query against the real `tickets` table when Issue 39 creates one.
+- [x] Opening hours drive an `is_open_now` flag that respects public holidays and ad-hoc closures
+      (Issue 24), in that order of precedence, with a test crossing midnight in Johannesburg.
+- [x] Display mode defaults to `number_only` on every newly created site, never anything else
+      (Issue 27). Held by a guard that walks the source of every path that constructs a `Site`.
+- [x] A new clinic stays invisible in discovery until a platform admin verifies it (Issue 29),
+      proven against the search service rather than a page.
+- [x] `sites.yaml` documents every route the sites router serves, enforced by a drift test
+      (Issue 30), in both directions. **Partly (Issue 30):** the drift test compares method, path
+      and the *concrete* statuses FastAPI's own document declares; the `403`/`404`/`409` a handler
+      raises are invisible to it, so the contract's error half is proved by
+      `tests/integration/sites/test_sites_module.py` driving each documented refusal over HTTP.
 
 ## Demo at the end of the milestone
 

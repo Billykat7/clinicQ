@@ -1,0 +1,1864 @@
+# ClinicQ: the sites and queues contract (Issue 30).
+#
+# Hand-written from the routers as they actually are, so that the frontend (C) and the channel
+# adapters (B) can be built against a stable document instead of against whatever the code happens
+# to return this week. It is checked against the running application's /openapi.json in **both**
+# directions by tests/integration/contracts/test_openapi_contracts.py: an undocumented route fails
+# the suite, and so does a documented path with no handler.
+#
+# What is in scope: every route under /api/v1/sites that M4 owns — the clinic profile (Issue 23),
+# opening hours, holidays and closures (24), queues (25), the services catalogue (26), display and
+# privacy settings (27), staff and room assignment (22, 28) and onboarding (29).
+#
+# What is deliberately **not**: /api/v1/sites/{site_id}/audit/events. It sits under this prefix but
+# belongs to the audit module (Issue 20), and it will be documented by that module's own contract.
+# The drift test carries that one exclusion, named, so it cannot quietly grow into a list.
+#
+# Three conventions every operation follows:
+#
+#   * a route naming {site_id} goes through the site guard: a clinic the caller is not assigned to
+#     answers 404 with the same body an id that never existed gets. There is no 403 for "not your
+#     clinic", ever — a 403 would confirm the id exists (non-negotiable 3);
+#   * error responses are documented, not only the happy path. 400/403/404/409/422 appear where the
+#     handler can actually produce them;
+#   * every example is validated against the schema it claims to be an example of, so an example a
+#     consumer copies is one the API would accept.
+
+openapi: 3.1.0
+
+info:
+  title: ClinicQ sites and queues
+  version: "0.4.0"
+  description: |
+    A clinic, its opening hours, its named queues, the services it offers, what its waiting-room
+    board may show, who works there, and how it gets listed in the first place.
+
+    **Authentication.** Every route except `GET /sites/{module}/info` and `POST /sites/register`
+    needs a signed-in staff session: an `Authorization: Bearer <access token>` header, or the
+    session cookies a browser gets from `POST /api/v1/auth/password/login`. A cookie-authenticated
+    unsafe request must also echo the CSRF cookie in `X-CSRF-Token`.
+
+    **Whose clinic.** A staff member's clinic is a role held *at* a site. Any route with `{site_id}`
+    resolves the caller's roles at that clinic; a clinic they hold no role at answers `404`.
+
+    **Time.** Every datetime is ISO 8601 with an offset, in `Africa/Johannesburg` (`+02:00`).
+    Opening hours are wall-clock times in that zone; a span whose `closes_at` is at or before its
+    `opens_at` crosses midnight.
+
+servers:
+  - url: /api/v1
+    description: This deployment.
+
+tags:
+  - name: sites
+    description: A clinic's profile, hours, services, display settings and listing.
+  - name: queues
+    description: A clinic's named lines.
+  - name: staff
+    description: Who works at a clinic, and which rooms they work.
+
+paths:
+  # ── Module metadata ─────────────────────────────────────────────────────────────────────
+  /sites/info:
+    get:
+      tags: [sites]
+      operationId: sitesInfo
+      summary: Sites module metadata
+      description: Unauthenticated, like every module's `/info`.
+      responses:
+        "200":
+          description: The module's bounded context and a one-line summary.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModuleInfo" }
+              example: { context: sites, summary: "Clinics: profile, location, hours, queues, services, staff and display mode." }
+
+  /sites/queues/info:
+    get:
+      tags: [queues]
+      operationId: queuesInfo
+      summary: Queues module metadata
+      responses:
+        "200":
+          description: The module's bounded context and a one-line summary.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModuleInfo" }
+
+  /sites/staff/info:
+    get:
+      tags: [staff]
+      operationId: staffInfo
+      summary: Staff module metadata
+      responses:
+        "200":
+          description: The module's bounded context and a one-line summary.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModuleInfo" }
+
+  # ── The directory (platform admin) ──────────────────────────────────────────────────────
+  /sites:
+    get:
+      tags: [sites]
+      operationId: sitesList
+      summary: The whole directory
+      description: |
+        The operator's list of every clinic. Needs a `business`-tier grant on `sites`, which only
+        `platform_admin` holds: a clinic manager's role is held at a site and does not satisfy a
+        gate on a route that names none. A manager reads their own clinic by its id instead.
+      parameters:
+        - { name: sector, in: query, required: false, schema: { $ref: "#/components/schemas/SiteSector" } }
+        - { name: status, in: query, required: false, schema: { $ref: "#/components/schemas/SiteStatus" } }
+        - { name: q, in: query, required: false, description: Substring of the name or suburb., schema: { type: string, maxLength: 120 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        "200":
+          description: A page of clinics, by name.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SiteListOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    post:
+      tags: [sites]
+      operationId: sitesCreate
+      summary: Create a clinic
+      description: |
+        The operator's path. The clinic starts at `draft` whatever the body says: a clinic becomes
+        visible through the verification workflow, never by asking to. `display_mode` is not
+        settable at all and is always `number_only` (non-negotiable 4).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SiteIn" }
+      responses:
+        "201":
+          description: The clinic, as created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SiteOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Another clinic already holds that slug.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "The slug 'zola-clinic' is already in use." }
+        "422":
+          description: |
+            A field failed validation. The commonest is a location outside South Africa, whose
+            message names the numbers that were read.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationError" }
+
+  /sites/geocode:
+    post:
+      tags: [sites]
+      operationId: sitesGeocodeAddress
+      summary: Look up a typed address while onboarding a clinic
+      description: |
+        **The browser never calls a geocoder.** The Content-Security-Policy allows
+        `connect-src 'self'` only, so the form posts here and the server makes the outbound
+        request. A deployment with no provider configured answers `503`, and the operator types
+        the coordinate in: a supported path, not a failure.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GeocodeIn" }
+      responses:
+        "200":
+          description: Candidates inside the operating country, best first. An empty list is a valid answer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GeocodeOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "503":
+          description: No geocoding provider is configured, or the provider did not answer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "No geocoding provider is configured (GEOCODING_PROVIDER). Enter the clinic's coordinate manually." }
+
+  # ── Onboarding and verification (Issue 29) ──────────────────────────────────────────────
+  /sites/register:
+    post:
+      tags: [sites]
+      operationId: sitesRegisterPublic
+      summary: Submit a clinic for checking
+      description: |
+        **Public: no session, and it grants nothing.** The clinic it creates is
+        `pending_verification` — invisible to every patient-facing surface — with no account, no
+        role and no session attached. The default queue set and services catalogue are created
+        with it, so an approving admin sees a working clinic.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SiteRegistrationIn" }
+      responses:
+        "201":
+          description: The submission, and what to tell the person who made it.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SiteRegistrationOut" }
+        "409":
+          description: |
+            Another clinic already holds that slug. The message deliberately says nothing about
+            whether that clinic is listed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "The web address 'zola-clinic' is already in use. Please choose another." }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/verification:
+    get:
+      tags: [sites]
+      operationId: sitesVerificationQueue
+      summary: Clinics waiting for a platform admin
+      description: |
+        The operator's queue, oldest submission first. A `business`-tier grant on `sites`, so a
+        clinic manager is refused. Not behind the site guard: this is a cross-clinic console, and
+        the guard would 404 an operator who is assigned to no clinic.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Which tab. Defaults to `pending_verification`.
+          schema: { $ref: "#/components/schemas/SiteStatus" }
+        - { name: q, in: query, required: false, schema: { type: string, maxLength: 120 } }
+      responses:
+        "200":
+          description: The clinics with that status.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VerificationQueueOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/verification:
+    put:
+      tags: [sites]
+      operationId: sitesDecideVerification
+      summary: Approve, send back, or suspend
+      description: |
+        The only route that writes a clinic's listing status. Verifying makes it visible to
+        patients; suspending stops joins on the **next read**, because the join gate and the
+        patient-facing search both consult the status on every request.
+
+        Sending a clinic back (`draft`, `pending_verification`) or suspending it **requires** a
+        note: the submitter is shown exactly what is written.
+      parameters:
+        - $ref: "#/components/parameters/SiteId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VerificationDecisionIn" }
+      responses:
+        "200":
+          description: The clinic, moved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VerificationQueueItemOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Not a move this listing may make.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "A clinic that is 'verified' cannot become 'verified'." }
+        "422":
+          description: A rejection or a request for more information with nothing written in it.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "Say what is wrong, or what more is needed. The person who submitted this clinic is shown exactly what you write here." }
+
+  # ── One clinic's profile (Issue 23) ─────────────────────────────────────────────────────
+  /sites/{site_id}:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    get:
+      tags: [sites]
+      operationId: sitesGet
+      summary: One clinic's profile
+      responses:
+        "200":
+          description: The clinic.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SiteOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    put:
+      tags: [sites]
+      operationId: sitesUpdate
+      summary: Replace a clinic's editable profile
+      description: The clinic manager's. `status` and `display_mode` are not editable here.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SiteIn" }
+      responses:
+        "200":
+          description: The clinic, updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SiteOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Another clinic already holds that slug.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    delete:
+      tags: [sites]
+      operationId: sitesDelete
+      summary: Remove a clinic from the directory
+      description: |
+        A soft delete: the row stays so its tickets, audit rows and reports resolve. The operator's,
+        at `business` tier, and deliberately **not** behind the site guard, which would 404 an
+        operator assigned to no clinic.
+      responses:
+        "204": { description: Removed. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/geocode:
+    post:
+      tags: [sites]
+      operationId: sitesGeocodeAddressForSite
+      summary: Look up a typed address for a clinic that already exists
+      description: |
+        The same server-side proxy as `/sites/geocode`, for a manager correcting their own clinic's
+        address. A separate route rather than a wider grant: a clinic manager's role is held at a
+        site, so it only resolves on a route that names one.
+      parameters:
+        - $ref: "#/components/parameters/SiteId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GeocodeIn" }
+      responses:
+        "200":
+          description: Candidates inside the operating country, best first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GeocodeOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "503":
+          description: No geocoding provider is configured, or the provider did not answer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  # ── Opening hours, holidays and closures (Issue 24) ─────────────────────────────────────
+  /sites/{site_id}/open:
+    get:
+      tags: [sites]
+      operationId: sitesOpenState
+      summary: Is this clinic open, and is it taking patients?
+      description: |
+        One payload for discovery, the board and all four channel menus, so a screen can never show
+        "open" from one call and "not taking patients" from another. `accepting_joins` is the
+        server's decision and is a function of the clinic and the moment, never of the channel
+        asking: a closure stops web, USSD, WhatsApp and walk-in joins at the same instant.
+      parameters:
+        - $ref: "#/components/parameters/SiteId"
+      responses:
+        "200":
+          description: Whether it is open, when it opens next, and whether joins are accepted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OpenStateOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/hours:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    get:
+      tags: [sites]
+      operationId: sitesGetHours
+      summary: A clinic's ordinary week
+      description: All seven days are returned, so a caller never has to infer a missing one.
+      responses:
+        "200":
+          description: The week.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WeeklyHoursOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    put:
+      tags: [sites]
+      operationId: sitesSetHours
+      summary: Replace the weekdays the payload names
+      description: |
+        A whole-week replacement rather than per-day edits, because "what are your hours" has one
+        answer. Only the weekdays named are touched, so a form that renders five days leaves the
+        weekend alone.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WeeklyHoursIn" }
+      responses:
+        "200":
+          description: The week, as saved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WeeklyHoursOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422":
+          description: Overlapping spans on one day, a weekday named twice, or a midnight-crossing span that is not last.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationError" }
+
+  /sites/{site_id}/holidays:
+    get:
+      tags: [sites]
+      operationId: sitesListHolidays
+      summary: The public-holiday calendar, and what this clinic does on each
+      description: |
+        A holiday with no rule of the clinic's own means **closed**, and the payload says
+        `has_rule: false` so a screen can show that it is a default rather than a decision.
+      parameters:
+        - $ref: "#/components/parameters/SiteId"
+      responses:
+        "200":
+          description: The holidays in the window, in date order.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HolidayListOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/holidays/{holiday_date}:
+    put:
+      tags: [sites]
+      operationId: sitesSetHolidayRule
+      summary: Say whether this clinic opens on one public holiday
+      description: |
+        Both times, or neither. A date that is not a public holiday is a **404**: a clinic closing
+        on an ordinary Tuesday is an ad-hoc closure, and conflating the two would let one clinic
+        invent holidays for the whole country.
+      parameters:
+        - $ref: "#/components/parameters/SiteId"
+        - name: holiday_date
+          in: path
+          required: true
+          schema: { type: string, format: date }
+          example: "2026-09-24"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HolidayRuleIn" }
+      responses:
+        "200":
+          description: The holiday, with this clinic's rule on it.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HolidayOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Another clinic's id, or a date that is not a public holiday.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "2026-09-15 is not a public holiday." }
+        "422":
+          description: "Half a rule: an opening time with no closing time, or the reverse."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationError" }
+
+  /sites/{site_id}/closures:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    get:
+      tags: [sites]
+      operationId: sitesListClosures
+      summary: A clinic's ad-hoc closures
+      parameters:
+        - name: include_past
+          in: query
+          required: false
+          description: Past and lifted closures are kept, and returned when asked for.
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: The closures, most recent first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClosureListOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    post:
+      tags: [sites]
+      operationId: sitesAnnounceClosure
+      summary: Close the clinic, with a reason patients are shown
+      description: |
+        New joins stop on every channel the moment this commits. The people already holding a
+        ticket are told by the notification service, which subscribes to the event this raises:
+        **nothing is sent from here**, so a clinic can close while the SMS gateway is down.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClosureIn" }
+      responses:
+        "201":
+          description: The closure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClosureOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422":
+          description: A window that ends before it starts.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "A closure cannot end before it starts." }
+
+  /sites/{site_id}/closures/{closure_id}:
+    delete:
+      tags: [sites]
+      operationId: sitesLiftClosure
+      summary: End a closure early
+      description: The row stays, with `lifted_at` set, so "why were we shut on the 14th" still answers.
+      parameters:
+        - $ref: "#/components/parameters/SiteId"
+        - { name: closure_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: The closure, lifted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClosureOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Another clinic's id, or a closure that is already lifted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  # ── Display and privacy settings (Issue 27) ─────────────────────────────────────────────
+  /sites/{site_id}/settings/display:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    get:
+      tags: [sites]
+      operationId: sitesGetDisplaySettings
+      summary: What this clinic's board shows
+      description: A receptionist may read this; only a clinic manager may change it.
+      responses:
+        "200":
+          description: The settings, with the plain-language warning that describes them.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DisplaySettingsOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    put:
+      tags: [sites]
+      operationId: sitesSetDisplaySettings
+      summary: Change what the waiting-room board may show
+      description: |
+        A change that newly puts a name or a reason on a public screen is **refused without
+        `confirm_public_display`**, so a client that renders no warning cannot make it. A reason
+        beside a **full** name takes a second, separate `confirm_comment_with_full_name`. Going
+        back to `number_only` needs neither: the safe direction never needs permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DisplaySettingsIn" }
+      responses:
+        "200":
+          description: The settings, as saved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DisplaySettingsOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: |
+            The change exposes something on a public screen and was not confirmed. `409` rather than
+            `403`: the caller *may* do this, and has not yet said they understand it.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "Showing a reason beside a full name means anyone reading the board learns why a named person is at the clinic. Confirm that this screen cannot be seen from a public area." }
+        "422":
+          description: A retention window outside the platform's ceiling.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationError" }
+
+  /sites/{site_id}/settings/display-options:
+    get:
+      tags: [sites]
+      operationId: sitesDisplayOptions
+      summary: What this clinic may choose, and what each choice means
+      description: |
+        Served rather than hardcoded in a screen, so the sentence a manager reads and the rule the
+        server enforces are the same text. Under `{site_id}` because a clinic manager's role is
+        held at a site and only resolves on a route that names one.
+      parameters:
+        - $ref: "#/components/parameters/SiteId"
+      responses:
+        "200":
+          description: The modes, the languages, the retention bounds and the warnings.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DisplayOptionsOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  # ── Queues (Issue 25) ───────────────────────────────────────────────────────────────────
+  /sites/{site_id}/queues:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    get:
+      tags: [queues]
+      operationId: queuesList
+      summary: A clinic's queues, in its own order
+      parameters:
+        - name: include_inactive
+          in: query
+          required: false
+          description: |
+            `true` (the default) for a manager's screen, which has to show a deactivated queue in
+            order to bring it back. A join surface passes `false`.
+          schema: { type: boolean, default: true }
+      responses:
+        "200":
+          description: The queues.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QueueListOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    post:
+      tags: [queues]
+      operationId: queuesCreate
+      summary: Add a queue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QueueIn" }
+      responses:
+        "201":
+          description: The queue.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QueueOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: This clinic already has a queue with that name or slug. Names are unique per site, not platform-wide.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "This clinic already has a queue called 'Triage'." }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    put:
+      tags: [queues]
+      operationId: queuesReorder
+      summary: Put this clinic's queues in order
+      description: |
+        The whole list in one request, because reordering is one decision and a per-queue update is
+        how two queues end up sharing a position. Ids that do not belong to this clinic are
+        ignored, so a stale entry cannot stop a manager reordering the rest.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QueueOrderIn" }
+      responses:
+        "200":
+          description: The queues, reordered.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QueueListOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/queues/joinable:
+    get:
+      tags: [queues]
+      operationId: queuesJoinable
+      summary: What this channel may join here
+      description: |
+        The channel menu's endpoint. The **server** decides, and the refusal travels beside each
+        queue rather than the queue being dropped, so a patient on USSD is told the pharmacy is
+        walk-in only instead of being left to wonder whether the clinic has one.
+      parameters:
+        - $ref: "#/components/parameters/SiteId"
+        - name: source
+          in: query
+          required: false
+          description: The channel asking. Echoed in the response so a cached menu cannot be shown to the wrong one.
+          schema: { $ref: "#/components/schemas/TicketSource" }
+      responses:
+        "200":
+          description: The queues, with the server's join answer for that channel.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JoinableQueueListOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/queues/{queue_id}:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+      - { name: queue_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [queues]
+      operationId: queuesGet
+      summary: One queue, including a deactivated one
+      responses:
+        "200":
+          description: The queue.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QueueOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    put:
+      tags: [queues]
+      operationId: queuesUpdate
+      summary: Replace a queue's editable fields
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QueueIn" }
+      responses:
+        "200":
+          description: The queue, updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QueueOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: The new name or slug belongs to another of this clinic's queues.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    delete:
+      tags: [queues]
+      operationId: queuesDeactivate
+      summary: Take a queue out of new joins
+      description: |
+        **Its history stays**, which is why this is not a delete: yesterday's tickets for a
+        deactivated queue still resolve. Returns the queue rather than `204`, so the screen can
+        show the new state and so it is visible that the row is still there.
+      responses:
+        "200":
+          description: The queue, deactivated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QueueOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  # ── The services catalogue (Issue 26) ───────────────────────────────────────────────────
+  /sites/{site_id}/services:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    get:
+      tags: [sites]
+      operationId: sitesListServices
+      summary: What this clinic offers
+      parameters:
+        - name: include_inactive
+          in: query
+          required: false
+          schema: { type: boolean, default: true }
+      responses:
+        "200":
+          description: The catalogue, in the clinic's order.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClinicServiceListOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    post:
+      tags: [sites]
+      operationId: sitesCreateService
+      summary: Add a service
+      description: |
+        `expected_minutes` is the wait estimator's prior until real samples exist, so it is
+        validated to 1..240. A `queue_ids` entry that is not one of this clinic's queues is
+        dropped rather than refused.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClinicServiceIn" }
+      responses:
+        "201":
+          description: The service.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClinicServiceOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: This clinic already offers a service with that name or slug.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "This clinic already offers 'General consultation'." }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/services/{service_id}:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+      - { name: service_id, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      tags: [sites]
+      operationId: sitesUpdateService
+      summary: Replace a service's editable fields
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClinicServiceIn" }
+      responses:
+        "200":
+          description: The service, updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClinicServiceOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: The new name or slug belongs to another of this clinic's services.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    delete:
+      tags: [sites]
+      operationId: sitesDeactivateService
+      summary: Take a service out of new joins
+      description: "Its history stays: a past ticket that named it still resolves."
+      responses:
+        "200":
+          description: The service, deactivated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClinicServiceOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  # ── Staff, invitations and room assignment (Issues 22, 28) ──────────────────────────────
+  /sites/{site_id}/staff:
+    get:
+      tags: [staff]
+      operationId: staffListForSite
+      summary: Everyone who works at this clinic
+      description: |
+        `roles` are the roles the person holds **at this clinic**; a role they hold elsewhere is not
+        this clinic's business and never appears.
+      parameters:
+        - $ref: "#/components/parameters/SiteId"
+      responses:
+        "200":
+          description: The staff.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StaffListOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/staff/invitations:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    get:
+      tags: [staff]
+      operationId: staffInvitationsForSite
+      summary: Who has been invited to this clinic
+      responses:
+        "200":
+          description: The invitations. **Never** carrying the link, which is a credential.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StaffInvitationListOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    post:
+      tags: [staff]
+      operationId: staffInviteForSite
+      summary: Invite somebody to work at this clinic
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StaffInviteIn" }
+      responses:
+        "201":
+          description: The invitation, without its link.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StaffInvitationOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403":
+          description: Nobody hands out a role they do not hold. A clinic cannot make a platform admin.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/staff/invitations/{invitation_id}:
+    delete:
+      tags: [staff]
+      operationId: staffRevokeInvitation
+      summary: Withdraw an invitation before it is used
+      parameters:
+        - $ref: "#/components/parameters/SiteId"
+        - { name: invitation_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: The invitation, withdrawn. Returned rather than 204 so the screen can show the new state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StaffInvitationOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/staff/{user_id}:
+    get:
+      tags: [staff]
+      operationId: staffGetForSite
+      summary: One colleague at this clinic
+      parameters:
+        - $ref: "#/components/parameters/SiteId"
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: The staff member.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StaffMemberOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/staff/{user_id}/active:
+    put:
+      tags: [staff]
+      operationId: staffSetActive
+      summary: Switch a colleague's account off, or on
+      description: |
+        Deactivation takes effect on their very next request, and revokes every live session so a
+        new access token cannot be minted from a refresh cookie either.
+      parameters:
+        - $ref: "#/components/parameters/SiteId"
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StaffActiveIn" }
+      responses:
+        "200":
+          description: The staff member.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StaffMemberOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/staff/{user_id}/roles:
+    post:
+      tags: [staff]
+      operationId: staffGrantRoleAtSite
+      summary: Give somebody a role at this clinic
+      description: Idempotent. A clinic cannot grant `platform_admin`; that is the operator's to give.
+      parameters:
+        - $ref: "#/components/parameters/SiteId"
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SiteRoleIn" }
+      responses:
+        "200":
+          description: The staff member, with the roles they now hold here.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StaffMemberOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403":
+          description: That role is not one a clinic may grant.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "A clinic cannot grant the 'platform_admin' role; that is the operator's to give." }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/staff/{user_id}/roles/{role}:
+    delete:
+      tags: [staff]
+      operationId: staffRevokeRoleAtSite
+      summary: Take a role away at this clinic
+      description: |
+        Takes effect on the person's **next request**: which clinics and queues somebody reaches is
+        read from their assignments on every request and is never a claim in their token. Losing
+        their last role here also clears their room assignments here.
+      parameters:
+        - $ref: "#/components/parameters/SiteId"
+        - $ref: "#/components/parameters/UserId"
+        - { name: role, in: path, required: true, schema: { $ref: "#/components/schemas/UserRole" } }
+      responses:
+        "200":
+          description: The staff member, with the roles they now hold here.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StaffMemberOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: This would leave the clinic with no clinic manager.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "A clinic must always have at least one clinic manager. Add another before removing this one." }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/staff/{user_id}/queues:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+      - $ref: "#/components/parameters/UserId"
+    get:
+      tags: [staff]
+      operationId: staffListRoomAssignments
+      summary: Which rooms somebody works at this clinic
+      description: "The ones they are on first; a room they came off keeps its entry with `is_active: false`."
+      responses:
+        "200":
+          description: The rooms.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RoomAssignmentListOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    put:
+      tags: [staff]
+      operationId: staffSetRoomAssignments
+      summary: Put somebody on exactly these rooms
+      description: |
+        The whole set in one request: "which rooms does this nurse work" is one decision. A queue
+        that is not one of this clinic's is a **404**, not silently dropped — an assignment names a
+        person and a room by hand, so a manager who gets it wrong should be told.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RoomAssignmentIn" }
+      responses:
+        "200":
+          description: The rooms, as saved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RoomAssignmentListOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: A short-lived access token, typed `access`.
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: bk_clinicq_access
+      description: |
+        The browser session. An unsafe request must also echo the readable CSRF cookie
+        (`bk_clinicq_csrf`) in `X-CSRF-Token`.
+
+  parameters:
+    SiteId:
+      name: site_id
+      in: path
+      required: true
+      description: |
+        The clinic. A clinic the caller holds no role at answers **404**, with the same body an id
+        that never existed gets: a 403 would confirm the id exists.
+      schema: { type: string, format: uuid }
+      example: "0199b0c0-0000-7000-8000-00000000a001"
+    UserId:
+      name: user_id
+      in: path
+      required: true
+      description: A staff member. Somebody who does not work at this clinic answers 404.
+      schema: { type: string, format: uuid }
+
+  responses:
+    Unauthenticated:
+      description: No session, or an expired or deactivated one.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { detail: "Not authenticated" }
+    Forbidden:
+      description: |
+        Signed in, and the caller's grants do not admit this. Never returned for "not your clinic",
+        which is a 404.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { detail: "Forbidden" }
+    NotFound:
+      description: |
+        No such record — **or** one at a clinic the caller may not reach. The two are
+        indistinguishable on purpose (non-negotiable 3).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { detail: "Not found." }
+    Unprocessable:
+      description: A field failed validation.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ValidationError" }
+
+  schemas:
+    # ── Errors ────────────────────────────────────────────────────────────────────────────
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail: { type: string, description: A sentence a person can act on. }
+        code: { type: string, description: A stable machine-readable code, when the handler sets one. }
+        request_id: { type: string, description: This request's id, for correlating with the logs. }
+      example: { detail: "Not found.", code: "http.not_found" }
+    ValidationError:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: object
+                required: [loc, msg, type]
+                properties:
+                  loc: { type: array, items: { anyOf: [{ type: string }, { type: integer }] } }
+                  msg: { type: string }
+                  type: { type: string }
+      example:
+        detail:
+          - loc: [body, location]
+            msg: "Value error, 0.00000, 0.00000 is outside South Africa (latitude -35.5..-21.5, longitude 15.5..33.5). Check that latitude and longitude are not swapped, and that the latitude is negative."
+            type: value_error
+
+    ModuleInfo:
+      type: object
+      required: [context, summary]
+      properties:
+        context: { type: string }
+        summary: { type: string }
+
+    # ── Vocabulary ────────────────────────────────────────────────────────────────────────
+    SiteSector:
+      type: string
+      enum: [public, private]
+      description: A public facility, or a private practice.
+    SiteStatus:
+      type: string
+      enum: [draft, pending_verification, verified, suspended]
+      description: |
+        Where a clinic is in its listing lifecycle. **Only `verified` is ever returned by a
+        patient-facing surface.**
+    SaProvince:
+      type: string
+      enum: ["Eastern Cape", "Free State", "Gauteng", "KwaZulu-Natal", "Limpopo", "Mpumalanga", "North West", "Northern Cape", "Western Cape"]
+    DisplayMode:
+      type: string
+      enum: [number_only, name_lite, full]
+      description: |
+        What the waiting-room board may show. Every new clinic is created `number_only` on every
+        code path, and the server applies the mode before anything reaches the board: under
+        `number_only` a name is not in the payload at all.
+    BoardLanguage:
+      type: string
+      enum: [en, af, zu, xh, nbl, nso, st, tsn, ssw, ven, tso]
+      description: ISO 639-1 where one exists, ISO 639-3 otherwise.
+    QueueKind:
+      type: string
+      enum: [triage, consultation, pharmacy, other]
+    ServiceCategory:
+      type: string
+      enum: [consultation, chronic, maternal, child_health, hiv_tb, screening, pharmacy, other]
+    TicketSource:
+      type: string
+      enum: [web, ussd, whatsapp, walk_in]
+      description: The four doors into one clinic.
+    UserRole:
+      type: string
+      enum: [user, admin, patient, receptionist, nurse_doctor, clinic_manager, platform_admin]
+
+    # ── The clinic ────────────────────────────────────────────────────────────────────────
+    Location:
+      type: object
+      required: [latitude, longitude]
+      description: |
+        WGS 84, latitude first (the order a person reads one). Validated against South Africa's
+        bounding box: `0, 0`, a swapped pair and a positive latitude are each refused.
+      properties:
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+      example: { latitude: -26.19355, longitude: 28.04540 }
+    SiteIn:
+      type: object
+      required: [name, slug, sector, location, address_line, city, province]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 200 }
+        slug: { type: string, minLength: 2, maxLength: 80, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+        sector: { $ref: "#/components/schemas/SiteSector" }
+        location: { $ref: "#/components/schemas/Location" }
+        address_line: { type: string, minLength: 3, maxLength: 200 }
+        suburb: { type: [string, "null"], maxLength: 120 }
+        city: { type: string, minLength: 2, maxLength: 120 }
+        province: { $ref: "#/components/schemas/SaProvince" }
+        postal_code: { type: [string, "null"], maxLength: 10 }
+        phone_e164: { type: [string, "null"], pattern: "^\\+[1-9]\\d{6,14}$" }
+        notes: { type: [string, "null"], maxLength: 2000 }
+      example:
+        name: Zola Clinic
+        slug: zola-clinic
+        sector: public
+        location: { latitude: -26.26840, longitude: 27.84720 }
+        address_line: Zola North, Soweto
+        suburb: Zola
+        city: Johannesburg
+        province: Gauteng
+        phone_e164: "+27115551234"
+    SiteOut:
+      type: object
+      required: [id, slug, name, sector, status, location, address_line, suburb, city, province, postal_code, phone_e164, notes, is_active, created_at, modified_at]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        sector: { $ref: "#/components/schemas/SiteSector" }
+        status: { $ref: "#/components/schemas/SiteStatus" }
+        location: { $ref: "#/components/schemas/Location" }
+        address_line: { type: string }
+        suburb: { type: [string, "null"] }
+        city: { type: string }
+        province: { $ref: "#/components/schemas/SaProvince" }
+        postal_code: { type: [string, "null"] }
+        phone_e164: { type: [string, "null"] }
+        notes: { type: [string, "null"] }
+        is_active: { type: boolean }
+        created_at: { type: string, format: date-time }
+        modified_at: { type: string, format: date-time }
+      example:
+        id: "01a095c1-2a59-75d5-be1e-e5c018cc6ef7"
+        slug: zola-clinic
+        name: Zola Clinic
+        sector: public
+        status: draft
+        location: { latitude: -26.26840, longitude: 27.84720 }
+        address_line: Zola North, Soweto
+        suburb: Zola
+        city: Johannesburg
+        province: Gauteng
+        postal_code: null
+        phone_e164: "+27115551234"
+        notes: null
+        is_active: true
+        created_at: "2026-09-12T15:14:22+02:00"
+        modified_at: "2026-09-12T15:14:22+02:00"
+    SiteListOut:
+      type: object
+      required: [total, limit, offset, items]
+      properties:
+        total: { type: integer, minimum: 0 }
+        limit: { type: integer, minimum: 1 }
+        offset: { type: integer, minimum: 0 }
+        items: { type: array, items: { $ref: "#/components/schemas/SiteOut" } }
+
+    GeocodeIn:
+      type: object
+      required: [address]
+      properties:
+        address: { type: string, minLength: 3, maxLength: 300 }
+      example: { address: "Hillbrow Community Health Centre, Johannesburg" }
+    GeocodeOut:
+      type: object
+      required: [query, candidates]
+      properties:
+        query: { type: string }
+        candidates:
+          type: array
+          items:
+            type: object
+            required: [label, location]
+            properties:
+              label: { type: string, description: The provider's own label, for a person to recognise. }
+              location: { $ref: "#/components/schemas/Location" }
+
+    # ── Onboarding ────────────────────────────────────────────────────────────────────────
+    SiteRegistrationIn:
+      type: object
+      required: [name, slug, sector, location, address_line, city, province, contact_name, contact_email]
+      description: |
+        The public form. Deliberately **not** `SiteIn` with extra fields: it is filled in by a
+        stranger, so it asks for a responsible person and cannot set anything an operator sets.
+        `status` is not here at all.
+      properties:
+        name: { type: string, minLength: 2, maxLength: 200 }
+        slug: { type: string, minLength: 2, maxLength: 80, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+        sector: { $ref: "#/components/schemas/SiteSector" }
+        location: { $ref: "#/components/schemas/Location" }
+        address_line: { type: string, minLength: 3, maxLength: 200 }
+        suburb: { type: [string, "null"], maxLength: 120 }
+        city: { type: string, minLength: 2, maxLength: 120 }
+        province: { $ref: "#/components/schemas/SaProvince" }
+        phone_e164: { type: [string, "null"], pattern: "^\\+[1-9]\\d{6,14}$" }
+        contact_name: { type: string, minLength: 2, maxLength: 120 }
+        contact_email: { type: string, format: email }
+        contact_phone: { type: [string, "null"], pattern: "^\\+[1-9]\\d{6,14}$" }
+      example:
+        name: Zola North Clinic
+        slug: zola-north-clinic
+        sector: public
+        location: { latitude: -26.26840, longitude: 27.84720 }
+        address_line: 12 Zola Road, Zola North
+        suburb: Zola
+        city: Johannesburg
+        province: Gauteng
+        phone_e164: "+27115551234"
+        contact_name: Nomsa Dlamini
+        contact_email: nomsa@zolaclinic.example
+        contact_phone: "+27821234567"
+    SiteRegistrationOut:
+      type: object
+      required: [id, slug, name, status, submitted_at, message]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        status: { $ref: "#/components/schemas/SiteStatus" }
+        submitted_at: { type: [string, "null"], format: date-time }
+        message: { type: string, description: A sentence the page shows. Server-side, so every channel says the same thing. }
+    VerificationDecisionIn:
+      type: object
+      required: [status]
+      properties:
+        status: { $ref: "#/components/schemas/SiteStatus" }
+        note: { type: [string, "null"], maxLength: 1000, description: Shown to the submitter. Required when sending back or suspending. }
+      example: { status: verified, note: "Checked against the Gauteng DoH facility list." }
+    VerificationQueueItemOut:
+      type: object
+      required: [id, slug, name, sector, status, city, suburb, province, contact_name, contact_email, contact_phone, submitted_at, reviewed_at, review_note]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        sector: { $ref: "#/components/schemas/SiteSector" }
+        status: { $ref: "#/components/schemas/SiteStatus" }
+        city: { type: string }
+        suburb: { type: [string, "null"] }
+        province: { $ref: "#/components/schemas/SaProvince" }
+        contact_name: { type: [string, "null"] }
+        contact_email: { type: [string, "null"] }
+        contact_phone: { type: [string, "null"] }
+        submitted_at: { type: [string, "null"], format: date-time }
+        reviewed_at: { type: [string, "null"], format: date-time }
+        review_note: { type: [string, "null"] }
+    VerificationQueueOut:
+      type: object
+      required: [total, status, items]
+      properties:
+        total: { type: integer, minimum: 0 }
+        status: { $ref: "#/components/schemas/SiteStatus" }
+        items: { type: array, items: { $ref: "#/components/schemas/VerificationQueueItemOut" } }
+
+    # ── Hours, holidays and closures ──────────────────────────────────────────────────────
+    TimeSpanIn:
+      type: object
+      required: [opens_at, closes_at]
+      description: Wall clock in Africa/Johannesburg. `closes_at <= opens_at` crosses midnight.
+      properties:
+        opens_at: { type: string, pattern: "^[0-2][0-9]:[0-5][0-9](:[0-5][0-9])?$" }
+        closes_at: { type: string, pattern: "^[0-2][0-9]:[0-5][0-9](:[0-5][0-9])?$" }
+    TimeSpanOut:
+      type: object
+      required: [opens_at, closes_at, crosses_midnight]
+      properties:
+        opens_at: { type: string }
+        closes_at: { type: string }
+        crosses_midnight: { type: boolean }
+    WeeklyHoursIn:
+      type: object
+      required: [days]
+      properties:
+        days:
+          type: array
+          maxItems: 7
+          items:
+            type: object
+            required: [weekday]
+            properties:
+              weekday: { type: integer, minimum: 0, maximum: 6, description: "0 = Monday ... 6 = Sunday." }
+              spans: { type: array, maxItems: 4, items: { $ref: "#/components/schemas/TimeSpanIn" } }
+      example:
+        days:
+          - weekday: 0
+            spans:
+              - { opens_at: "07:00:00", closes_at: "12:30:00" }
+              - { opens_at: "13:00:00", closes_at: "16:00:00" }
+    WeeklyHoursOut:
+      type: object
+      required: [site_id, days]
+      properties:
+        site_id: { type: string, format: uuid }
+        days:
+          type: array
+          description: Always all seven, so a caller never infers a missing one.
+          items:
+            type: object
+            required: [weekday, spans]
+            properties:
+              weekday: { type: integer }
+              spans: { type: array, items: { $ref: "#/components/schemas/TimeSpanOut" } }
+    HolidayRuleIn:
+      type: object
+      description: Both times to open on this holiday, or neither to close.
+      properties:
+        opens_at: { type: [string, "null"] }
+        closes_at: { type: [string, "null"] }
+      example: { opens_at: "08:00:00", closes_at: "11:00:00" }
+    HolidayOut:
+      type: object
+      required: [holiday_date, name, observed_for, is_open, opens_at, closes_at, has_rule]
+      properties:
+        holiday_date: { type: string, format: date }
+        name: { type: string }
+        observed_for: { type: [string, "null"], description: Set on a Monday that exists only because the holiday fell on a Sunday. }
+        is_open: { type: boolean }
+        opens_at: { type: [string, "null"] }
+        closes_at: { type: [string, "null"] }
+        has_rule: { type: boolean, description: "`false` means closed by the safe default rather than by a decision." }
+      example:
+        holiday_date: "2026-09-24"
+        name: Heritage Day
+        observed_for: null
+        is_open: true
+        opens_at: "08:00:00"
+        closes_at: "11:00:00"
+        has_rule: true
+    HolidayListOut:
+      type: object
+      required: [site_id, items]
+      properties:
+        site_id: { type: string, format: uuid }
+        items: { type: array, items: { $ref: "#/components/schemas/HolidayOut" } }
+    ClosureIn:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 3, maxLength: 200, description: The manager's own words; shown to the patient. }
+        starts_at: { type: [string, "null"], format: date-time, description: "`null` means now." }
+        ends_at: { type: [string, "null"], format: date-time, description: "`null` means until further notice." }
+      example: { reason: "The water is off." }
+    ClosureOut:
+      type: object
+      required: [id, site_id, reason, starts_at, ends_at, lifted_at, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        site_id: { type: string, format: uuid }
+        reason: { type: string }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: [string, "null"], format: date-time }
+        lifted_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+    ClosureListOut:
+      type: object
+      required: [total, items]
+      properties:
+        total: { type: integer, minimum: 0 }
+        items: { type: array, items: { $ref: "#/components/schemas/ClosureOut" } }
+    OpenStateOut:
+      type: object
+      required: [site_id, is_open, next_open_at, closure_reason, accepting_joins, refusal]
+      properties:
+        site_id: { type: string, format: uuid }
+        is_open: { type: boolean }
+        next_open_at: { type: [string, "null"], format: date-time, description: "`null` when it does not open again within the horizon." }
+        closure_reason: { type: [string, "null"], description: Set only when an ad-hoc closure is what is keeping it shut. }
+        accepting_joins: { type: boolean }
+        refusal: { type: [string, "null"], description: What a patient is told when joins are refused. }
+      example:
+        site_id: "0199b0c0-0000-7000-8000-00000000a001"
+        is_open: false
+        next_open_at: "2026-09-14T07:00:00+02:00"
+        closure_reason: "The water is off."
+        accepting_joins: false
+        refusal: "Hillbrow Community Health Centre is closed: The water is off."
+
+    # ── Display settings ──────────────────────────────────────────────────────────────────
+    DisplaySettingsIn:
+      type: object
+      required: [display_mode]
+      properties:
+        display_mode: { $ref: "#/components/schemas/DisplayMode" }
+        display_show_comment: { type: boolean, default: false }
+        board_language: { $ref: "#/components/schemas/BoardLanguage" }
+        announce_audio: { type: boolean, default: true }
+        reason_retention_days: { type: integer, minimum: 1, maximum: 90 }
+        confirm_public_display: { type: boolean, default: false, description: '"I understand what will appear on the screen."' }
+        confirm_comment_with_full_name: { type: boolean, default: false, description: A second, separate agreement for a reason beside a full name. }
+      example:
+        display_mode: full
+        display_show_comment: false
+        board_language: en
+        announce_audio: true
+        reason_retention_days: 30
+        confirm_public_display: true
+    DisplaySettingsOut:
+      type: object
+      required: [site_id, display_mode, display_show_comment, board_language, announce_audio, reason_retention_days, reason_retention_ceiling_days, warning_lines]
+      properties:
+        site_id: { type: string, format: uuid }
+        display_mode: { $ref: "#/components/schemas/DisplayMode" }
+        display_show_comment: { type: boolean }
+        board_language: { $ref: "#/components/schemas/BoardLanguage" }
+        announce_audio: { type: boolean }
+        reason_retention_days: { type: integer }
+        reason_retention_ceiling_days: { type: integer, description: The platform ceiling a clinic cannot raise. }
+        warning_lines: { type: array, items: { type: string }, description: What these settings put on the screen, in plain language. }
+    DisplayOptionsOut:
+      type: object
+      required: [modes, languages, retention_floor_days, retention_ceiling_days, comment_warning, comment_with_full_name_warning]
+      properties:
+        modes:
+          type: array
+          items:
+            type: object
+            required: [value, warning, requires_confirmation]
+            properties:
+              value: { $ref: "#/components/schemas/DisplayMode" }
+              warning: { type: string }
+              requires_confirmation: { type: boolean }
+        languages: { type: array, items: { $ref: "#/components/schemas/BoardLanguage" } }
+        retention_floor_days: { type: integer }
+        retention_ceiling_days: { type: integer }
+        comment_warning: { type: string }
+        comment_with_full_name_warning: { type: string }
+
+    # ── Queues ────────────────────────────────────────────────────────────────────────────
+    QueueIn:
+      type: object
+      required: [name, slug]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 120 }
+        slug: { type: string, minLength: 2, maxLength: 80, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+        kind: { $ref: "#/components/schemas/QueueKind" }
+        room_label: { type: [string, "null"], maxLength: 60 }
+        ticket_prefix: { type: string, pattern: "^[A-Z]{1,4}$", default: "A" }
+        display_order: { type: integer, minimum: 0, maximum: 999, default: 0 }
+        expected_service_minutes: { type: integer, minimum: 1, maximum: 240, default: 10 }
+        max_daily_capacity: { type: [integer, "null"], minimum: 1, maximum: 2000 }
+        allows_remote_join: { type: boolean, default: true, description: "`false` is walk-ins only, enforced on the server." }
+        is_active: { type: boolean, default: true }
+      example:
+        name: Triage
+        slug: triage
+        kind: triage
+        room_label: Front desk
+        ticket_prefix: T
+        display_order: 0
+        expected_service_minutes: 5
+    QueueOut:
+      type: object
+      required: [id, site_id, name, slug, kind, room_label, ticket_prefix, display_order, expected_service_minutes, max_daily_capacity, allows_remote_join, is_active, created_at, modified_at]
+      properties:
+        id: { type: string, format: uuid }
+        site_id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        kind: { $ref: "#/components/schemas/QueueKind" }
+        room_label: { type: [string, "null"] }
+        ticket_prefix: { type: string }
+        display_order: { type: integer }
+        expected_service_minutes: { type: integer }
+        max_daily_capacity: { type: [integer, "null"] }
+        allows_remote_join: { type: boolean }
+        is_active: { type: boolean }
+        created_at: { type: string, format: date-time }
+        modified_at: { type: string, format: date-time }
+    QueueListOut:
+      type: object
+      required: [site_id, total, items]
+      properties:
+        site_id: { type: string, format: uuid }
+        total: { type: integer, minimum: 0 }
+        items: { type: array, items: { $ref: "#/components/schemas/QueueOut" } }
+    QueueOrderIn:
+      type: object
+      required: [queue_ids]
+      properties:
+        queue_ids: { type: array, minItems: 1, maxItems: 50, items: { type: string, format: uuid } }
+    JoinableQueueListOut:
+      type: object
+      required: [site_id, source, items]
+      properties:
+        site_id: { type: string, format: uuid }
+        source: { $ref: "#/components/schemas/TicketSource" }
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, name, slug, kind, room_label, expected_service_minutes, joinable, refusal]
+            properties:
+              id: { type: string, format: uuid }
+              name: { type: string }
+              slug: { type: string }
+              kind: { $ref: "#/components/schemas/QueueKind" }
+              room_label: { type: [string, "null"] }
+              expected_service_minutes: { type: integer }
+              joinable: { type: boolean }
+              refusal: { type: [string, "null"] }
+      example:
+        site_id: "0199b0c0-0000-7000-8000-00000000a001"
+        source: ussd
+        items:
+          - id: "01a095dc-0000-7000-8000-000000000001"
+            name: Pharmacy
+            slug: pharmacy
+            kind: pharmacy
+            room_label: null
+            expected_service_minutes: 5
+            joinable: false
+            refusal: "This queue takes walk-in patients only. Please join at the clinic's front desk."
+
+    # ── Services ──────────────────────────────────────────────────────────────────────────
+    ClinicServiceIn:
+      type: object
+      required: [name, slug]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 120 }
+        slug: { type: string, minLength: 2, maxLength: 80, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+        category: { $ref: "#/components/schemas/ServiceCategory" }
+        description: { type: [string, "null"], maxLength: 500 }
+        expected_minutes: { type: integer, minimum: 1, maximum: 240, default: 15 }
+        display_order: { type: integer, minimum: 0, maximum: 999, default: 0 }
+        requires_appointment: { type: boolean, default: false }
+        queue_ids: { type: array, maxItems: 50, items: { type: string, format: uuid } }
+        is_active: { type: boolean, default: true }
+      example:
+        name: Chronic medication collection
+        slug: chronic-medication
+        category: chronic
+        description: Collecting repeat medicine for a long-term condition.
+        expected_minutes: 5
+        display_order: 1
+    ClinicServiceOut:
+      type: object
+      required: [id, site_id, name, slug, category, description, expected_minutes, display_order, requires_appointment, is_active, queue_ids, created_at, modified_at]
+      properties:
+        id: { type: string, format: uuid }
+        site_id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        category: { $ref: "#/components/schemas/ServiceCategory" }
+        description: { type: [string, "null"] }
+        expected_minutes: { type: integer }
+        display_order: { type: integer }
+        requires_appointment: { type: boolean }
+        is_active: { type: boolean }
+        queue_ids: { type: array, items: { type: string, format: uuid } }
+        created_at: { type: string, format: date-time }
+        modified_at: { type: string, format: date-time }
+    ClinicServiceListOut:
+      type: object
+      required: [site_id, total, items]
+      properties:
+        site_id: { type: string, format: uuid }
+        total: { type: integer, minimum: 0 }
+        items: { type: array, items: { $ref: "#/components/schemas/ClinicServiceOut" } }
+
+    # ── Staff ─────────────────────────────────────────────────────────────────────────────
+    StaffMemberOut:
+      type: object
+      required: [id, email, first_name, last_name, roles, is_active, last_login]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        first_name: { type: [string, "null"] }
+        last_name: { type: [string, "null"] }
+        roles: { type: array, items: { type: string }, description: The roles held **at this clinic**, and no other. }
+        is_active: { type: boolean }
+        last_login: { type: [string, "null"], format: date-time }
+    StaffListOut:
+      type: object
+      required: [site_id, total, items]
+      properties:
+        site_id: { type: string, format: uuid }
+        total: { type: integer, minimum: 0 }
+        items: { type: array, items: { $ref: "#/components/schemas/StaffMemberOut" } }
+    StaffInviteIn:
+      type: object
+      required: [email, role]
+      properties:
+        email: { type: string, format: email }
+        role: { $ref: "#/components/schemas/UserRole" }
+        phone: { type: [string, "null"] }
+      example: { email: naledi@clinicq.example, role: receptionist }
+    StaffInvitationOut:
+      type: object
+      required: [id, email, role, site_id, state, expires_at, created_at, invited_by]
+      description: Never carries the invitation link, which is a credential.
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        role: { type: string }
+        site_id: { type: string, format: uuid }
+        state: { type: string, enum: [pending, accepted, revoked, expired] }
+        expires_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        accepted_at: { type: [string, "null"], format: date-time }
+        invited_by: { type: string }
+    StaffInvitationListOut:
+      type: object
+      required: [site_id, total, items]
+      properties:
+        site_id: { type: string, format: uuid }
+        total: { type: integer, minimum: 0 }
+        items: { type: array, items: { $ref: "#/components/schemas/StaffInvitationOut" } }
+    StaffActiveIn:
+      type: object
+      required: [is_active]
+      properties:
+        is_active: { type: boolean }
+      example: { is_active: false }
+    SiteRoleIn:
+      type: object
+      required: [role]
+      properties:
+        role: { $ref: "#/components/schemas/UserRole" }
+      example: { role: nurse_doctor }
+    RoomAssignmentIn:
+      type: object
+      properties:
+        queue_ids: { type: array, maxItems: 50, items: { type: string, format: uuid } }
+      example: { queue_ids: ["01a095dc-0000-7000-8000-000000000002"] }
+    RoomAssignmentListOut:
+      type: object
+      required: [site_id, user_id, items]
+      properties:
+        site_id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        items:
+          type: array
+          items:
+            type: object
+            required: [queue_id, queue_name, room_label, is_active]
+            properties:
+              queue_id: { type: string, format: uuid }
+              queue_name: { type: string }
+              room_label: { type: [string, "null"] }
+              is_active: { type: boolean, description: "`false` for a room somebody has come off; the entry is kept." }
+
+security:
+  - bearerAuth: []
+  - sessionCookie: []
