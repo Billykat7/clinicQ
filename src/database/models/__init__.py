@@ -48,6 +48,12 @@ from src.database.models.resource_descendant import ResourceDescendant
 from src.database.models.role_hierarchy import RoleHierarchy
 from src.database.models.role_permission import RolePermission
 from src.database.models.site import Site
+from src.database.models.site_hours import (
+    PublicHoliday,
+    SiteClosure,
+    SiteHolidayRule,
+    SiteOpeningHours,
+)
 from src.database.models.staff_invitation import StaffInvitation
 from src.database.models.stripe_event import StripeEvent
 from src.database.models.user import User
@@ -84,6 +90,7 @@ __all__ = [
     "PermissionAuditLog",
     "PermissionUsage",
     "PermissionUsageWindow",
+    "PublicHoliday",
     "RbacRole",
     "RefreshToken",
     "Resource",
@@ -91,6 +98,9 @@ __all__ = [
     "RoleHierarchy",
     "RolePermission",
     "Site",
+    "SiteClosure",
+    "SiteHolidayRule",
+    "SiteOpeningHours",
     "SoftDeleteMixin",
     "StaffInvitation",
     "StripeEvent",

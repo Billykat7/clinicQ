@@ -7,12 +7,16 @@ Read the files in this order:
 * :mod:`.schemas` — what a client may send, and what the API returns;
 * :mod:`.service` — the rules and every query, including the ``ST_DWithin`` radius search the GiST
   index exists for;
+* :mod:`.hours` — is this clinic open, and when does it open next? Pure functions of their inputs,
+  with the precedence (a closure beats a holiday rule beats the weekly schedule) resolved once;
+  :mod:`.hours_service` writes them, and :mod:`.availability` is the single join gate every channel
+  asks;
 * :mod:`.geocoding` — turning a typed address into a coordinate **on the server**, because the
   Content-Security-Policy allows ``connect-src 'self'`` and a browser cannot reach a geocoder;
 * :mod:`.router` — the HTTP surface: platform routes behind a ``business``-tier grant, and
   per-clinic routes behind the site guard (Issue 19).
 
-The ``sites`` model and its CRUD landed with Issue 23. Opening hours come with Issue 24, the
-services catalogue with Issue 26, the display and privacy settings with Issue 27, and onboarding
-with Issue 29.
+The ``sites`` model and its CRUD landed with Issue 23, opening hours and closures with Issue 24.
+The services catalogue comes with Issue 26, the display and privacy settings with Issue 27, and
+onboarding with Issue 29.
 """

@@ -83,6 +83,26 @@ CASES: dict[str, dict[str, object]] = {
         "reader": "a@clinicq.example",
         "paths": lambda site, _row: (f"/api/v1/sites/{site}",),
     },
+    "siteopeninghours": {
+        # A clinic's ordinary week (Issue 24). The same grant as the profile: the front desk reads
+        # the hours, the manager changes them.
+        "resource": "sites.profile",
+        "reader": "a@clinicq.example",
+        "paths": lambda site, _row: (
+            f"/api/v1/sites/{site}/hours",
+            f"/api/v1/sites/{site}/open",
+        ),
+    },
+    "siteholidayrule": {
+        "resource": "sites.profile",
+        "reader": "a@clinicq.example",
+        "paths": lambda site, _row: (f"/api/v1/sites/{site}/holidays",),
+    },
+    "siteclosure": {
+        "resource": "sites.profile",
+        "reader": "a@clinicq.example",
+        "paths": lambda site, _row: (f"/api/v1/sites/{site}/closures",),
+    },
     "staffinvitation": {
         # Who has been invited to a clinic (Issue 22): the same grant as the staff list, so a
         # receptionist reads it, and another clinic's list is a 404 like everything else.
