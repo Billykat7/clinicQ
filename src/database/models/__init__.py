@@ -57,6 +57,7 @@ from src.database.models.site_hours import (
     SiteOpeningHours,
 )
 from src.database.models.staff_invitation import StaffInvitation
+from src.database.models.staff_queue_assignment import StaffQueueAssignment
 from src.database.models.stripe_event import StripeEvent
 from src.database.models.user import User
 from src.database.models.user_role_assignment import UserRoleAssignment
@@ -107,6 +108,7 @@ __all__ = [
     "SiteOpeningHours",
     "SoftDeleteMixin",
     "StaffInvitation",
+    "StaffQueueAssignment",
     "StripeEvent",
     "TimestampMixin",
     "User",

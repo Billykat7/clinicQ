@@ -46,6 +46,18 @@ _ASSIGNMENT_SCOPED: dict[str, frozenset[str]] = {
 #: in the same module is still a finding. An entry here is a decision someone can read, not a way
 #: around the rule.
 _UNSCOPED_BY_DESIGN: dict[str, str] = {
+    "modules/staff/assignments.py::_assignments_at": (
+        "``user_roles`` has no ``site_id`` column: the clinic **is** its ``scope_id``, so the "
+        "filter this applies (``scope_type='site' AND scope_id = access.site_id``) is the site "
+        "filter, written once here for the writes the way ``roles_held_at_site`` writes it for the "
+        "reads. There is no guard helper to route it through (Issue 28)"
+    ),
+    "modules/staff/assignments.py::_sync_queue_scoped_roles": (
+        "reads the caller's queue-scoped ``user_roles`` rows **across clinics on purpose**: the "
+        "same person may work at another clinic, and only this clinic's rows are ours to remove. "
+        "The narrowing is the explicit ``this_clinic`` set below, taken from a guarded "
+        "``scoped_select(Queue, access)`` (Issue 28)"
+    ),
     "modules/sites/catalogue.py::seed_default_catalogue": (
         "a clinic's default catalogue is written **while the clinic is being onboarded** "
         "(Issue 29), before anyone holds a role at it, so there is no SiteAccess to scope by; the "
