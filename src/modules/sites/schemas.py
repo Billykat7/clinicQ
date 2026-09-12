@@ -30,6 +30,7 @@ from src.commons.enums import (
     BoardLanguage,
     DisplayMode,
     SaProvince,
+    ServiceCategory,
     SiteSector,
     SiteStatus,
 )
@@ -37,6 +38,10 @@ from src.commons.geo import (
     CoordinateOutOfRangeError,
     Coordinates,
     assert_within_operating_area,
+)
+from src.database.models.clinic_service import (
+    MAX_EXPECTED_MINUTES,
+    MIN_EXPECTED_MINUTES,
 )
 from src.modules.sites.settings import (
     REASON_RETENTION_CEILING_DAYS,
@@ -412,3 +417,53 @@ class DisplayOptionsOut(BaseModel):
     retention_ceiling_days: int
     comment_warning: str
     comment_with_full_name_warning: str
+
+
+# --------------------------------------------------------------------------------------
+# The services catalogue (Issue 26)
+# --------------------------------------------------------------------------------------
+
+
+class ClinicServiceIn(BaseModel):
+    """What a clinic manager may set about one service it offers."""
+
+    name: str = Field(min_length=2, max_length=120)
+    slug: str = Field(min_length=2, max_length=80, pattern=SLUG_PATTERN)
+    category: ServiceCategory = ServiceCategory.OTHER
+    description: str | None = Field(default=None, max_length=500)
+    expected_minutes: int = Field(
+        default=15, ge=MIN_EXPECTED_MINUTES, le=MAX_EXPECTED_MINUTES
+    )
+    """Validated to a sensible range: this is the wait estimator's prior (Issue 42), so zero would
+    make an estimate divide by nothing and a value in hours would report a wait in days."""
+    display_order: int = Field(default=0, ge=0, le=999)
+    requires_appointment: bool = False
+    queue_ids: list[str] = Field(default_factory=list, max_length=50)
+    """Which of this clinic's queues handle it. Optional, and another clinic's id is dropped."""
+    is_active: bool = True
+
+
+class ClinicServiceOut(BaseModel):
+    """One service as the API returns it."""
+
+    id: str
+    site_id: str
+    name: str
+    slug: str
+    category: ServiceCategory
+    description: str | None
+    expected_minutes: int
+    display_order: int
+    requires_appointment: bool
+    is_active: bool
+    queue_ids: list[str]
+    created_at: datetime
+    modified_at: datetime
+
+
+class ClinicServiceListOut(BaseModel):
+    """A clinic's catalogue, in the order the clinic put it in."""
+
+    site_id: str
+    total: int = Field(ge=0)
+    items: list[ClinicServiceOut]

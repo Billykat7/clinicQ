@@ -21,7 +21,8 @@ listed ones, with their **weekly opening hours** and the country's **public holi
 and next (Issue 24); and one staff account per ClinicQ staff role, printed with its development
 password, each (except the platform admin) assigned to the first demo clinic so the site-scoped
 routes work locally. Their **queues** land too (Issue 25): the dataset's own
-lines per clinic, so a public health centre gets four and a private practice two. The day of ticket
+lines per clinic, so a public health centre gets four and a private practice two; and their
+**services catalogue** (Issue 26), the primary-care services with the minutes each usually takes. The day of ticket
 history (``scripts/db/demo_dataset.py``) is built and summarised, and is written when its table
 lands with Issue 39, which adds its step to :func:`seed`.
 """
@@ -369,6 +370,25 @@ def _queue_kind(slug: str) -> QueueKind:
     return QueueKind.OTHER
 
 
+def seed_services(session: Session, site_ids: dict[str, str]) -> SeedReport:
+    """Give every demo clinic the default services catalogue (Issue 26). Caller commits.
+
+    Idempotent by clinic, like the queues and the hours: a clinic that already has any service is
+    left alone, because a manager may have edited the catalogue and a seed run must not undo that.
+    """
+    from src.modules.sites.catalogue import seed_default_catalogue
+
+    report = SeedReport()
+    for clinic in CLINICS:
+        created = seed_default_catalogue(session, site_ids[clinic.slug])
+        if created:
+            report.created += 1
+        else:
+            report.unchanged += 1
+    session.flush()
+    return report
+
+
 def seed_holidays(session: Session) -> SeedReport:
     """Write this year's and next year's public holidays (Issue 24). Caller commits."""
     from src.modules.sites.hours_service import seed_public_holidays
@@ -392,6 +412,7 @@ def seed(session: Session, *, password: str) -> dict[str, SeedReport]:
         "Clinics": sites,
         "Opening hours": seed_opening_hours(session, ids),
         "Queues": seed_queues(session, ids),
+        "Services": seed_services(session, ids),
         "Public holidays": seed_holidays(session),
         "Staff accounts": seed_staff(
             session, password=password, site_id=ids[DEMO_SITE_SLUG]

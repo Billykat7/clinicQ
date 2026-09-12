@@ -40,14 +40,22 @@ from src.core.audit import record_audit_event
 from src.core.client_ip import resolve_client_ip
 from src.core.request_logging import bind_request_context
 from src.core.security import CurrentStaff
-from src.core.site_scope import SiteAccess, require_site_access, site_ids_in_scope
+from src.core.site_scope import (
+    SiteAccess,
+    require_site_access,
+    site_ids_in_scope,
+    site_not_found,
+)
 from src.database.models.site import Site
-from src.modules.sites import hours_service, service
+from src.modules.sites import catalogue, hours_service, service
 from src.modules.sites import settings as display_settings
 from src.modules.sites.availability import join_gate
 from src.modules.sites.geocoding import GeocodingUnavailableError, geocode_address
 from src.modules.sites.hours import open_state, schedule_for
 from src.modules.sites.schemas import (
+    ClinicServiceIn,
+    ClinicServiceListOut,
+    ClinicServiceOut,
     ClosureIn,
     ClosureListOut,
     ClosureOut,
@@ -111,6 +119,11 @@ SiteDisplayRead = Annotated[
 SiteDisplayUpdate = Annotated[
     SiteAccess, Depends(require_site_access("sites.display", "update"))
 ]
+
+#: The services catalogue is part of the clinic's profile: the front desk reads it (it is what a
+#: walk-in is asked which of), and the clinic manager decides what is on it.
+SiteServicesRead = SiteProfileRead
+SiteServicesUpdate = SiteProfileUpdate
 
 
 def _audit(
@@ -644,6 +657,144 @@ def set_display_settings(
     db.commit()
     db.refresh(site)
     return _settings_out(site)
+
+
+# --------------------------------------------------------------------------------------
+# The services catalogue (Issue 26)
+# --------------------------------------------------------------------------------------
+
+
+@router.get(
+    "/{site_id}/services",
+    response_model=ClinicServiceListOut,
+    operation_id="sitesListServices",
+)
+def list_services(
+    access: SiteServicesRead,
+    db: DbSession,
+    include_inactive: Annotated[bool, Query()] = True,
+) -> ClinicServiceListOut:
+    """What this clinic offers, in the order the clinic put it in.
+
+    Deactivated services are included by default, because a manager's screen has to show one in
+    order to bring it back; anything a patient chooses from asks for ``include_inactive=false``.
+    """
+    return catalogue.list_services(db, access, include_inactive=include_inactive)
+
+
+@router.post(
+    "/{site_id}/services",
+    response_model=ClinicServiceOut,
+    status_code=status.HTTP_201_CREATED,
+    operation_id="sitesCreateService",
+)
+def create_service(
+    payload: ClinicServiceIn,
+    request: Request,
+    access: SiteServicesUpdate,
+    db: DbSession,
+) -> ClinicServiceOut:
+    """Add a service to this clinic's catalogue; records a CREATE audit event."""
+    try:
+        service_row = catalogue.create_service(db, access, payload)
+    except catalogue.ServiceNameTakenError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    _audit_entity(
+        db,
+        request,
+        access,
+        AuditAction.CREATE,
+        AuditEntityType.CLINIC_SERVICE,
+        service_row.id,
+        f"added {service_row.name!r} ({service_row.expected_minutes} min)",
+    )
+    db.commit()
+    db.refresh(service_row)
+    return catalogue.service_out(service_row)
+
+
+@router.put(
+    "/{site_id}/services/{service_id}",
+    response_model=ClinicServiceOut,
+    operation_id="sitesUpdateService",
+)
+def update_service(
+    service_id: str,
+    payload: ClinicServiceIn,
+    request: Request,
+    access: SiteServicesUpdate,
+    db: DbSession,
+) -> ClinicServiceOut:
+    """Replace a service's editable fields; records an UPDATE audit event."""
+    service_row = catalogue.get_service(db, access, service_id)
+    if service_row is None:
+        raise site_not_found()
+    try:
+        catalogue.update_service(db, access, service_row, payload)
+    except catalogue.ServiceNameTakenError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    _audit_entity(
+        db,
+        request,
+        access,
+        AuditAction.UPDATE,
+        AuditEntityType.CLINIC_SERVICE,
+        service_row.id,
+        f"updated {service_row.name!r}",
+    )
+    db.commit()
+    db.refresh(service_row)
+    return catalogue.service_out(service_row)
+
+
+@router.delete(
+    "/{site_id}/services/{service_id}",
+    response_model=ClinicServiceOut,
+    operation_id="sitesDeactivateService",
+)
+def deactivate_service(
+    service_id: str, request: Request, access: SiteServicesUpdate, db: DbSession
+) -> ClinicServiceOut:
+    """Take a service out of new joins. **Its history stays**, which is why this is not a delete."""
+    service_row = catalogue.get_service(db, access, service_id)
+    if service_row is None:
+        raise site_not_found()
+    catalogue.deactivate_service(db, service_row)
+    _audit_entity(
+        db,
+        request,
+        access,
+        AuditAction.UPDATE,
+        AuditEntityType.CLINIC_SERVICE,
+        service_row.id,
+        f"deactivated {service_row.name!r}; past tickets still name it",
+    )
+    db.commit()
+    db.refresh(service_row)
+    return catalogue.service_out(service_row)
+
+
+def _audit_entity(
+    db: Session,
+    request: Request,
+    access: SiteAccess,
+    action: AuditAction,
+    entity_type: AuditEntityType,
+    entity_id: str,
+    context: str,
+) -> None:
+    """Record one mutation of something *inside* a clinic, rather than of the clinic itself."""
+    bind_request_context(site_id=access.site_id)
+    record_audit_event(
+        db,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        actor=access.user.email,
+        actor_id=str(access.user.id),
+        ip_address=resolve_client_ip(request),
+        context=context,
+    )
 
 
 def _site_or_404(db: Session, access: SiteAccess) -> Site:

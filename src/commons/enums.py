@@ -369,6 +369,33 @@ class QueueKind(StrEnum):
     OTHER = "other"
 
 
+class ServiceCategory(StrEnum):
+    """What kind of care a clinic service is. Stored in ``clinic_service.category`` (Issue 26).
+
+    A closed vocabulary rather than typed text, because a district report (M12) groups by it across
+    clinics that each name the same service differently: "ARV collection", "HIV treatment" and
+    "chronic ARVs" are one category.
+
+    - ``CONSULTATION``: seeing a nurse or a doctor about something new.
+    - ``CHRONIC``: collecting repeat medication for a long-term condition.
+    - ``MATERNAL``: antenatal and postnatal care, and family planning.
+    - ``CHILD_HEALTH``: immunisation, growth monitoring, under-fives.
+    - ``HIV_TB``: testing, counselling, initiation and treatment.
+    - ``SCREENING``: blood pressure, glucose, cervical and other screening.
+    - ``PHARMACY``: dispensing at the medicine window.
+    - ``OTHER``: anything a clinic offers that none of the above describes.
+    """
+
+    CONSULTATION = "consultation"
+    CHRONIC = "chronic"
+    MATERNAL = "maternal"
+    CHILD_HEALTH = "child_health"
+    HIV_TB = "hiv_tb"
+    SCREENING = "screening"
+    PHARMACY = "pharmacy"
+    OTHER = "other"
+
+
 class TicketStatus(StrEnum):
     """Where one ticket is in its lifecycle. Stored in ``tickets.status``.
 
@@ -786,6 +813,7 @@ class AssignmentScopeType(StrEnum):
     INSTANCE = "instance"
     SITE = "site"
     QUEUE = "queue"
+    CLINIC_SERVICE = "clinic_service"
 
 
 class ScopeShape(StrEnum):
@@ -1241,6 +1269,7 @@ class AuditEntityType(StrEnum):
     PATIENT_CONSENT = "patient_consent"
     SITE = "site"
     QUEUE = "queue"
+    CLINIC_SERVICE = "clinic_service"
     STAFF_INVITATION = "staff_invitation"
     AUDIT_LOG = "audit_log"
     DATA_SUBJECT = "data_subject"
