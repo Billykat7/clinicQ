@@ -17,11 +17,12 @@ password into a real database is never the intent.
 second run creates nothing: it updates what differs from the dataset and leaves the rest.
 
 **What it seeds today.** The eleven demo **clinics** (Issue 23), verified so they behave like
-listed ones, and one staff account per ClinicQ staff role, printed with its development password,
-each (except the platform admin) assigned to the first demo clinic so the site-scoped routes work
-locally. Queues and the day of ticket history (``scripts/db/demo_dataset.py``) are built and
-summarised, and are written as their tables land: queues with Issue 25, tickets with Issue 39. Each
-of those issues adds its step to :func:`seed`.
+listed ones, with their **weekly opening hours** and the country's **public holidays** for this year
+and next (Issue 24); and one staff account per ClinicQ staff role, printed with its development
+password, each (except the platform admin) assigned to the first demo clinic so the site-scoped
+routes work locally. Queues and the day of ticket history (``scripts/db/demo_dataset.py``) are built
+and summarised, and are written as their tables land: queues with Issue 25, tickets with Issue 39.
+Each of those issues adds its step to :func:`seed`.
 """
 
 import argparse
@@ -47,7 +48,7 @@ from src.commons.geo import Coordinates
 from src.commons.time import APP_TIMEZONE, business_date
 from src.core.config import Settings, get_settings
 from src.core.security import hash_password, verify_password
-from src.database.models import Site, User, UserRoleAssignment
+from src.database.models import Site, SiteOpeningHours, User, UserRoleAssignment
 
 #: Where a development database may live: this machine, or the compose stack's service name.
 LOCAL_HOSTS: Final = frozenset({"localhost", "127.0.0.1", "::1", "db"})
@@ -276,18 +277,68 @@ def seed_sites(session: Session) -> tuple[SeedReport, dict[str, str]]:
     return report, ids
 
 
-def seed(session: Session, *, password: str) -> tuple[SeedReport, SeedReport]:
+#: The demo clinics' ordinary week: weekdays only, one span a day, from the dataset's own opening
+#: and closing times. Saturdays and Sundays are left with no rows, which is what "closed" looks
+#: like (:mod:`src.modules.sites.hours`).
+DEMO_WEEKDAYS: Final = range(5)
+
+
+def seed_opening_hours(session: Session, site_ids: dict[str, str]) -> SeedReport:
+    """Give every demo clinic its weekly hours (Issue 24); return the report. Caller commits.
+
+    Idempotent by clinic: a clinic that already has any opening-hours row is left exactly as it is,
+    because a manager may have edited it and a seed run must not overwrite a real decision.
+    """
+    report = SeedReport()
+    for clinic in CLINICS:
+        site_id = site_ids[clinic.slug]
+        already = session.execute(
+            select(SiteOpeningHours.id).where(SiteOpeningHours.site_id == site_id)
+        ).first()
+        if already is not None:
+            report.unchanged += 1
+            continue
+        for weekday in DEMO_WEEKDAYS:
+            session.add(
+                SiteOpeningHours(
+                    site_id=site_id,
+                    weekday=weekday,
+                    opens_at=clinic.opens,
+                    closes_at=clinic.closes,
+                )
+            )
+        report.created += 1
+    session.flush()
+    return report
+
+
+def seed_holidays(session: Session) -> SeedReport:
+    """Write this year's and next year's public holidays (Issue 24). Caller commits."""
+    from src.modules.sites.hours_service import seed_public_holidays
+
+    this_year = business_date().year
+    created, unchanged = seed_public_holidays(session, (this_year, this_year + 1))
+    return SeedReport(created=created, unchanged=unchanged)
+
+
+def seed(session: Session, *, password: str) -> dict[str, SeedReport]:
     """Every seeding step, in dependency order. Issues 25 and 39 add theirs here.
 
-    Clinics first: a staff member's role is held **at a site**, so the ``site`` rows have to exist
-    before the assignments that point at them.
+    Clinics first: a staff member's role is held **at a site**, and opening hours hang off one, so
+    the ``site`` rows have to exist before anything that points at them.
 
     Returns:
-        ``(sites report, staff report)``.
+        ``{what was seeded: report}``, in the order it ran.
     """
     sites, ids = seed_sites(session)
-    staff = seed_staff(session, password=password, site_id=ids[DEMO_SITE_SLUG])
-    return sites, staff
+    return {
+        "Clinics": sites,
+        "Opening hours": seed_opening_hours(session, ids),
+        "Public holidays": seed_holidays(session),
+        "Staff accounts": seed_staff(
+            session, password=password, site_id=ids[DEMO_SITE_SLUG]
+        ),
+    }
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -323,19 +374,16 @@ def main(argv: list[str] | None = None) -> int:
         f"Seeding {url.host}:{url.port or 5432}/{url.database} (schema {settings.db_schema.value})"
     )
     with get_db_context() as db:
-        sites, report = seed(db, password=password)
+        reports = seed(db, password=password)
         if args.dry_run:
             db.rollback()
             print("Dry run: rolled back.")
 
-    print(
-        f"Clinics: {sites.created} created, {sites.updated} updated, "
-        f"{sites.unchanged} unchanged"
-    )
-    print(
-        f"Staff accounts: {report.created} created, {report.updated} updated, "
-        f"{report.unchanged} unchanged"
-    )
+    for what, report in reports.items():
+        print(
+            f"{what}: {report.created} created, {report.updated} updated, "
+            f"{report.unchanged} unchanged"
+        )
     print()
     print("DEVELOPMENT ONLY. These accounts exist to click around a local database:")
     for staff in DEMO_STAFF:

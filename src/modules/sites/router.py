@@ -20,6 +20,7 @@ the change and its trail land in one transaction.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -39,16 +40,27 @@ from src.core.request_logging import bind_request_context
 from src.core.security import CurrentStaff
 from src.core.site_scope import SiteAccess, require_site_access, site_ids_in_scope
 from src.database.models.site import Site
-from src.modules.sites import service
+from src.modules.sites import hours_service, service
+from src.modules.sites.availability import join_gate
 from src.modules.sites.geocoding import GeocodingUnavailableError, geocode_address
+from src.modules.sites.hours import open_state, schedule_for
 from src.modules.sites.schemas import (
+    ClosureIn,
+    ClosureListOut,
+    ClosureOut,
     GeocodeCandidateOut,
     GeocodeIn,
     GeocodeOut,
+    HolidayListOut,
+    HolidayOut,
+    HolidayRuleIn,
+    OpenStateOut,
     SiteIn,
     SiteListOut,
     SiteLocationOut,
     SiteOut,
+    WeeklyHoursIn,
+    WeeklyHoursOut,
 )
 
 router = APIRouter(prefix="/sites", tags=["sites"])
@@ -77,6 +89,11 @@ SiteProfileRead = Annotated[
 SiteProfileUpdate = Annotated[
     SiteAccess, Depends(require_site_access("sites.profile", "update"))
 ]
+#: Opening hours, holiday rules and closures are the clinic's profile: a receptionist reads them,
+#: a clinic manager changes them, and closing the clinic is the same grant as changing its hours
+#: because it is the same decision made at short notice.
+SiteHoursRead = SiteProfileRead
+SiteHoursUpdate = SiteProfileUpdate
 
 
 def _audit(
@@ -299,6 +316,194 @@ def delete_site(
         f"removed clinic {site.slug} from the directory",
     )
     db.commit()
+
+
+# --------------------------------------------------------------------------------------
+# Opening hours, public holidays and closures (Issue 24)
+#
+# Declared after ``/{site_id}`` deliberately: FastAPI matches in declaration order, and these are
+# all longer paths under the same prefix, so nothing here can be swallowed by it.
+# --------------------------------------------------------------------------------------
+
+
+@router.get(
+    "/{site_id}/open",
+    response_model=OpenStateOut,
+    operation_id="sitesOpenState",
+    summary="Is this clinic open, and is it taking patients?",
+)
+def site_open_state(access: SiteHoursRead, db: DbSession) -> OpenStateOut:
+    """One answer for discovery, the board and all four channel menus.
+
+    ``accepting_joins`` is the **server's** decision (:mod:`src.modules.sites.availability`) and is
+    a function of the clinic and the moment, never of the channel asking — which is what makes a
+    closure stop web, USSD, WhatsApp and walk-in joins at the same instant.
+    """
+    site = _site_or_404(db, access)
+    schedule = schedule_for(db, access)
+    state = open_state(schedule)
+    gate = join_gate(site, schedule)
+    return OpenStateOut(
+        site_id=site.id,
+        is_open=state.is_open,
+        next_open_at=state.next_open_at,
+        closure_reason=state.closure_reason,
+        accepting_joins=gate.allowed,
+        refusal=gate.reason,
+    )
+
+
+@router.get(
+    "/{site_id}/hours", response_model=WeeklyHoursOut, operation_id="sitesGetHours"
+)
+def get_hours(access: SiteHoursRead, db: DbSession) -> WeeklyHoursOut:
+    """The clinic's ordinary week, all seven days."""
+    return hours_service.weekly_hours(db, access)
+
+
+@router.put(
+    "/{site_id}/hours", response_model=WeeklyHoursOut, operation_id="sitesSetHours"
+)
+def set_hours(
+    payload: WeeklyHoursIn,
+    request: Request,
+    access: SiteHoursUpdate,
+    db: DbSession,
+) -> WeeklyHoursOut:
+    """Replace the weekdays the payload names; records an UPDATE audit event."""
+    hours = hours_service.replace_weekly_hours(db, access, payload)
+    _audit(
+        db,
+        request,
+        access.user.email,
+        str(access.user.id),
+        AuditAction.UPDATE,
+        access.site_id,
+        f"set opening hours for {len(payload.days)} weekday(s)",
+    )
+    db.commit()
+    return hours
+
+
+@router.get(
+    "/{site_id}/holidays",
+    response_model=HolidayListOut,
+    operation_id="sitesListHolidays",
+)
+def list_holidays(access: SiteHoursRead, db: DbSession) -> HolidayListOut:
+    """The public-holiday calendar, with this clinic's answer for each one."""
+    return hours_service.holiday_calendar(db, access)
+
+
+@router.put(
+    "/{site_id}/holidays/{holiday_date}",
+    response_model=HolidayOut,
+    operation_id="sitesSetHolidayRule",
+)
+def set_holiday_rule(
+    holiday_date: date,
+    payload: HolidayRuleIn,
+    request: Request,
+    access: SiteHoursUpdate,
+    db: DbSession,
+) -> HolidayOut:
+    """Say whether this clinic opens on one public holiday, and for which hours."""
+    try:
+        rule = hours_service.set_holiday_rule(db, access, holiday_date, payload)
+    except hours_service.HolidayNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    _audit(
+        db,
+        request,
+        access.user.email,
+        str(access.user.id),
+        AuditAction.UPDATE,
+        access.site_id,
+        f"{holiday_date}: {'open' if rule.is_open else 'closed'} ({rule.name})",
+    )
+    db.commit()
+    return rule
+
+
+@router.get(
+    "/{site_id}/closures",
+    response_model=ClosureListOut,
+    operation_id="sitesListClosures",
+)
+def list_closures(
+    access: SiteHoursRead,
+    db: DbSession,
+    include_past: Annotated[bool, Query()] = False,
+) -> ClosureListOut:
+    """The clinic's closures. Live ones by default; past ones are kept and shown when asked for."""
+    return hours_service.list_closures(db, access, include_past=include_past)
+
+
+@router.post(
+    "/{site_id}/closures",
+    response_model=ClosureOut,
+    status_code=status.HTTP_201_CREATED,
+    operation_id="sitesAnnounceClosure",
+)
+def announce_closure(
+    payload: ClosureIn,
+    request: Request,
+    access: SiteHoursUpdate,
+    db: DbSession,
+) -> ClosureOut:
+    """Close the clinic, with a reason patients will be shown.
+
+    New joins stop on every channel the moment this commits, because every channel asks the same
+    gate. The people already holding a ticket are told by the notification service (Issue 63),
+    which subscribes to the event this raises: nothing is sent from here, so a clinic can still
+    close when the SMS gateway is down.
+    """
+    try:
+        closure = hours_service.announce_closure(db, access, payload)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    _audit(
+        db,
+        request,
+        access.user.email,
+        str(access.user.id),
+        AuditAction.CREATE,
+        access.site_id,
+        f"closed the clinic: {closure.reason}",
+    )
+    db.commit()
+    db.refresh(closure)
+    return ClosureOut.model_validate(closure)
+
+
+@router.delete(
+    "/{site_id}/closures/{closure_id}",
+    response_model=ClosureOut,
+    operation_id="sitesLiftClosure",
+)
+def lift_closure(
+    closure_id: str,
+    request: Request,
+    access: SiteHoursUpdate,
+    db: DbSession,
+) -> ClosureOut:
+    """End a closure early. The row stays, so "why were we shut on the 14th" stays answerable."""
+    try:
+        closure = hours_service.lift_closure(db, access, closure_id)
+    except hours_service.ClosureNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    _audit(
+        db,
+        request,
+        access.user.email,
+        str(access.user.id),
+        AuditAction.UPDATE,
+        access.site_id,
+        "lifted the closure early",
+    )
+    db.commit()
+    db.refresh(closure)
+    return ClosureOut.model_validate(closure)
 
 
 def _site_or_404(db: Session, access: SiteAccess) -> Site:

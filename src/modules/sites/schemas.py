@@ -14,9 +14,16 @@ API returns are different sets of fields. Two decisions worth naming:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, time
+from itertools import pairwise
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from src.commons.enums import SaProvince, SiteSector, SiteStatus
 from src.commons.geo import (
@@ -137,3 +144,187 @@ class GeocodeOut(BaseModel):
 
     query: str
     candidates: list[GeocodeCandidateOut]
+
+
+# --------------------------------------------------------------------------------------
+# Opening hours, public holidays and ad-hoc closures (Issue 24)
+# --------------------------------------------------------------------------------------
+
+#: Monday is 0, as :meth:`datetime.date.weekday` numbers them.
+MIN_WEEKDAY, MAX_WEEKDAY = 0, 6
+#: The most spans one weekday may carry. A lunch break is two; a clinic with more than four
+#: sessions in a day is describing something this model is the wrong shape for.
+MAX_SPANS_PER_DAY = 4
+#: How long a closure reason may be. It is shown to a patient, so it is a sentence, not an essay.
+MAX_CLOSURE_REASON = 200
+
+
+class TimeSpanIn(BaseModel):
+    """One stretch of a clinic's day, in ``Africa/Johannesburg`` wall clock."""
+
+    opens_at: time
+    closes_at: time
+
+
+class DayHoursIn(BaseModel):
+    """One weekday's spans. No spans means the clinic does not open that day."""
+
+    weekday: int = Field(ge=MIN_WEEKDAY, le=MAX_WEEKDAY)
+    spans: list[TimeSpanIn] = Field(default_factory=list, max_length=MAX_SPANS_PER_DAY)
+
+    @field_validator("spans")
+    @classmethod
+    def _spans_do_not_overlap(cls, value: list[TimeSpanIn]) -> list[TimeSpanIn]:
+        """Refuse overlapping spans on one day: two answers to "are you open" is not an answer.
+
+        A span whose ``closes_at`` is at or before its ``opens_at`` crosses midnight, which is
+        legitimate (an after-hours service) but can only be the **last** span of a day, since
+        anything after it would be the following morning.
+        """
+        ordered = sorted(value, key=lambda span: span.opens_at)
+        for earlier, later in pairwise(ordered):
+            if earlier.closes_at <= earlier.opens_at:
+                raise ValueError(
+                    "A span that crosses midnight has to be the last one of its day."
+                )
+            if later.opens_at < earlier.closes_at:
+                raise ValueError(
+                    f"The spans {earlier.opens_at}-{earlier.closes_at} and "
+                    f"{later.opens_at}-{later.closes_at} overlap."
+                )
+        return ordered
+
+
+class WeeklyHoursIn(BaseModel):
+    """A clinic's whole ordinary week, replaced in one request.
+
+    A whole-week replacement rather than per-day edits on purpose: "what are your hours" is one
+    answer, and a partial update is how a clinic ends up with Tuesday from last year.
+    """
+
+    days: list[DayHoursIn] = Field(max_length=7)
+
+    @field_validator("days")
+    @classmethod
+    def _one_entry_per_weekday(cls, value: list[DayHoursIn]) -> list[DayHoursIn]:
+        """Refuse a payload that names the same weekday twice."""
+        weekdays = [day.weekday for day in value]
+        if len(weekdays) != len(set(weekdays)):
+            raise ValueError("Each weekday may appear at most once.")
+        return sorted(value, key=lambda day: day.weekday)
+
+
+class TimeSpanOut(BaseModel):
+    """One stretch of a clinic's day, as the API returns it."""
+
+    opens_at: time
+    closes_at: time
+    #: True when the span runs past midnight into the next morning.
+    crosses_midnight: bool
+
+
+class DayHoursOut(BaseModel):
+    """One weekday's spans, as the API returns them."""
+
+    weekday: int
+    spans: list[TimeSpanOut]
+
+
+class WeeklyHoursOut(BaseModel):
+    """A clinic's ordinary week: all seven days, so a caller never has to infer a missing one."""
+
+    site_id: str
+    days: list[DayHoursOut]
+
+
+class HolidayRuleIn(BaseModel):
+    """What a clinic does on one public holiday: closed, or open for these hours."""
+
+    opens_at: time | None = None
+    closes_at: time | None = None
+
+    @model_validator(mode="after")
+    def _both_or_neither(self) -> HolidayRuleIn:
+        """Half a rule is not a rule: either the clinic opens, with both times, or it is closed.
+
+        A ``model_validator`` rather than a ``field_validator`` on ``closes_at``, because a field
+        validator does not run for a field the payload omitted — which is exactly the case this
+        refuses (``opens_at`` given, ``closes_at`` left out).
+        """
+        if (self.opens_at is None) != (self.closes_at is None):
+            raise ValueError(
+                "Give both opens_at and closes_at to open on this holiday, or neither to close."
+            )
+        return self
+
+
+class HolidayOut(BaseModel):
+    """One public holiday, and what this clinic does on it."""
+
+    holiday_date: date
+    name: str
+    #: Set when the holiday exists only because the one it observes fell on a Sunday.
+    observed_for: str | None
+    is_open: bool
+    opens_at: time | None
+    closes_at: time | None
+    #: False when the clinic has written no rule, so it is closed by the safe default.
+    has_rule: bool
+
+
+class HolidayListOut(BaseModel):
+    """A clinic's holiday calendar for the window asked about, in date order."""
+
+    site_id: str
+    items: list[HolidayOut]
+
+
+class ClosureIn(BaseModel):
+    """An ad-hoc closure a clinic manager announces."""
+
+    reason: str = Field(min_length=3, max_length=MAX_CLOSURE_REASON)
+    """Shown to every patient holding a ticket, in the manager's own words."""
+    starts_at: datetime | None = None
+    """``None`` means now: the commonest case, because something has just gone wrong."""
+    ends_at: datetime | None = None
+    """``None`` means "until further notice", which a manager has to lift by hand."""
+
+
+class ClosureOut(BaseModel):
+    """One closure as the API returns it."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    site_id: str
+    reason: str
+    starts_at: datetime
+    ends_at: datetime | None
+    lifted_at: datetime | None
+    created_at: datetime
+
+
+class ClosureListOut(BaseModel):
+    """A clinic's closures, most recent first."""
+
+    total: int = Field(ge=0)
+    items: list[ClosureOut]
+
+
+class OpenStateOut(BaseModel):
+    """Whether a clinic is open right now, when it opens next, and whether joins are accepted.
+
+    One payload rather than three endpoints, because discovery, the board and every channel menu
+    ask all three questions at once and must never show a half-updated answer.
+    """
+
+    site_id: str
+    is_open: bool
+    #: ``Africa/Johannesburg``. ``None`` means it does not open again within the horizon.
+    next_open_at: datetime | None
+    #: The manager's own words when an ad-hoc closure is what is keeping it shut.
+    closure_reason: str | None
+    #: The single server-side answer every channel reads (Issue 24).
+    accepting_joins: bool
+    #: What a patient is told when ``accepting_joins`` is false.
+    refusal: str | None

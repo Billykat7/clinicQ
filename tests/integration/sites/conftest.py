@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 from starlette import status
 
-from src.commons.enums import AppEnvironment, UserRole
+from src.commons.enums import AppEnvironment, SiteStatus, UserRole
 from src.core import refresh_token_policy, security
 from src.core.config import Settings, get_settings
 from src.core.rbac_manifest_sync import sync_rbac_catalog
@@ -72,8 +72,10 @@ def clinics(monkeypatch: pytest.MonkeyPatch) -> Iterator[SimpleNamespace]:
 
     with factory() as db:
         sync_rbac_catalog(db)
-        SiteFactory.create(db, id=SITE_A)
-        SiteFactory.create(db, id=SITE_B)
+        # Verified, because these stand in for listed clinics: a draft one refuses joins for a
+        # reason that has nothing to do with what most of these tests are about (Issue 24's gate).
+        SiteFactory.create(db, id=SITE_A, status=SiteStatus.VERIFIED)
+        SiteFactory.create(db, id=SITE_B, status=SiteStatus.VERIFIED)
         for name, role, site_id in PEOPLE:
             StaffFactory.create(
                 db, email=f"{name}@clinicq.example", role=role, site_id=site_id

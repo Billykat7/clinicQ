@@ -52,6 +52,39 @@ def to_sast(value: datetime) -> datetime:
     return value.astimezone(APP_TIMEZONE)
 
 
+def stored_sast(value: datetime) -> datetime:
+    """Read a **stored** business datetime back as the Johannesburg instant it was written as.
+
+    :func:`to_sast` refuses a naive value, and is right to: a naive datetime arriving from outside
+    does not say which instant it means. A value coming back out of *this application's own
+    storage* is different, and needs its own function, because of one fact about SQLite:
+
+    * **PostgreSQL** columns are ``timestamptz``. A value goes in aware, comes back aware, and this
+      converts it to the SAST wall clock like :func:`to_sast`.
+    * **SQLite**, which the test suite runs on, has no such type: SQLAlchemy writes the local wall
+      clock and hands back a **naive** datetime with the offset gone. Everything this application
+      writes is aware SAST, so re-attaching :data:`APP_TIMEZONE` restores exactly what was stored.
+
+    Calling ``value.astimezone(APP_TIMEZONE)`` on that naive value instead is the bug this function
+    exists to prevent: Python reads a naive datetime as the **server's** clock zone, so the same
+    row resolves correctly on a developer's laptop (SAST) and two hours in the future in CI or a
+    container (UTC). It was found by a closure that had started refusing to count as started.
+
+    Also the right reading for a datetime parsed from a **request body** with no offset: this API
+    documents its times as Africa/Johannesburg, so "14:00" from a client means 14:00 there rather
+    than 14:00 wherever the server happens to be running.
+
+    Args:
+        value: A datetime read from storage, or parsed from a request body.
+
+    Returns:
+        The same instant as an aware datetime in ``Africa/Johannesburg``.
+    """
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=APP_TIMEZONE)
+    return value.astimezone(APP_TIMEZONE)
+
+
 def business_date(value: datetime | None = None) -> date:
     """Return the service day (the Johannesburg calendar date) of ``value``, or of now.
 
