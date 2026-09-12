@@ -129,3 +129,41 @@ class StaffActiveIn(BaseModel):
     is_active: bool = Field(
         description="False deactivates and revokes their live sessions."
     )
+
+
+# --------------------------------------------------------------------------------------
+# Site membership and room assignment (Issue 28)
+# --------------------------------------------------------------------------------------
+
+
+class SiteRoleIn(BaseModel):
+    """A role a clinic manager grants to somebody at their own clinic."""
+
+    role: UserRole
+
+
+class RoomAssignmentIn(BaseModel):
+    """Which of this clinic's rooms a staff member works.
+
+    The whole set rather than one room at a time: "which rooms does this nurse work" is one
+    decision, and a per-room edit is how somebody ends up on a room nobody meant to leave them on.
+    """
+
+    queue_ids: list[str] = Field(default_factory=list, max_length=50)
+
+
+class RoomAssignmentOut(BaseModel):
+    """One room a staff member is on, or was on."""
+
+    queue_id: str
+    queue_name: str
+    room_label: str | None
+    is_active: bool
+
+
+class RoomAssignmentListOut(BaseModel):
+    """A staff member's rooms at one clinic, the ones they are on first."""
+
+    site_id: str
+    user_id: str
+    items: list[RoomAssignmentOut]

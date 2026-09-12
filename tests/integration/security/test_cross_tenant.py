@@ -128,6 +128,13 @@ CASES: dict[str, dict[str, object]] = {
             f"/api/v1/sites/{site}/queues/joinable",
         ),
     },
+    "staffqueueassignment": {
+        # Which rooms somebody works (Issue 28). The same grant as the staff list: a receptionist
+        # sees who is on which room, and the manager decides it.
+        "resource": "sites.staff",
+        "reader": "a@clinicq.example",
+        "paths": lambda site, row: (f"/api/v1/sites/{site}/staff/{row}/queues",),
+    },
     "staffinvitation": {
         # Who has been invited to a clinic (Issue 22): the same grant as the staff list, so a
         # receptionist reads it, and another clinic's list is a 404 like everything else.

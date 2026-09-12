@@ -17,19 +17,26 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from src.commons.enums import UserRole
+from src.commons.enums import AuditAction, AuditEntityType, UserRole
+from src.core.audit import record_audit_event
+from src.core.client_ip import resolve_client_ip
 from src.core.rbac_language import role_label
+from src.core.request_logging import bind_request_context
 from src.core.site_scope import SiteAccess, require_site_access
 from src.database.models import StaffInvitation
 from src.database.session import get_db
-from src.modules.staff import invitations, service
+from src.modules.staff import assignments, invitations, service
 from src.modules.staff.schemas import (
     InvitationAcceptedOut,
     InvitationAcceptIn,
     InvitationPreviewOut,
+    RoomAssignmentIn,
+    RoomAssignmentListOut,
+    RoomAssignmentOut,
+    SiteRoleIn,
     StaffActiveIn,
     StaffInvitationListOut,
     StaffInvitationOut,
@@ -229,3 +236,189 @@ def accept_staff_invitation(
     )
     db.commit()
     return InvitationAcceptedOut(email=email, site_id=site_id, role=role)
+
+
+# --------------------------------------------------------------------------------------
+# Site membership and room assignment (Issue 28)
+#
+# Both are ``sites.staff`` writes, the same grant that invites and deactivates: deciding who works
+# here and which room they work is one job, and it is the clinic manager's.
+# --------------------------------------------------------------------------------------
+
+
+def _audit_assignment(
+    db: Session,
+    request: Request,
+    access: SiteAccess,
+    action: AuditAction,
+    user_id: str,
+    context: str,
+) -> None:
+    """Record one membership or room change, before the commit, with the clinic on it."""
+    bind_request_context(site_id=access.site_id)
+    record_audit_event(
+        db,
+        action=action,
+        entity_type=AuditEntityType.USER,
+        entity_id=user_id,
+        actor=access.user.email,
+        actor_id=str(access.user.id),
+        ip_address=resolve_client_ip(request),
+        context=context,
+    )
+
+
+@router.post(
+    "/{site_id}/staff/{user_id}/roles",
+    response_model=StaffMemberOut,
+    operation_id="staffGrantRoleAtSite",
+)
+def grant_role_at_site(
+    user_id: str,
+    body: SiteRoleIn,
+    request: Request,
+    access: StaffUpdate,
+    db: DbSession,
+) -> StaffMemberOut:
+    """Give somebody a role **at this clinic**. Idempotent; audited.
+
+    Not a way in from outside: the person must already have an account (Issue 22's invitation is
+    how one is made), and another clinic's id is a 404 before any of this is considered.
+    """
+    try:
+        assignments.grant_role_at_site(db, access, user_id, body.role)
+    except assignments.RoleNotAssignableError as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from exc
+    _audit_assignment(
+        db,
+        request,
+        access,
+        AuditAction.UPDATE,
+        user_id,
+        f"granted the {body.role.value} role at this clinic",
+    )
+    db.commit()
+    return service.get_staff_member(db, user_id, access)
+
+
+@router.delete(
+    "/{site_id}/staff/{user_id}/roles/{role}",
+    response_model=StaffMemberOut,
+    operation_id="staffRevokeRoleAtSite",
+)
+def revoke_role_at_site(
+    user_id: str,
+    role: UserRole,
+    request: Request,
+    access: StaffUpdate,
+    db: DbSession,
+) -> StaffMemberOut:
+    """Take a role away at this clinic. **Refused if it would leave the clinic without a manager.**
+
+    Takes effect on the person's very next request: which clinics and queues somebody reaches is
+    read from these rows on every request and never from their token, so an access token minted a
+    minute ago stops reaching this clinic the moment this commits.
+    """
+    member = service.get_staff_member(db, user_id, access)
+    try:
+        assignments.revoke_role_at_site(db, access, user_id, role)
+    except assignments.LastManagerError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except assignments.NotAtThisClinicError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    _audit_assignment(
+        db,
+        request,
+        access,
+        AuditAction.UPDATE,
+        user_id,
+        f"removed the {role.value} role at this clinic",
+    )
+    db.commit()
+    return StaffMemberOut(
+        **{**member.model_dump(), "roles": _roles_now(db, user_id, access)}
+    )
+
+
+@router.get(
+    "/{site_id}/staff/{user_id}/queues",
+    response_model=RoomAssignmentListOut,
+    operation_id="staffListRoomAssignments",
+)
+def list_room_assignments(
+    user_id: str, access: StaffRead, db: DbSession
+) -> RoomAssignmentListOut:
+    """Which of this clinic's rooms somebody works, the ones they are on first."""
+    service.get_staff_member(db, user_id, access)  # 404s for anyone else's id
+    return RoomAssignmentListOut(
+        site_id=access.site_id,
+        user_id=user_id,
+        items=[
+            RoomAssignmentOut(
+                queue_id=row.queue_id,
+                queue_name=row.queue_name,
+                room_label=row.room_label,
+                is_active=row.is_active,
+            )
+            for row in assignments.room_assignments(db, access, user_id)
+        ],
+    )
+
+
+@router.put(
+    "/{site_id}/staff/{user_id}/queues",
+    response_model=RoomAssignmentListOut,
+    operation_id="staffSetRoomAssignments",
+)
+def set_room_assignments(
+    user_id: str,
+    body: RoomAssignmentIn,
+    request: Request,
+    access: StaffUpdate,
+    db: DbSession,
+) -> RoomAssignmentListOut:
+    """Put somebody on exactly these rooms at this clinic; audited.
+
+    The whole set in one request, and a room they come off keeps its row so "who was on Room 2 last
+    Tuesday" stays answerable. Takes effect on their next request, for the same reason as above.
+    """
+    service.get_staff_member(db, user_id, access)
+    try:
+        rooms = assignments.set_room_assignments(db, access, user_id, body.queue_ids)
+    except assignments.NotAtThisClinicError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    on = [row.queue_name for row in rooms if row.is_active]
+    _audit_assignment(
+        db,
+        request,
+        access,
+        AuditAction.UPDATE,
+        user_id,
+        f"room assignment: {', '.join(on) if on else 'none'}",
+    )
+    db.commit()
+    return RoomAssignmentListOut(
+        site_id=access.site_id,
+        user_id=user_id,
+        items=[
+            RoomAssignmentOut(
+                queue_id=row.queue_id,
+                queue_name=row.queue_name,
+                room_label=row.room_label,
+                is_active=row.is_active,
+            )
+            for row in assignments.room_assignments(db, access, user_id)
+        ],
+    )
+
+
+def _roles_now(db: Session, user_id: str, access: SiteAccess) -> list[str]:
+    """The roles somebody holds at this clinic *after* a change, without re-running the 404.
+
+    ``get_staff_member`` would 404 for someone whose last role here has just been removed, which is
+    correct for a read and wrong for the response to the removal itself: the caller asked what
+    happened, and "they now hold nothing here" is the answer.
+    """
+    from src.core.site_scope import roles_held_at_site
+
+    return roles_held_at_site(db, user_id, access)
