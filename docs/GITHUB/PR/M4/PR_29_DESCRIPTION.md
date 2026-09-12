@@ -71,8 +71,8 @@ testing", so `NOT_TAKING_PATIENTS` refuses `suspended` and `draft` and deliberat
 somebody who already has its link can reach it. A draft has not been put forward at all. The line is
 named in a constant with that paragraph beside it, and there is a test for both sides of it.
 
-**Two bugs the tests were green through, and the browser was not.** Driving the pages against a
-real database found both:
+**Three bugs the tests were green through, and the browser was not.** Driving the pages against a
+real database found all three:
 
 - **the CSRF token.** Three of this milestone's scripts matched a **hardcoded** cookie name
   (`csrf_token`) instead of the configured one (`bk_clinicq_csrf`, read from
@@ -83,6 +83,11 @@ real database found both:
   rather than `window.BKPAdmin`, and the page did not load `admin-crud.js` at all, so the panel had
   no geometry and opened off the anchor. Both fixed; the panel is now the kernel's, with its
   standard head/foot chrome and outside-click dismissal.
+- **the form greeted every visitor with two red fields.** `.lp-field input:invalid:not(:placeholder-shown)`
+  was written to mean "red once they have typed something wrong", but `:not(:placeholder-shown)`
+  matches any input that has **no `placeholder` attribute at all** — which is exactly *Full name* and
+  *Work email address*. Both were painted with the danger border the instant the page loaded, before
+  anyone had touched them. Now `:user-invalid`, which is the selector that actually means that.
 
 **Out of scope:** payment and medical-aid details (Issue 37); the notification delivery itself
 (Issue 63), which subscribes to the event this raises; and the discovery API (Issue 31), which is
@@ -102,7 +107,12 @@ built on the `search_sites` narrowing added here.
   **`src/templates/admin/verification.html`**, **`src/static/js/admin-verification.js`** (all new),
   and their routes in **`src/web/routes.py`** (`_VERIFICATION_SECTIONS`, with the bare console URL
   redirecting to its default tab and an unrecognised section redirecting rather than 404ing).
-  **`src/static/css/landing.css`:** front-door form styles — this is the first form out there.
+  **`src/static/css/landing.css`:** front-door form styles — this is the first form out there —
+  plus a top margin on `.lp-doc h2`, given back by `.lp-doc section > h2:first-child`. A `.lp-doc`
+  section with several headings needs the gap; `privacy.html` never showed it because each of its
+  headings is alone in its own `<section>` and takes the gap from the section instead.
+  **`src/static/css/admin.css`:** `.detail-list`, the slideover's label/value grid, which had no
+  style at all and collapsed to one column under 30rem.
 - **`src/static/js/site-display-settings.js`**, **`admin-verification.js`**: the CSRF fix above.
 - **`tests/`:** `integration/sites/test_onboarding_api.py` (17 cases); the two allow-list entries,
   each with its reason.
