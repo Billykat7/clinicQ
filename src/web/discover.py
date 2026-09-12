@@ -145,6 +145,23 @@ def queue_label(waiting: int | None) -> str:
     return "1 person waiting" if waiting == 1 else f"{waiting} people waiting"
 
 
+def counted_ago(as_of: datetime | None, moment: datetime) -> str | None:
+    """How old a measured figure is, in seconds (Issue 36): counted 12 s ago. ``None`` when unknown."""
+    if as_of is None:
+        return None
+    seconds = max(0, round((moment - as_of).total_seconds()))
+    return f"counted {seconds} s ago"
+
+
+def measured_queue_label(
+    waiting: int | None, as_of: datetime | None, moment: datetime
+) -> str:
+    """The queue length with its age when it was measured; "not reported yet" when it was not."""
+    label = queue_label(waiting)
+    age = counted_ago(as_of, moment) if waiting is not None else None
+    return f"{label}, {age}" if age else label
+
+
 def wait_label(ranges: Sequence[WaitRange | None]) -> str:
     """The expected wait across a clinic's queues, always a range; "not available" until Issue 42.
 
@@ -226,7 +243,11 @@ def clinic_card(clinic: NearbyClinic, moment: datetime) -> ClinicCard:
         ),
         is_open=clinic.open_status.is_open,
         open_label=open_label(clinic.open_status, moment),
-        queue_label=queue_label(clinic.total_waiting),
+        queue_label=measured_queue_label(
+            clinic.total_waiting,
+            min((q.as_of for q in clinic.queues if q.as_of is not None), default=None),
+            moment,
+        ),
         wait_label=wait_label([queue.wait_range for queue in clinic.queues]),
     )
 
@@ -809,7 +830,9 @@ def live_view(profile: ClinicProfile, *, join_enabled: bool) -> LiveView:
     rows = tuple(
         QueueRow(
             name=queue.name,
-            waiting_label=queue_label(queue.waiting),
+            waiting_label=measured_queue_label(
+                queue.waiting, queue.as_of, profile.evaluated_at
+            ),
             wait_label=wait_label([queue.wait_range]),
             walk_in_only=not queue.allows_remote_join,
         )

@@ -18,13 +18,16 @@ arrive it is a :class:`WaitRange`, which cannot hold a single number, because a 
 "12 minutes" is a promise nobody can keep.
 
 **The reader is a parameter, not a global.** :func:`published_live_queues` takes the counting
-function as an argument (defaulting to the direct read), which is the seam two later issues plug
-into without touching a caller: Issue 36's snapshot cache wraps the direct read, and the tests
-hand in a reader with real numbers to prove that a count travels intact from here to the API.
+function as an argument, which is the seam later issues plug into without touching a caller: Issue
+36's snapshot cache (:func:`src.modules.queue.snapshot.cached_waiting_counts`, what discovery reads
+by default) wraps this direct read, and the tests hand in a reader with real numbers to prove that
+a count travels intact from here to the API. A reader answers :class:`QueueReading`, the count and
+when it was taken, so a patient can be told how old a figure is.
 """
 
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
@@ -32,9 +35,27 @@ from src.commons.enums import QueueKind
 from src.core.site_scope import published_select
 from src.database.models.queue import Queue
 
-#: Given the queues asked about, return ``{queue id: waiting count}``, where ``None`` means the
-#: count is not measured. A reader must answer for every queue it is given.
-WaitingCountReader = Callable[[Session, Collection[Queue]], Mapping[str, int | None]]
+
+@dataclass(frozen=True, slots=True)
+class QueueReading:
+    """One queue's length as a reader reports it, and when it was counted.
+
+    ``waiting`` is ``None`` when the length is not measured. ``as_of`` is when the count was taken
+    (Africa/Johannesburg): the moment of the read for a direct count, the snapshot's timestamp for a
+    cached one (Issue 36), so a surface can say how old a figure is. ``None`` when nothing was
+    counted.
+    """
+
+    waiting: int | None
+    as_of: datetime | None = None
+
+
+#: The reading that means "nobody counted".
+NOT_MEASURED = QueueReading(waiting=None, as_of=None)
+
+#: Given the queues asked about, return ``{queue id: reading}``. A reader must answer for every
+#: queue it is given; a queue missing from the answer is treated as not measured.
+WaitingCountReader = Callable[[Session, Collection[Queue]], Mapping[str, QueueReading]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,11 +97,13 @@ class LiveQueue:
     waiting: int | None
     #: The estimator's range (Issue 42). ``None`` until it exists: show the length, never a guess.
     wait_range: WaitRange | None = None
+    #: When ``waiting`` was counted, so a surface can show its age in seconds (Issue 36).
+    as_of: datetime | None = None
 
 
 def read_waiting_counts(
     db: Session, queues: Collection[Queue]
-) -> Mapping[str, int | None]:
+) -> Mapping[str, QueueReading]:
     """The direct read of each queue's length: ``None`` for every queue until Issue 39 lands.
 
     Issue 39 creates the ticket table and replaces this body with one grouped ``COUNT`` of
@@ -93,10 +116,10 @@ def read_waiting_counts(
         queues: The queues to count.
 
     Returns:
-        ``{queue id: None}`` for each queue: not measured.
+        ``{queue id: NOT_MEASURED}`` for each queue.
     """
     del db  # read by Issue 39's implementation
-    return dict.fromkeys((queue.id for queue in queues), None)
+    return dict.fromkeys((queue.id for queue in queues), NOT_MEASURED)
 
 
 def published_live_queues(
@@ -130,9 +153,10 @@ def published_live_queues(
             .order_by(Queue.site_id, Queue.display_order, Queue.name)
         ).scalars()
     )
-    counts = reader(db, rows)
+    readings = reader(db, rows)
     by_site: dict[str, list[LiveQueue]] = {}
     for queue in rows:
+        reading = readings.get(queue.id, NOT_MEASURED)
         by_site.setdefault(queue.site_id, []).append(
             LiveQueue(
                 queue_id=queue.id,
@@ -141,7 +165,8 @@ def published_live_queues(
                 kind=queue.kind_enum,
                 display_order=queue.display_order,
                 allows_remote_join=queue.allows_remote_join,
-                waiting=counts.get(queue.id),
+                waiting=reading.waiting,
+                as_of=reading.as_of,
             )
         )
     return {site_id: tuple(queues) for site_id, queues in by_site.items()}

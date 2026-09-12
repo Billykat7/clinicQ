@@ -33,6 +33,7 @@ from src.core.rbac_manifest_sync import sync_rbac_catalog
 from src.database.models import SiteOpeningHours
 from src.database.session import get_db
 from src.main import create_app
+from src.modules.queue.snapshot import NoSnapshotCache, set_snapshot_cache
 from src.modules.sites.catalogue import seed_default_catalogue
 from tests.factories import PatientFactory, QueueFactory, SiteFactory
 
@@ -69,6 +70,9 @@ def directory(
     ``directory.patient_client()`` returns a client signed in as a new patient.
     """
     factory = sessionmaker(bind=migrated_engine, autoflush=False)
+    # No Redis here: discovery reads the queue snapshot with the cache absent, which is the
+    # "cold cache is slow, never wrong" path. The snapshot's own tests bring a real Redis.
+    set_snapshot_cache(NoSnapshotCache())
     ids: dict[str, str] = {}
     with factory() as db:
         sync_rbac_catalog(db)
@@ -138,3 +142,4 @@ def directory(
         engine=migrated_engine,
     )
     app.dependency_overrides.clear()
+    set_snapshot_cache(None)

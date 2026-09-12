@@ -35,11 +35,11 @@ from src.commons.time import business_date, now_sast
 from src.core.site_scope import published_select
 from src.database.models import ClinicService, Site
 from src.modules.discovery.service import OpenStatus
+from src.modules.queue.snapshot import cached_waiting_counts
 from src.modules.queues.live import (
     LiveQueue,
     WaitingCountReader,
     published_live_queues,
-    read_waiting_counts,
     total_waiting,
 )
 from src.modules.sites.availability import join_gate
@@ -182,7 +182,7 @@ def clinic_profile(
     slug: str,
     *,
     moment: datetime | None = None,
-    reader: WaitingCountReader = read_waiting_counts,
+    reader: WaitingCountReader = cached_waiting_counts,
 ) -> ClinicProfile | None:
     """One publicly visible clinic's profile, or ``None``.
 
@@ -193,7 +193,7 @@ def clinic_profile(
         db: The session.
         slug: The clinic's public handle.
         moment: When "open now" means; ``None`` is now in Johannesburg.
-        reader: Where queue lengths come from (the direct read until Issue 36).
+        reader: Where queue lengths come from: the queue snapshot (Issue 36) by default.
     """
     site = db.execute(publicly_visible().where(Site.slug == slug)).scalar_one_or_none()
     if site is None:
