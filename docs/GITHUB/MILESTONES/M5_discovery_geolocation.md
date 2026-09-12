@@ -6,7 +6,7 @@
 |---|---|
 | **Status** | 📋 Planned |
 | **Progress** | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
-| **Sprints** | 5–6 (weeks 9–12), semester 1. The sprint plan spreads its issues over sprints 2–6: some start early against stubs (see the table) |
+| **Sprints** | 5–6 (weeks 9–12), semester 2. The sprint plan spreads its issues over sprints 2–6: some start early against stubs (see the table) |
 | **Release tag** | `v0.5.0` |
 | **Primary owner** | C, Frontend/Patient · A, Backend Lead |
 | **Who does the work** | A: 3 issues · C: 3 issues · F: 2 issues (see each issue for the backup) |

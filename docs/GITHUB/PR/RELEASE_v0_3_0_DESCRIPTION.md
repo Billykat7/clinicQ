@@ -87,6 +87,25 @@ and M3 are now closed there**; they had been left open.
 The rule itself lives in `.cursor/rules/milestone-progress.mdc` and is summarised in
 `CONTRIBUTING.md`, which is what the README links to (see *Note on `.cursor/`* below).
 
+## Sprints
+
+The plan put sprints 1–7 in semester 1 and 8–14 in semester 2. **All fourteen run in semester 2**, so
+the split is gone: `WORKLOAD_SPLIT.md` §3 is one table, and the six milestone documents that said
+"semester 1" now say semester 2.
+
+It also gained a *Where we are* table — sprint, weeks, the milestones it carries, and its status —
+with **sprints 1–4 marked done** (they carry M1–M3, issues 1–22, tags `v0.1.0`–`v0.3.0`), sprint 5
+marked next, and a `✅` on those four rows in the lanes table.
+
+**Why this one is marked by hand and the milestone bars are not:** a lane names issues it works
+*against* as well as issues it delivers — sprint 3 works against the notification contract stub
+`[63]` and a discovery fixture `[32]`, neither of which is sprint 3's to close, and `[→95]` is an
+explicit forward reference. A script counting brackets would call sprint 3 unfinished. The document
+says so where the table is, so nobody later mistakes it for generated output.
+
+The root README's Status block was still "planning complete. Implementation begins at M1" with M1
+and M2 unticked; it now reads sprint 4 of 14, 22 of 109 issues, `v0.3.0`.
+
 ## Changes
 
 - **New:** `docs/GITHUB/RELEASES/RELEASE_v0_3_0.md`, `scripts/update_milestone_progress.py`.
@@ -98,6 +117,9 @@ The rule itself lives in `.cursor/rules/milestone-progress.mdc` and is summarise
   roll-up line under it (`🟩🟩⬜⬜⬜⬜⬜⬜⬜⬜ **20%** (22/109 issues) closed · **3 of 14 milestones
   done**`).
 - **All 14 milestone documents:** a **Progress** row. M3 additionally: status, and its exit criteria.
+  Six of them: `semester 1` → `semester 2`.
+- **`docs/TEAM/WORKLOAD_SPLIT.md`:** one sprint table instead of two, the *Where we are* status
+  table, and `✅` on sprints 1–4.
 
 ## Testing
 

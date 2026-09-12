@@ -418,15 +418,19 @@ Full detail: [engineering non-negotiables](docs/guideline.md) and
 
 ## Status
 
-**Phase:** planning complete. Implementation begins at M1.
+**Phase:** building. **Sprint 4 of 14 complete** (semester 2), 22 of 109 issues closed, latest tag
+`v0.3.0`. Next: sprint 5 — `sites` and `queues` (M4).
 
 - [x] Idea finalised (**ClinicQ**, selected from the shortlist)
 - [x] Requirements gathered ([product docs](docs/PRODUCT/README.md))
 - [x] Architecture agreed ([implementation plan](docs/PLAN/IMPLEMENTATION_PLAN.md))
 - [x] Milestones and issues defined (14 milestones, 109 issues)
 - [x] Workload split and dependency analysis ([workload split](docs/TEAM/WORKLOAD_SPLIT.md))
-- [ ] Repo structure set up (M1)
-- [ ] CI/CD pipeline running (M2)
+- [x] Repo structure set up (M1, `v0.1.0`)
+- [x] CI/CD pipeline running (M2, `v0.2.0`)
+- [x] Identity, RBAC, site scoping, audit and consent (M3, `v0.3.0`)
+- [ ] Clinics and queues configurable (M4)
+- [ ] Queue engine running (M6) ⚠️ critical path
 - [ ] MVP complete (M8)
 - [ ] Pilot clinic live (M14)
 - [ ] Demo-ready

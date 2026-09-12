@@ -6,7 +6,7 @@
 |---|---|
 | **Status** | ✅ Done: issues 15–22 closed on 2026-09-12, release note [`v0.3.0`](../RELEASES/RELEASE_v0_3_0.md). Two exit criteria are met only in part until queues and tickets exist (below) |
 | **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (8/8 issues) |
-| **Sprints** | 3–4 (weeks 5–8), semester 1. The sprint plan spreads its issues over sprints 2–4: some start early against stubs (see the table) |
+| **Sprints** | 3–4 (weeks 5–8), semester 2. The sprint plan spreads its issues over sprints 2–4: some start early against stubs (see the table) |
 | **Release tag** | `v0.3.0` |
 | **Primary owner** | A, Backend Lead |
 | **Who does the work** | A: 7 issues · F: 1 issue (see each issue for the backup) |
