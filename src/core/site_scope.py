@@ -12,7 +12,8 @@ here, in one module, with three rules:
    would confirm that the id exists, which is all an attacker needs to enumerate another clinic.
    The body is the same for a site that does not exist at all.
 3. **Every query on a site-scoped row is built here**: :func:`scoped_select`,
-   :func:`get_in_site_or_404`, :func:`staff_at_site`. A router or service that writes its own
+   :func:`get_in_site_or_404`, :func:`staff_at_site`, and for a patient who has no role anywhere,
+   :func:`published_select`. A router or service that writes its own
    ``select(SomeSiteScopedModel)`` fails ``tests/unit/security/test_site_scoped_queries.py``.
 
 The **platform-admin escape hatch** is explicit, audited and read-only: a caller whose grant reaches
@@ -28,10 +29,11 @@ from dataclasses import dataclass
 from typing import Annotated, Any
 
 from fastapi import Depends, HTTPException, Request, status
-from sqlalchemy import Select, select
+from sqlalchemy import ColumnElement, Select, select
 from sqlalchemy.orm import Session
 
 from src.commons.enums import (
+    SITE_PUBLICLY_VISIBLE_STATUSES,
     AssignmentScopeType,
     AuditAction,
     AuditEntityType,
@@ -42,7 +44,7 @@ from src.core.audit import record_audit_event
 from src.core.client_ip import resolve_client_ip
 from src.core.request_logging import bind_request_context
 from src.core.security import CurrentStaff
-from src.database.models import User, UserRoleAssignment
+from src.database.models import Site, User, UserRoleAssignment
 from src.database.session import get_db
 
 #: The header a caller sends to read a clinic they are not assigned to, with the reason why.
@@ -236,6 +238,40 @@ def select_in_scope(model: type[Any], access: SiteAccess | None) -> Select[Any]:
     ``None``; the audit read API is the first (Issue 20).
     """
     return select(model) if access is None else scoped_select(model, access)
+
+
+def publicly_visible_site_clauses() -> tuple[ColumnElement[bool], ...]:
+    """The ``where`` clauses that make a clinic one a patient may be shown (Issues 29, 31).
+
+    Live, switched on, and in a status the platform has published
+    (:data:`~src.commons.enums.SITE_PUBLICLY_VISIBLE_STATUSES`). Written **once**, here, so the
+    discovery search and every public read of a clinic's hours and queues apply the same rule.
+    """
+    return (
+        Site.is_deleted.is_(False),
+        Site.is_active.is_(True),
+        Site.status.in_([status.value for status in SITE_PUBLICLY_VISIBLE_STATUSES]),
+    )
+
+
+def published_select(model: type[Any], site_ids: Iterable[str]) -> Select[Any]:
+    """Rows of a site-scoped ``model`` belonging to ``site_ids``, **only where a patient may look**.
+
+    The patient-facing counterpart of :func:`scoped_select`. A patient searching for a clinic holds
+    no role anywhere, so there is no :class:`SiteAccess` to narrow by, and the rule that replaces it
+    is the directory's: a row is readable only if its clinic is publicly visible. A draft, pending or
+    suspended clinic's hours and queues are therefore unreachable from here even when its id is
+    passed in, which is what keeps an unchecked clinic out of discovery by construction rather than
+    by every caller remembering to filter first.
+
+    It reads what a clinic publishes about itself (opening hours, queue names); a ticket or a
+    patient is never a published row, and nothing here may be used to read one.
+    """
+    return (
+        select(model)
+        .join(Site, Site.id == model.site_id)
+        .where(model.site_id.in_(list(site_ids)), *publicly_visible_site_clauses())
+    )
 
 
 def get_in_site_or_404(
