@@ -26,13 +26,25 @@ behaviour from status. One direct write outside the machine and they disagree, s
 
 ## 3. Every site-scoped query goes through the tenancy helper
 
-Cross-site access returns **404, not 403**, so ids cannot be probed for existence.
+`src/core/site_scope.py` is the helper, and the rules are:
+
+- **Which clinics a caller may reach is read from their role assignments** (`user_roles` with
+  `scope_type='site'`), never from a column, a token claim or a request parameter.
+- **A site the caller is not assigned to answers 404, not 403** — with the same body an id that
+  never existed gets, so an id cannot be probed for existence.
+- **Every read of a site-scoped row is built by the helper**: `require_site_access(resource, verb)`
+  on the route, then `scoped_select`, `get_in_site_or_404`, `staff_at_site`.
+- **A platform admin's cross-site read is explicit, read-only and audited**: it needs an
+  `X-ClinicQ-Cross-Site-Reason` header and writes one audit row per request. Without it, 404.
 
 **Why:** ClinicQ is multi-tenant from the first pilot. A receptionist at Clinic A must never read a
 ticket at Clinic B, and retrofitting that guarantee across forty routes is far more expensive than
 holding it from the start.
 
-*Enforced by:* Issue 19 and the cross-tenant test suite.
+*Enforced by:* `tests/unit/security/test_site_scoped_queries.py` (a query on a site-scoped model
+built outside the helper fails the build, naming the file and line) and
+`tests/integration/security/test_cross_tenant.py` (every Clinic B id answers 404 over real HTTP; a
+site-scoped resource that has no case there, and no pending entry naming its issue, fails too).
 
 ## 4. The waiting-room board applies privacy server-side
 

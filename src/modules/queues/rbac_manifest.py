@@ -13,7 +13,7 @@ nurse or doctor only on the queues they are assigned to (``own``). The site guar
 assignment (Issues 19, 28) turn the tier into rows.
 """
 
-from src.commons.enums import GrantScope, PermissionVerb, UserRole
+from src.commons.enums import GrantScope, PermissionVerb, ScopeShape, UserRole
 from src.core.rbac_manifest import ModuleManifest, ResourceSpec, RoleGrant
 
 _ASSIGNED = GrantScope.ASSIGNED.value
@@ -23,6 +23,9 @@ MANIFEST = ModuleManifest(
     key="queues",
     name="Queues",
     description="A clinic's queues and the tickets in them.",
+    # A queue, or a row hanging off one: narrowed by the caller's queues at ``own`` and by their
+    # sites at ``assigned`` (Issue 19).
+    scope_shape=ScopeShape.QUEUE,
     children=(
         ResourceSpec(
             key="call",

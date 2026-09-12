@@ -17,7 +17,7 @@ Grants at the ``assigned`` tier reach the sites a member holds a role at; the si
 turns that into rows. ``platform_admin`` reaches every clinic at ``business``.
 """
 
-from src.commons.enums import GrantScope, PermissionVerb, UserRole
+from src.commons.enums import GrantScope, PermissionVerb, ScopeShape, UserRole
 from src.core.rbac_manifest import ModuleManifest, ResourceSpec, RoleGrant
 
 _ASSIGNED = GrantScope.ASSIGNED.value
@@ -26,6 +26,8 @@ MANIFEST = ModuleManifest(
     key="sites",
     name="Sites",
     description="A clinic and everything configured for it.",
+    # Every row under this tree is a clinic, or carries its ``site_id`` (Issue 19).
+    scope_shape=ScopeShape.SITE,
     children=(
         ResourceSpec(
             key="profile", name="Sites / Profile", description="Name, hours, sector."

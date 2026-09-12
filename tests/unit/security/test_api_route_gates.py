@@ -49,6 +49,7 @@ PUBLIC: dict[str, str] = {
     "GET /api/v1/documents/info": "module metadata",
     "GET /api/v1/widgets/info": "module metadata",
     "GET /api/v1/patients/info": "module metadata",
+    "GET /api/v1/sites/staff/info": "module metadata",
     "GET /api/v1/documents/download": "a signed, expiring, single-document link is the capability",
     "POST /api/v1/webhooks/stripe": "verifies the gateway's signature before anything else",
     "POST /api/v1/webhooks/paystack": "verifies the gateway's signature before anything else",

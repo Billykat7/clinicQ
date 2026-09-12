@@ -26,8 +26,14 @@ function below that walks grants, roles and the resource tree is finished and ne
 resolves exactly one narrowing axis — :attr:`ScopeNarrowing.instance_ids`, the ids a caller's role
 assignments name — because that is the only axis that exists before your domain does.
 
-The *shape* half is yours. A resource whose rows hang off a customer, a site, a case file expresses
-"the caller's own rows" through a column the kernel has never heard of. To add one:
+The *shape* half is ClinicQ's, and Issue 19 fills it in: :attr:`~src.commons.enums.ScopeShape.SITE`
+(the row is a clinic, or carries its ``site_id``) and :attr:`~src.commons.enums.ScopeShape.QUEUE`
+(the row is a queue, or hangs off one), declared on the ``sites`` and ``queues`` manifests and
+resolved into :attr:`ScopeNarrowing.site_ids` and :attr:`ScopeNarrowing.queue_ids`. The site guard
+that turns them into a query filter, and into a 404 for another clinic's id, is
+:mod:`src.core.site_scope`.
+
+To add a shape of your own:
 
 1. add a member to :class:`~src.commons.enums.ScopeShape`;
 2. declare it on the owning module's ``ResourceSpec.scope_shape``, next to the resource tree;
@@ -82,6 +88,22 @@ def is_scope_exempt(db: Session, role: str) -> bool:
         db.execute(
             select(RbacRole.is_scope_exempt).where(RbacRole.name == role)
         ).scalar_one_or_none()
+    )
+
+
+def assigned_scope_ids(
+    db: Session, user: User, scope_type: AssignmentScopeType
+) -> frozenset[str]:
+    """The ids of one kind of thing ``user``'s active assignments name (Issue 19).
+
+    The one read of ``user_roles`` behind every "which sites / which queues" question: the sites a
+    staff member holds a role at (:attr:`~src.commons.enums.AssignmentScopeType.SITE`), or the
+    queues a nurse was put on (``QUEUE``). Expired assignments are already excluded.
+    """
+    return frozenset(
+        scope_id
+        for _role, this_type, scope_id in active_role_assignments(db, str(user.id))
+        if this_type == scope_type.value and scope_id is not None
     )
 
 
@@ -200,6 +222,13 @@ class ScopeNarrowing:
     #: Instances the caller is the subject of, plus — at ``assigned`` — the instances their role
     #: assignments name.
     instance_ids: frozenset[str]
+    #: The clinics the caller holds a role at: the narrowing for a :attr:`ScopeShape.SITE` resource
+    #: (Issue 19). Empty means no clinic, which means no rows.
+    site_ids: frozenset[str] = frozenset()
+    #: The queues the caller is personally assigned to: the narrowing an ``own``-tier caller gets on
+    #: a :attr:`ScopeShape.QUEUE` resource (a nurse's own room). At ``assigned`` the site narrowing
+    #: applies instead, because a receptionist reaches every queue at their clinics.
+    queue_ids: frozenset[str] = frozenset()
 
 
 def _allowed_scope_rows(db: Session, roles: Iterable[str]) -> list[tuple[str, str]]:
@@ -414,6 +443,9 @@ def resolve_scope(
     instance_ids = own_instance_ids(db, user)
     if tier is GrantScope.ASSIGNED:
         instance_ids |= assignment_instance_ids(db, user)
+    # The ClinicQ narrowings (Issue 19): which clinics, and which queues within them.
+    site_ids = assigned_scope_ids(db, user, AssignmentScopeType.SITE)
+    queue_ids = assigned_scope_ids(db, user, AssignmentScopeType.QUEUE)
     _record(
         trace,
         TraceStage.INSTANCE_NARROWING,
@@ -430,6 +462,8 @@ def resolve_scope(
         user_id=str(user.id),
         shape=scope_shape_for(resource_key),
         instance_ids=instance_ids,
+        site_ids=site_ids,
+        queue_ids=queue_ids,
     )
 
 
@@ -465,6 +499,8 @@ def _closed_narrowing(resource_key: str) -> ScopeNarrowing:
         user_id="",
         shape=scope_shape_for(resource_key),
         instance_ids=frozenset(),
+        site_ids=frozenset(),
+        queue_ids=frozenset(),
     )
 
 
