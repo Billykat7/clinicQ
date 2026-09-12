@@ -427,21 +427,31 @@ def test_search_completes_in_under_200_ms_with_500_seeded_clinics(
 def test_an_open_now_search_also_stays_inside_the_budget(
     five_hundred_clinics: Engine,
 ) -> None:
-    """``open_now`` evaluates hours over every candidate in the radius, so it is timed separately."""
+    """``open_now`` evaluates hours over every candidate in the radius, so it is timed separately.
+
+    Timed the way the main budget test is, as the median of seven runs after a warm-up: a single
+    measurement on a shared CI runner came in at 226 ms once while the median stays near 60 ms.
+    """
+    timings: list[float] = []
     with Session(five_hundred_clinics) as db:
         find_nearby_sites(db, JOHANNESBURG, radius_m=MAX_RADIUS_M, open_now=True)
-        started = clock.perf_counter()
-        result = find_nearby_sites(
-            db,
-            JOHANNESBURG,
-            radius_m=MAX_RADIUS_M,
-            open_now=True,
-            moment=_TUESDAY_10AM,
-        )
-        elapsed_ms = (clock.perf_counter() - started) * 1000
-    print(f"\nopen_now over {result.total} candidates: {elapsed_ms:.1f} ms")  # noqa: T201
+        for _ in range(7):
+            started = clock.perf_counter()
+            result = find_nearby_sites(
+                db,
+                JOHANNESBURG,
+                radius_m=MAX_RADIUS_M,
+                open_now=True,
+                moment=_TUESDAY_10AM,
+            )
+            timings.append(clock.perf_counter() - started)
+    median_ms = statistics.median(timings) * 1000
+    print(  # noqa: T201
+        f"\nopen_now over {result.total} candidates: median {median_ms:.1f} ms, "
+        f"slowest {max(timings) * 1000:.1f} ms"
+    )
     assert result.total > 100
-    assert elapsed_ms < 200
+    assert median_ms < 200, timings
 
 
 def test_opening_hours_that_exclude_the_moment_are_respected_at_scale(
