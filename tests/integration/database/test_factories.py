@@ -12,6 +12,7 @@ from scripts.db.demo_dataset import CLINICS, TicketStub
 from src.commons.enums import (
     SITE_DEFAULT_STATUS,
     AssignmentScopeType,
+    QueueKind,
     SiteSector,
     TicketStatus,
     UserRole,
@@ -19,7 +20,7 @@ from src.commons.enums import (
 from src.commons.geo import Coordinates
 from src.commons.phone import normalize_phone
 from src.core.security import verify_password
-from src.database.models import Patient, Site, User, UserRoleAssignment
+from src.database.models import Patient, Queue, Site, User, UserRoleAssignment
 from tests.factories import (
     FACTORY_STAFF_PASSWORD,
     PatientFactory,
@@ -146,12 +147,39 @@ def test_a_site_persists_with_its_coordinate_and_the_default_status(
         assert site.status == SITE_DEFAULT_STATUS.value
 
 
-def test_tickets_join_a_queue_in_sequence() -> None:
-    """A batch in one queue takes its prefix and site, waits, and joined in order."""
-    queue = QueueFactory.build()
-    tickets = TicketFactory.build_batch(3, queue=queue)
+def test_tickets_join_a_queue_in_sequence(
+    session_factory: sessionmaker[Session],
+) -> None:
+    """A batch in one queue takes its prefix and its clinic, waits, and joined in order.
+
+    The queue is Issue 25's model; the ticket is still Issue 39's stub. That the two fit together
+    without either side changing is the point of the agreed field names.
+    """
+    with session_factory() as db:
+        site = SiteFactory.create(db)
+        queue = QueueFactory.create(db, site_id=site.id)
+        tickets = TicketFactory.build_batch(3, queue=queue)
+
     assert all(isinstance(t, TicketStub) for t in tickets)
     assert {t.queue_slug for t in tickets} == {queue.slug}
-    assert all(t.number.startswith(queue.prefix) for t in tickets)
+    assert {t.site_slug for t in tickets} == {site.id}
+    assert all(t.number.startswith(queue.ticket_prefix) for t in tickets)
     assert {t.status for t in tickets} == {TicketStatus.WAITING}
     assert [t.sequence for t in tickets] == sorted(t.sequence for t in tickets)
+
+
+def test_a_queue_is_persisted_at_the_clinic_it_was_asked_for(
+    session_factory: sessionmaker[Session],
+) -> None:
+    """``site_id`` has no default, because a queue does not exist outside a clinic (Issue 25)."""
+    with session_factory() as db:
+        site = SiteFactory.create(db)
+        site_id = site.id
+        queue = QueueFactory.create(db, site_id=site_id, kind=QueueKind.PHARMACY)
+        db.commit()
+        db.refresh(queue)
+
+        assert isinstance(queue, Queue)
+        assert queue.site_id == site_id
+        assert queue.kind_enum is QueueKind.PHARMACY
+        assert queue.is_active and queue.allows_remote_join

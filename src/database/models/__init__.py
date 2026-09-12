@@ -41,6 +41,7 @@ from src.database.models.permission_usage import (
     PermissionUsage,
     PermissionUsageWindow,
 )
+from src.database.models.queue import Queue
 from src.database.models.rbac_role import RbacRole
 from src.database.models.refresh_token import RefreshToken
 from src.database.models.resource import Resource
@@ -91,6 +92,7 @@ __all__ = [
     "PermissionUsage",
     "PermissionUsageWindow",
     "PublicHoliday",
+    "Queue",
     "RbacRole",
     "RefreshToken",
     "Resource",

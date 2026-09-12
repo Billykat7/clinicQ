@@ -79,6 +79,7 @@ class BoundedContext(StrEnum):
     PATIENTS = "patients"
     STAFF = "staff"
     SITES = "sites"
+    QUEUES = "queues"
 
 
 class LogLevel(StrEnum):
@@ -346,6 +347,26 @@ class GeocodingProvider(StrEnum):
 
     NONE = "none"
     NOMINATIM = "nominatim"
+
+
+class QueueKind(StrEnum):
+    """What kind of line a queue is. Stored in ``queue.kind`` (Issue 25).
+
+    A real clinic visit is triage, then a consulting room, then the pharmacy window, so a site runs
+    several named queues and a patient joins one of them. The kind is what lets a board, a report
+    and a channel menu treat "the pharmacy" the same way at every clinic without matching on a name
+    somebody typed.
+
+    - ``TRIAGE``: the first stop, where a nurse decides how urgent the visit is.
+    - ``CONSULTATION``: a doctor's or nurse's room.
+    - ``PHARMACY``: the medicine window, including chronic medication collection.
+    - ``OTHER``: anything else a clinic runs — a dressing room, a records desk, an X-ray queue.
+    """
+
+    TRIAGE = "triage"
+    CONSULTATION = "consultation"
+    PHARMACY = "pharmacy"
+    OTHER = "other"
 
 
 class TicketStatus(StrEnum):
@@ -1180,6 +1201,7 @@ class AuditEntityType(StrEnum):
     PATIENT = "patient"
     PATIENT_CONSENT = "patient_consent"
     SITE = "site"
+    QUEUE = "queue"
     STAFF_INVITATION = "staff_invitation"
     AUDIT_LOG = "audit_log"
     DATA_SUBJECT = "data_subject"

@@ -103,6 +103,16 @@ CASES: dict[str, dict[str, object]] = {
         "reader": "a@clinicq.example",
         "paths": lambda site, _row: (f"/api/v1/sites/{site}/closures",),
     },
+    "queue": {
+        # A clinic's named lines (Issue 25). Reading is the front desk's grant; configuring one is
+        # the manager's. Naming ``queues`` here covers the root of that tree as well as the model.
+        "resource": "queues",
+        "reader": "a@clinicq.example",
+        "paths": lambda site, _row: (
+            f"/api/v1/sites/{site}/queues",
+            f"/api/v1/sites/{site}/queues/joinable",
+        ),
+    },
     "staffinvitation": {
         # Who has been invited to a clinic (Issue 22): the same grant as the staff list, so a
         # receptionist reads it, and another clinic's list is a 404 like everything else.
@@ -122,7 +132,6 @@ PENDING: dict[str, str] = {
     "sites.settings": "display and privacy settings land with Issue 27",
     "sites.display": "Issue 27",
     "sites.reports": "clinic reports land with M12",
-    "queues": "queues land with Issue 25",
     "queues.call": "call-next lands with Issue 42",
     "queues.tickets": "tickets land with Issue 39",
     "queues.tickets.priority": "the priority override lands with Issue 46",

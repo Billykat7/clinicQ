@@ -20,9 +20,10 @@ second run creates nothing: it updates what differs from the dataset and leaves 
 listed ones, with their **weekly opening hours** and the country's **public holidays** for this year
 and next (Issue 24); and one staff account per ClinicQ staff role, printed with its development
 password, each (except the platform admin) assigned to the first demo clinic so the site-scoped
-routes work locally. Queues and the day of ticket history (``scripts/db/demo_dataset.py``) are built
-and summarised, and are written as their tables land: queues with Issue 25, tickets with Issue 39.
-Each of those issues adds its step to :func:`seed`.
+routes work locally. Their **queues** land too (Issue 25): the dataset's own
+lines per clinic, so a public health centre gets four and a private practice two. The day of ticket
+history (``scripts/db/demo_dataset.py``) is built and summarised, and is written when its table
+lands with Issue 39, which adds its step to :func:`seed`.
 """
 
 import argparse
@@ -40,6 +41,7 @@ from scripts.db.demo_dataset import CLINICS, queues_for, ticket_history
 from src.commons.enums import (
     AppEnvironment,
     AssignmentScopeType,
+    QueueKind,
     SiteStatus,
     TicketStatus,
     UserRole,
@@ -48,7 +50,13 @@ from src.commons.geo import Coordinates
 from src.commons.time import APP_TIMEZONE, business_date
 from src.core.config import Settings, get_settings
 from src.core.security import hash_password, verify_password
-from src.database.models import Site, SiteOpeningHours, User, UserRoleAssignment
+from src.database.models import (
+    Queue,
+    Site,
+    SiteOpeningHours,
+    User,
+    UserRoleAssignment,
+)
 
 #: Where a development database may live: this machine, or the compose stack's service name.
 LOCAL_HOSTS: Final = frozenset({"localhost", "127.0.0.1", "::1", "db"})
@@ -312,6 +320,55 @@ def seed_opening_hours(session: Session, site_ids: dict[str, str]) -> SeedReport
     return report
 
 
+def seed_queues(session: Session, site_ids: dict[str, str]) -> SeedReport:
+    """Give every demo clinic the queues the dataset says it runs (Issue 25). Caller commits.
+
+    Idempotent by clinic, like the opening hours: a clinic that already has any queue is left
+    exactly as it is, because a manager may have renamed, reordered or deactivated one and a seed
+    run must not undo that.
+    """
+    report = SeedReport()
+    for clinic in CLINICS:
+        site_id = site_ids[clinic.slug]
+        already = session.execute(
+            select(Queue.id).where(Queue.site_id == site_id)
+        ).first()
+        if already is not None:
+            report.unchanged += 1
+            continue
+        for position, queue in enumerate(queues_for(clinic)):
+            session.add(
+                Queue(
+                    site_id=site_id,
+                    slug=queue.slug,
+                    name=queue.name,
+                    kind=_queue_kind(queue.slug).value,
+                    ticket_prefix=queue.prefix,
+                    display_order=position,
+                    expected_service_minutes=queue.service_minutes,
+                    # The pharmacy and chronic-medication windows are walk-in only: you cannot
+                    # collect medicine from a phone, so a remote ticket for one would put somebody
+                    # in a line they cannot reach the front of.
+                    allows_remote_join=_queue_kind(queue.slug)
+                    is not QueueKind.PHARMACY,
+                )
+            )
+        report.created += 1
+    session.flush()
+    return report
+
+
+def _queue_kind(slug: str) -> QueueKind:
+    """The kind of line a demo queue is, from the dataset's own slug."""
+    if slug == "triage":
+        return QueueKind.TRIAGE
+    if slug in {"pharmacy", "chronic"}:
+        return QueueKind.PHARMACY
+    if slug in {"general", "consultation"}:
+        return QueueKind.CONSULTATION
+    return QueueKind.OTHER
+
+
 def seed_holidays(session: Session) -> SeedReport:
     """Write this year's and next year's public holidays (Issue 24). Caller commits."""
     from src.modules.sites.hours_service import seed_public_holidays
@@ -334,6 +391,7 @@ def seed(session: Session, *, password: str) -> dict[str, SeedReport]:
     return {
         "Clinics": sites,
         "Opening hours": seed_opening_hours(session, ids),
+        "Queues": seed_queues(session, ids),
         "Public holidays": seed_holidays(session),
         "Staff accounts": seed_staff(
             session, password=password, site_id=ids[DEMO_SITE_SLUG]

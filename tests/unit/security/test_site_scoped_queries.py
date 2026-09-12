@@ -46,6 +46,12 @@ _ASSIGNMENT_SCOPED: dict[str, frozenset[str]] = {
 #: in the same module is still a finding. An entry here is a decision someone can read, not a way
 #: around the rule.
 _UNSCOPED_BY_DESIGN: dict[str, str] = {
+    "modules/queues/service.py::create_default_queues": (
+        "a clinic's default queue set is created **while the clinic is being onboarded** (Issue 29), "
+        "before anyone holds a role at it, so there is no SiteAccess to scope by; the site id comes "
+        "from the row just created, and the function refuses to do anything if the clinic already "
+        "has a queue (Issue 25)"
+    ),
     "modules/staff/invitations.py::usable_invitation": (
         "an invitation link is opened by someone who has no account and therefore no clinic to be "
         "scoped by; the id comes from the signed token, and the row's own site_id is what "
