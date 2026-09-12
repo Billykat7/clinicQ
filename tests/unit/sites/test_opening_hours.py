@@ -11,12 +11,14 @@ Pure functions of their inputs, so unit tests with the moment pinned. What is pr
 
 from __future__ import annotations
 
+import os
+import time as time_module
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
 
-from src.commons.time import APP_TIMEZONE
+from src.commons.time import APP_TIMEZONE, stored_sast
 from src.modules.sites.hours import (
     ClosedPeriod,
     OpeningSchedule,
@@ -248,3 +250,61 @@ def test_is_open_now_and_next_open_at_never_disagree(hour: int) -> None:
     )
     moment = sast(_MONDAY, hour)
     assert is_open_now(schedule, moment) == (next_open_at(schedule, moment) == moment)
+
+
+# --- reading a stored closure back, in whatever zone the server runs in ------------------------
+
+
+def test_a_stored_closure_is_read_as_the_johannesburg_instant_it_was_written_as() -> (
+    None
+):
+    """The regression CI found and a SAST laptop could not.
+
+    SQLite has no ``timestamptz``: it hands a business datetime back **naive**, with the offset
+    gone. ``value.astimezone(APP_TIMEZONE)`` then reads that naive value as the **server's** clock
+    zone, so a closure written at 17:02 SAST resolves as 17:02 SAST on a developer's machine and as
+    19:02 SAST in a UTC container — two hours in the future, which is why
+    ``test_a_closure_shows_up_in_the_open_endpoint_with_its_reason`` passed locally and failed in
+    CI with ``assert None == 'The water is off.'``.
+
+    :func:`~src.commons.time.stored_sast` is the fix: everything this application writes is aware
+    SAST, so a naive value coming back out of its own storage is read as SAST.
+    """
+    written = sast(_MONDAY, 17, 2)
+    as_sqlite_returns_it = written.replace(tzinfo=None)
+
+    assert stored_sast(as_sqlite_returns_it) == written
+    assert stored_sast(written) == written
+    # And the same instant arriving from PostgreSQL in UTC reads as the same moment.
+    assert stored_sast(written.astimezone(ZoneInfo("UTC"))) == written
+
+
+def test_the_whole_closure_path_holds_in_a_utc_process() -> None:
+    """The failure end to end, with the process clock zone actually set to CI's.
+
+    ``time_module.tzset()`` is what makes this a real reproduction rather than a restatement: the naive
+    datetime is interpreted against the process zone, so this test genuinely fails against the old
+    code and passes against the new one, on any machine.
+    """
+    written = sast(_MONDAY, 17, 2)
+    naive = written.replace(tzinfo=None)
+    before = os.environ.get("TZ")
+    try:
+        os.environ["TZ"] = "UTC"
+        time_module.tzset()
+        # What the old code did, and what it produced: two hours into the future.
+        assert naive.astimezone(APP_TIMEZONE) == written + timedelta(hours=2)
+        # What the schedule loader does now.
+        schedule = OpeningSchedule(
+            weekly=dict.fromkeys(range(7), (TimeSpan(time(0, 0), time(0, 0)),)),
+            closures=(ClosedPeriod(stored_sast(naive), None, "The water is off."),),
+        )
+        state = open_state(schedule, sast(_MONDAY, 17, 30))
+        assert state.is_open is False
+        assert state.closure_reason == "The water is off."
+    finally:
+        if before is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = before
+        time_module.tzset()

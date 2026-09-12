@@ -33,7 +33,7 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.commons.time import APP_TIMEZONE, business_date, now_sast
+from src.commons.time import APP_TIMEZONE, business_date, now_sast, stored_sast
 from src.core.site_scope import SiteAccess, scoped_select
 from src.database.models import (
     PublicHoliday,
@@ -340,10 +340,11 @@ def schedule_for(
 
     closures = tuple(
         ClosedPeriod(
-            starts_at=row.starts_at.astimezone(APP_TIMEZONE),
-            ends_at=None
-            if row.ends_at is None
-            else row.ends_at.astimezone(APP_TIMEZONE),
+            # ``stored_sast``, never ``astimezone``: SQLite hands these back naive, and Python
+            # would read a naive value as the *server's* zone — correct on a SAST laptop, two
+            # hours out in a UTC container. See src.commons.time.stored_sast.
+            starts_at=stored_sast(row.starts_at),
+            ends_at=None if row.ends_at is None else stored_sast(row.ends_at),
             reason=row.reason,
         )
         for row in db.execute(

@@ -19,7 +19,7 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.commons.time import APP_TIMEZONE, business_date, now_sast
+from src.commons.time import business_date, now_sast, stored_sast
 from src.core.domain_events import (
     SiteClosureAnnounced,
     SiteClosureLifted,
@@ -257,10 +257,10 @@ def announce_closure(
     Raises:
         ValueError: If the window ends before it starts.
     """
-    starts_at = (payload.starts_at or now_sast()).astimezone(APP_TIMEZONE)
-    ends_at = (
-        None if payload.ends_at is None else payload.ends_at.astimezone(APP_TIMEZONE)
-    )
+    # A body datetime may arrive with no offset. This API's times are Africa/Johannesburg, so
+    # that is what one means (``stored_sast``), rather than whatever zone the server runs in.
+    starts_at = stored_sast(payload.starts_at or now_sast())
+    ends_at = None if payload.ends_at is None else stored_sast(payload.ends_at)
     if ends_at is not None and ends_at <= starts_at:
         raise ValueError("A closure cannot end before it starts.")
     closure = SiteClosure(
