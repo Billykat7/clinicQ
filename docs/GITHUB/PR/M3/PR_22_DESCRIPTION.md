@@ -202,5 +202,3 @@ business time, which is invisible in PostgreSQL but makes naive timestamp arithm
 SQLite tests — worth a sweep of its own rather than a change here.
 
 Closes #22
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)

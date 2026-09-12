@@ -179,5 +179,3 @@ does not remove the rulesets from GitHub; they are settings. The two labels the 
 were recreated; no issue lost a label.
 
 Closes #13
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)

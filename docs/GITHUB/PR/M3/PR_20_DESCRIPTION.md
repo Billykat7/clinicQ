@@ -155,5 +155,3 @@ not yet resolve the acting role); filling it centrally belongs with the dashboar
 rows is Issue 95.
 
 Closes #20
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)

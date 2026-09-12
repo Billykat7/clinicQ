@@ -198,5 +198,3 @@ running `make gh-sync-environments`; revert the PR to remove the workflow.
 and `v0.0.1-test` from Issue 10). Deleting them needs your go-ahead.
 
 Closes #11
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)

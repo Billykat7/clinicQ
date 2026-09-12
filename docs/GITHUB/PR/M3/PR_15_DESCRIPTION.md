@@ -171,5 +171,3 @@ config rule in Issue 97). The kernel's other routers still read the email claim 
 than identity (audit actor labels); they now resolve the account itself through the shared path.
 
 Closes #15
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)

@@ -185,5 +185,3 @@ environment's `APP_ENV`, and run the monitoring compose file on a machine that i
 host. None of these can be created from the repository.
 
 Closes #14
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
