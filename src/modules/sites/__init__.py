@@ -13,10 +13,12 @@ Read the files in this order:
   asks;
 * :mod:`.geocoding` — turning a typed address into a coordinate **on the server**, because the
   Content-Security-Policy allows ``connect-src 'self'`` and a browser cannot reach a geocoder;
+* :mod:`.settings` — what the waiting-room board may show, and what it takes to change it. This
+  is where non-negotiable 4 lives, and the warning text lives next to the rule it describes;
 * :mod:`.router` — the HTTP surface: platform routes behind a ``business``-tier grant, and
   per-clinic routes behind the site guard (Issue 19).
 
-The ``sites`` model and its CRUD landed with Issue 23, opening hours and closures with Issue 24.
-The services catalogue comes with Issue 26, the display and privacy settings with Issue 27, and
+The ``sites`` model and its CRUD landed with Issue 23, opening hours and closures with Issue 24,
+and the display and privacy settings with Issue 27. The services catalogue comes with Issue 26 and
 onboarding with Issue 29.
 """

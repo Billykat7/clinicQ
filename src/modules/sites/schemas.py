@@ -25,11 +25,23 @@ from pydantic import (
     model_validator,
 )
 
-from src.commons.enums import SaProvince, SiteSector, SiteStatus
+from src.commons.enums import (
+    SITE_DEFAULT_BOARD_LANGUAGE,
+    BoardLanguage,
+    DisplayMode,
+    SaProvince,
+    SiteSector,
+    SiteStatus,
+)
 from src.commons.geo import (
     CoordinateOutOfRangeError,
     Coordinates,
     assert_within_operating_area,
+)
+from src.modules.sites.settings import (
+    REASON_RETENTION_CEILING_DAYS,
+    REASON_RETENTION_DEFAULT_DAYS,
+    REASON_RETENTION_FLOOR_DAYS,
 )
 
 #: A slug is lowercase letters, digits and single hyphens: it appears in URLs and USSD menus.
@@ -328,3 +340,75 @@ class OpenStateOut(BaseModel):
     accepting_joins: bool
     #: What a patient is told when ``accepting_joins`` is false.
     refusal: str | None
+
+
+# --------------------------------------------------------------------------------------
+# Display and privacy settings (Issue 27, non-negotiable 4)
+# --------------------------------------------------------------------------------------
+
+
+class DisplaySettingsIn(BaseModel):
+    """What a clinic manager may set about its waiting-room board.
+
+    The two ``confirm_`` fields are not decoration. The server refuses a change that newly puts
+    something about a patient on a public screen unless the request says so explicitly, so a
+    manager who has not seen the warning cannot agree to it by accident and an API client cannot
+    skip it by not rendering one.
+    """
+
+    display_mode: DisplayMode
+    display_show_comment: bool = False
+    board_language: BoardLanguage = SITE_DEFAULT_BOARD_LANGUAGE
+    announce_audio: bool = True
+    reason_retention_days: int = Field(
+        default=REASON_RETENTION_DEFAULT_DAYS,
+        ge=REASON_RETENTION_FLOOR_DAYS,
+        le=REASON_RETENTION_CEILING_DAYS,
+    )
+    """Validated against the platform's retention ceiling (:mod:`src.modules.sites.settings`),
+    which a clinic cannot raise."""
+
+    confirm_public_display: bool = False
+    """"I understand what will appear on the screen." Required to reveal a name or a comment."""
+    confirm_comment_with_full_name: bool = False
+    """A second, separate agreement: a reason beside a **full** name is the sharpest combination."""
+
+
+class DisplaySettingsOut(BaseModel):
+    """A clinic's display settings, with the warning that describes what they mean."""
+
+    site_id: str
+    display_mode: DisplayMode
+    display_show_comment: bool
+    board_language: BoardLanguage
+    announce_audio: bool
+    reason_retention_days: int
+    #: The ceiling a clinic cannot raise, echoed so a screen can show it without hardcoding it.
+    reason_retention_ceiling_days: int
+    #: What these settings put on the screen, in plain language.
+    warning_lines: list[str]
+
+
+class DisplayModeOptionOut(BaseModel):
+    """One display mode a clinic may choose, and what choosing it would mean."""
+
+    value: DisplayMode
+    #: The plain-language description of the screen, from :mod:`src.modules.sites.settings`.
+    warning: str
+    requires_confirmation: bool
+
+
+class DisplayOptionsOut(BaseModel):
+    """Everything a settings screen needs to render itself without hardcoding a rule.
+
+    Served so that the warning a manager reads and the rule the server enforces are the same text,
+    read from the same place — the failure this prevents is a screen that reassures somebody about
+    a setting the server treats differently.
+    """
+
+    modes: list[DisplayModeOptionOut]
+    languages: list[BoardLanguage]
+    retention_floor_days: int
+    retention_ceiling_days: int
+    comment_warning: str
+    comment_with_full_name_warning: str

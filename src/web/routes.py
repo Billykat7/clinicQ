@@ -51,6 +51,7 @@ from src.core.rbac_language import scope_tier_label, scope_tier_meaning
 from src.core.s3_logs_query import warm_logs_listing
 from src.core.scope import ASSIGNMENT_SCOPE_TYPE, scope_tiers_for_roles
 from src.core.security import decode_patient_session_token
+from src.database.models import Site, User
 from src.database.session import get_db
 from src.web.components import register_components
 from src.web.context import (
@@ -61,6 +62,10 @@ from src.web.context import (
 )
 
 logger = logging.getLogger(__name__)
+
+#: The resource whose grants gate the waiting-room screen settings page (Issue 27). Named here so
+#: the page gate and the API gate cannot drift to different resources.
+SITE_DISPLAY_RESOURCE = "sites.display"
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = PACKAGE_DIR / "templates"
@@ -338,6 +343,56 @@ async def account_notifications(
             account_section="notifications",
         ),
     )
+
+
+def _site_for_staff(db: Session, staff: User | None, site_id: str) -> Site | None:
+    """The clinic ``staff`` may open this page for, or ``None``.
+
+    The page counterpart of :func:`~src.core.site_scope.require_site_access`: a clinic the caller
+    holds no role at is indistinguishable from one that does not exist, because a page that said
+    "forbidden" would confirm the id (non-negotiable 3). There is no cross-site hatch here — that
+    one is read-only, audited and for the API.
+    """
+    from src.core.site_scope import permitted_site_ids
+    from src.modules.sites.service import get_site
+
+    if staff is None or site_id not in permitted_site_ids(db, staff):
+        return None
+    return get_site(db, site_id)
+
+
+@router.get("/dashboard/sites/{site_id}/settings/display", response_class=HTMLResponse)
+async def site_display_settings_page(
+    site_id: str, request: Request, db: Session = Depends(get_db)
+) -> HTMLResponse:
+    """The waiting-room screen's settings for one clinic (Issue 27, non-negotiable 4).
+
+    Two gates, in the order that keeps a 404 honest: the caller has to hold a role **at this
+    clinic** (:func:`~src.core.site_scope.permitted_site_ids` — another clinic's id renders the
+    not-found page, never a 403 that would confirm the id exists), and then the ``sites.display``
+    grant decides whether they may see the page at all. The JSON API behind it re-checks the same
+    grant and adds the ``update`` check for saving, because this gate governs what is *offered* and
+    the API's governs what is *done*.
+
+    The page itself renders no rule: the modes, their descriptions, the bounds and the warnings all
+    come from ``/api/v1/sites/display-options``.
+    """
+    if not require_authenticated_html(request, db):
+        return _redirect_to_sign_in(request)  # type: ignore[return-value]
+    ctx = page_context(
+        request,
+        db,
+        active_nav="",
+        page_title="Waiting-room screen",
+    )
+    if not ctx["nav"].can(SITE_DISPLAY_RESOURCE, PermissionVerb.READ.value):
+        return _forbidden_html(request, db)
+    staff = peek_user_from_refresh_cookie(db, request)
+    site = _site_for_staff(db, staff, site_id)
+    if site is None:
+        return _not_found_html(request, db)
+    ctx["site"] = site
+    return templates.TemplateResponse(request, "dashboard/settings_display.html", ctx)
 
 
 @router.get("/me/consent", response_class=HTMLResponse)

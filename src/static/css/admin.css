@@ -2093,3 +2093,35 @@ details.collapsible[open] > summary .chev { transform: rotate(180deg); }
   font-family: var(--font-mono, monospace);
   font-size: .85rem;
 }
+
+/* Radio cards: one choice per block, with the consequence of choosing it underneath (Issue 27).
+   A plain radio list puts the label and its explanation on one line, and the explanation on the
+   waiting-room screen settings is the whole point of the control: what the board will show about
+   a named person. So each option is a card whose title and description stack, and the selected one
+   is outlined rather than only dotted, because a privacy choice should be obvious at a glance. */
+/* The ``.field label:has(> input[type="radio"])`` rule above is more specific than a bare
+   ``.radio-card``, so these repeat ``.field`` to win rather than reaching for ``!important``. */
+.field label.radio-card {
+  display: grid; grid-template-columns: auto 1fr; gap: .1rem .55rem;
+  align-items: start;
+  padding: .7rem .85rem; margin-bottom: .5rem;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); cursor: pointer;
+}
+.field label.radio-card:hover { border-color: var(--brand); }
+.field label.radio-card:has(> input:checked) {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 1px var(--brand) inset;
+}
+.field label.radio-card > input[type="radio"] { margin-top: .18rem; }
+.radio-card-body { display: block; }
+.radio-card-title { display: block; font-weight: 600; color: var(--ink); }
+.radio-card-sub { display: block; margin-top: .25rem; font-size: .85rem; color: var(--muted); line-height: 1.45; }
+/* A value with its unit beside it: "30 days", where the unit is not part of the input. */
+.input-suffix { display: flex; align-items: center; gap: .45rem; }
+.input-suffix > input { flex: 1 1 auto; min-width: 0; }
+.input-suffix .suffix { color: var(--muted); font-size: .9rem; }
+/* The warning a manager reads before a privacy setting takes effect. Amber rather than red: this
+   is a consequence to understand, not an error to fix. */
+.alert { padding: .8rem .95rem; border-radius: var(--radius); font-size: .9rem; line-height: 1.5; margin-bottom: 1rem; }
+.alert-warn { background: var(--warn-bg); color: var(--warn-ink); border: 1px solid var(--warn-ink); }
