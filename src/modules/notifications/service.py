@@ -27,6 +27,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from src.commons.enums import (
+    NOTIFICATION_SECRET_FIELDS,
     NotificationChannel,
     NotificationStatus,
     NotificationTemplate,
@@ -48,9 +49,27 @@ logger = logging.getLogger(__name__)
 _EMAIL_PROVIDER = "smtp"
 
 
+#: What the ledger stores instead of a secret (Issue 17).
+WITHHELD = "[withheld: one-time code]"
+
+
 def _now() -> datetime:
     """Return the current time in the project business timezone (Africa/Johannesburg)."""
     return datetime.now(APP_TIMEZONE)
+
+
+def is_secret_bearing(template: NotificationTemplate) -> bool:
+    """Whether ``template``'s message carries a secret the ledger must not keep (Issue 17)."""
+    return template in NOTIFICATION_SECRET_FIELDS
+
+
+def ledger_payload(template: NotificationTemplate, context: dict) -> dict:
+    """The payload to store on the row: ``context`` with every secret field withheld."""
+    secret_fields = NOTIFICATION_SECRET_FIELDS.get(template, frozenset())
+    return {
+        key: (WITHHELD if key in secret_fields else value)
+        for key, value in context.items()
+    }
 
 
 def _backoff_seconds(attempts: int) -> int:
@@ -180,6 +199,7 @@ def attempt(
     *,
     provider: SmsProvider,
     now: datetime | None = None,
+    context: dict | None = None,
 ) -> bool:
     """Attempt one delivery of ``notification`` and update its row. Returns True on success.
 
@@ -187,11 +207,14 @@ def attempt(
     the originating domain objects), hands it to the right transport, and applies success or a
     failure/backoff/dead-letter transition. Never raises for a transport failure — the outcome is
     recorded on the row.
+
+    ``context`` renders from values the row does not hold: a secret-bearing message (a one-time
+    code) is stored with a placeholder and delivered, once, from the real value in memory.
     """
     now = now or _now()
     channel = NotificationChannel(notification.channel)
     template = NotificationTemplate(notification.template_key)
-    message = templates.render(channel, template, notification.payload)
+    message = templates.render(channel, template, context or notification.payload)
     try:
         if channel is NotificationChannel.EMAIL:
             message_id = _deliver_email_transport(
@@ -245,7 +268,14 @@ def deliver_email(
     from src.core.email_send import EmailDeliveryError
 
     settings = get_settings()
-    payload = templates.prerendered_payload(subject=subject, text=text, html=html)
+    secret = is_secret_bearing(template)
+    # A secret-bearing email (a sign-in code) is recorded without its body: the row says a code
+    # was sent, never which one.
+    payload = templates.prerendered_payload(
+        subject=subject,
+        text=WITHHELD if secret else text,
+        html=None if secret else html,
+    )
     message = RenderedMessage(text=text, subject=subject, html=html)
 
     # Honour the recipient's notification preferences (Issue #72): a non-essential category the
@@ -274,7 +304,7 @@ def deliver_email(
         recipient=to,
         subject=subject,
         payload=payload,
-        max_attempts=settings.notification_max_attempts,
+        max_attempts=1 if secret else settings.notification_max_attempts,
         next_attempt_at=next_attempt_at,
     )
 
@@ -344,20 +374,30 @@ def send_sms(
     next_attempt_at = (
         decision.defer_until if decision.outcome is DeliveryOutcome.DEFER else None
     )
+    secret = is_secret_bearing(template)
     notification = enqueue(
         db,
         channel=NotificationChannel.SMS,
         template=template,
         recipient=to,
         subject=None,
-        payload=dict(context),
+        payload=ledger_payload(template, context),
         next_attempt_at=next_attempt_at,
+        # A code is sent once or not at all: a retry would render the placeholder, and a late
+        # code is no use to anyone.
+        max_attempts=1 if secret else None,
     )
     db.flush()
     if decision.outcome is DeliveryOutcome.DEFER:
         # Queued for the retry sweep to deliver once quiet hours end.
         return notification
-    attempt(db, notification, provider=provider, now=now)
+    attempt(
+        db,
+        notification,
+        provider=provider,
+        now=now,
+        context=dict(context) if secret else None,
+    )
     return notification
 
 

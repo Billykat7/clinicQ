@@ -77,6 +77,19 @@ Places where the specs and the repository disagree. None blocks sprint 1, but ea
 | 6 | Seeding roles and grants | By migration | By module manifests and `make seed-rbac` (idempotent) | 18 |
 | 7 | Database topology | A production database of its own | A schema (`clinicq`) in a shared platform database, which `scripts/db/backup.sh` assumes | 102, 103 |
 | 8 | API paths | `/api/...` (for example `/api/clinics/nearby`) | Everything under `/api/v1/` | 31 and every API issue |
+| 9 | USSD and WhatsApp identity (**decided in Issue 17**) | "A USSD session is trusted via the gateway MSISDN without a second OTP" | `patient_for_gateway()` in `src/modules/patients/service.py`. **Trusted, with conditions**: see the note below the table | 17, 73, 75 |
+
+**Decision 9, recorded in Issue 17:** a USSD session, and a WhatsApp conversation, identify the
+patient by the number the gateway reports, **with no second OTP**. The mobile network authenticated
+that MSISDN when it connected the session (a USSD session cannot be started from someone else's
+SIM), and Meta verified the WhatsApp number when it registered. An SMS code on top would add a
+second channel, a cost per session and a failure point to prove what the network already proved,
+and would shut out feature phones on weak coverage, the people USSD is for. The trust holds only
+because of three conditions the M10 issues must keep: the gateway webhook is authenticated (a
+shared secret or signature, and an IP allow-list), so only the aggregator can claim a number; the
+trust never becomes a web session, which only a code can start; and the accepted risk is the one an
+SMS code accepts anyway, a lost or stolen phone. The reasoning is also in the `patients` package
+docstring, next to the code.
 
 **Decision 2, recorded in Issue 5:** the hand-written design tokens stay, and grow into the one
 token set all three layouts read (colour, a type scale, spacing, layers); there is no Tailwind and no

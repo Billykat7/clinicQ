@@ -525,6 +525,45 @@ class Settings(BaseSettings):
         ge=1,
         description="OTP rate-limit window in minutes (env: OTP_RATE_LIMIT_WINDOW_MINUTES)",
     )
+    otp_rate_limit_per_phone: int = Field(
+        default=5,
+        ge=1,
+        description=(
+            "Max patient OTP requests per phone number per window, so one number cannot be "
+            "flooded with texts (env: OTP_RATE_LIMIT_PER_PHONE)"
+        ),
+    )
+    otp_max_verify_attempts: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+        description=(
+            "Wrong guesses a one-time code takes before it locks and a new one must be requested; "
+            "applies to email and phone codes alike (env: OTP_MAX_VERIFY_ATTEMPTS)"
+        ),
+    )
+    otp_resend_cooldown_seconds: int = Field(
+        default=60,
+        ge=0,
+        le=600,
+        description=(
+            "Seconds after a phone code is sent before another may be requested "
+            "(env: OTP_RESEND_COOLDOWN_SECONDS)"
+        ),
+    )
+    patient_session_hours: int = Field(
+        default=12,
+        ge=1,
+        le=168,
+        description=(
+            "How long a patient's web session lasts after a phone OTP, in hours: one clinic day "
+            "by default (env: PATIENT_SESSION_HOURS)"
+        ),
+    )
+    patient_session_cookie_name: str = Field(
+        default="bk_clinicq_patient_session",
+        description="httpOnly cookie carrying a patient's session (env: PATIENT_SESSION_COOKIE_NAME)",
+    )
 
     # Password sign-in (M17 — Issue #101). The password-login fallback authenticates on a
     # single request (no OTP round-trip), so it needs its own brute-force / credential-stuffing

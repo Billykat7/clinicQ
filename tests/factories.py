@@ -2,14 +2,15 @@
 
     staff = StaffFactory.create(db)                          # a verified receptionist, persisted
     manager = StaffFactory.create(db, role=UserRole.CLINIC_MANAGER, site_id=site.slug)
-    patient = PatientFactory.build()                         # +27 10 555 0001, unsaved
+    patient = PatientFactory.create(db)                      # +27 10 555 0001, persisted
     site = SiteFactory.build(sector=SiteSector.PRIVATE)
     tickets = TicketFactory.build_batch(5, queue=QueueFactory.build())
 
 **Real or stub.** :class:`StaffFactory` persists: staff are ``User`` rows (Issue 15 keeps the
 kernel's table), so ``create(session)`` writes one. The other factories build the agreed stubs in
 ``scripts/db/demo_dataset.py`` (``SiteStub``, ``QueueStub``, ``TicketStub``, ``PatientStub``),
-because their tables arrive with Issues 23, 25, 39 and 17. When one of those lands, its author
+because their tables arrive with Issues 23, 25 and 39. :class:`PatientFactory` persists too, since
+Issue 17 brought the ``Patient`` model. When one of those lands, its author
 changes the factory's ``model`` to the new class and adds ``create``; the field names already match
 the specs, so callers do not change.
 
@@ -28,7 +29,6 @@ from sqlalchemy.orm import Session
 
 from scripts.db.demo_dataset import (
     CLINICS,
-    PatientStub,
     QueueStub,
     SiteStub,
     TicketStub,
@@ -37,7 +37,7 @@ from scripts.db.demo_dataset import (
 from src.commons.enums import AssignmentScopeType, TicketSource, TicketStatus, UserRole
 from src.commons.time import now_sast
 from src.core.security import hash_password
-from src.database.models import User, UserRoleAssignment
+from src.database.models import Patient, User, UserRoleAssignment
 
 #: The password every factory-made staff account has, for tests that sign in. Development only.
 FACTORY_STAFF_PASSWORD = "clinicq-factory-password"
@@ -129,10 +129,10 @@ class StaffFactory(Factory[User]):
         return user
 
 
-class PatientFactory(Factory[PatientStub]):
-    """A phone-first patient (a stub until Issue 17's ``patients`` model)."""
+class PatientFactory(Factory[Patient]):
+    """A phone-first patient: Issue 17's ``Patient`` model. No password exists to set."""
 
-    model = PatientStub
+    model = Patient
 
     @classmethod
     def defaults(cls, n: int) -> dict[str, Any]:
@@ -141,6 +141,14 @@ class PatientFactory(Factory[PatientStub]):
             "phone_e164": f"+2710555{n:04d}",
             "display_name": f"Patient {n}",
         }
+
+    @classmethod
+    def create(cls, session: Session, **overrides: Any) -> Patient:
+        """Persist a patient. Flushed, not committed: the test owns the transaction."""
+        patient = cls.build(**overrides)
+        session.add(patient)
+        session.flush()
+        return patient
 
 
 class SiteFactory(Factory[SiteStub]):

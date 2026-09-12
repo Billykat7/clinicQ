@@ -76,6 +76,7 @@ class BoundedContext(StrEnum):
     ALERTS = "alerts"
     DOCUMENTS = "documents"
     WIDGETS = "widgets"
+    PATIENTS = "patients"
 
 
 class LogLevel(StrEnum):
@@ -331,6 +332,50 @@ class TicketSource(StrEnum):
     WALK_IN = "walk_in"
 
 
+class PatientChannel(StrEnum):
+    """The channel a patient reached ClinicQ through (Issue 17).
+
+    The same values as :class:`TicketSource`, because they are the same four doors: a patient on
+    the web, on a USSD menu, on WhatsApp, or at the reception desk. Recorded on the patient as the
+    last channel used, and (Issue 21) on every consent as the channel it was given on.
+    """
+
+    WEB = "web"
+    USSD = "ussd"
+    WHATSAPP = "whatsapp"
+    WALK_IN = "walk_in"
+
+
+#: The channels whose gateway vouches for the caller's number (Issue 17). A USSD session and a
+#: WhatsApp conversation arrive with the MSISDN the mobile network (or Meta) authenticated, so the
+#: number is trusted without a second OTP. A deliberate decision: see ``src/modules/patients``.
+GATEWAY_TRUSTED_CHANNELS: frozenset[PatientChannel] = frozenset(
+    {PatientChannel.USSD, PatientChannel.WHATSAPP}
+)
+
+
+class OtpSubjectKind(StrEnum):
+    """What a one-time code proves control of (Issue 17): one store, keyed by kind and identifier."""
+
+    EMAIL = "email"
+    PHONE = "phone"
+
+
+class OtpVerification(StrEnum):
+    """The outcome of checking a one-time code (Issue 17).
+
+    - ``VERIFIED``: right code, in time, first use. The code is spent.
+    - ``INVALID``: wrong code (one attempt used), or no code was ever issued.
+    - ``EXPIRED``: the code's time is up, or it was already used.
+    - ``LOCKED``: too many wrong attempts; even the right code is refused until a new one is issued.
+    """
+
+    VERIFIED = "verified"
+    INVALID = "invalid"
+    EXPIRED = "expired"
+    LOCKED = "locked"
+
+
 class DisplayMode(StrEnum):
     """What the waiting-room board may show about a ticket. Stored in ``sites.display_mode``.
 
@@ -363,6 +408,9 @@ class TokenType(StrEnum):
 
     # The short-lived session token every authenticated request carries (Issue 15).
     ACCESS = "access"
+    # A patient's web session after a phone OTP (Issue 17). Its own type, so a patient session is
+    # never a staff session and a staff token never opens a patient's record.
+    PATIENT_SESSION = "patient"
     ACTIVATION = "act"
     PASSWORD_RESET = "pwd_reset"
     BEARER = "bearer"
@@ -847,6 +895,14 @@ NOTIFICATION_URGENT_TEMPLATES: frozenset[NotificationTemplate] = frozenset(
     }
 )
 
+#: Templates whose message *is* a secret, and the payload fields that carry it (Issue 17). The
+#: notification ledger keeps a row for each send, but never these fields' values: the row stores a
+#: placeholder, the message is rendered from the real value in memory and handed to the transport
+#: once, and it is never retried (a retry would render the placeholder, and a late code is no use).
+NOTIFICATION_SECRET_FIELDS: dict[NotificationTemplate, frozenset[str]] = {
+    NotificationTemplate.OTP_SIGN_IN: frozenset({"code"}),
+}
+
 
 def notification_category_for(template: NotificationTemplate) -> NotificationCategory:
     """Return the category governing ``template`` (essential ``ACCOUNT`` for any unmapped key)."""
@@ -1010,6 +1066,7 @@ class AuditEntityType(StrEnum):
     """
 
     USER = "user"
+    PATIENT = "patient"
     AUDIT_LOG = "audit_log"
     DATA_SUBJECT = "data_subject"
     DOCUMENT = "document"

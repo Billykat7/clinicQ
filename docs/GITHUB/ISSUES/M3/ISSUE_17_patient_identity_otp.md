@@ -60,7 +60,9 @@ population the public-clinic side of the product exists for.
 - `src/modules/patients/`
 - `src/database/models/patient.py`
 - `src/commons/phone.py`
-- `alembic/versions/NNNN_patients.py`
+- `alembic/versions/0003_patients.py`
+- `src/core/otp_store.py` (one store for email and phone codes)
+- `src/modules/notifications/` (codes withheld from the ledger and the log; the dev outbox)
 - `tests/integration/patients/test_patient_otp.py`
 
 ---

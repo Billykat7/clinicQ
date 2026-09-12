@@ -468,10 +468,14 @@ The {app_name} Team
         template=NotificationTemplate.OTP_SIGN_IN,
     )
     if not sent:
+        # Never the code in a log (Issue 17): in development it goes to /dev/outbox instead.
+        from src.commons.enums import NotificationChannel
+        from src.modules.notifications import dev_outbox
+
+        dev_outbox.record(NotificationChannel.EMAIL, to_email, plain_body)
         logger.info(
-            "OTP (SMTP not configured) for %s: %s — set SMTP_HOST etc. to send.",
-            to_email,
-            code,
+            "Sign-in code email not sent (SMTP not configured); in development it is at "
+            "/dev/outbox. Set SMTP_HOST etc. to send."
         )
 
 

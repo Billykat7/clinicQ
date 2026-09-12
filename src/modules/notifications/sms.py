@@ -16,8 +16,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from uuid import uuid4
 
-from src.commons.enums import SmsProviderKind
+from src.commons.enums import NotificationChannel, SmsProviderKind
 from src.core.config import Settings, get_settings
+from src.modules.notifications import dev_outbox
 
 logger = logging.getLogger(__name__)
 
@@ -59,23 +60,28 @@ class SmsProvider(ABC):
 
 
 class LoggingSmsProvider(SmsProvider):
-    """Default provider: log the message and return a synthetic id (no gateway account needed).
+    """Default provider: accept the message and return a synthetic id (no gateway account needed).
 
     Lets the whole notification flow run in development and CI without an SMS account, exactly as
     unset ``SMTP_HOST`` lets email flow no-op. Never raises.
+
+    **It logs that a message was accepted, never what it said or whom it was for** (Issue 17): an
+    SMS carries one-time codes, and the number is personal information. In development the message
+    goes to the outbox at ``GET /dev/outbox`` (:mod:`src.modules.notifications.dev_outbox`) instead,
+    so a developer can still read the code they were sent.
     """
 
     kind = SmsProviderKind.LOGGING
 
     def send(self, *, to: str, text: str, sender: str) -> str:
-        """Log the outbound SMS and return a synthetic message id."""
+        """Accept the outbound SMS (outbox in development) and return a synthetic message id."""
         message_id = f"log-{uuid4()}"
+        in_outbox = dev_outbox.record(NotificationChannel.SMS, to, text)
         logger.info(
-            "SMS (logging provider) to %s from %s [%s]: %s",
-            to,
-            sender or "<unset>",
+            "SMS accepted by the logging provider [%s], %d characters%s",
             message_id,
-            text,
+            len(text),
+            " (see /dev/outbox)" if in_outbox else "",
         )
         return message_id
 

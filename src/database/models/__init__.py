@@ -26,6 +26,12 @@ from src.database.models.mixins import ActiveMixin, SoftDeleteMixin, TimestampMi
 from src.database.models.nav_gate_override import NavGateOverride
 from src.database.models.notification import Notification
 from src.database.models.notification_preference import NotificationPreference
+
+# ── your models ──────────────────────────────────────────────────────────────
+# Add `from src.database.models.<name> import <Model>` here and the name to __all__.
+# Alembic autogenerate only sees what this file imports: a model missing from it reflects
+# as a table to *drop*.
+from src.database.models.patient import Patient
 from src.database.models.paystack_event import PaystackEvent
 from src.database.models.permission import Permission
 from src.database.models.permission_audit_log import PermissionAuditLog
@@ -44,11 +50,6 @@ from src.database.models.stripe_event import StripeEvent
 from src.database.models.user import User
 from src.database.models.user_role_assignment import UserRoleAssignment
 from src.database.models.widget import Widget
-
-# ── your models ──────────────────────────────────────────────────────────────
-# Add `from src.database.models.<name> import <Model>` here and the name to __all__.
-# Alembic autogenerate only sees what this file imports: a model missing from it reflects
-# as a table to *drop*.
 
 __all__ = [
     "USAGE_WINDOW_ID",
@@ -72,6 +73,7 @@ __all__ = [
     "NavGateOverride",
     "Notification",
     "NotificationPreference",
+    "Patient",
     "PaystackEvent",
     "Permission",
     "PermissionAuditLog",

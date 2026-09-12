@@ -10,8 +10,8 @@ cheapest first:
    request labelled ``cross-site`` is refused outright, cookies or not. That also covers the
    sign-in endpoints, which have no session yet to protect (login CSRF). Clients that are not
    browsers send no such header and are unaffected.
-3. **A signed double-submit token.** Every unsafe ``/api/`` request that carries the access cookie
-   must echo the readable CSRF cookie in ``X-CSRF-Token`` (or a ``csrf_token`` form field). The
+3. **A signed double-submit token.** Every unsafe ``/api/`` request that carries a session cookie
+   (the staff access cookie, or a patient's session cookie from Issue 17) must echo the readable CSRF cookie in ``X-CSRF-Token`` (or a ``csrf_token`` form field). The
    token is ``<nonce>.<HMAC(secret, session id, nonce)>``, **bound to the session** (``sid``, the
    refresh-token family): a token another session minted, planted in the victim's cookie jar from
    a sibling subdomain, does not validate against the victim's session. The comparison is
@@ -121,7 +121,11 @@ class CsrfProtectMiddleware(BaseHTTPMiddleware):
         from src.core.security import session_id_from_access_token
 
         settings = get_settings()
-        access = request.cookies.get(settings.access_token_cookie_name)
+        # The session a browser is signed in with: a staff access cookie, or a patient's session
+        # cookie (Issue 17). Either one makes the request cookie-authenticated.
+        access = request.cookies.get(
+            settings.access_token_cookie_name
+        ) or request.cookies.get(settings.patient_session_cookie_name)
         csrf_cookie = request.cookies.get(settings.csrf_cookie_name)
         if not access:
             # No authenticated session on this request. With only a refresh cookie, the routes it
