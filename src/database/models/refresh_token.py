@@ -58,3 +58,25 @@ class RefreshToken(Base):
         nullable=True,
     )
     """UTC anchor for an optional absolute max session; copied on refresh rotation."""
+    family_id: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+        index=True,
+    )
+    """The sign-in this row belongs to: the id of the family's first row, copied onto every row
+    rotated from it (Issue 16). A *session* is a family: the sessions list shows one entry per
+    family, revoking a session revokes its family, and replaying a rotated token revokes the family
+    it came from. Nullable only so the release before migration ``0002`` keeps working; read a
+    missing value as the row's own id (:attr:`session_id`)."""
+    rotated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    """When this row was exchanged for its successor (Issue 16). A rotated row is also revoked;
+    this is what tells a *replay* (a thief or a race presenting a spent token) apart from a row that
+    was simply signed out or timed out."""
+
+    @property
+    def session_id(self) -> str:
+        """The family id, which is the stable id of the session this row belongs to."""
+        return self.family_id or self.id

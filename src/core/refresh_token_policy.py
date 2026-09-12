@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select, update
+from sqlalchemy import ColumnElement, and_, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from src.core.config import get_settings
@@ -110,3 +110,71 @@ def get_valid_refresh_token_row(
     if not enforce_server_idle_timeout(db, row):
         return None
     return row
+
+
+# --------------------------------------------------------------------------------------
+# Token families (Issue 16)
+# --------------------------------------------------------------------------------------
+#
+# A sign-in starts a family: its first refresh row and every row rotated from it share
+# ``family_id``. The family is the *session* the user sees and revokes, and the unit a replay
+# revokes. Rows written by the release before migration 0002 have no ``family_id``; each is a
+# family of one, whose id is its own.
+
+
+def in_family(family_id: str) -> ColumnElement[bool]:
+    """SQL condition: the row belongs to ``family_id`` (a pre-0002 row is its own family).
+
+    Written as an ``OR`` so the ``family_id`` index serves it. Never negate it: for a row whose
+    ``family_id`` is NULL, ``family_id = :x`` is NULL rather than false, so ``NOT (...)`` would be
+    NULL too and the row would silently match nothing. :func:`outside_family` is the negation.
+    """
+    return or_(
+        RefreshToken.family_id == family_id,
+        and_(RefreshToken.family_id.is_(None), RefreshToken.id == family_id),
+    )
+
+
+def outside_family(family_id: str) -> ColumnElement[bool]:
+    """SQL condition: the row belongs to any family but ``family_id``; NULL-safe."""
+    return func.coalesce(RefreshToken.family_id, RefreshToken.id) != family_id
+
+
+def revoke_family(db: Session, family_id: str, *, now: datetime | None = None) -> int:
+    """Revoke every still-live row of the family; return how many were revoked. Commits."""
+    result = db.execute(
+        update(RefreshToken)
+        .where(in_family(family_id), RefreshToken.revoked_at.is_(None))
+        .values(revoked_at=now or datetime.now(UTC))
+    )
+    db.commit()
+    return int(getattr(result, "rowcount", 0) or 0)
+
+
+def revoke_families_except(
+    db: Session, user_id: str, keep_family_id: str | None
+) -> None:
+    """Revoke every live row of ``user_id`` outside ``keep_family_id`` (all when it is None)."""
+    stmt = update(RefreshToken).where(
+        RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None)
+    )
+    if keep_family_id is not None:
+        stmt = stmt.where(outside_family(keep_family_id))
+    db.execute(stmt.values(revoked_at=datetime.now(UTC)))
+    db.commit()
+
+
+def family_is_live(db: Session, family_id: str) -> bool:
+    """Whether the family still has an unrevoked, unexpired row (the session is still signed in)."""
+    return (
+        db.execute(
+            select(RefreshToken.id)
+            .where(
+                in_family(family_id),
+                RefreshToken.revoked_at.is_(None),
+                RefreshToken.expires_at > datetime.now(UTC),
+            )
+            .limit(1)
+        ).first()
+        is not None
+    )

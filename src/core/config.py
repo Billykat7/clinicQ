@@ -441,6 +441,18 @@ class Settings(BaseSettings):
         ge=1,
         description="Refresh token lifetime in days (env: REFRESH_TOKEN_EXPIRE_DAYS)",
     )
+    refresh_reuse_grace_seconds: int = Field(
+        default=5,
+        ge=0,
+        le=30,
+        description=(
+            "How long after a refresh token is rotated a second presentation of it is treated as "
+            "a concurrent refresh (two tabs whose requests crossed) rather than a replay: it gets "
+            "a fresh access token and no new refresh token, and revokes nothing. After the window "
+            "a replay revokes the whole token family. 0 turns the window off "
+            "(env: REFRESH_REUSE_GRACE_SECONDS)."
+        ),
+    )
 
     # Typed-token link lifetimes (activation / password reset emails)
     activation_link_expire_hours: int = Field(

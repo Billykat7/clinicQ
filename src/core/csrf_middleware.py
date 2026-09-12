@@ -1,12 +1,37 @@
-"""CSRF double-submit middleware for cookie-based browser sessions.
+"""CSRF protection for cookie-authenticated browser sessions (Issue 16).
 
-Ported from the ``maps`` project. Applies to unsafe methods on ``/api/*``. When the
-CSRF cookie is present, an ``X-CSRF-Token`` header (or a ``csrf_token`` form field for
-native HTML form posts) must match it. Bearer-authenticated API clients skip the check,
-as do requests without a CSRF cookie (e.g. OTP verify before cookies are issued).
+The dashboard is a server-rendered app authenticated by cookies, so a page on another site could
+make the browser send a state-changing request with those cookies attached. Three layers stop it,
+cheapest first:
+
+1. **``SameSite=Lax`` session cookies** (set by the auth routes): a cross-site ``POST`` does not
+   carry them at all in a current browser.
+2. **Fetch Metadata.** A browser labels every request with ``Sec-Fetch-Site``; an unsafe ``/api/``
+   request labelled ``cross-site`` is refused outright, cookies or not. That also covers the
+   sign-in endpoints, which have no session yet to protect (login CSRF). Clients that are not
+   browsers send no such header and are unaffected.
+3. **A signed double-submit token.** Every unsafe ``/api/`` request that carries the access cookie
+   must echo the readable CSRF cookie in ``X-CSRF-Token`` (or a ``csrf_token`` form field). The
+   token is ``<nonce>.<HMAC(secret, session id, nonce)>``, **bound to the session** (``sid``, the
+   refresh-token family): a token another session minted, planted in the victim's cookie jar from
+   a sibling subdomain, does not validate against the victim's session. The comparison is
+   constant-time.
+
+A request that carries only the refresh cookie (the access cookie has expired) can reach nothing
+but ``/auth/refresh`` and ``/auth/logout``; when it has a CSRF cookie it must echo it here, and those
+two routes check the binding against the refresh token's own family (:func:`csrf_token_is_bound`).
+``Authorization: Bearer`` clients carry no ambient credential and skip the token check.
+
+Before Issue 16 the check was skipped whenever the CSRF cookie was absent, and compared with
+``==``; the CSRF cookie also expired with the access token, 15 minutes in, while the refresh cookie
+lived a week.
 """
 
 from __future__ import annotations
+
+import hashlib
+import hmac
+import secrets
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -14,49 +39,111 @@ from starlette.responses import JSONResponse
 
 from src.core.config import get_settings
 
-_CSRF_HEADER_NAME = "X-CSRF-Token"
+CSRF_HEADER_NAME = "X-CSRF-Token"
 _CSRF_FORM_FIELD = "csrf_token"
 _UNSAFE_METHODS = ("POST", "PUT", "PATCH", "DELETE")
+#: ``Sec-Fetch-Site`` value a browser sends for a request initiated by another site.
+_CROSS_SITE = "cross-site"
+
+
+def _signing_key() -> bytes:
+    """The HMAC key: derived from ``JWT_SECRET`` under a label of its own, never the secret itself."""
+    return hashlib.sha256(
+        b"clinicq-csrf-v1|" + get_settings().jwt_secret.encode()
+    ).digest()
+
+
+def _signature(session_id: str, nonce: str) -> str:
+    """HMAC-SHA256 of ``session_id`` and ``nonce``, hex."""
+    message = f"{session_id}|{nonce}".encode()
+    return hmac.new(_signing_key(), message, hashlib.sha256).hexdigest()
+
+
+def mint_csrf_token(session_id: str) -> str:
+    """Return a fresh CSRF token bound to ``session_id`` (the refresh-token family)."""
+    nonce = secrets.token_urlsafe(16)
+    return f"{nonce}.{_signature(session_id, nonce)}"
+
+
+def csrf_token_is_bound(token: str | None, session_id: str | None) -> bool:
+    """Return whether ``token`` was minted for ``session_id`` (constant-time)."""
+    if not token or not session_id or token.count(".") != 1:
+        return False
+    nonce, signature = token.split(".")
+    return hmac.compare_digest(signature, _signature(session_id, nonce))
 
 
 def _csrf_protected_path(path: str) -> bool:
-    """Return True for paths where double-submit CSRF applies when the cookie is set."""
+    """Return True for paths where the checks apply: the JSON API."""
     return path.startswith("/api/")
 
 
+def _forbidden(detail: str) -> JSONResponse:
+    """The one refusal shape: 403, with a reason a developer can act on and nothing secret."""
+    return JSONResponse(status_code=403, content={"detail": detail})
+
+
+async def _submitted_token(request: Request) -> str | None:
+    """The token the request echoes: the header, or a ``csrf_token`` field on a native form post."""
+    header = request.headers.get(CSRF_HEADER_NAME)
+    if header:
+        return header
+    content_type = (request.headers.get("content-type") or "").lower()
+    if (
+        "multipart/form-data" in content_type
+        or "application/x-www-form-urlencoded" in content_type
+    ):
+        try:
+            form = await request.form()
+        except Exception:
+            # Malformed multipart/urlencoded body: treat as "no token submitted".
+            return None
+        raw = form.get(_CSRF_FORM_FIELD)
+        return raw if isinstance(raw, str) else None
+    return None
+
+
 class CsrfProtectMiddleware(BaseHTTPMiddleware):
-    """Validate double-submit CSRF for ``/api/*`` writes when the CSRF cookie is set."""
+    """Refuse cross-site and unsigned state-changing ``/api/*`` requests (see the module docs)."""
 
     async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
-        """Reject unsafe API requests when the CSRF cookie and token do not match."""
-        if request.method not in _UNSAFE_METHODS:
+        """Apply Fetch Metadata, then the signed double-submit check, to unsafe API requests."""
+        if request.method not in _UNSAFE_METHODS or not _csrf_protected_path(
+            request.url.path
+        ):
             return await call_next(request)
-        if not _csrf_protected_path(request.url.path):
-            return await call_next(request)
+        if request.headers.get("sec-fetch-site", "").lower() == _CROSS_SITE:
+            return _forbidden("Cross-site request refused")
         auth = request.headers.get("Authorization")
         if auth and auth.startswith("Bearer "):
             return await call_next(request)
-        csrf_cookie = request.cookies.get(get_settings().csrf_cookie_name)
-        if not csrf_cookie:
-            return await call_next(request)
-        header = request.headers.get(_CSRF_HEADER_NAME)
-        if header == csrf_cookie:
-            return await call_next(request)
-        content_type = (request.headers.get("content-type") or "").lower()
-        if (
-            "multipart/form-data" in content_type
-            or "application/x-www-form-urlencoded" in content_type
-        ):
-            try:
-                form = await request.form()
-                raw = form.get(_CSRF_FORM_FIELD)
-                submitted = raw if isinstance(raw, str) else None
-            except Exception:
-                # Malformed multipart/urlencoded body: treat as "no token submitted".
-                submitted = None
-            if submitted == csrf_cookie:
+
+        from src.core.security import session_id_from_access_token
+
+        settings = get_settings()
+        access = request.cookies.get(settings.access_token_cookie_name)
+        csrf_cookie = request.cookies.get(settings.csrf_cookie_name)
+        if not access:
+            # No authenticated session on this request. With only a refresh cookie, the routes it
+            # can reach (refresh, logout) verify the binding themselves; the cookie still has to be
+            # echoed when there is one.
+            if csrf_cookie is None:
                 return await call_next(request)
-        return JSONResponse(
-            status_code=403,
-            content={"detail": "Invalid or missing CSRF token"},
-        )
+            submitted = await _submitted_token(request)
+            if submitted is not None and hmac.compare_digest(submitted, csrf_cookie):
+                return await call_next(request)
+            return _forbidden("Invalid or missing CSRF token")
+
+        submitted = await _submitted_token(request)
+        if (
+            submitted is None
+            or csrf_cookie is None
+            or not hmac.compare_digest(submitted, csrf_cookie)
+        ):
+            return _forbidden("Invalid or missing CSRF token")
+        session_id = session_id_from_access_token(access)
+        # An access cookie that is not a genuine token (or predates sessions) leaves nothing to
+        # bind to; the route's own authentication answers it with a 401.
+        if session_id is not None and not csrf_token_is_bound(submitted, session_id):
+            return _forbidden("Invalid or missing CSRF token")
+        return await call_next(request)

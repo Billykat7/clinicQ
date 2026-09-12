@@ -259,7 +259,9 @@ def test_a_new_password_over_72_bytes_is_a_422_not_a_500(
     reset = ctx.client.post(
         "/api/v1/auth/password/reset",
         json={
-            "token": security.create_password_reset_token(staff.id, staff.email),
+            "token": security.create_password_reset_token(
+                staff.id, staff.email, password_hash=staff.password
+            ),
             "new_password": password,
         },
     )

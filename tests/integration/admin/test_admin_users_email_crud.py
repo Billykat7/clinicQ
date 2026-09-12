@@ -531,7 +531,9 @@ def test_password_reset_updates_password_and_revokes_sessions(
     )
     assert _refresh_rows(ctx.session, user.id)  # session exists
 
-    token = create_password_reset_token(user_id=str(user.id), email=_MEMBER_EMAIL)
+    token = create_password_reset_token(
+        user_id=str(user.id), email=_MEMBER_EMAIL, password_hash=user.password
+    )
     new_password = "brand-new-passw0rd"
     # Reset is unauthenticated; call it from a clean client so no CSRF cookie from the
     # login above is in play (cookie-based /api writes require the double-submit header).
