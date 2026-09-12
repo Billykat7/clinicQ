@@ -9,10 +9,55 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from src.commons.enums import QueueKind, SaProvince, SectorFilter, SiteSector
+from src.commons.enums import (
+    AreaKind,
+    DistanceBasis,
+    QueueKind,
+    SaProvince,
+    SectorFilter,
+    SiteSector,
+)
+from src.modules.discovery.areas import AreaSummary
 from src.modules.discovery.service import NearbyClinic, NearbyResult, OpenStatus
 from src.modules.queues.live import LiveQueue, WaitRange
 from src.modules.sites.schemas import SiteLocationOut
+
+
+class AreaOut(BaseModel):
+    """A place a search can start from (Issue 34)."""
+
+    id: str
+    name: str
+    label: str = Field(
+        description="The name with its municipality, to tell same-named places apart."
+    )
+    matched_name: str | None = Field(
+        description="The alternative name the text matched, when it was not the place's own name."
+    )
+    kind: AreaKind
+    municipality: str | None
+    province: SaProvince
+    centroid: SiteLocationOut
+
+    @classmethod
+    def of(cls, area: AreaSummary) -> AreaOut:
+        """The API shape of one area."""
+        return cls(
+            id=area.area_id,
+            name=area.name,
+            label=area.label,
+            matched_name=area.matched_name,
+            kind=area.kind,
+            municipality=area.municipality,
+            province=area.province,
+            centroid=SiteLocationOut.of(area.centroid),
+        )
+
+
+class AreaListOut(BaseModel):
+    """Suggested or recently used areas, best or newest first."""
+
+    items: list[AreaOut]
 
 
 class WaitRangeOut(BaseModel):
@@ -96,6 +141,12 @@ class NearbyClinicOut(BaseModel):
     distance_m: int = Field(
         description="Straight-line distance from the search origin."
     )
+    distance_is_approximate: bool = Field(
+        description="True when measured from an area's centroid rather than the patient's position."
+    )
+    distance_label: str = Field(
+        description='The distance in words, e.g. "1.4 km" or "about 4.0 km from the middle of Soweto".'
+    )
     travel: TravelOut
     open_status: OpenStatusOut
     total_waiting: int | None = Field(
@@ -118,6 +169,8 @@ class NearbyClinicOut(BaseModel):
             province=clinic.province,
             phone_e164=clinic.phone_e164,
             distance_m=clinic.distance_m,
+            distance_is_approximate=clinic.distance_basis.approximate,
+            distance_label=clinic.distance_label,
             travel=TravelOut(
                 walking_minutes=clinic.travel.walking_minutes,
                 driving_minutes=clinic.travel.driving_minutes,
@@ -142,6 +195,10 @@ class NearbyPageOut(BaseModel):
     """One page of nearby clinics, nearest first."""
 
     origin: SiteLocationOut
+    origin_area: AreaOut | None = Field(
+        description="The area searched from, when the search started from one."
+    )
+    distance_basis: DistanceBasis
     radius: SearchRadiusOut
     sector: SectorFilter
     open_now: bool
@@ -156,6 +213,8 @@ class NearbyPageOut(BaseModel):
         """The API shape of a search result."""
         return cls(
             origin=SiteLocationOut.of(result.origin),
+            origin_area=AreaOut.of(result.origin_area) if result.origin_area else None,
+            distance_basis=result.distance_basis,
             radius=SearchRadiusOut(
                 requested_m=result.radius.requested_m,
                 applied_m=result.radius.applied_m,

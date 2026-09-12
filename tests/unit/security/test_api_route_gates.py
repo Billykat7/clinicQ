@@ -64,6 +64,10 @@ PUBLIC: dict[str, str] = {
         "lengths), never a ticket, a patient or anything about an unverified clinic. The radius is "
         "capped on the server, and Issue 38 adds the rate limit against scraping"
     ),
+    "GET /api/v1/clinics/areas": (
+        "the place-name typeahead (Issue 34) a patient without GPS types a suburb into: it reads "
+        "only the public OpenStreetMap place dataset, and nothing about any person"
+    ),
     "GET /api/v1/sites/staff/info": "module metadata",
     "GET /api/v1/documents/download": "a signed, expiring, single-document link is the capability",
     "POST /api/v1/webhooks/stripe": "verifies the gateway's signature before anything else",

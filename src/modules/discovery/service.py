@@ -18,7 +18,10 @@ What a search does, in order:
 3. **Filters by radius with ``ST_DWithin`` on the geography column**, which the GiST index
    ``ix_clinicq_site_location_gist`` serves, and orders by ``ST_Distance``. :func:`nearby_statement`
    builds the statement, so a test can put the exact query the service runs under ``EXPLAIN``.
-4. **Joins what a patient decides on**: whether the clinic is open now and when it next opens
+4. **Starts from a position or from an area** (Issue 34). An :class:`AreaOrigin` is resolved to the
+   area's centroid, and every distance in the answer is then marked approximate
+   (:class:`~src.commons.enums.DistanceBasis`) and labelled so by :mod:`.wording`.
+5. **Joins what a patient decides on**: whether the clinic is open now and when it next opens
    (Issue 24's pure functions over :func:`~src.modules.sites.hours.published_schedules`), a rough
    travel time (:mod:`.travel`), and the live queue lengths
    (:func:`~src.modules.queues.live.published_live_queues`).
@@ -39,14 +42,22 @@ from typing import Any, Final
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
-from src.commons.enums import BoundedContext, SaProvince, SectorFilter, SiteSector
+from src.commons.enums import (
+    BoundedContext,
+    DistanceBasis,
+    SaProvince,
+    SectorFilter,
+    SiteSector,
+)
 from src.commons.geo import Coordinates, assert_within_operating_area
 from src.commons.schemas import ModuleInfo
 from src.commons.time import business_date, now_sast
 from src.core.site_scope import publicly_visible_site_clauses
 from src.database.models.site import Site
 from src.database.types import point_ewkt
+from src.modules.discovery.areas import AreaSummary, get_area
 from src.modules.discovery.travel import TravelEstimate, estimate_travel
+from src.modules.discovery.wording import distance_label
 from src.modules.queues.live import (
     LiveQueue,
     WaitingCountReader,
@@ -112,6 +123,21 @@ def clamp_radius(requested_m: int | None) -> SearchRadius:
 
 
 @dataclass(frozen=True, slots=True)
+class AreaOrigin:
+    """Search from the middle of a named place instead of from a position (Issue 34).
+
+    What a patient without GPS searches from: the area they picked from
+    :func:`~src.modules.discovery.areas.search_areas`. Distances from it are approximate.
+    """
+
+    area_id: str
+
+
+#: Where a search starts: a position, or an area.
+SearchOrigin = Coordinates | AreaOrigin
+
+
+@dataclass(frozen=True, slots=True)
 class OpenStatus:
     """Open or closed at the moment of the search, with what a patient needs next."""
 
@@ -139,6 +165,10 @@ class NearbyClinic:
     phone_e164: str | None
     #: Straight-line distance from the search origin, in whole metres.
     distance_m: int
+    #: What the distance was measured from. From an area's centroid it is approximate.
+    distance_basis: DistanceBasis
+    #: The distance in words, approximate where it must be (:mod:`.wording`).
+    distance_label: str
     travel: TravelEstimate
     open_status: OpenStatus
     #: Active queues in the clinic's own display order, each with its live length.
@@ -154,7 +184,11 @@ class NearbyClinic:
 class NearbyResult:
     """One page of a search, with everything needed to say what was searched."""
 
+    #: The point distances were measured from: the position, or the area's centroid.
     origin: Coordinates
+    #: The area searched from, when the search started from one.
+    origin_area: AreaSummary | None
+    distance_basis: DistanceBasis
     radius: SearchRadius
     sector: SectorFilter
     open_now: bool
@@ -201,7 +235,7 @@ def _open_status(schedule: OpeningSchedule | None, moment: datetime) -> OpenStat
 
 def find_nearby_sites(
     db: Session,
-    origin: Coordinates,
+    origin: SearchOrigin,
     *,
     radius_m: int | None = None,
     sector: SectorFilter = SectorFilter.ALL,
@@ -217,7 +251,8 @@ def find_nearby_sites(
 
     Args:
         db: The session (PostgreSQL with PostGIS).
-        origin: Where the patient is: a GPS fix, or an area's centroid (Issue 34).
+        origin: Where the patient is: a GPS fix, or an :class:`AreaOrigin` they picked, which is
+            resolved to the area's centroid (Issue 34).
         radius_m: The radius asked for, in metres; capped to :data:`MAX_RADIUS_M`. ``None`` means
             :data:`DEFAULT_RADIUS_M`.
         sector: Public, private or all.
@@ -232,13 +267,23 @@ def find_nearby_sites(
 
     Raises:
         CoordinateOutOfRangeError: If ``origin`` is outside the operating country.
+        AreaNotFoundError: If ``origin`` names an area that does not exist.
     """
-    assert_within_operating_area(origin)
+    origin_area: AreaSummary | None = None
+    match origin:
+        case AreaOrigin(area_id=area_id):
+            origin_area = get_area(db, area_id)
+            point = origin_area.centroid
+            basis = DistanceBasis.AREA_CENTROID
+        case Coordinates():
+            point = origin
+            basis = DistanceBasis.POSITION
+    assert_within_operating_area(point)
     moment = moment or now_sast()
     radius = clamp_radius(radius_m)
     limit = min(MAX_PAGE_SIZE, max(1, limit))
     offset = max(0, offset)
-    statement = nearby_statement(origin, radius.applied_m, sector)
+    statement = nearby_statement(point, radius.applied_m, sector)
 
     rows: Sequence[Any]
     schedules: dict[str, OpeningSchedule]
@@ -284,6 +329,12 @@ def find_nearby_sites(
             province=row.Site.province_enum,
             phone_e164=row.Site.phone_e164,
             distance_m=round(float(row.distance_m)),
+            distance_basis=basis,
+            distance_label=distance_label(
+                round(float(row.distance_m)),
+                basis,
+                origin_area.name if origin_area is not None else None,
+            ),
             travel=estimate_travel(float(row.distance_m)),
             open_status=_open_status(schedules.get(row.Site.id), moment),
             queues=queues.get(row.Site.id, ()),
@@ -291,7 +342,9 @@ def find_nearby_sites(
         for row in rows
     )
     return NearbyResult(
-        origin=origin,
+        origin=point,
+        origin_area=origin_area,
+        distance_basis=basis,
         radius=radius,
         sector=sector,
         open_now=open_now,
