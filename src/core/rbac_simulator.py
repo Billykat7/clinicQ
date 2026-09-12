@@ -74,7 +74,7 @@ from src.database.models import RolePermission, User
 #: hundred should not return four hundred ids to a console panel.
 INSTANCE_SAMPLE_SIZE = 5
 
-#: Joins the roles on an inheritance path — ``agent→manager``, as the design doc writes it.
+#: Joins the roles on an inheritance path — ``nurse_doctor→receptionist``, as the design doc writes it.
 _INHERITANCE_ARROW = "→"
 
 
@@ -89,9 +89,9 @@ class TargetKind(StrEnum):
     """Which of the simulator's two target forms a request asked for.
 
     Both exist because the two questions people ask are genuinely different, and only the second
-    would have caught M28 #164: a resource+verb simulator says the tenant role holds
-    ``leases:READ`` (true, for their own lease) and says nothing at all about whether
-    ``/admin/leases`` opens for them.
+    would have caught M28 #164: a resource+verb simulator says the nurse role holds
+    ``queues:READ`` (true, for the queues at their clinic) and says nothing at all about whether
+    a whole-platform queue console opens for them.
     """
 
     #: ``{"resource": "leases", "verb": "update"}`` — may this principal do X?
@@ -113,8 +113,8 @@ class SimulationError(ValueError):
 class SimulationPrincipal:
     """Who the simulation is about — exactly one of the three identifying forms.
 
-    A **role** is the portable question ("what does the tenant role reach?"), a **user** the
-    concrete one ("why can't this person open their lease?"), which under Issue #136 may resolve to
+    A **role** is the portable question ("what does the receptionist role reach?"), a **user** the
+    concrete one ("why can't this nurse call next here?"), which under Issue #136 may resolve to
     several roles at once, some scoped and some time-boxed.
     """
 
@@ -185,7 +185,7 @@ class DecidingStatement:
     max_verb: str | None = None
     action: str | None = None
     scope: str | None = None
-    #: ``"agent→manager"`` when the grant reached the principal through the role closure.
+    #: ``"nurse_doctor→receptionist"`` when the grant reached the principal through the closure.
     inherited_via: str | None = None
     #: True when the grant sits on an ancestor of the target resource, not the target itself.
     cascaded_from_ancestor: bool = False
@@ -310,7 +310,7 @@ def _authored_rows(
 def _inheritance_label(
     db: Session, principal_roles: tuple[str, ...], granting_role: str
 ) -> str | None:
-    """Return ``"agent→manager"`` when the grant arrived through the closure, else ``None``.
+    """Return ``"nurse_doctor→receptionist"`` when the grant came through the closure, else None.
 
     The shortest path across the principal's roles, so a user holding several roles is explained by
     the one that most directly accounts for the grant rather than by an arbitrary pick.
@@ -546,7 +546,8 @@ def _simulate_surface(
     renders from and asking it — :meth:`~src.core.nav_visibility.NavVisibility.visible` for a
     registry destination, :meth:`~src.core.nav_visibility.NavVisibility.can_surface` for a console
     sub-tab that has no destination of its own. Resolving it any other way would reintroduce the
-    divergence that let seven consoles open for the tenant role while every test stayed green.
+    divergence that once let seven consoles open for a self-service role while every test stayed
+    green (M28 #164).
     """
     nav = nav_visibility_for_role(db, principal.nav_role)
     _record(

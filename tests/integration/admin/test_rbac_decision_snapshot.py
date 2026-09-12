@@ -52,6 +52,19 @@ def committed() -> str:
     return text
 
 
+def test_the_committed_snapshot_is_what_the_code_decides(committed: str) -> None:
+    """The guard itself: a moved decision fails CI until someone regenerates and reviews it.
+
+    The kernel shipped without its golden file and without this test (Issue 18 restored both), so
+    ``make rbac-snapshot-check`` failed on every checkout and nothing noticed.
+    """
+    moved = rbac_snapshot.diff_snapshots(committed, build_snapshot())
+    assert not moved, (
+        f"{len(moved)} RBAC decision(s) moved; review them, then run `make rbac-snapshot`:\n"
+        + "\n".join(moved[:40])
+    )
+
+
 def test_the_snapshot_is_deterministic_across_runs() -> None:
     """A file that wobbles between runs is a file nobody reads, and a guard nobody trusts."""
     assert build_snapshot() == build_snapshot()
@@ -130,7 +143,7 @@ def owner_grants_widened_to_business() -> Iterator[None]:
     original = rbac_snapshot.seeded_grant_scope
 
     def _widened(role: str | None) -> GrantScope:
-        if (role or "").strip() == UserRole.OWNER.value:
+        if (role or "").strip() == UserRole.NURSE_DOCTOR.value:
             return GrantScope.BUSINESS
         return original(role)
 

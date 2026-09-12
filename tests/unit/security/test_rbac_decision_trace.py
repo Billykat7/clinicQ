@@ -51,10 +51,10 @@ from src.database.models import RbacRole, RoleHierarchy, RolePermission, User
 
 _ROLES = (
     UserRole.ADMIN.value,
-    UserRole.MANAGER.value,
-    UserRole.OWNER.value,
-    UserRole.TENANT.value,
-    UserRole.VENDOR.value,
+    UserRole.PLATFORM_ADMIN.value,
+    UserRole.NURSE_DOCTOR.value,
+    UserRole.PATIENT.value,
+    UserRole.RECEPTIONIST.value,
     UserRole.USER.value,
 )
 
@@ -216,7 +216,7 @@ def test_a_level_with_no_grant_reports_the_step_that_explains_the_surprise(
     """ "No grant on X, walked to parent Y" is the step the design calls out by name."""
     trace: list[TraceStep] = []
     effective_verb_over_keys(
-        load_effective_grant_keys_for_roles(db, [UserRole.TENANT.value]),
+        load_effective_grant_keys_for_roles(db, [UserRole.PATIENT.value]),
         load_resource_parent_map(db),
         "no.such.resource",
         trace=trace,
@@ -233,7 +233,7 @@ def test_a_resource_nothing_grants_ends_in_an_explicit_no_access_step(
     """The verdict is a step of its own, so a reader never has to infer it from an absence."""
     trace: list[TraceStep] = []
     verb = effective_verb_over_keys(
-        load_effective_grant_keys_for_roles(db, [UserRole.TENANT.value]),
+        load_effective_grant_keys_for_roles(db, [UserRole.PATIENT.value]),
         load_resource_parent_map(db),
         "no.such.resource",
         trace=trace,
@@ -254,7 +254,7 @@ def test_the_deciding_level_is_carried_as_a_machine_readable_anchor(
     """
     trace: list[TraceStep] = []
     verb = effective_verb_over_keys(
-        load_effective_grant_keys_for_roles(db, [UserRole.MANAGER.value]),
+        load_effective_grant_keys_for_roles(db, [UserRole.PLATFORM_ADMIN.value]),
         load_resource_parent_map(db),
         "order.details",
         trace=trace,
@@ -282,30 +282,32 @@ def test_the_tier_walk_reports_its_closed_default_rather_than_falling_silent(
 def test_the_role_closure_stage_names_the_roles_in_play(db: Session) -> None:
     """Stage one of the design's list: which roles the principal actually resolved to."""
     trace: list[TraceStep] = []
-    resolve_scope_tier(db, _user(db, UserRole.MANAGER.value), "crates", trace=trace)
+    resolve_scope_tier(
+        db, _user(db, UserRole.PLATFORM_ADMIN.value), "crates", trace=trace
+    )
     closure_steps = [step for step in trace if step.stage is TraceStage.ROLE_CLOSURE]
     assert closure_steps
-    assert UserRole.MANAGER.value in closure_steps[0].detail
+    assert UserRole.PLATFORM_ADMIN.value in closure_steps[0].detail
 
 
 def test_a_directly_held_grant_reports_a_single_element_path(db: Session) -> None:
     """``["manager"]`` — the grant is the role's own, so there is no inheritance to explain."""
     assert role_inheritance_path(
-        db, UserRole.MANAGER.value, UserRole.MANAGER.value
-    ) == [UserRole.MANAGER.value]
+        db, UserRole.PLATFORM_ADMIN.value, UserRole.PLATFORM_ADMIN.value
+    ) == [UserRole.PLATFORM_ADMIN.value]
 
 
 def test_an_inherited_grant_reports_the_shortest_path(db: Session) -> None:
     """``agent → manager``: the edge an operator wants named, not an arbitrary walk."""
     db.add(RbacRole(name="agent", description="Property agent", is_system=False))
-    db.add(RoleHierarchy(role="agent", inherits_role=UserRole.MANAGER.value))
+    db.add(RoleHierarchy(role="agent", inherits_role=UserRole.PLATFORM_ADMIN.value))
     db.commit()
-    assert role_inheritance_path(db, "agent", UserRole.MANAGER.value) == [
+    assert role_inheritance_path(db, "agent", UserRole.PLATFORM_ADMIN.value) == [
         "agent",
-        UserRole.MANAGER.value,
+        UserRole.PLATFORM_ADMIN.value,
     ]
 
 
 def test_an_unreachable_role_reports_no_path_at_all(db: Session) -> None:
     """An empty list, never a partial one — "not inherited" is a distinct, useful answer."""
-    assert role_inheritance_path(db, UserRole.TENANT.value, UserRole.ADMIN.value) == []
+    assert role_inheritance_path(db, UserRole.PATIENT.value, UserRole.ADMIN.value) == []

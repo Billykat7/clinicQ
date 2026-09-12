@@ -610,7 +610,7 @@ class NavGatePatchIn(BaseModel):
 class SimulatePrincipalIn(BaseModel):
     """Who to simulate — exactly one of ``role``, ``user_id`` or ``email``.
 
-    A **role** answers the portable question ("what does the tenant role reach?"); a **user**
+    A **role** answers the portable question ("what does the receptionist role reach?"); a **user**
     answers the concrete one, resolving the union of their active, in-scope, unexpired assignments
     exactly as a real request does (Issue #136).
     """
@@ -689,7 +689,8 @@ class DecidingStatementOut(BaseModel):
     )
     inherited_via: str | None = Field(
         default=None,
-        description="Inheritance path through role_hierarchy, e.g. 'agent→manager'; null when the "
+        description="Inheritance path through role_hierarchy, e.g. 'nurse_doctor→receptionist'; "
+        "null when the "
         "principal holds the grant directly.",
     )
     cascaded_from_ancestor: bool = Field(

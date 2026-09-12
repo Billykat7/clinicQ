@@ -1,8 +1,9 @@
 """HTTP routes for patient identity (Issue 17): a code by SMS, a session, the patient's own record.
 
 ``/otp/request`` and ``/otp/verify`` are public: they are how a patient signs in. ``/me`` and
-``/logout`` take the patient's own session (:data:`~.sessions.CurrentPatient`) and act only on the
-record it names, so they carry no id a caller could change.
+``/logout`` take the patient's own session through the ``patient`` role's grant on
+``patients.self`` (:func:`src.api.rbac_deps.require_patient`, Issue 18) and act only on the record
+the session names, so they carry no id a caller could change.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
+from src.api.rbac_deps import require_patient
 from src.commons.enums import OtpVerification
 from src.commons.phone import mask_phone
 from src.core.client_ip import client_ip_or_unknown
@@ -28,7 +30,6 @@ from src.modules.patients.schemas import (
     PatientUpdateIn,
 )
 from src.modules.patients.sessions import (
-    CurrentPatient,
     end_session,
     sign_out_everywhere,
     start_session,
@@ -38,6 +39,12 @@ router = APIRouter(prefix="/patients", tags=["patients"])
 
 DbSession = Annotated[Session, Depends(get_db)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
+
+#: The patient's own record, gated by the ``patient`` role's grant on ``patients.self`` (Issue 18).
+OwnRecordRead = Annotated[Patient, Depends(require_patient("patients.self", "read"))]
+OwnRecordUpdate = Annotated[
+    Patient, Depends(require_patient("patients.self", "update"))
+]
 
 #: What a patient is told for each refused code. Plain words; nothing about the number.
 _REJECTED: dict[OtpVerification, str] = {
@@ -117,14 +124,14 @@ def verify_code(
 
 
 @router.get("/me", response_model=PatientOut, operation_id="patientsMe")
-def get_me(patient: CurrentPatient) -> PatientOut:
+def get_me(patient: OwnRecordRead) -> PatientOut:
     """The signed-in patient's own record."""
     return _out(patient)
 
 
 @router.patch("/me", response_model=PatientOut, operation_id="patientsUpdateMe")
 def update_me(
-    body: PatientUpdateIn, patient: CurrentPatient, db: DbSession
+    body: PatientUpdateIn, patient: OwnRecordUpdate, db: DbSession
 ) -> PatientOut:
     """Change what the signed-in patient is called. Any other field is refused (422)."""
     return _out(service.update_display_name(db, patient, body.display_name))
@@ -133,7 +140,7 @@ def update_me(
 @router.post(
     "/logout", status_code=status.HTTP_204_NO_CONTENT, operation_id="patientsLogout"
 )
-def logout(patient: CurrentPatient, db: DbSession, settings: SettingsDep) -> Response:
+def logout(patient: OwnRecordUpdate, db: DbSession, settings: SettingsDep) -> Response:
     """Sign out on the server: every session this patient holds is refused from now on."""
     sign_out_everywhere(db, patient)
     db.commit()

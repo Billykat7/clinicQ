@@ -27,7 +27,7 @@ seeded from migrations, is what keeps authorisation out of individual route bodi
 
 ## Scope
 
-- Roles `patient`, `receptionist`, `nurse_doctor`, `clinic_manager`, `platform_admin` seeded via migration
+- Roles `patient`, `receptionist`, `nurse_doctor`, `clinic_manager`, `platform_admin` seeded from the module manifests by `make seed-rbac`, which the deploy sequence runs after the migrations (decision 6)
 - Verb-based permissions (`READ < CREATE < UPDATE < DELETE`) on named resources
 - `require_permission(resource, verb)` FastAPI dependency used by every protected route
 - Template helpers so the UI hides actions the current role cannot perform
@@ -44,7 +44,7 @@ seeded from migrations, is what keeps authorisation out of individual route bodi
 - [ ] A nurse cannot call next on a queue they are not assigned to
 - [ ] A receptionist cannot change display mode or site settings
 - [ ] The UI never renders an action the role cannot execute (defence in depth, not the only control)
-- [ ] Seeded roles and permissions are created by migration, not by a manual script
+- [ ] Seeded roles and permissions are created automatically by the deploy sequence (`make seed-rbac` after `alembic upgrade head`, decision 6), not by a manual script
 - [ ] The RBAC matrix is committed and matches the seeded data, verified by a test
 
 ## How to verify
@@ -60,6 +60,8 @@ seeded from migrations, is what keeps authorisation out of individual route bodi
 - `src/core/rbac_manifest_registry.py`
 - `scripts/db/seed_rbac.py`
 - `tests/test_rbac_matrix.py`
+- `docs/architecture/rbac-matrix.md` (generated) and `tests/snapshots/rbac_decisions.txt`
+- `src/modules/sites/rbac_manifest.py`, `src/modules/queues/rbac_manifest.py`
 
 ---
 

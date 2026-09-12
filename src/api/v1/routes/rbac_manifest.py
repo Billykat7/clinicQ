@@ -20,11 +20,32 @@ key that ships is declared by one of them. ``sync_module_manifest`` only ever *s
 clears one, so re-declaring a parent here is a no-op against an existing database.
 """
 
-from src.core.rbac_manifest import ModuleManifest, ResourceSpec
+from src.commons.enums import GrantScope, PermissionVerb, UserRole
+from src.core.rbac_manifest import ModuleManifest, ResourceSpec, RoleGrant
 
 RBAC_MANIFEST = ModuleManifest(key="rbac", name="RBAC")
 
-DASHBOARD_MANIFEST = ModuleManifest(key="dashboard", name="Dashboard")
+#: Every ClinicQ staff role opens the dashboard shell (Issue 18); what it shows inside is decided by
+#: the module grants. At ``business``, like the kernel's ``user``: the shell has no rows to narrow.
+#: The patient role has no dashboard.
+DASHBOARD_MANIFEST = ModuleManifest(
+    key="dashboard",
+    name="Dashboard",
+    grants=tuple(
+        RoleGrant(
+            role.value,
+            "dashboard",
+            PermissionVerb.READ.value,
+            GrantScope.BUSINESS.value,
+        )
+        for role in (
+            UserRole.RECEPTIONIST,
+            UserRole.NURSE_DOCTOR,
+            UserRole.CLINIC_MANAGER,
+            UserRole.PLATFORM_ADMIN,
+        )
+    ),
+)
 
 # ``full_key`` overrides: ``logs`` and ``users`` are undotted keys under a dotted-composition
 # parent, exactly the predating-the-framework case ``ResourceSpec.full_key`` exists for.

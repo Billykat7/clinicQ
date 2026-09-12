@@ -319,8 +319,8 @@ class NavVisibility:
 
         A **named-action** gate is deliberately exempt from the tier check. The tier exists to stop
         a *cumulative* verb grant from reaching further than it was meant to: verbs are ordered and
-        inherit down the whole resource tree, which is exactly how a tenant's coarse
-        ``maintenance:CREATE`` reached the staff request board. A named action has neither property
+        inherit down the whole resource tree, which is exactly how one self-service role's coarse
+        grant once reached a staff board (M28). A named action has neither property
         — :func:`~src.core.rbac.named_action_allowed` matches an exact ``(resource, action)`` pair
         and only cascades to descendants when a grant opts in explicitly — so the over-reach the
         tier closes cannot arise, and applying it anyway would silently break the capability an
@@ -392,8 +392,8 @@ class NavVisibility:
 
         Issue #164 deleted the wall on the grounds that ``role_permission.scope`` (Issue #156) now
         carries that distinction — correctly, but only at the *data* layer: this method still
-        compared verbs alone, so ``own`` and ``business`` were indistinguishable here and seven
-        staff consoles opened for a tenant, twelve for an owner and five for a vendor. Issue #165
+        compared verbs alone, so ``own`` and ``business`` were indistinguishable here and two dozen
+        staff consoles opened for the source project's self-service roles. Issue #165
         finished the job by giving the *surface* a required tier and comparing the caller's
         effective tier against it. The result is the wall's guarantee without the wall's flaw: a
         brand-new portal-style role is still expressible (its tier is whatever an admin granted),

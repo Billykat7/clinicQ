@@ -80,7 +80,7 @@ def _verb_from_rank(rank: int) -> str:
 # ``effective_verb_over_keys()``, ``resolve_scope_tier()`` and ``_surface_allowed()`` each compute a
 # rich intermediate state and then throw all of it away, returning a verb, a tier or a bool. That is
 # why M28 #164's reachability regression needed a hand-built probe across two git worktrees to
-# establish, and why nobody could answer "what does the tenant role reach today?" without writing
+# establish, and why nobody could answer "what does the receptionist role reach today?" without writing
 # code. The trace is that state, captured **on request only**.
 #
 # Two rules keep this honest, and both are asserted by
@@ -137,7 +137,8 @@ class TraceStep:
     """One step a resolver took, as ``docs/architecture/rbac-decision-transparency.md`` §3 specifies.
 
     ``stage``/``detail``/``outcome`` are the three fields the design names: the stage that produced
-    it, a human-readable sentence an operator can read ("leases: ALLOW update (role: manager)"), and
+    it, a human-readable sentence an operator can read ("queues.call: ALLOW update (role:
+    receptionist)"), and
     what it did to the decision.
 
     ``resource`` and ``value`` are **machine-readable anchors** on the same step, carried so a
@@ -259,12 +260,13 @@ def role_closure(db: Session, role: str) -> set[str]:
 def role_inheritance_path(db: Session, role: str, granting_role: str) -> list[str]:
     """Return the shortest ``role_hierarchy`` path from ``role`` to ``granting_role`` (Issue #174).
 
-    ``["agent", "manager"]`` when ``agent`` inherits ``manager``; ``[role]`` when the two are the
-    same role (the grant is held directly); ``[]`` when ``granting_role`` is not in ``role``'s
-    closure at all.
+    ``["nurse_doctor", "receptionist"]`` when ``nurse_doctor`` inherits ``receptionist``; ``[role]``
+    when the two are the same role (the grant is held directly); ``[]`` when ``granting_role`` is not
+    in ``role``'s closure at all.
 
     Breadth-first, so the path reported is the shortest one — an operator reading "inherited via
-    agent→manager" wants the edge that explains it, not an arbitrary walk through a diamond. Shares
+    nurse_doctor→receptionist" wants the edge that explains it, not an arbitrary walk through a
+    diamond. Shares
     :func:`_load_hierarchy_adjacency` with :func:`role_closure`, so it can never disagree with the
     closure the resolvers actually use about which roles are reachable.
     """
@@ -732,18 +734,42 @@ def ensure_permission_action(
 
 
 def default_system_roles() -> list[tuple[str, str]]:
-    """Return the ``(name, description)`` system roles seeded at ``alembic upgrade head``."""
+    """Return the ``(name, description)`` roles every deployment is seeded with.
+
+    The kernel's two system roles and ClinicQ's five (Issue 18). ``make seed-rbac`` inserts any that
+    are missing (``sync_system_roles``); the golden decision snapshot pins every one of them.
+    """
     return [
         (UserRole.ADMIN.value, "Full application access; system role."),
         (UserRole.USER.value, "Standard user; system role."),
+        (
+            UserRole.PATIENT.value,
+            "A patient acting on their own record, through a phone session.",
+        ),
+        (
+            UserRole.RECEPTIONIST.value,
+            "Front desk: issues and moves tickets and calls next on any queue at their clinic.",
+        ),
+        (
+            UserRole.NURSE_DOCTOR.value,
+            "Calls next and completes visits on the queues they are assigned to.",
+        ),
+        (
+            UserRole.CLINIC_MANAGER.value,
+            "Runs their clinic: profile, settings, display mode, staff, queues and reports.",
+        ),
+        (
+            UserRole.PLATFORM_ADMIN.value,
+            "ClinicQ operator: onboarding, support and aggregate reports across clinics.",
+        ),
     ]
 
 
 def default_role_permissions() -> list[tuple[str, str, PermissionVerb]]:
-    """Return the default ``(role, resource, max_verb)`` grants seeded at migration time.
+    """Return the kernel's system ``(role, resource, max_verb)`` grants, seeded by ``make seed-rbac``.
 
-    Admin holds DELETE on ``users``, ``logs``, ``rbac`` and the dashboard; standard users
-    get READ on their dashboard.
+    Admin holds DELETE on ``users``, ``logs``, ``rbac`` and the dashboard; standard users get READ
+    on the dashboard. Everything else, the ClinicQ roles included, is declared in manifests.
     """
     admin = UserRole.ADMIN.value
     user = UserRole.USER.value
@@ -785,16 +811,20 @@ def default_role_permissions() -> list[tuple[str, str, PermissionVerb]]:
 # verbs. A role not listed here (every custom role an admin creates) is seeded at
 # :data:`~src.commons.enums.GrantScope.OWN`, the narrowest tier: see :func:`default_grant_scope`.
 SEEDED_ROLE_GRANT_SCOPES: dict[str, GrantScope] = {
-    # Staff roles: their consoles are the whole-business view, and their seed rows say so.
+    # The kernel's system roles: whole-platform consoles and the base signed-in surfaces.
     UserRole.ADMIN.value: GrantScope.BUSINESS,
-    UserRole.MANAGER.value: GrantScope.BUSINESS,
-    # The base signed-in role. Its only grants are the dashboard and the notification bell, both
-    # of which are whole-business resources with nothing for a narrower tier to narrow to.
     UserRole.USER.value: GrantScope.BUSINESS,
-    # Portal roles: their whole surface is a self-service portal over their own rows.
-    UserRole.OWNER.value: GrantScope.OWN,
-    UserRole.TENANT.value: GrantScope.OWN,
-    UserRole.VENDOR.value: GrantScope.OWN,
+    # ClinicQ (Issue 18). Staff reach what their assignments name: the sites they hold a role at
+    # (and, for a nurse, the queues they are assigned to). A manifest grant may narrow further,
+    # as the nurse's call-next grant does (``own``: only the queues assigned to them).
+    UserRole.RECEPTIONIST.value: GrantScope.ASSIGNED,
+    UserRole.NURSE_DOCTOR.value: GrantScope.ASSIGNED,
+    UserRole.CLINIC_MANAGER.value: GrantScope.ASSIGNED,
+    # The operator reaches every clinic; reading one they are not assigned to is explicit and
+    # audited by the site guard (Issue 19), because this role is not scope-exempt.
+    UserRole.PLATFORM_ADMIN.value: GrantScope.BUSINESS,
+    # A patient reaches only their own record.
+    UserRole.PATIENT.value: GrantScope.OWN,
 }
 
 
@@ -1550,11 +1580,11 @@ def ensure_permission_key(
     :class:`~src.commons.enums.GrantScope` tier the caller's grant on this resource must reach,
     compared on the ladder (:meth:`~src.commons.enums.GrantScope.satisfies`). It defaults to
     :data:`~src.commons.enums.GrantScope.OWN` — the narrowest tier, which *every* tier satisfies —
-    so an existing call site's behaviour is unchanged. A route that acts on the **whole business**
-    (drafting a work order, assigning a vendor, approving a cost) passes ``BUSINESS``, which is what
-    stops a portal grant from authorizing it: a vendor's ``maintenance.work_orders:UPDATE`` at
-    ``own`` is exactly the grant that lets them start and complete *their own* job, and exactly the
-    grant that must not let them assign one.
+    so an existing call site's behaviour is unchanged. A route that acts on the **whole platform**
+    (onboarding a clinic, an aggregate report) passes ``BUSINESS``, which is what stops a narrower
+    grant from authorizing it: a nurse's ``queues.call:UPDATE`` at ``own`` is exactly the grant that
+    lets them call their own queue, and exactly the grant that must not let them call every
+    queue.
     """
     if not get_settings().auth_enabled:
         return
@@ -1587,6 +1617,30 @@ def ensure_permission_key(
     record_allow(roles, resource_key, required_verb)
 
 
+def ensure_roles_hold_permission(
+    db: Session, roles: Iterable[str], resource_key: str, required_verb: str
+) -> None:
+    """Ensure a fixed set of roles holds ``required_verb`` on ``resource_key``; 403 otherwise.
+
+    The check for a principal that is not a ``user`` row: a patient (Issue 18), whose one role is
+    ``patient``. Same resolution as :func:`ensure_permission_key` (inheritance, the resource tree,
+    deny-beats-allow), without the account lookup. No-ops when auth is disabled.
+    """
+    if not get_settings().auth_enabled:
+        return
+    role_list = list(roles)
+    granted = effective_verb_over_keys(
+        load_effective_grant_keys_for_roles(db, role_list),
+        load_resource_parent_map(db),
+        resource_key,
+    )
+    if granted is None or permission_verb_rank(
+        PermissionVerb(granted)
+    ) < permission_verb_rank(PermissionVerb(required_verb)):
+        raise_forbidden(resource_key, required_verb)
+    record_allow(role_list, resource_key, required_verb)
+
+
 def ensure_management_permission_key(
     db: Session,
     current_user: dict[str, Any],
@@ -1598,17 +1652,15 @@ def ensure_management_permission_key(
 ) -> None:
     """Like :func:`ensure_permission_key`, but also require a **business-scoped** grant.
 
-    The whole-business management **list/detail** APIs (e.g. ``GET /api/v1/leases``) show every
-    row, not the caller's own. A portal-scoped role holds READ on a shared resource so its *own*
-    ownership-scoped portal works (a tenant reads their own lease; ``leases:read``), and for
-    ``maintenance`` no verb separates staff from portal at all (manager and vendor both hold
-    ``update``) — so the bare verb check in :func:`ensure_permission_key` would wrongly admit a
-    portal caller to the management API. This gate refuses such a caller with 403 even when their
+    A whole-platform **list/detail** API shows every row, not the caller's slice. A role holds a
+    verb on a shared resource so its *own* narrowed view works (a nurse reads the queues at their
+    clinic; ``queues:read``), so the bare verb check in :func:`ensure_permission_key` would wrongly
+    admit such a caller to the whole-platform API. This gate refuses them with 403 even when their
     grant holds the verb.
 
     **Issue #156 (M28) swapped what "such a caller" means.** Until then this asked
-    ``is_management_role()`` — is the caller's role literally one of ``owner``/``tenant``/
-    ``vendor`` — a wall no grant could open and no grant could narrow. It now asks
+    ``is_management_role()`` — is the caller's role name on a fixed list — a wall no grant could
+    open and no grant could narrow. It now asks
     :func:`~src.core.scope.resolve_scope_tier`: does the caller's *grant* on this resource reach the
     whole ``business``, or only a slice of it? Because Issue #156's backfill wrote exactly the
     tier that name check implied for every pre-existing grant, this was a mechanism swap with
@@ -1618,8 +1670,8 @@ def ensure_management_permission_key(
     the widest tier any active role grants wins, the same union semantics the verb resolution
     already has.
 
-    Ownership-scoped reads a portal caller *does* use (e.g. an owner's own reporting, which pairs
-    the verb with an ownership narrowing) must keep using :func:`ensure_permission_key` plus
+    Narrowed reads a caller *does* use (e.g. a clinic manager's own clinic's reports, which pair
+    the verb with a site narrowing) must keep using :func:`ensure_permission_key` plus
     :func:`~src.core.scope.resolve_scope`, not this — that is the pattern Issues #157–#159 migrate
     each console onto.
 
