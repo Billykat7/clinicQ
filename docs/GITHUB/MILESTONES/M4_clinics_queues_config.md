@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Status** | ✅ Done: issues 23–30 closed on 2026-09-12, release note [`v0.4.0`](../RELEASES/RELEASE_v0_4_0.md) |
-| **Progress** | 🟩⬜⬜⬜⬜⬜⬜⬜⬜⬜ **12%** (1/8 issues) |
+| **Status** | ✅ Done: issues 23–30 closed on 2026-09-12, release note [`v0.4.0`](../RELEASES/RELEASE_v0_4_0.md). One exit criterion is met only in part, because the drift test cannot see a handler's error statuses (below) |
+| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (8/8 issues) |
 | **Sprints** | 4–5 (weeks 7–10), semester 2 |
 | **Release tag** | `v0.4.0` |
 | **Primary owner** | A, Backend Lead · D, Frontend/Clinic |
@@ -13,14 +13,6 @@
 | **Issues** | 23–30 (8 issues, about 14 person-days of estimates) |
 | **Depends on** | [M3](M3_identity_auth_rbac.md) |
 | **Blocks** | [M5](M5_discovery_geolocation.md) (discovery reads `sites`), [M6](M6_queue_engine_core.md) (tickets belong to `queues`), [M7](M7_clinic_dashboard.md), [M8](M8_display_monitor.md). This is the **widest bottleneck in the project**, see the workload split doc. |
-
-> **On the two rows above disagreeing.** The **Progress** bar is generated from GitHub
-> (`make milestone-progress`) and is a fact about the issues, never typed by hand; it reads 12%
-> because M4 shipped as eight **stacked** pull requests (#138–#145) and only the first has merged.
-> The **Status** row is written by the pull request that closes the last issue, which is #145 — so
-> it is true from the moment that one lands, and the next run of the generator brings the bar up to
-> meet it. Merge #139 → #140 → #141 → #142 → #143 → #144 → #145 in that order; the `Conventions`
-> check is red on each until its predecessors are in.
 
 ## Goal
 
