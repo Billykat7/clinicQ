@@ -507,6 +507,45 @@ class DisplayMode(StrEnum):
 #: constant; never restate the member at a call site.
 SITE_DEFAULT_DISPLAY_MODE: DisplayMode = DisplayMode.NUMBER_ONLY
 
+#: The display modes that put a patient's name on a public screen (Issue 27). Switching **to** one
+#: of these needs clinic-manager permission, an explicit confirmation and an audit row; a screen
+#: reads this set rather than naming the members, so a fourth mode cannot be added without deciding
+#: which side of the line it falls on.
+NAME_REVEALING_DISPLAY_MODES: frozenset[DisplayMode] = frozenset(
+    {DisplayMode.NAME_LITE, DisplayMode.FULL}
+)
+
+
+class BoardLanguage(StrEnum):
+    """The language a waiting-room board and its announcements use. ``sites.board_language``.
+
+    South Africa has twelve official languages; these are the eleven written ones (South African
+    Sign Language, the twelfth, has no written form for a board to render). A clinic picks the one
+    its patients read, and the board, the audio announcements (Issue 60) and the channel menus all
+    follow it.
+
+    Values are ISO 639-1 codes where one exists, and ISO 639-3 where it does not (``nso``, ``tsn``,
+    ``ven``, ``tso``, ``ssw``, ``nbl``), so a browser's ``lang`` attribute and a text-to-speech
+    voice selection can use them unchanged.
+    """
+
+    ENGLISH = "en"
+    AFRIKAANS = "af"
+    ISIZULU = "zu"
+    ISIXHOSA = "xh"
+    ISINDEBELE = "nbl"
+    SEPEDI = "nso"
+    SESOTHO = "st"
+    SETSWANA = "tsn"
+    SISWATI = "ssw"
+    TSHIVENDA = "ven"
+    XITSONGA = "tso"
+
+
+#: The board language a new site is created with. English, because it is the language every one of
+#: the pilot clinics' signage already uses; a clinic changes it in one click.
+SITE_DEFAULT_BOARD_LANGUAGE: BoardLanguage = BoardLanguage.ENGLISH
+
 
 class TokenType(StrEnum):
     """Typed JWT ``type`` claim, plus the bearer scheme label.

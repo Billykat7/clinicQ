@@ -83,6 +83,14 @@ CASES: dict[str, dict[str, object]] = {
         "reader": "a@clinicq.example",
         "paths": lambda site, _row: (f"/api/v1/sites/{site}",),
     },
+    "sites.display": {
+        # What the waiting-room board may show (Issue 27, non-negotiable 4). A receptionist reads
+        # it and cannot change it; naming ``sites.settings`` here covers that sibling too, whose
+        # own routes (the operational settings) are still to come.
+        "resource": "sites.settings",
+        "reader": "a@clinicq.example",
+        "paths": lambda site, _row: (f"/api/v1/sites/{site}/settings/display",),
+    },
     "siteopeninghours": {
         # A clinic's ordinary week (Issue 24). The same grant as the profile: the front desk reads
         # the hours, the manager changes them.
@@ -129,8 +137,6 @@ PENDING: dict[str, str] = {
         "clinic-facing route reads consent: a patient reads their own through their session. A "
         "route that lists a clinic's consent events must add a case here"
     ),
-    "sites.settings": "display and privacy settings land with Issue 27",
-    "sites.display": "Issue 27",
     "sites.reports": "clinic reports land with M12",
     "queues.call": "call-next lands with Issue 42",
     "queues.tickets": "tickets land with Issue 39",

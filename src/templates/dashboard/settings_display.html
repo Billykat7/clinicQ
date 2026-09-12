@@ -1,0 +1,92 @@
+{% extends "layouts/dashboard.html" %}
+
+{# The waiting-room board's settings (Issue 27). This page exists to make one decision hard to
+   make by accident: what a screen in a public room says about a named person. Everything it shows
+   comes from the API (/api/v1/sites/display-options and .../settings/display), so the sentence a
+   manager reads here and the rule the server enforces are the same text, read from one place. #}
+
+{% block layout_head %}
+  {{ super() }}
+  <script src="/static/js/site-display-settings.js" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Waiting-room screen</h1>
+  <p class="lead">What the screen in the waiting room shows about the people waiting.</p>
+  {% include "partials/breadcrumbs.html" %}
+</div>
+
+<div class="card" data-site-id="{{ site.id }}" id="display-settings">
+  <h2>{{ site.name }}</h2>
+  <p class="card-sub">Every clinic starts by showing ticket numbers only. Changing that puts
+    information about a patient on a screen other patients can read, so it takes a deliberate
+    choice and it is recorded.</p>
+
+  <div id="ds-loading" class="msg msg-muted"><span class="spinner" aria-hidden="true"></span> Loading the current settings…</div>
+
+  <form id="ds-form" hidden>
+    <fieldset class="field">
+      <legend>What the screen shows</legend>
+      {# The three options and their descriptions are rendered from the API, not written here. #}
+      <div id="ds-modes"></div>
+    </fieldset>
+
+    <div class="field">
+      <label class="check">
+        <input type="checkbox" id="ds-show-comment">
+        Also show the reason each patient gave for their visit
+      </label>
+      <p class="hint" id="ds-comment-hint"></p>
+    </div>
+
+    {# The warning: filled in from the API for whatever is currently selected, so it changes as
+       the manager changes their mind and describes the screen they would actually get. #}
+    <div class="alert alert-warn" id="ds-warning" role="status" aria-live="polite" hidden></div>
+
+    <div class="field-row cols-2">
+      <div class="field">
+        <label for="ds-language">Language of the screen</label>
+        <select id="ds-language" data-combobox></select>
+      </div>
+      <div class="field">
+        <label for="ds-retention">Keep each visit's reason for</label>
+        <div class="input-suffix">
+          <input type="number" id="ds-retention" min="1" step="1" inputmode="numeric">
+          <span class="suffix">days</span>
+        </div>
+        <p class="hint" id="ds-retention-hint"></p>
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="check">
+        <input type="checkbox" id="ds-announce-audio">
+        Announce each call aloud as well as showing it
+      </label>
+      <p class="hint">For patients who cannot read the screen. What the announcement says follows
+        the setting above.</p>
+    </div>
+
+    {# The confirmations. Hidden until the choice actually needs one, because a checkbox that is
+       always there stops being read. The server refuses the change without them either way. #}
+    <div class="field" id="ds-confirm-wrap" hidden>
+      <label class="check">
+        <input type="checkbox" id="ds-confirm">
+        I understand what will appear on the screen.
+      </label>
+    </div>
+    <div class="field" id="ds-confirm-comment-wrap" hidden>
+      <label class="check">
+        <input type="checkbox" id="ds-confirm-comment">
+        <span id="ds-confirm-comment-text"></span>
+      </label>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn" id="ds-save">Save</button>
+      <span class="msg" id="ds-msg" aria-live="polite"></span>
+    </div>
+  </form>
+</div>
+{% endblock %}

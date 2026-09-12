@@ -30,6 +30,8 @@ from src.api.rbac_deps import CurrentUser, DbSession, require
 from src.commons.enums import (
     AuditAction,
     AuditEntityType,
+    BoardLanguage,
+    DisplayMode,
     GrantScope,
     SiteSector,
     SiteStatus,
@@ -41,6 +43,7 @@ from src.core.security import CurrentStaff
 from src.core.site_scope import SiteAccess, require_site_access, site_ids_in_scope
 from src.database.models.site import Site
 from src.modules.sites import hours_service, service
+from src.modules.sites import settings as display_settings
 from src.modules.sites.availability import join_gate
 from src.modules.sites.geocoding import GeocodingUnavailableError, geocode_address
 from src.modules.sites.hours import open_state, schedule_for
@@ -48,6 +51,10 @@ from src.modules.sites.schemas import (
     ClosureIn,
     ClosureListOut,
     ClosureOut,
+    DisplayModeOptionOut,
+    DisplayOptionsOut,
+    DisplaySettingsIn,
+    DisplaySettingsOut,
     GeocodeCandidateOut,
     GeocodeIn,
     GeocodeOut,
@@ -94,6 +101,16 @@ SiteProfileUpdate = Annotated[
 #: because it is the same decision made at short notice.
 SiteHoursRead = SiteProfileRead
 SiteHoursUpdate = SiteProfileUpdate
+
+#: The board's display mode is its own resource (``sites.display``), so a receptionist can be shown
+#: what the screen is set to without being able to change it, and changing it is the clinic
+#: manager's alone — non-negotiable 4.
+SiteDisplayRead = Annotated[
+    SiteAccess, Depends(require_site_access("sites.display", "read"))
+]
+SiteDisplayUpdate = Annotated[
+    SiteAccess, Depends(require_site_access("sites.display", "update"))
+]
 
 
 def _audit(
@@ -504,6 +521,129 @@ def lift_closure(
     db.commit()
     db.refresh(closure)
     return ClosureOut.model_validate(closure)
+
+
+# --------------------------------------------------------------------------------------
+# Display and privacy settings (Issue 27, non-negotiable 4)
+# --------------------------------------------------------------------------------------
+
+
+def _settings_out(site: Site) -> DisplaySettingsOut:
+    """One clinic's display settings, with the warning that describes what they mean."""
+    warning = display_settings.warning_for(
+        display_mode=site.display_mode_enum, show_comment=site.display_show_comment
+    )
+    return DisplaySettingsOut(
+        site_id=site.id,
+        display_mode=site.display_mode_enum,
+        display_show_comment=site.display_show_comment,
+        board_language=site.board_language_enum,
+        announce_audio=site.announce_audio,
+        reason_retention_days=site.reason_retention_days,
+        reason_retention_ceiling_days=display_settings.REASON_RETENTION_CEILING_DAYS,
+        warning_lines=list(warning.lines),
+    )
+
+
+@router.get(
+    "/{site_id}/settings/display-options",
+    response_model=DisplayOptionsOut,
+    operation_id="sitesDisplayOptions",
+    summary="What this clinic may choose, and what each choice means",
+)
+def display_options(_access: SiteDisplayRead) -> DisplayOptionsOut:
+    """The modes, the languages, the retention bounds and the warning text.
+
+    Served rather than hardcoded in the screen so the sentence a manager reads and the rule the
+    server enforces come from the same place (:mod:`src.modules.sites.settings`). The failure this
+    prevents is a screen that reassures somebody about a setting the server treats differently.
+
+    Under ``/{site_id}/`` even though the answer is the same everywhere, because a clinic manager's
+    role is held **at a site** and only resolves on a route that names one — and because the
+    warning is about *this clinic's* screen. The first version of this endpoint had no site in the
+    path, and the settings page 403'd for the only role that opens it.
+    """
+    return DisplayOptionsOut(
+        modes=[
+            DisplayModeOptionOut(
+                value=mode,
+                warning=display_settings.DISPLAY_MODE_WARNINGS[mode],
+                requires_confirmation=display_settings.warning_for(
+                    display_mode=mode, show_comment=False
+                ).requires_confirmation,
+            )
+            for mode in DisplayMode
+        ],
+        languages=list(BoardLanguage),
+        retention_floor_days=display_settings.REASON_RETENTION_FLOOR_DAYS,
+        retention_ceiling_days=display_settings.REASON_RETENTION_CEILING_DAYS,
+        comment_warning=display_settings.COMMENT_WARNING,
+        comment_with_full_name_warning=display_settings.COMMENT_WITH_FULL_NAME_WARNING,
+    )
+
+
+@router.get(
+    "/{site_id}/settings/display",
+    response_model=DisplaySettingsOut,
+    operation_id="sitesGetDisplaySettings",
+)
+def get_display_settings(access: SiteDisplayRead, db: DbSession) -> DisplaySettingsOut:
+    """What this clinic's board is set to show. A receptionist may read it, and no more."""
+    return _settings_out(_site_or_404(db, access))
+
+
+@router.put(
+    "/{site_id}/settings/display",
+    response_model=DisplaySettingsOut,
+    operation_id="sitesSetDisplaySettings",
+)
+def set_display_settings(
+    payload: DisplaySettingsIn,
+    request: Request,
+    access: SiteDisplayUpdate,
+    db: DbSession,
+) -> DisplaySettingsOut:
+    """Change what the waiting-room board may show.
+
+    Three things happen here and nowhere else (non-negotiable 4): the grant decides **who**
+    (``sites.display:update``, the clinic manager's), the confirmation decides **whether** — a
+    change that newly puts a name or a reason on a public screen is refused without an explicit
+    one, so a client that renders no warning cannot make it — and the audit row records **what
+    moved**, field by field.
+    """
+    site = _site_or_404(db, access)
+    try:
+        _, changed = display_settings.apply_display_settings(
+            site,
+            display_settings.DisplaySettingsChange(
+                display_mode=payload.display_mode,
+                show_comment=payload.display_show_comment,
+                board_language=payload.board_language,
+                announce_audio=payload.announce_audio,
+                retention_days=payload.reason_retention_days,
+            ),
+            confirm_public_display=payload.confirm_public_display,
+            confirm_comment_with_full_name=payload.confirm_comment_with_full_name,
+        )
+    except display_settings.ConfirmationRequiredError as exc:
+        # 409, not 403: the caller *may* do this, and has not yet said they understand it.
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except display_settings.RetentionOutOfRangeError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+
+    if changed:
+        _audit(
+            db,
+            request,
+            access.user.email,
+            str(access.user.id),
+            AuditAction.UPDATE,
+            access.site_id,
+            "display settings: " + "; ".join(changed),
+        )
+    db.commit()
+    db.refresh(site)
+    return _settings_out(site)
 
 
 def _site_or_404(db: Session, access: SiteAccess) -> Site:
