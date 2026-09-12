@@ -148,5 +148,3 @@ lands — worth a line in Issue 23. `require_site_access` reads `{site_id}` from
 route that takes the site in the body or a query parameter needs its own small variant.
 
 Closes #19
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)

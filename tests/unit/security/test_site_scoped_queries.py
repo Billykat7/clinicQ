@@ -41,6 +41,17 @@ _SCOPED_CALLS = frozenset(
 _ASSIGNMENT_SCOPED: dict[str, frozenset[str]] = {
     "modules/staff": frozenset({"User", "UserRoleAssignment"}),
 }
+#: The queries that are deliberately not site-scoped, keyed ``path::function``, each with the
+#: reason. A **closed** list, and narrow on purpose: one function, not one file, so the next query
+#: in the same module is still a finding. An entry here is a decision someone can read, not a way
+#: around the rule.
+_UNSCOPED_BY_DESIGN: dict[str, str] = {
+    "modules/staff/invitations.py::usable_invitation": (
+        "an invitation link is opened by someone who has no account and therefore no clinic to be "
+        "scoped by; the id comes from the signed token, and the row's own site_id is what "
+        "acceptance then writes (Issue 22)"
+    ),
+}
 
 
 def site_scoped_models() -> frozenset[str]:
@@ -62,10 +73,24 @@ def _models_named(call: ast.Call) -> set[str]:
     return names
 
 
+def _exempt_call_ids(tree: ast.Module, path: str) -> set[int]:
+    """The ids of every call inside a function listed in :data:`_UNSCOPED_BY_DESIGN` for ``path``."""
+    exempt: set[int] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if f"{path.removeprefix('src/')}::{node.name}" not in _UNSCOPED_BY_DESIGN:
+            continue
+        exempt.update(
+            id(child) for child in ast.walk(node) if isinstance(child, ast.Call)
+        )
+    return exempt
+
+
 def findings_in_source(source: str, *, path: str, models: frozenset[str]) -> list[str]:
     """Every unscoped query on one of ``models`` in ``source``, as readable lines."""
     tree = ast.parse(source)
-    scoped_calls: set[int] = set()
+    scoped_calls: set[int] = _exempt_call_ids(tree, path)
     for node in ast.walk(tree):
         if (
             isinstance(node, ast.Call)
@@ -180,6 +205,41 @@ def test_the_staff_module_may_not_select_users_directly() -> None:
         path="src/modules/staff/service.py",
         models=_models_for(_SRC / "modules" / "staff" / "service.py"),
     )
+
+
+_EXEMPT_AND_ITS_NEIGHBOUR = """
+from sqlalchemy import select
+from src.database.models import StaffInvitation
+
+def usable_invitation(db, token):
+    return db.execute(select(StaffInvitation).where(StaffInvitation.id == token)).scalar_one()
+
+def list_invitations(db, site_id):
+    return db.execute(select(StaffInvitation)).scalars().all()
+"""
+
+
+def test_the_named_exception_covers_one_function_and_not_the_module() -> None:
+    """An entry in the list exempts the function it names — and nothing else in the same file."""
+    findings = findings_in_source(
+        _EXEMPT_AND_ITS_NEIGHBOUR,
+        path="src/modules/staff/invitations.py",
+        models=frozenset({"StaffInvitation"}),
+    )
+    assert len(findings) == 1 and "list_invitations" not in findings[0]
+    assert findings[0].endswith(
+        "use src.core.site_scope (scoped_select / get_in_site_or_404 / staff_at_site)"
+    )
+    # The exempt function's own query is gone from the findings, which is the whole point.
+    assert not any(":6:" in finding for finding in findings)
+
+
+def test_every_named_exception_carries_a_reason() -> None:
+    """A list of exemptions with no reasons is a list nobody can review."""
+    assert all(reason.strip() for reason in _UNSCOPED_BY_DESIGN.values())
+    for key in _UNSCOPED_BY_DESIGN:
+        relative, _, function = key.partition("::")
+        assert function and (_SRC / relative).exists(), key
 
 
 def test_the_model_set_is_discovered_from_the_models_not_listed_here() -> None:

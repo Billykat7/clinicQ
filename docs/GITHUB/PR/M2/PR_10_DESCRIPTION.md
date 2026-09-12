@@ -170,5 +170,3 @@ images), because Issue 11 uses two releases to demonstrate its deploy and a time
 go-ahead.
 
 Closes #10
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)

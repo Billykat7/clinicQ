@@ -361,6 +361,22 @@ async def patient_consent_page(request: Request) -> HTMLResponse:
     )
 
 
+@router.get("/invite", response_class=HTMLResponse)
+async def staff_invitation_page(request: Request) -> HTMLResponse:
+    """The page a staff invitation link opens (Issue 22): what it is for, and a password field.
+
+    Deliberately renders for anyone, with no database read and without inspecting the token: the
+    page is a shell, and ``/api/v1/staff/invitations/preview`` is what decides whether the link is
+    still good. A link that is used, revoked, expired or unknown gets one message from that
+    endpoint, so the page cannot be used to tell those four apart either.
+    """
+    return templates.TemplateResponse(
+        request,
+        "account/invitation.html",
+        public_page_context(request, page_title="Accept your invitation"),
+    )
+
+
 @router.get("/notifications/unsubscribe", response_class=HTMLResponse)
 async def unsubscribe_page(request: Request, token: str = "") -> HTMLResponse:
     """Login-free unsubscribe confirmation page (Issue #72).

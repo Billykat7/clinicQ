@@ -190,5 +190,3 @@ Rollback is a revert of this PR. The `run-local-platform.sh` change should stay 
 fallback there would be the same leak again.
 
 Closes #12
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)

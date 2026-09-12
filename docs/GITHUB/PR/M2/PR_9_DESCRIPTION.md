@@ -221,5 +221,3 @@ and deleting it needs your go-ahead. The v0.1.0 release note should say that a c
 and CODEOWNERS rules beside this ruleset.
 
 Closes #9
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)

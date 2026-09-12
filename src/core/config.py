@@ -465,6 +465,15 @@ class Settings(BaseSettings):
         ge=1,
         description="Password reset link validity in hours (env: PASSWORD_RESET_LINK_EXPIRE_HOURS)",
     )
+    staff_invite_expire_hours: int = Field(
+        default=72,
+        ge=1,
+        description=(
+            "Staff invitation validity in hours — long enough to survive a weekend, short enough "
+            "that a forwarded link is not a standing way in (Issue 22; env: "
+            "STAFF_INVITE_EXPIRE_HOURS)"
+        ),
+    )
     email_change_link_expire_hours: int = Field(
         default=2,
         ge=1,

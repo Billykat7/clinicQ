@@ -17,7 +17,7 @@ anything, and nothing it returns is ever fed back into a decision.
 
 from datetime import datetime
 
-from src.commons.enums import GrantScope, PermissionEffect
+from src.commons.enums import GrantScope, PermissionEffect, UserRole
 
 #: How a scope tier reads to an operator (Issue #173, M28 — this table moved here from
 #: ``src.web.routes`` so the API and the templates cannot drift into two vocabularies).
@@ -26,6 +26,26 @@ _TIER_LABELS: dict[str, str] = {
     GrantScope.ASSIGNED.value: "assigned instances",
     GrantScope.BUSINESS.value: "whole business",
 }
+
+#: How a role reads to the person holding it (Issue 22). ``nurse_doctor`` is a wire value, and
+#: "nurse doctor" is not English — an invitation that says what the job is called belongs in one
+#: table, not in each page that names a role.
+_ROLE_LABELS: dict[str, str] = {
+    UserRole.PATIENT.value: "patient",
+    UserRole.RECEPTIONIST.value: "receptionist",
+    UserRole.NURSE_DOCTOR.value: "nurse or doctor",
+    UserRole.CLINIC_MANAGER.value: "clinic manager",
+    UserRole.PLATFORM_ADMIN.value: "platform administrator",
+    UserRole.ADMIN.value: "administrator",
+    UserRole.USER.value: "standard user",
+}
+
+
+def role_label(role: UserRole | str) -> str:
+    """Return the readable name of a role ("nurse or doctor", not ``nurse_doctor``)."""
+    value = role.value if isinstance(role, UserRole) else str(role)
+    return _ROLE_LABELS.get(value, value.replace("_", " "))
+
 
 #: How a trace stage reads to an operator. The raw stage keeps travelling on the wire — this is what
 #: the "details" disclosure prints beside it for a reader who is not holding the source open.

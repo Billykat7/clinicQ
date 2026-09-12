@@ -75,6 +75,13 @@ CASES: dict[str, dict[str, object]] = {
             f"/api/v1/sites/{site}/staff/{row}",
         ),
     },
+    "staffinvitation": {
+        # Who has been invited to a clinic (Issue 22): the same grant as the staff list, so a
+        # receptionist reads it, and another clinic's list is a 404 like everything else.
+        "resource": "sites.staff",
+        "reader": "a@clinicq.example",
+        "paths": lambda site, _row: (f"/api/v1/sites/{site}/staff/invitations",),
+    },
 }
 
 #: Site-scoped surfaces with no route yet: the issue that brings them must add a case here.

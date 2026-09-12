@@ -203,5 +203,3 @@ modules, `ENCRYPTED_COLUMNS` naming a `tenant` table that does not exist) is not
 left for its own clean-up issue.
 
 Closes #18
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)

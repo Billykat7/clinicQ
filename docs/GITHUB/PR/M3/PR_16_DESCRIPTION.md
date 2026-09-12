@@ -197,5 +197,3 @@ htmx request that 401s after the access cookie expires is not silently refreshed
 for the dashboard, M7). The email-OTP attempt lock lands with Issue 17.
 
 Closes #16
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)

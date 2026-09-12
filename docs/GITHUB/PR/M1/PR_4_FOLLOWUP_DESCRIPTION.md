@@ -108,5 +108,3 @@ have failed mypy or a test, and the grep above found none. Code outside this rep
 import them; the kernel is not published as a library. Rollback is a revert of this PR.
 
 Refs #4 (already closed by #112; this PR closes nothing new)
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)

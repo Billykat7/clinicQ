@@ -643,11 +643,20 @@ def valid_refresh_token_row_for_request(
 
 
 def peek_user_from_refresh_cookie(db: Session, request: Request) -> User | None:
-    """Resolve the signed-in user from the httpOnly refresh cookie without updating last_seen."""
+    """Resolve the signed-in user from the httpOnly refresh cookie without updating last_seen.
+
+    An account that has been switched off resolves to ``None`` (Issue 22), the same answer the API
+    path gives through :func:`~src.core.security.find_active_user`: deactivation revokes the refresh
+    families as well, but the shell must not depend on that having happened — a page rendered for a
+    deactivated staff member is a page they should not see, whatever cookie they still hold.
+    """
     row = valid_refresh_token_row_for_request(db, request)
     if row is None:
         return None
-    return db.execute(select(User).where(User.id == row.user_id)).scalar_one_or_none()
+    user = db.execute(select(User).where(User.id == row.user_id)).scalar_one_or_none()
+    if user is None or not user.is_active or user.is_deleted:
+        return None
+    return user
 
 
 def peek_access_subject_from_access_cookie(request: Request) -> str | None:

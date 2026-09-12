@@ -114,5 +114,3 @@ passes unchanged. Rollback is a revert of this PR, which brings back the four ad
 pushed) list these advisories under *Known issues*. That entry comes out once this PR is merged.
 
 Refs #7 (already closed by #116; this PR closes nothing new)
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)

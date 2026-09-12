@@ -190,5 +190,3 @@ address, which is exact for SMS and WhatsApp; when patients gain email addresses
 the patient id the send already knows.
 
 Closes #21
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)

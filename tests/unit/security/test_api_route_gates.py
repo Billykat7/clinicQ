@@ -58,6 +58,14 @@ PUBLIC: dict[str, str] = {
     "GET /api/v1/reference/enums": "the public wire vocabulary (Issue 4)",
     "POST /api/v1/patients/otp/request": "patient sign-in: asks for a code (Issue 17)",
     "POST /api/v1/patients/otp/verify": "patient sign-in: proves the code (Issue 17)",
+    "GET /api/v1/staff/invitations/preview": (
+        "the invitation link: a typed, signed token naming one row that decides everything "
+        "about it (Issue 22) — the person opening it has no account yet, which is the point"
+    ),
+    "POST /api/v1/staff/invitations/accept": (
+        "the invitation link again, this time spending it: single use, enforced on the row "
+        "in the same transaction that creates the account (Issue 22)"
+    ),
 }
 
 #: Authenticated, acting only on the caller's own account.

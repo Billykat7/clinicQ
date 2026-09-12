@@ -180,5 +180,3 @@ which names a real SMTP relay, and may have attempted to send a code to `nurse@c
 reserved domain that cannot receive mail. The test now pins them.
 
 Closes #17
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
