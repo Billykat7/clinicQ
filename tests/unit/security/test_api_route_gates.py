@@ -57,6 +57,13 @@ PUBLIC: dict[str, str] = {
         "with it. The worst a stranger can do is put an entry in a queue a platform admin reads"
     ),
     "GET /api/v1/sites/queues/info": "module metadata",
+    "GET /api/v1/clinics/info": "module metadata",
+    "GET /api/v1/clinics/nearby": (
+        "clinic discovery (Issue 31): a patient looking for a clinic has no account, and the search "
+        "returns only what verified clinics publish about themselves (name, address, hours, queue "
+        "lengths), never a ticket, a patient or anything about an unverified clinic. The radius is "
+        "capped on the server, and Issue 38 adds the rate limit against scraping"
+    ),
     "GET /api/v1/sites/staff/info": "module metadata",
     "GET /api/v1/documents/download": "a signed, expiring, single-document link is the capability",
     "POST /api/v1/webhooks/stripe": "verifies the gateway's signature before anything else",
