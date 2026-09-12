@@ -78,6 +78,7 @@ class BoundedContext(StrEnum):
     WIDGETS = "widgets"
     PATIENTS = "patients"
     STAFF = "staff"
+    SITES = "sites"
 
 
 class LogLevel(StrEnum):
@@ -278,6 +279,73 @@ class SiteSector(StrEnum):
 
     PUBLIC = "public"
     PRIVATE = "private"
+
+
+class SiteStatus(StrEnum):
+    """Where one clinic is in its listing lifecycle. Stored in ``site.status`` (Issues 23, 29).
+
+    The lifecycle is ``DRAFT`` → ``PENDING_VERIFICATION`` → ``VERIFIED``, with ``SUSPENDED``
+    reachable from any of them and reversible. Issue 29 owns the transitions and the platform
+    admin's verification queue; Issue 23 owns the column, because a site that exists before the
+    workflow does must already say whether patients may see it.
+
+    - ``DRAFT``: created by an operator and not yet submitted. Invisible to patients.
+    - ``PENDING_VERIFICATION``: submitted and waiting for a platform admin. Invisible to patients,
+      reachable by direct link so the clinic can check its own entry.
+    - ``VERIFIED``: checked by a platform admin. **The only status discovery ever returns.**
+    - ``SUSPENDED``: switched off by a platform admin. Invisible, and it stops accepting joins at
+      once (Issue 29).
+    """
+
+    DRAFT = "draft"
+    PENDING_VERIFICATION = "pending_verification"
+    VERIFIED = "verified"
+    SUSPENDED = "suspended"
+
+
+#: The status a site is created with on every code path that is not the public registration form
+#: (Issue 23). A site an operator types in is a draft until somebody submits it.
+SITE_DEFAULT_STATUS: SiteStatus = SiteStatus.DRAFT
+
+#: The only statuses a patient-facing surface may return: discovery, the channel menus and the
+#: clinic detail page all read this rather than naming the member (Issues 29, 31).
+SITE_PUBLICLY_VISIBLE_STATUSES: frozenset[SiteStatus] = frozenset({SiteStatus.VERIFIED})
+
+
+class SaProvince(StrEnum):
+    """South Africa's nine provinces, spelled as the Department of Health and OpenStreetMap do.
+
+    A site's province is part of its address and of every district report (M12), so it is a closed
+    vocabulary rather than typed text: "KZN", "Kwazulu Natal" and "KwaZulu-Natal" are one province
+    and must group as one.
+    """
+
+    EASTERN_CAPE = "Eastern Cape"
+    FREE_STATE = "Free State"
+    GAUTENG = "Gauteng"
+    KWAZULU_NATAL = "KwaZulu-Natal"
+    LIMPOPO = "Limpopo"
+    MPUMALANGA = "Mpumalanga"
+    NORTH_WEST = "North West"
+    NORTHERN_CAPE = "Northern Cape"
+    WESTERN_CAPE = "Western Cape"
+
+
+class GeocodingProvider(StrEnum):
+    """Which service turns a typed address into a coordinate, server-side (Issue 23).
+
+    The browser never calls a geocoder: the Content-Security-Policy allows ``connect-src 'self'``
+    and nothing else, so the address goes to ClinicQ and ClinicQ asks the provider. The default is
+    ``NONE`` — a deployment that has not chosen a provider asks the operator for the coordinate
+    instead of silently reaching out to somebody's service.
+
+    - ``NONE``: no lookup. ``POST /sites/geocode`` answers 503 and site creation needs a coordinate.
+    - ``NOMINATIM``: the OpenStreetMap search API (or a self-hosted instance), which requires a
+      descriptive ``User-Agent`` and asks for at most one request a second.
+    """
+
+    NONE = "none"
+    NOMINATIM = "nominatim"
 
 
 class TicketStatus(StrEnum):

@@ -1,17 +1,25 @@
 """The factories make valid objects in one call, with no arguments (Issue 8).
 
-Staff are persisted (SQLite through the ``session_factory`` fixture: the factory takes any
-session); the stubs are built. Each test checks what the next issue's author will rely on.
+Staff, patients and clinics are persisted (SQLite through the ``session_factory`` fixture: a
+factory takes any session); the queue and ticket stubs are built until Issues 25 and 39 land. Each
+test checks what the next issue's author will rely on.
 """
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from scripts.db.demo_dataset import CLINICS, SiteStub, TicketStub
-from src.commons.enums import AssignmentScopeType, SiteSector, TicketStatus, UserRole
+from scripts.db.demo_dataset import CLINICS, TicketStub
+from src.commons.enums import (
+    SITE_DEFAULT_STATUS,
+    AssignmentScopeType,
+    SiteSector,
+    TicketStatus,
+    UserRole,
+)
+from src.commons.geo import Coordinates
 from src.commons.phone import normalize_phone
 from src.core.security import verify_password
-from src.database.models import Patient, User, UserRoleAssignment
+from src.database.models import Patient, Site, User, UserRoleAssignment
 from tests.factories import (
     FACTORY_STAFF_PASSWORD,
     PatientFactory,
@@ -99,14 +107,43 @@ def test_a_patient_is_phone_first_and_reachable_by_no_real_mobile(
 
 
 def test_sites_cycle_through_the_real_clinics_with_unique_slugs() -> None:
-    """Every site is one of the real clinics; past the first lap the slug gains a suffix."""
+    """Every site is one of the real clinics; past the first lap the slug gains a suffix.
+
+    Issue 23 swapped :class:`SiteStub` for the ``Site`` model, so this now checks the columns other
+    modules will read: a unique slug, a coordinate that is one of the real clinics', and the
+    lifecycle status every code path starts a clinic at.
+    """
     sites = SiteFactory.build_batch(len(CLINICS) + 2)
-    assert all(isinstance(s, SiteStub) for s in sites)
+    assert all(isinstance(s, Site) for s in sites)
     assert len({s.slug for s in sites}) == len(sites)
-    assert {(s.latitude, s.longitude) for s in sites} <= {
+    assert {(s.location.latitude, s.location.longitude) for s in sites} <= {
         (c.latitude, c.longitude) for c in CLINICS
     }
-    assert SiteFactory.build(sector=SiteSector.PRIVATE).sector is SiteSector.PRIVATE
+    assert (
+        SiteFactory.build(sector=SiteSector.PRIVATE).sector_enum is SiteSector.PRIVATE
+    )
+
+
+def test_a_site_persists_with_its_coordinate_and_the_default_status(
+    session_factory: sessionmaker[Session],
+) -> None:
+    """``create`` writes a row: the point round-trips as a value object, and the status is ``draft``.
+
+    The status matters to every other module: a clinic an operator types in is not visible to
+    patients until the verification workflow (Issue 29) moves it, so the column's default is the
+    closed one and no factory may quietly open it.
+    """
+    with session_factory() as db:
+        site = SiteFactory.create(db)
+        db.commit()
+        db.refresh(site)
+        clinic = next(c for c in CLINICS if site.slug.startswith(c.slug))
+        assert isinstance(site.location, Coordinates)
+        assert (site.location.latitude, site.location.longitude) == (
+            clinic.latitude,
+            clinic.longitude,
+        )
+        assert site.status == SITE_DEFAULT_STATUS.value
 
 
 def test_tickets_join_a_queue_in_sequence() -> None:

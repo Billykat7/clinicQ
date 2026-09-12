@@ -16,11 +16,12 @@ password into a real database is never the intent.
 **It is idempotent.** Everything is matched by a natural key (a staff account by its email), so a
 second run creates nothing: it updates what differs from the dataset and leaves the rest.
 
-**What it seeds today.** One staff account per ClinicQ staff role, printed with its development
-password, each (except the platform admin) assigned to the first demo clinic so the site-scoped
-routes work locally. The clinics, queues and the day of ticket history (``scripts/db/demo_dataset.py``) are
-built and summarised, and are written as their tables land: sites with Issue 23, queues with
-Issue 25, tickets with Issue 39. Each of those issues adds its step to :func:`seed`.
+**What it seeds today.** The eleven demo **clinics** (Issue 23), verified so they behave like
+listed ones, and one staff account per ClinicQ staff role, printed with its development password,
+each (except the platform admin) assigned to the first demo clinic so the site-scoped routes work
+locally. Queues and the day of ticket history (``scripts/db/demo_dataset.py``) are built and
+summarised, and are written as their tables land: queues with Issue 25, tickets with Issue 39. Each
+of those issues adds its step to :func:`seed`.
 """
 
 import argparse
@@ -38,13 +39,15 @@ from scripts.db.demo_dataset import CLINICS, queues_for, ticket_history
 from src.commons.enums import (
     AppEnvironment,
     AssignmentScopeType,
+    SiteStatus,
     TicketStatus,
     UserRole,
 )
+from src.commons.geo import Coordinates
 from src.commons.time import APP_TIMEZONE, business_date
 from src.core.config import Settings, get_settings
 from src.core.security import hash_password, verify_password
-from src.database.models import User, UserRoleAssignment
+from src.database.models import Site, User, UserRoleAssignment
 
 #: Where a development database may live: this machine, or the compose stack's service name.
 LOCAL_HOSTS: Final = frozenset({"localhost", "127.0.0.1", "::1", "db"})
@@ -64,10 +67,10 @@ class DemoStaff:
     last_name: str
 
 
-#: The clinic the demo staff work at, until Issue 23 gives sites real ids: the first demo clinic's
-#: slug, used as the ``scope_id`` of their site-scoped role assignment (Issue 19). Without one, a
+#: The clinic the demo staff work at: the first demo clinic, looked up by slug so the ``scope_id``
+#: of their site-scoped role assignment (Issue 19) is the ``site`` row's real id. Without one, a
 #: seeded account reaches no site route at all, which is the guard working, not a bug.
-DEMO_SITE_ID: Final = CLINICS[0].slug
+DEMO_SITE_SLUG: Final = CLINICS[0].slug
 
 #: One account per staff role. ``.example`` is reserved by RFC 2606 and never delegated, so mail
 #: to it cannot be delivered. Not ``.test``: that one is reserved too, but the email validator the
@@ -118,12 +121,17 @@ class SeedReport:
     unchanged: int = 0
 
 
-def seed_staff(session: Session, *, password: str) -> SeedReport:
+def seed_staff(session: Session, *, password: str, site_id: str) -> SeedReport:
     """Create or update one account per staff role; never a duplicate.
 
     An existing account (matched by email) keeps its password unless it no longer matches
     ``password``, and is brought back to the dataset's role, names and verified, active state.
-    Its unscoped role assignment, the one RBAC resolves it by, is added if missing.
+    Its role assignment, the one RBAC resolves it by, is added if missing.
+
+    Args:
+        session: The session; the caller commits.
+        password: The development password every seeded account gets.
+        site_id: The ``site`` row the clinic staff hold their role at (Issue 23).
     """
     report = SeedReport()
     for staff in DEMO_STAFF:
@@ -166,7 +174,7 @@ def seed_staff(session: Session, *, password: str) -> SeedReport:
         # only through the audited cross-site hatch.
         at_site = staff.role is not UserRole.PLATFORM_ADMIN
         scope_type = AssignmentScopeType.SITE.value if at_site else None
-        scope_id = DEMO_SITE_ID if at_site else None
+        scope_id = site_id if at_site else None
         has_assignment = session.execute(
             select(UserRoleAssignment.id).where(
                 UserRoleAssignment.user_id == user.id,
@@ -217,9 +225,69 @@ def summarise_dataset(day: date, now: datetime) -> DatasetSummary:
     return DatasetSummary(len(CLINICS), queues, tickets, done, *busiest)
 
 
-def seed(session: Session, *, password: str) -> SeedReport:
-    """Every seeding step, in dependency order. Issues 23, 25 and 39 add theirs here."""
-    return seed_staff(session, password=password)
+def seed_sites(session: Session) -> tuple[SeedReport, dict[str, str]]:
+    """Create or update the demo clinics; return the report and ``{slug: site id}`` (Issue 23).
+
+    Matched by slug, so a second run updates rather than duplicates. Every clinic is seeded
+    ``verified``: locally these stand in for listed clinics, and discovery only ever returns that
+    status. What the seed never touches is ``display_mode`` — non-negotiable 4 says a site is
+    created ``number_only`` on every code path, including this one, so the column's default is left
+    to do its job (and ``tests/unit/sites/test_display_defaults.py`` proves it, Issue 27).
+    """
+    report = SeedReport()
+    ids: dict[str, str] = {}
+    for clinic in CLINICS:
+        wanted: dict[str, object] = {
+            "name": clinic.name,
+            "sector": clinic.sector.value,
+            "status": SiteStatus.VERIFIED.value,
+            "location": Coordinates(
+                latitude=clinic.latitude, longitude=clinic.longitude
+            ),
+            "address_line": f"{clinic.name}, {clinic.suburb}",
+            "suburb": clinic.suburb,
+            "city": clinic.city,
+            "province": clinic.province.value,
+            "is_active": True,
+            "is_deleted": False,
+        }
+        site = session.execute(
+            select(Site).where(Site.slug == clinic.slug)
+        ).scalar_one_or_none()
+        if site is None:
+            site = Site(slug=clinic.slug, **wanted)
+            session.add(site)
+            session.flush()
+            report.created += 1
+        else:
+            changed = {
+                name: value
+                for name, value in wanted.items()
+                if getattr(site, name) != value
+            }
+            for name, value in changed.items():
+                setattr(site, name, value)
+            if changed:
+                report.updated += 1
+            else:
+                report.unchanged += 1
+        ids[clinic.slug] = site.id
+    session.flush()
+    return report, ids
+
+
+def seed(session: Session, *, password: str) -> tuple[SeedReport, SeedReport]:
+    """Every seeding step, in dependency order. Issues 25 and 39 add theirs here.
+
+    Clinics first: a staff member's role is held **at a site**, so the ``site`` rows have to exist
+    before the assignments that point at them.
+
+    Returns:
+        ``(sites report, staff report)``.
+    """
+    sites, ids = seed_sites(session)
+    staff = seed_staff(session, password=password, site_id=ids[DEMO_SITE_SLUG])
+    return sites, staff
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -255,11 +323,15 @@ def main(argv: list[str] | None = None) -> int:
         f"Seeding {url.host}:{url.port or 5432}/{url.database} (schema {settings.db_schema.value})"
     )
     with get_db_context() as db:
-        report = seed(db, password=password)
+        sites, report = seed(db, password=password)
         if args.dry_run:
             db.rollback()
             print("Dry run: rolled back.")
 
+    print(
+        f"Clinics: {sites.created} created, {sites.updated} updated, "
+        f"{sites.unchanged} unchanged"
+    )
     print(
         f"Staff accounts: {report.created} created, {report.updated} updated, "
         f"{report.unchanged} unchanged"
@@ -282,8 +354,8 @@ def main(argv: list[str] | None = None) -> int:
         f"({summary.done} done; busiest: {summary.busiest_queue}, {summary.busiest_done} done)."
     )
     print(
-        "  Written to the database as their tables land: sites (Issue 23), queues (Issue 25), "
-        "tickets (Issue 39)."
+        "  The clinics are in the database (Issue 23); queues and tickets are written as their "
+        "tables land: queues (Issue 25), tickets (Issue 39)."
     )
     return 0
 

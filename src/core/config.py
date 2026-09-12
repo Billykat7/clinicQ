@@ -17,6 +17,7 @@ from src.commons.enums import (
     DbSchema,
     DocumentScannerKind,
     EsignProviderKind,
+    GeocodingProvider,
     LogFormat,
     LogLevel,
     RateLimitBackendKind,
@@ -1046,6 +1047,57 @@ class Settings(BaseSettings):
         description=(
             "Paystack public key (pk_test_… / pk_live_…) handed to the client to open the checkout "
             "(env: PAYSTACK_PUBLIC_KEY)."
+        ),
+    )
+
+    # Geocoding (M4 — Issue 23). Turning a clinic's typed address into a coordinate happens on the
+    # server: the Content-Security-Policy allows connect-src 'self' only, so a browser cannot reach
+    # a geocoder, and routing it through the application keeps the address and any provider
+    # credential in one place. Off by default — an unconfigured deployment asks the operator for
+    # the coordinate rather than silently calling somebody else's service.
+    geocoding_provider: GeocodingProvider = Field(
+        default=GeocodingProvider.NONE,
+        description=(
+            "Which service turns a typed address into a coordinate, server-side (env: "
+            "GEOCODING_PROVIDER). 'none' disables the lookup and site creation takes an explicit "
+            "coordinate; 'nominatim' uses the OpenStreetMap search API or a self-hosted instance."
+        ),
+    )
+
+    geocoding_base_url: str = Field(
+        default="https://nominatim.openstreetmap.org",
+        description=(
+            "Base URL of the geocoding service (env: GEOCODING_BASE_URL). Point it at a "
+            "self-hosted Nominatim to keep clinic addresses inside the deployment."
+        ),
+    )
+
+    geocoding_user_agent: str = Field(
+        default="",
+        description=(
+            "Descriptive User-Agent identifying this deployment to the geocoding service (env: "
+            "GEOCODING_USER_AGENT), e.g. 'ClinicQ/0.4 (ops@example.org)'. Nominatim's usage policy "
+            "requires one, so the lookup is refused while this is empty."
+        ),
+    )
+
+    geocoding_country_code: str = Field(
+        default="za",
+        min_length=2,
+        max_length=2,
+        description=(
+            "ISO 3166-1 alpha-2 code the geocoder is restricted to (env: GEOCODING_COUNTRY_CODE). "
+            "Matches the operating-area bounding box in src.commons.geo."
+        ),
+    )
+
+    geocoding_timeout_seconds: float = Field(
+        default=5.0,
+        gt=0,
+        le=30,
+        description=(
+            "How long to wait for the geocoding service before giving up and asking the operator "
+            "for the coordinate (env: GEOCODING_TIMEOUT_SECONDS)."
         ),
     )
 

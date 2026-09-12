@@ -22,24 +22,22 @@ import heapq
 import random
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
-from enum import StrEnum
 from typing import Final
 
 from src.commons.enums import (
     SITE_DEFAULT_DISPLAY_MODE,
     DisplayMode,
+    SaProvince,
     SiteSector,
     TicketSource,
     TicketStatus,
 )
 from src.commons.time import APP_TIMEZONE, business_day_bounds
 
-
-class Province(StrEnum):
-    """South African provinces the demo covers, named as OpenStreetMap names them."""
-
-    GAUTENG = "Gauteng"
-    KWAZULU_NATAL = "KwaZulu-Natal"
+#: The province vocabulary. One enum for the whole project since Issue 23 gave ``sites`` a real
+#: ``province`` column; re-exported under the name this module has always used so the demo data,
+#: the model and every report group by the same values.
+Province = SaProvince
 
 
 @dataclass(frozen=True, slots=True)
