@@ -5,6 +5,7 @@
 | | |
 |---|---|
 | **Status** | ✅ Done: issues 1–8 closed on 2026-09-11, release note [`v0.1.0`](../RELEASES/RELEASE_v0_1_0.md) |
+| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (8/8 issues) |
 | **Sprints** | 1–2 (weeks 1–4), semester 1 |
 | **Release tag** | `v0.1.0` |
 | **Primary owner** | E, DevOps/QA (primary) · A, Backend Lead (support) |

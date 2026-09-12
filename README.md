@@ -31,18 +31,44 @@ Find a nearby clinic, public or private, by geolocation, join its digital queue 
 home**, and watch your ticket number count down on the clinic's own waiting-room display, while staff
 run the whole line from one dashboard.
 
-```text
-        +------------------------- ClinicQ queue engine -------------------------+
-        |                                                                        |
-  Mobile PWA ---------|                                                          |
-  USSD menu ----------> JOIN QUEUE (ticket number, live position, ETA)           |
-  WhatsApp bot -------|                                                          |
-  Walk-in (reception) |                                                          |
-        |                                                                        |
-  Clinic dashboard --> CALL NEXT --> patient's phone + waiting-room display      |
-        +------------------------------------------------------------------------+
-            Same queue, same ticket number, no matter which door you came in
+```mermaid
+flowchart LR
+    subgraph ways["Four ways in"]
+        direction TB
+        PWA["Mobile PWA"]
+        USSD["USSD menu<br/><small>any phone, no data</small>"]
+        WA["WhatsApp bot"]
+        WALK["Walk-in<br/><small>reception or kiosk</small>"]
+    end
+
+    ENGINE["<b>ClinicQ queue engine</b><br/>one ticket number<br/>live position &middot; honest ETA"]
+
+    DASH["<b>Clinic dashboard</b><br/><small>CALL NEXT</small>"]
+
+    subgraph out["Called forward"]
+        direction TB
+        PHONE["Your phone<br/><small>you're #5 &rarr; next &rarr; come in</small>"]
+        BOARD["Waiting-room board<br/><small>number always, name only by consent</small>"]
+    end
+
+    PWA & USSD & WA & WALK ==> ENGINE
+    ENGINE ==> DASH
+    DASH ==> PHONE & BOARD
+
+    classDef door fill:#E8F5F0,stroke:#0F6B4F,stroke-width:1px,color:#0B3B2C
+    classDef engine fill:#0F6B4F,stroke:#0B3B2C,stroke-width:2px,color:#FFFFFF
+    classDef desk fill:#E7EEFB,stroke:#1F4E9C,stroke-width:1px,color:#10294F
+    classDef shout fill:#FFF4E0,stroke:#B26B00,stroke-width:1px,color:#4A2C00
+    class PWA,USSD,WA,WALK door
+    class ENGINE engine
+    class DASH desk
+    class PHONE,BOARD shout
+    style ways fill:none,stroke:#9BB8AE,stroke-dasharray:4 4,color:#0F6B4F
+    style out fill:none,stroke:#D8B071,stroke-dasharray:4 4,color:#B26B00
 ```
+
+<p align="center"><em>Same queue, same ticket number, no matter which door you came in.</em></p>
+
 
 ## Features
 
@@ -111,23 +137,23 @@ is there from day one, which is exactly what the USSD and WhatsApp adapters cons
 
 ## Delivery at a glance
 
-| | Milestone | Issues | Sprints | Tag |
-|---|-----------|--------|---------|-----|
-| 1 | [Foundation & Local CI](docs/GITHUB/MILESTONES/M1_foundation_local_ci.md) | 1–8 | 1–2 | `v0.1.0` |
-| 2 | [CI/CD & Team Workflow](docs/GITHUB/MILESTONES/M2_cicd_environments.md) | 9–14 | 2 | `v0.2.0` |
-| 3 | [Identity, Auth, RBAC & Consent](docs/GITHUB/MILESTONES/M3_identity_auth_rbac.md) | 15–22 | 3–4 | `v0.3.0` |
-| 4 | [Clinics, Queues & Configuration](docs/GITHUB/MILESTONES/M4_clinics_queues_config.md) | 23–30 | 4–5 | `v0.4.0` |
-| 5 | [Discovery & Geolocation](docs/GITHUB/MILESTONES/M5_discovery_geolocation.md) | 31–38 | 5–6 | `v0.5.0` |
-| 6 | [**Queue Engine Core**](docs/GITHUB/MILESTONES/M6_queue_engine_core.md) ⚠️ critical path | 39–47 | 6–7 | `v0.6.0` |
-| 7 | [Clinic Dashboard](docs/GITHUB/MILESTONES/M7_clinic_dashboard.md) | 48–55 | 8–9 | `v0.7.0` |
-| 8 | [Display Monitor](docs/GITHUB/MILESTONES/M8_display_monitor.md) | 56–62 | 9 | `v0.8.0` |
-| 9 | [Notifications & Patient PWA](docs/GITHUB/MILESTONES/M9_notifications_patient_pwa.md) | 63–71 | 9–10 | `v0.9.0` |
-| 10 | [USSD & WhatsApp Channels](docs/GITHUB/MILESTONES/M10_ussd_whatsapp_channels.md) | 72–79 | 10–11 | `v0.10.0` |
-| 11 | [Appointments & Check-in](docs/GITHUB/MILESTONES/M11_appointments_checkin_patient_care.md) | 80–87 | 11–12 | `v0.11.0` |
-| 12 | [Reporting & Analytics](docs/GITHUB/MILESTONES/M12_reporting_analytics.md) | 88–94 | 12 | `v0.12.0` |
-| 13 | [Security, Privacy & POPIA](docs/GITHUB/MILESTONES/M13_security_privacy_compliance.md) | 95–101 | 12–13 | `v0.13.0` |
-| 14 | [Production, Pilot & Go-live](docs/GITHUB/MILESTONES/M14_production_pilot_golive.md) | 102–109 | 13–14 | `v0.14.0` |
-| ⭐ | **First official release:** every issue 1–109 closed | - | end of 14 | **`v1.0.0`** |
+| | Milestone | Issues | Sprints | Tag | Progress |
+|---|-----------|--------|---------|-----|----------|
+| 1 | [Foundation & Local CI](docs/GITHUB/MILESTONES/M1_foundation_local_ci.md) | 1–8 | 1–2 | `v0.1.0` | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (8/8 issues) |
+| 2 | [CI/CD & Team Workflow](docs/GITHUB/MILESTONES/M2_cicd_environments.md) | 9–14 | 2 | `v0.2.0` | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (6/6 issues) |
+| 3 | [Identity, Auth, RBAC & Consent](docs/GITHUB/MILESTONES/M3_identity_auth_rbac.md) | 15–22 | 3–4 | `v0.3.0` | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (8/8 issues) |
+| 4 | [Clinics, Queues & Configuration](docs/GITHUB/MILESTONES/M4_clinics_queues_config.md) | 23–30 | 4–5 | `v0.4.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
+| 5 | [Discovery & Geolocation](docs/GITHUB/MILESTONES/M5_discovery_geolocation.md) | 31–38 | 5–6 | `v0.5.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
+| 6 | [**Queue Engine Core**](docs/GITHUB/MILESTONES/M6_queue_engine_core.md) ⚠️ critical path | 39–47 | 6–7 | `v0.6.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/9 issues) |
+| 7 | [Clinic Dashboard](docs/GITHUB/MILESTONES/M7_clinic_dashboard.md) | 48–55 | 8–9 | `v0.7.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
+| 8 | [Display Monitor](docs/GITHUB/MILESTONES/M8_display_monitor.md) | 56–62 | 9 | `v0.8.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/7 issues) |
+| 9 | [Notifications & Patient PWA](docs/GITHUB/MILESTONES/M9_notifications_patient_pwa.md) | 63–71 | 9–10 | `v0.9.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/9 issues) |
+| 10 | [USSD & WhatsApp Channels](docs/GITHUB/MILESTONES/M10_ussd_whatsapp_channels.md) | 72–79 | 10–11 | `v0.10.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
+| 11 | [Appointments & Check-in](docs/GITHUB/MILESTONES/M11_appointments_checkin_patient_care.md) | 80–87 | 11–12 | `v0.11.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
+| 12 | [Reporting & Analytics](docs/GITHUB/MILESTONES/M12_reporting_analytics.md) | 88–94 | 12 | `v0.12.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/7 issues) |
+| 13 | [Security, Privacy & POPIA](docs/GITHUB/MILESTONES/M13_security_privacy_compliance.md) | 95–101 | 12–13 | `v0.13.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/7 issues) |
+| 14 | [Production, Pilot & Go-live](docs/GITHUB/MILESTONES/M14_production_pilot_golive.md) | 102–109 | 13–14 | `v0.14.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
+| ⭐ | **First official release:** every issue 1–109 closed | - | end of 14 | **`v1.0.0`** | 🟩🟩⬜⬜⬜⬜⬜⬜⬜⬜ **20%** (22/109 issues) |
 
 ## Team
 
@@ -143,10 +169,83 @@ is there from day one, which is exactly what the USSD and WhatsApp adapters cons
 Each role has a **named backup** who reviews their PRs and picks up their work if they are unavailable;
 see the [workload split](docs/TEAM/WORKLOAD_SPLIT.md#1-the-six-roles).
 
-## Getting started
+## Quickstart
 
-You need **Python 3.14**, **Docker** (with Compose 2.24 or newer) and **make**. From a fresh clone,
-five commands take you from nothing to a running app:
+From a fresh clone to a running app in about ten minutes, on Windows, macOS or Linux.
+
+### 1. Install the prerequisites
+
+| | What | Why | Check it |
+|---|---|---|---|
+| 🐍 | **Python 3.14** | the app, the tests, Alembic | `python3.14 --version` |
+| 🐳 | **Docker Desktop** (or Docker Engine) with **Compose v2.24+** | PostgreSQL 18 + PostGIS and Redis, without installing either | `docker compose version` |
+| 🌿 | **Git** | | `git --version` |
+| 🔨 | **make** | every command below is a `make` target | `make --version` |
+| 🐙 | **GitHub CLI** (`gh`) | raising pull requests, syncing labels and rulesets | `gh --version` |
+
+<details>
+<summary><strong>Windows</strong> — use WSL2, and run everything inside it</summary>
+
+Docker Desktop, `make` and the shell scripts in `scripts/` all assume a Unix shell. WSL2 is the
+supported path; Git Bash alone will not run the `make` targets.
+
+```powershell
+wsl --install -d Ubuntu          # then reboot, and open the Ubuntu terminal
+```
+
+Install **Docker Desktop for Windows** and turn on *Settings → Resources → WSL integration* for your
+Ubuntu distribution. Everything from here runs **inside the Ubuntu shell**, not PowerShell:
+
+```bash
+sudo add-apt-repository ppa:deadsnakes/ppa && sudo apt update
+sudo apt install -y python3.14 python3.14-venv git make gh
+```
+
+Clone into the Linux filesystem (`~/code/...`), **not** `/mnt/c/...`: builds and file watching are
+several times slower across the Windows mount.
+
+</details>
+
+<details>
+<summary><strong>macOS</strong> — Homebrew</summary>
+
+```bash
+brew install python@3.14 git make gh
+brew install --cask docker        # then launch Docker Desktop once, to finish setup
+```
+
+`make` ships with the Xcode command line tools (`xcode-select --install`) if you would rather not
+use Homebrew's. **Apple Silicon:** `postgis/postgis` publishes amd64 images only, so the database
+container runs under emulation — it works, and the first start is slower.
+
+</details>
+
+<details>
+<summary><strong>Linux</strong> — Debian/Ubuntu, Fedora, Arch</summary>
+
+```bash
+# Debian / Ubuntu
+sudo add-apt-repository ppa:deadsnakes/ppa && sudo apt update
+sudo apt install -y python3.14 python3.14-venv git make gh docker.io docker-compose-plugin
+
+# Fedora
+sudo dnf install -y python3.14 git make gh docker docker-compose-plugin
+
+# Arch
+sudo pacman -S python git make github-cli docker docker-compose
+```
+
+Then add yourself to the `docker` group so the compose targets do not need `sudo`:
+
+```bash
+sudo usermod -aG docker "$USER" && newgrp docker
+```
+
+</details>
+
+### 2. Run it locally
+
+Five commands, from a fresh clone:
 
 1. Create the virtual environment and install the dependencies:
 
@@ -197,6 +296,51 @@ development password) and reports the demo clinics, queues and ticket history in
 `scripts/db/demo_dataset.py`: eleven real Gauteng and KwaZulu-Natal clinics, written to the database
 as their tables land (Issues 23, 25 and 39). It is idempotent, and refuses any database that is not
 a local development one.
+
+### 3. Make a change: branch, commit, pull request
+
+One issue, one branch, one pull request. The names are checked by CI, so they are not a matter of
+taste — the **Conventions** job fails a branch, a commit or a description that does not follow this.
+
+```bash
+# 1. Start from an up-to-date main
+git checkout main && git pull
+
+# 2. Branch: Issue/<number>/<short-slug>, five words at most
+git checkout -b Issue/39/tickets-model-sequence
+
+# 3. Work, then commit. Every commit subject starts "Issue <number>: "
+git commit -m "Issue 39: Add the concurrency-safe ticket sequence"
+
+# 4. Run the same gate CI runs, before you push
+make check
+
+# 5. Write the description, then open the pull request with it
+#    docs/GITHUB/PR/M6/PR_39_DESCRIPTION.md — ending in "Closes #39"
+git push -u origin Issue/39/tickets-model-sequence
+gh pr create --base main \
+  --title "Issue 39: Tickets model and daily sequence" \
+  --body-file docs/GITHUB/PR/M6/PR_39_DESCRIPTION.md \
+  --milestone "Milestone 6: Queue Engine Core" --assignee @me
+```
+
+What the checks expect, and why:
+
+| Rule | Example | Checked by |
+|---|---|---|
+| Branch `Issue/<N>/<slug>` (or `Release/v<X.Y.Z>`) | `Issue/39/tickets-model-sequence` | `scripts/check_pr_conventions.py` |
+| Every commit subject starts `Issue <N>: ` | `Issue 39: Add the ticket sequence` | same — merge commits are skipped |
+| The description ends with `Closes #<N>` | `Closes #39` | same |
+| A screenshot when `src/templates/` or `src/static/` changed | an image in the body | same |
+| **The milestone's progress is updated in the same PR** | `make milestone-progress` | [CONTRIBUTING.md](CONTRIBUTING.md#branches-commits-and-pull-requests) |
+| The CI gate is green, and a code owner approves | | branch ruleset on `main` |
+
+Write the description **before** opening the pull request, in
+`docs/GITHUB/PR/M<milestone>/PR_<issue>_DESCRIPTION.md`, and prove each acceptance criterion by
+demonstration — real command output, a before/after failure — rather than by describing the code.
+[`PR_1_DESCRIPTION.md`](docs/GITHUB/PR/M1/PR_1_DESCRIPTION.md) is the model.
+
+### Troubleshooting
 
 If something is already using a port: `DB_PORT=5433 make db-up` starts the database on another port
 (put the same port in `DATABASE_URL`), `REDIS_PORT` does the same for Redis (and `REDIS_URL`), and

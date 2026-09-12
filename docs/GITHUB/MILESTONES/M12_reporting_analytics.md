@@ -5,6 +5,7 @@
 | | |
 |---|---|
 | **Status** | 📋 Planned |
+| **Progress** | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/7 issues) |
 | **Sprints** | 12 (weeks 23–24), semester 2. The sprint plan spreads its issues over sprints 9–12: some start early against stubs (see the table) |
 | **Release tag** | `v0.12.0` |
 | **Primary owner** | F, Data & Research |

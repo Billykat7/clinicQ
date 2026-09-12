@@ -5,6 +5,7 @@
 | | |
 |---|---|
 | **Status** | 📋 Planned · **critical path** |
+| **Progress** | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/9 issues) |
 | **Sprints** | 6–7 (weeks 11–14), semester 1 |
 | **Release tag** | `v0.6.0` |
 | **Primary owner** | A, Backend Lead |

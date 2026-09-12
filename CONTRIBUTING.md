@@ -161,6 +161,15 @@ the boot guard and `scripts/check_config.py` both read ([`docs/CICD/ENVIRONMENTS
   template, stylesheet or script under `src/` shows a screenshot. A follow-up to an issue an
   earlier PR closed says `Refs #<N>` instead.
 
+- **The same pull request updates the docs and the milestone.** Run `make milestone-progress`: it
+  reads the issue states from GitHub and writes the green progress bar and percentage into the
+  milestone document and the README's delivery table. `make milestone-progress-check` says whether
+  they are stale. When the pull request closes a milestone's **last** issue, it also ticks the exit
+  criteria (leaving anything met only in part unticked, with the reason beside it), marks the
+  milestone done and closes it on GitHub with
+  `make milestone-progress ARGS='--close-completed'`. Editors that read
+  `.cursor/rules/` pick the same rule up from `milestone-progress.mdc`.
+
 CI checks all four: the branch name, every commit's prefix, the closing line and the screenshot
 (`scripts/check_pr_conventions.py`). A slip fails the **CI gate** without stopping the tests; fix the
 description (or the branch) and re-run the failed job.
