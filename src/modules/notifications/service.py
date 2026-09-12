@@ -210,10 +210,34 @@ def attempt(
 
     ``context`` renders from values the row does not hold: a secret-bearing message (a one-time
     code) is stored with a placeholder and delivered, once, from the real value in memory.
+
+    The recipient's consent and preferences are resolved **again** here, because a row can sit in
+    the queue: a patient who withdrew while a message was deferred or waiting for a retry does not
+    receive it (Issue 21). Returns False for such a row, which is now terminal (``suppressed``).
     """
     now = now or _now()
     channel = NotificationChannel(notification.channel)
     template = NotificationTemplate(notification.template_key)
+    # Re-checked at delivery, not only when the message was queued (Issue 21): a message deferred
+    # past quiet hours, or waiting for a retry, must not go out after the patient has withdrawn.
+    decision = preferences.resolve(
+        db,
+        recipient_email=notification.recipient,
+        template=template,
+        channel=channel,
+        now=now,
+    )
+    if decision.outcome is DeliveryOutcome.SUPPRESS:
+        notification.status = NotificationStatus.SUPPRESSED.value
+        notification.last_error = f"suppressed by preference ({decision.reason})"
+        notification.next_attempt_at = None
+        logger.info(
+            "Notification %s suppressed at delivery: %s",
+            notification.id,
+            decision.reason,
+        )
+        db.flush()
+        return False
     message = templates.render(channel, template, context or notification.payload)
     try:
         if channel is NotificationChannel.EMAIL:

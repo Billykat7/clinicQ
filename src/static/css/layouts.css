@@ -145,3 +145,16 @@
 @media (prefers-reduced-motion: reduce) {
   .board * { transition: none; animation: none; }
 }
+
+/* The patient's consent list (Issue 21): one question per row, each with its own switch. The
+   whole row is the label, so a tap anywhere on the question toggles it: a 44px target on the
+   cheapest phone, not a 20px checkbox. */
+.consent-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-4); }
+.consent-item + .consent-item { border-top: 1px solid var(--line-soft); padding-top: var(--space-4); }
+.consent-label {
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  min-height: 2.75rem; cursor: pointer;
+}
+.consent-label input[type="checkbox"] { width: 1.35rem; height: 1.35rem; margin-top: .15rem; flex: none; accent-color: var(--brand); }
+.consent-question { color: var(--ink); }
+.consent-version { color: var(--muted); font-size: var(--step--1); text-align: center; }

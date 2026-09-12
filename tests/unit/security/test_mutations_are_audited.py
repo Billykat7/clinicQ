@@ -99,10 +99,12 @@ def unaudited_mutations() -> list[str]:
         router = _SRC / "modules" / module / "router.py"
         if not router.exists():
             continue
-        service = router.with_name("service.py")
-        auditing_in_service = (
-            _auditing_functions(service) if service.exists() else set()
-        )
+        # Any file of the module may hold the function that records: patients keep theirs in
+        # service.py and consent.py.
+        auditing_in_service: set[str] = set()
+        for module_file in sorted(router.parent.glob("*.py")):
+            if module_file != router:
+                auditing_in_service |= _auditing_functions(module_file)
         auditing_in_router = _auditing_functions(router)
         for method, handler in _routes(router):
             key = f"{_module_name(router)}:{handler.name}"

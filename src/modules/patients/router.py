@@ -15,14 +15,24 @@ from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
 from src.api.rbac_deps import require_patient
-from src.commons.enums import OtpVerification
+from src.commons.enums import ConsentPurpose, OtpVerification, PatientChannel
 from src.commons.phone import mask_phone
 from src.core.client_ip import client_ip_or_unknown
 from src.core.config import Settings, get_settings
 from src.database.models import Patient
 from src.database.session import get_db
+from src.modules.patients import consent as consent_service
 from src.modules.patients import service
+from src.modules.patients.consent_text import (
+    CONSENT_INTRO,
+    CONSENT_WITHDRAWN_NOTICE,
+    CONSENT_WORDING,
+    CONSENT_WORDING_VERSION,
+)
 from src.modules.patients.schemas import (
+    ConsentAnswerOut,
+    ConsentStateOut,
+    ConsentUpdateIn,
     OtpRequestIn,
     OtpRequestOut,
     OtpVerifyIn,
@@ -147,3 +157,56 @@ def logout(patient: OwnRecordUpdate, db: DbSession, settings: SettingsDep) -> Re
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     end_session(response, settings)
     return response
+
+
+# --------------------------------------------------------------------------------------
+# Consent (Issue 21): per purpose, defaulting to no, withdrawable at any time
+# --------------------------------------------------------------------------------------
+
+
+def _consent_state(
+    db: DbSession, patient: Patient, notice: str | None = None
+) -> ConsentStateOut:
+    """Every question, its wording and the patient's current answer."""
+    answers = consent_service.consent_state(db, patient.id)
+    return ConsentStateOut(
+        intro=CONSENT_INTRO,
+        wording_version=CONSENT_WORDING_VERSION,
+        notice=notice,
+        answers=[
+            ConsentAnswerOut(
+                purpose=purpose, question=CONSENT_WORDING[purpose], granted=granted
+            )
+            for purpose, granted in answers.items()
+        ],
+    )
+
+
+@router.get(
+    "/me/consents", response_model=ConsentStateOut, operation_id="patientsConsentRead"
+)
+def get_my_consents(patient: OwnRecordRead, db: DbSession) -> ConsentStateOut:
+    """What the patient has been asked, and what they have answered. No answer means no."""
+    return _consent_state(db, patient)
+
+
+@router.put(
+    "/me/consents/{purpose}",
+    response_model=ConsentStateOut,
+    operation_id="patientsConsentUpdate",
+)
+def set_my_consent(
+    purpose: ConsentPurpose,
+    body: ConsentUpdateIn,
+    patient: OwnRecordUpdate,
+    db: DbSession,
+) -> ConsentStateOut:
+    """Give or withdraw one consent. It takes effect at once: the next board render and the next
+    message both read the answer this writes."""
+    consent_service.record_consent(
+        db, patient, purpose, granted=body.granted, channel=PatientChannel.WEB
+    )
+    db.commit()
+    return _consent_state(
+        db, patient, notice=None if body.granted else CONSENT_WITHDRAWN_NOTICE
+    )

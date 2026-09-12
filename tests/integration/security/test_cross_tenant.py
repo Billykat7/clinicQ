@@ -79,6 +79,11 @@ CASES: dict[str, dict[str, object]] = {
 
 #: Site-scoped surfaces with no route yet: the issue that brings them must add a case here.
 PENDING: dict[str, str] = {
+    "patientconsentevent": (
+        "a consent event records the clinic it was given at for provenance (Issue 21), but no "
+        "clinic-facing route reads consent: a patient reads their own through their session. A "
+        "route that lists a clinic's consent events must add a case here"
+    ),
     "sites": "the sites model and its CRUD land with Issue 23",
     "sites.profile": "Issue 23",
     "sites.settings": "display and privacy settings land with Issue 27",

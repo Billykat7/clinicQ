@@ -65,6 +65,11 @@ _UNGATED_PAGES: dict[str, str] = {
     "/account/security": "self-service (see /account/profile)",
     "/account/notifications": "self-service (see /account/profile)",
     "/notifications/unsubscribe": "signed-token unsubscribe — no session to hold a grant",
+    "/me/consent": (
+        "a patient's own page (Issue 21): the patient session is the gate, the answers come from "
+        "/api/v1/patients/me/consents behind require_patient, and without a session it renders "
+        "the signed-out version rather than anything of theirs"
+    ),
     "/portal/documents/{document_id}": "ownership-scoped signed-link mint; the portal page above it is gated",
     "/jobs/{work_order_id}": "gated by `portal.jobs` inside the handler via _page_gate_denied",
     "/owner/properties/{property_id}": "owner-scoped drill-down; /owner is gated and this 403s a non-owner",
@@ -80,6 +85,11 @@ _UNGATED_PAGES: dict[str, str] = {
 _UNGATED_MUTATIONS: dict[str, str] = {
     "/apply/{unit_id}": "public application form — the caller is not signed in",
     "/notifications/unsubscribe": "signed-token unsubscribe — no session to hold a grant",
+    "/me/consent": (
+        "a patient's own page (Issue 21): the patient session is the gate, the answers come from "
+        "/api/v1/patients/me/consents behind require_patient, and without a session it renders "
+        "the signed-out version rather than anything of theirs"
+    ),
 }
 
 #: Template controls deliberately left ungated, each with the reason (Issue #168's exception list).

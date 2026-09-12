@@ -1,0 +1,47 @@
+{% extends "layouts/patient.html" %}
+{#- The patient's own consent page (Issue 21): what we may do, and how to change it.
+
+    The questions, the current answers and the wording version all come from the API
+    (src/modules/patients/consent_text.py), so the same words appear here, on the USSD menu and at
+    the desk, and the version a patient saw is recorded with their answer. This page renders the
+    shell; patient-consent.js reads and writes through /api/v1/patients/me/consents. -#}
+{% from "components/card.html" import card %}
+
+{% block title %}Your choices{% endblock %}
+
+{% block scripts %}
+  <script src="/static/js/patient-consent.js" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="stack">
+  <div>
+    <h1>Your choices</h1>
+    <p class="lead" id="consent-intro">
+      Everything here is optional. The answer is no until you say yes, and you can change it at any
+      time. Saying no never affects your care or your place in the queue.
+    </p>
+  </div>
+
+  {% if not signed_in %}
+    {% call card("Open this from your phone") %}
+      <p>Your choices show here once you have signed in with your phone number. Ask at the desk if
+        you would rather change them there: it is the same list, and the same answers.</p>
+    {% endcall %}
+  {% else %}
+    {% call card() %}
+      <p id="consent-loading" class="msg msg-muted">
+        <span class="spinner" aria-hidden="true"></span> Loading your choices…
+      </p>
+
+      <form id="consent-form" hidden>
+        <ul class="consent-list" id="consent-list"></ul>
+      </form>
+
+      <p id="consent-msg" class="msg" role="status" hidden></p>
+    {% endcall %}
+
+    <p class="consent-version" id="consent-version"></p>
+  {% endif %}
+</div>
+{% endblock %}
