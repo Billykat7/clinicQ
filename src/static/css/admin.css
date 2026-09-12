@@ -2130,7 +2130,7 @@ details.collapsible[open] > summary .chev { transform: rotate(180deg); }
    visual difference between them, so a reader has to work out which line is the label: the grid
    below puts the label in a narrow left column, quiet, and the value beside it. Collapses to
    stacked pairs on a narrow panel, where two columns would leave neither enough room. */
-.detail-list { display: grid; grid-template-columns: minmax(7rem, auto) 1fr; gap: .45rem .9rem; margin: 0; }
+.detail-list { display: grid; grid-template-columns: minmax(7rem, auto) 1fr; gap: .45rem .9rem; margin: 0 0 1.25rem; }
 .detail-list dt { color: var(--muted); font-size: .85rem; }
 .detail-list dd { margin: 0; color: var(--ink); font-size: .9rem; overflow-wrap: anywhere; }
 @media (max-width: 30rem) {
