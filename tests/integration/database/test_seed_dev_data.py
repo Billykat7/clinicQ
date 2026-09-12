@@ -20,7 +20,8 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import URL
 
-from scripts.db.seed_dev_data import DEMO_STAFF
+from scripts.db.demo_dataset import CLINICS
+from scripts.db.seed_dev_data import DEMO_SITE_SLUG, DEMO_STAFF
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -109,6 +110,8 @@ def test_a_second_run_creates_no_duplicates(migrated_database: URL) -> None:
 
     assert first.returncode == 0, first.stderr
     assert second.returncode == 0, second.stderr
+    assert f"Clinics: {len(CLINICS)} created, 0 updated, 0 unchanged" in first.stdout
+    assert f"Clinics: 0 created, 0 updated, {len(CLINICS)} unchanged" in second.stdout
     assert "Staff accounts: 4 created, 0 updated, 0 unchanged" in first.stdout
     assert "Staff accounts: 0 created, 0 updated, 4 unchanged" in second.stdout
     assert elapsed < 30
@@ -141,6 +144,46 @@ def test_a_second_run_creates_no_duplicates(migrated_database: URL) -> None:
     # admin, who reaches a clinic only through the audited cross-site hatch (Issue 19).
     assert at_a_site == len(DEMO_STAFF) - 1
     assert assignments == len(DEMO_STAFF)
+
+
+@pytest.mark.postgres
+def test_the_clinics_are_seeded_and_the_staff_are_assigned_to_a_real_site_row(
+    migrated_database: URL,
+) -> None:
+    """Issue 23: the clinics are rows now, and an assignment's ``scope_id`` is one of their ids.
+
+    Before the ``site`` table existed the demo staff were scoped by a slug, which nothing could
+    resolve. The site guard reads ``scope_id`` against ``site.id``, so a seeded receptionist only
+    reaches their clinic's routes if this join finds a row.
+    """
+    url = migrated_database.render_as_string(hide_password=False)
+    assert _run_seed(DATABASE_URL=url).returncode == 0
+
+    engine = create_engine(migrated_database)
+    try:
+        with engine.connect() as conn:
+            clinics = conn.execute(
+                text("SELECT count(*) FROM clinicq.site WHERE status = 'verified'")
+            ).scalar_one()
+            # Every clinic keeps a real coordinate: ST_Y reads the latitude back out.
+            southern = conn.execute(
+                text(
+                    "SELECT count(*) FROM clinicq.site WHERE ST_Y(location::geometry) < 0"
+                )
+            ).scalar_one()
+            resolved = conn.execute(
+                text(
+                    'SELECT s.slug FROM clinicq.user_roles r JOIN clinicq."user" u '
+                    "ON u.id = r.user_id JOIN clinicq.site s ON s.id = r.scope_id "
+                    "WHERE u.email = 'reception@clinicq.example' AND r.scope_type = 'site'"
+                )
+            ).scalar_one()
+    finally:
+        engine.dispose()
+
+    assert clinics == len(CLINICS)
+    assert southern == len(CLINICS)
+    assert resolved == DEMO_SITE_SLUG
 
 
 @pytest.mark.postgres

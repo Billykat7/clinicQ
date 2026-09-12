@@ -45,7 +45,7 @@ from src.database.models import AuditEvent, Base, User, UserRoleAssignment
 from src.database.schema import sqlite_schema_translate_map
 from src.database.session import get_db
 from src.main import create_app
-from tests.factories import FACTORY_STAFF_PASSWORD, StaffFactory
+from tests.factories import FACTORY_STAFF_PASSWORD, SiteFactory, StaffFactory
 
 _SECRET = "cross-tenant-test-secret-min-32-characters"
 _SITE_A = "0199b0c0-0000-7000-8000-0000000000aa"
@@ -75,6 +75,14 @@ CASES: dict[str, dict[str, object]] = {
             f"/api/v1/sites/{site}/staff/{row}",
         ),
     },
+    "sites.profile": {
+        # The clinic's own profile (Issue 23). The ``site`` row has no ``site_id`` column — it *is*
+        # the site — so it is the resource keys, not the model, that the discovery below finds;
+        # naming ``sites`` here covers the root of the tree as well as the profile beneath it.
+        "resource": "sites",
+        "reader": "a@clinicq.example",
+        "paths": lambda site, _row: (f"/api/v1/sites/{site}",),
+    },
     "staffinvitation": {
         # Who has been invited to a clinic (Issue 22): the same grant as the staff list, so a
         # receptionist reads it, and another clinic's list is a 404 like everything else.
@@ -91,8 +99,6 @@ PENDING: dict[str, str] = {
         "clinic-facing route reads consent: a patient reads their own through their session. A "
         "route that lists a clinic's consent events must add a case here"
     ),
-    "sites": "the sites model and its CRUD land with Issue 23",
-    "sites.profile": "Issue 23",
     "sites.settings": "display and privacy settings land with Issue 27",
     "sites.display": "Issue 27",
     "sites.reports": "clinic reports land with M12",
@@ -139,6 +145,11 @@ def clinics(monkeypatch: pytest.MonkeyPatch) -> Iterator[SimpleNamespace]:
 
     people: dict[str, User] = {}
     with factory() as db:
+        # The two clinics themselves (Issue 23). Before the ``site`` table existed the ids below
+        # were only ever ``scope_id`` strings; now the rows have to be there, or "Clinic A answers
+        # 200" would be measuring a missing row rather than the guard.
+        for site_id in (_SITE_A, _SITE_B):
+            SiteFactory.create(db, id=site_id)
         for name, role, site in (
             ("a", UserRole.RECEPTIONIST, _SITE_A),
             ("b", UserRole.RECEPTIONIST, _SITE_B),

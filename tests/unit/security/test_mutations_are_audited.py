@@ -37,6 +37,15 @@ NOT_AUDITED: dict[str, str] = {
         "the patient record it creates is audited inside the service (service.verify_code)"
     ),
     "patients.router:logout": "ends a session; it changes no record",
+    "sites.router:geocode": (
+        "a POST because an address is a body rather than a query string, but it is a lookup: it "
+        "reads a typed address and returns candidate coordinates, and changes no record. The "
+        "clinic that results from it is audited when it is created (sites.router:create_site)"
+    ),
+    "sites.router:geocode_for_site": (
+        "the same lookup for a clinic that already exists; the coordinate it suggests is recorded "
+        "only if the manager saves it, which is audited (sites.router:update_site)"
+    ),
 }
 
 

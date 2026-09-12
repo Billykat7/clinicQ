@@ -67,6 +67,7 @@ pytest -x --lf                                        # stop at the first failur
 
 Build test data with the factories in `tests/factories.py` rather than by hand: one call, no
 arguments, any field overridden (`StaffFactory.create(db, role=UserRole.CLINIC_MANAGER)`,
+`SiteFactory.create(db, sector=SiteSector.PRIVATE)`,
 `TicketFactory.build_batch(5, queue=QueueFactory.build())`).
 
 Markers are applied by location in `tests/conftest.py`, so you rarely write one yourself:

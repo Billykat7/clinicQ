@@ -1,0 +1,315 @@
+"""HTTP routes for a clinic's profile (Issue 23).
+
+The shape is the widgets example's, with the one difference every ClinicQ module has: **a route
+that names a clinic goes through the site guard**, not through the generic instance scope. So
+there are two groups here, and the split is the whole authorization story:
+
+* **Platform routes** — listing every clinic, creating one, deleting one, and the geocoding proxy.
+  These have no ``{site_id}`` to be scoped by, so they gate on a ``business``-tier grant
+  (:func:`~src.api.rbac_deps.require` with ``scope=BUSINESS``), which only ``platform_admin``
+  holds. The listing is still narrowed: a caller below that tier sees the clinics they hold a role
+  at, and nothing else.
+* **Clinic routes** — reading and editing one clinic. These take
+  :func:`~src.core.site_scope.require_site_access`, so another clinic's id answers **404**, with
+  the same body an id that never existed gets (non-negotiable 3), and the verb is resolved with the
+  roles the caller holds *at that clinic*.
+
+Every mutation writes an :class:`~src.database.models.audit_event.AuditEvent` before the commit, so
+the change and its trail land in one transaction.
+"""
+
+from __future__ import annotations
+
+from typing import Annotated, Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy.orm import Session
+
+from src.api.rbac_deps import CurrentUser, DbSession, require
+from src.commons.enums import (
+    AuditAction,
+    AuditEntityType,
+    GrantScope,
+    SiteSector,
+    SiteStatus,
+)
+from src.core.audit import record_audit_event
+from src.core.client_ip import resolve_client_ip
+from src.core.request_logging import bind_request_context
+from src.core.security import CurrentStaff
+from src.core.site_scope import SiteAccess, require_site_access, site_ids_in_scope
+from src.database.models.site import Site
+from src.modules.sites import service
+from src.modules.sites.geocoding import GeocodingUnavailableError, geocode_address
+from src.modules.sites.schemas import (
+    GeocodeCandidateOut,
+    GeocodeIn,
+    GeocodeOut,
+    SiteIn,
+    SiteListOut,
+    SiteLocationOut,
+    SiteOut,
+)
+
+router = APIRouter(prefix="/sites", tags=["sites"])
+
+_MAX_LIMIT = 200
+
+#: The operator's console: the whole directory, creating a clinic, removing one. ``business`` is
+#: the tier ``platform_admin`` holds on ``sites``. A clinic manager's grant is ``assigned`` and does
+#: **not** satisfy these — deliberately: a manager reaches their clinic by its id (below), and their
+#: "which clinics do I work at" list is the site switcher's, built on assignments (Issue 28).
+SitesDirectory = Annotated[
+    None, Depends(require("sites", "read", scope=GrantScope.BUSINESS))
+]
+SitesCreate = Annotated[
+    None, Depends(require("sites", "create", scope=GrantScope.BUSINESS))
+]
+SitesDelete = Annotated[
+    None, Depends(require("sites", "delete", scope=GrantScope.BUSINESS))
+]
+
+#: One clinic, named in the path: the site guard answers "whose clinic" before the verb, and the
+#: verb is resolved with the roles the caller holds *at that clinic*.
+SiteProfileRead = Annotated[
+    SiteAccess, Depends(require_site_access("sites.profile", "read"))
+]
+SiteProfileUpdate = Annotated[
+    SiteAccess, Depends(require_site_access("sites.profile", "update"))
+]
+
+
+def _audit(
+    db: Session,
+    request: Request,
+    actor: str,
+    actor_id: str | None,
+    action: AuditAction,
+    site_id: str,
+    context: str,
+) -> None:
+    """Record one clinic mutation. Called before the commit so both land in one transaction.
+
+    The site is bound into the request context first, because
+    :func:`~src.core.audit.record_audit_event` reads ``site_id`` from there — and on the platform
+    routes (creating a clinic, removing one) nothing has bound it: the site guard, which normally
+    does, is deliberately not on those. Without this line a clinic's own audit trail (Issue 20)
+    would be missing the row that created it.
+    """
+    bind_request_context(site_id=site_id)
+    record_audit_event(
+        db,
+        action=action,
+        entity_type=AuditEntityType.SITE,
+        entity_id=site_id,
+        actor=actor,
+        actor_id=actor_id,
+        ip_address=resolve_client_ip(request),
+        context=context,
+    )
+
+
+def _claims_actor(current_user: dict[str, Any]) -> tuple[str, str | None]:
+    """Return ``(actor label, actor id)`` from the caller's token claims."""
+    actor = current_user.get("email") or current_user.get("sub") or "unknown"
+    return str(actor), current_user.get("uid")
+
+
+@router.get("/info", summary="Module metadata", operation_id="sitesInfo")
+def sites_info() -> dict[str, str]:
+    """Return sites module metadata (unauthenticated, like every other ``/info``)."""
+    info = service.get_module_info()
+    return {"context": info.context.value, "summary": info.summary}
+
+
+def _geocode(address: str) -> GeocodeOut:
+    """Ask the configured provider and shape the answer. Shared by the two routes below.
+
+    **The browser never calls a geocoder.** The Content-Security-Policy allows ``connect-src
+    'self'`` only, so the form posts to ClinicQ and ClinicQ makes the outbound request
+    (:mod:`src.modules.sites.geocoding`): one egress point, one timeout, one place a provider
+    credential lives. A deployment with no provider answers 503 and the operator types the
+    coordinate in, which is a supported path rather than a failure mode.
+    """
+    try:
+        places = geocode_address(address)
+    except GeocodingUnavailableError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    return GeocodeOut(
+        query=address,
+        candidates=[
+            GeocodeCandidateOut(
+                label=place.label, location=SiteLocationOut.of(place.point)
+            )
+            for place in places
+        ],
+    )
+
+
+@router.post(
+    "/geocode",
+    response_model=GeocodeOut,
+    operation_id="sitesGeocodeAddress",
+    summary="Look up a typed address while onboarding a clinic",
+)
+def geocode(payload: GeocodeIn, _authz: SitesCreate) -> GeocodeOut:
+    """Candidate coordinates for an address, for the operator putting a new clinic on the map."""
+    return _geocode(payload.address)
+
+
+@router.post(
+    "/{site_id}/geocode",
+    response_model=GeocodeOut,
+    operation_id="sitesGeocodeAddressForSite",
+    summary="Look up a typed address for a clinic that already exists",
+)
+def geocode_for_site(payload: GeocodeIn, _access: SiteProfileUpdate) -> GeocodeOut:
+    """The same proxy for a manager correcting their own clinic's address.
+
+    A separate route rather than a wider grant on the one above: a clinic manager's role is held
+    **at a site**, so it only resolves on a route that names one (Issue 19). The clinic in the path
+    is checked before the lookup, so another clinic's id is a 404 here too.
+    """
+    return _geocode(payload.address)
+
+
+@router.get("", response_model=SiteListOut, operation_id="sitesList")
+def list_sites(
+    db: DbSession,
+    staff: CurrentStaff,
+    _authz: SitesDirectory,
+    sector: SiteSector | None = None,
+    site_status: Annotated[SiteStatus | None, Query(alias="status")] = None,
+    q: Annotated[str | None, Query(max_length=120)] = None,
+    limit: Annotated[int, Query(ge=1, le=_MAX_LIMIT)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> SiteListOut:
+    """List the clinics this caller may see, by name.
+
+    A platform admin sees the platform; everyone else sees the clinics they hold a role at, which
+    is the same set the site guard admits one at a time.
+    """
+    return service.list_sites(
+        db,
+        site_ids=site_ids_in_scope(db, staff, "sites.profile"),
+        sector=sector,
+        status=site_status,
+        query=q,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post(
+    "",
+    response_model=SiteOut,
+    status_code=status.HTTP_201_CREATED,
+    operation_id="sitesCreate",
+)
+def create_site(
+    payload: SiteIn,
+    request: Request,
+    db: DbSession,
+    current_user: CurrentUser,
+    _authz: SitesCreate,
+) -> SiteOut:
+    """Create a clinic. It starts as a draft, whatever the caller asks for."""
+    try:
+        site = service.create_site(db, payload)
+    except service.SlugAlreadyUsedError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    actor, actor_id = _claims_actor(current_user)
+    _audit(
+        db,
+        request,
+        actor,
+        actor_id,
+        AuditAction.CREATE,
+        site.id,
+        f"created clinic {site.slug} ({site.status})",
+    )
+    db.commit()
+    db.refresh(site)
+    return service.site_out(site)
+
+
+@router.get("/{site_id}", response_model=SiteOut, operation_id="sitesGet")
+def get_site(access: SiteProfileRead, db: DbSession) -> SiteOut:
+    """Return one clinic's profile. Another clinic's id is a 404, like an id that never existed."""
+    site = _site_or_404(db, access)
+    return service.site_out(site)
+
+
+@router.put("/{site_id}", response_model=SiteOut, operation_id="sitesUpdate")
+def update_site(
+    payload: SiteIn,
+    request: Request,
+    access: SiteProfileUpdate,
+    db: DbSession,
+) -> SiteOut:
+    """Replace a clinic's editable profile fields; records an UPDATE audit event."""
+    site = _site_or_404(db, access)
+    try:
+        service.update_site(db, site, payload)
+    except service.SlugAlreadyUsedError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    _audit(
+        db,
+        request,
+        access.user.email,
+        str(access.user.id),
+        AuditAction.UPDATE,
+        site.id,
+        f"updated the profile of {site.slug}",
+    )
+    db.commit()
+    db.refresh(site)
+    return service.site_out(site)
+
+
+@router.delete(
+    "/{site_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    operation_id="sitesDelete",
+)
+def delete_site(
+    site_id: str,
+    request: Request,
+    db: DbSession,
+    staff: CurrentStaff,
+    _authz: SitesDelete,
+) -> None:
+    """Soft-delete a clinic. The operator's action: a manager cannot remove their own clinic.
+
+    Not behind :func:`~src.core.site_scope.require_site_access`, because a platform admin is
+    deliberately assigned to no clinic (Issue 19) and the guard would 404 them here. The
+    ``business``-tier gate above is what authorises it, and the removal is audited.
+    """
+    site = service.get_site(db, site_id)
+    if site is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found.")
+    service.delete_site(db, site)
+    _audit(
+        db,
+        request,
+        staff.email,
+        str(staff.id),
+        AuditAction.DELETE,
+        site.id,
+        f"removed clinic {site.slug} from the directory",
+    )
+    db.commit()
+
+
+def _site_or_404(db: Session, access: SiteAccess) -> Site:
+    """The clinic the request names, or the guard's 404.
+
+    ``access.site_id`` has already been checked against the caller's assignments, so this is a
+    lookup and not a second authorization decision; a soft-deleted clinic still answers 404.
+    """
+    site = service.get_site(db, access.site_id)
+    if site is None:
+        from src.core.site_scope import site_not_found
+
+        raise site_not_found()
+    return site

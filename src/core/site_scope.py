@@ -99,6 +99,25 @@ def permitted_queue_ids(db: Session, user: User) -> frozenset[str]:
     return assigned_scope_ids(db, user, AssignmentScopeType.QUEUE)
 
 
+def site_ids_in_scope(
+    db: Session, user: User, resource_key: str
+) -> frozenset[str] | None:
+    """The clinics ``user`` may list on ``resource_key``, or ``None`` for "every clinic".
+
+    The list-endpoint counterpart of :func:`require_site_access`, which answers for one site named
+    in the path. A platform admin's grant reaches ``business``, so their listing is the platform's;
+    everyone else sees exactly the clinics they hold a role at, and somebody assigned to none sees
+    an empty list rather than everything (:func:`permitted_site_ids` returns an empty set, which is
+    a real answer).
+
+    ``None`` means *apply no filter* and is returned only for a ``business``-tier grant, so a
+    caller reading this value cannot confuse "unrestricted" with "assigned to nothing".
+    """
+    if reaches_every_site(db, user, resource_key):
+        return None
+    return permitted_site_ids(db, user)
+
+
 def reaches_every_site(db: Session, user: User, resource_key: str) -> bool:
     """Whether the caller's **grant** on this resource reaches the whole platform.
 

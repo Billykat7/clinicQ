@@ -47,6 +47,7 @@ from src.database.models.resource import Resource
 from src.database.models.resource_descendant import ResourceDescendant
 from src.database.models.role_hierarchy import RoleHierarchy
 from src.database.models.role_permission import RolePermission
+from src.database.models.site import Site
 from src.database.models.staff_invitation import StaffInvitation
 from src.database.models.stripe_event import StripeEvent
 from src.database.models.user import User
@@ -89,6 +90,7 @@ __all__ = [
     "ResourceDescendant",
     "RoleHierarchy",
     "RolePermission",
+    "Site",
     "SoftDeleteMixin",
     "StaffInvitation",
     "StripeEvent",
