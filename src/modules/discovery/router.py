@@ -7,7 +7,9 @@ plain data it gets back. Nothing about which clinics or which places match is de
 * ``GET /clinics/nearby`` searches from a position **or** from an area (``area_id``), never both;
 * ``GET /clinics/areas`` is the place-name typeahead a patient without GPS uses;
 * ``GET /clinics/areas/recent`` and ``PUT /clinics/areas/recent/{area_id}`` are a signed-in
-  patient's recently used areas, behind the ``patient`` role's grant on ``patients.self``.
+  patient's recently used areas, behind the ``patient`` role's grant on ``patients.self``;
+* ``GET /clinics/{slug}`` is one clinic's profile (Issue 35): hours, queues, services, contact and
+  whether a patient may join. Declared last, so it never shadows the fixed paths above.
 
 The search routes are public: a patient looking for a clinic has no account, and what they are shown
 is what verified clinics publish about themselves and a public place-name dataset. Served under
@@ -17,7 +19,7 @@ scraping arrives with Issue 38.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from sqlalchemy.orm import Session
 
 from src.api.rbac_deps import require_patient
@@ -25,8 +27,13 @@ from src.commons.enums import DiscoverySort, SaProvince, SectorFilter
 from src.commons.geo import CoordinateOutOfRangeError, Coordinates
 from src.database.models import Patient
 from src.database.session import get_db
-from src.modules.discovery import areas, service
-from src.modules.discovery.schemas import AreaListOut, AreaOut, NearbyPageOut
+from src.modules.discovery import areas, profile, service
+from src.modules.discovery.schemas import (
+    AreaListOut,
+    AreaOut,
+    ClinicProfileOut,
+    NearbyPageOut,
+)
 
 router = APIRouter(prefix="/clinics", tags=["discovery"])
 
@@ -185,3 +192,23 @@ def remember_my_area(area_id: str, patient: OwnRecordUpdate, db: DbSession) -> R
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No such area.") from exc
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/{slug}",
+    response_model=ClinicProfileOut,
+    operation_id="discoveryClinicProfile",
+    summary="One verified clinic: hours, live queues, services, contact and joinability",
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "No verified clinic has that slug."}
+    },
+)
+def clinic_profile(
+    slug: Annotated[str, Path(max_length=80, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")],
+    db: DbSession,
+) -> ClinicProfileOut:
+    """A clinic that is not verified answers the same 404 as one that does not exist."""
+    found = profile.clinic_profile(db, slug)
+    if found is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such clinic.")
+    return ClinicProfileOut.of(found)
