@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Status** | 📋 Planned |
-| **Progress** | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
+| **Status** | ✅ Done: issues 23–30 closed on 2026-09-12, release note [`v0.4.0`](../RELEASES/RELEASE_v0_4_0.md) |
+| **Progress** | 🟩⬜⬜⬜⬜⬜⬜⬜⬜⬜ **12%** (1/8 issues) |
 | **Sprints** | 4–5 (weeks 7–10), semester 2 |
 | **Release tag** | `v0.4.0` |
 | **Primary owner** | A, Backend Lead · D, Frontend/Clinic |
@@ -13,6 +13,14 @@
 | **Issues** | 23–30 (8 issues, about 14 person-days of estimates) |
 | **Depends on** | [M3](M3_identity_auth_rbac.md) |
 | **Blocks** | [M5](M5_discovery_geolocation.md) (discovery reads `sites`), [M6](M6_queue_engine_core.md) (tickets belong to `queues`), [M7](M7_clinic_dashboard.md), [M8](M8_display_monitor.md). This is the **widest bottleneck in the project**, see the workload split doc. |
+
+> **On the two rows above disagreeing.** The **Progress** bar is generated from GitHub
+> (`make milestone-progress`) and is a fact about the issues, never typed by hand; it reads 12%
+> because M4 shipped as eight **stacked** pull requests (#138–#145) and only the first has merged.
+> The **Status** row is written by the pull request that closes the last issue, which is #145 — so
+> it is true from the moment that one lands, and the next run of the generator brings the bar up to
+> meet it. Merge #139 → #140 → #141 → #142 → #143 → #144 → #145 in that order; the `Conventions`
+> check is red on each until its predecessors are in.
 
 ## Goal
 
@@ -94,12 +102,22 @@ flowchart LR
 
 ## Exit criteria
 
-- [ ] A clinic can be created with a real coordinate and appears in a PostGIS distance query
-- [ ] A site carries 1..n named queues, and a queue can be deactivated without deleting its history
-- [ ] Opening hours drive an `is_open_now` flag that respects public holidays and ad-hoc closures
-- [ ] Display mode defaults to `number_only` on every newly created site, never anything else
-- [ ] A new clinic stays invisible in discovery until a platform admin verifies it
-- [ ] `sites.yaml` documents every route the sites router serves, enforced by a drift test
+- [x] A clinic can be created with a real coordinate and appears in a PostGIS distance query
+      (Issue 23). The GiST index is asserted from the query plan, not by eye.
+- [x] A site carries 1..n named queues, and a queue can be deactivated without deleting its history
+      (Issue 25). The "history stays" half is asserted through the agreed ticket fixture; it becomes
+      a query against the real `tickets` table when Issue 39 creates one.
+- [x] Opening hours drive an `is_open_now` flag that respects public holidays and ad-hoc closures
+      (Issue 24), in that order of precedence, with a test crossing midnight in Johannesburg.
+- [x] Display mode defaults to `number_only` on every newly created site, never anything else
+      (Issue 27). Held by a guard that walks the source of every path that constructs a `Site`.
+- [x] A new clinic stays invisible in discovery until a platform admin verifies it (Issue 29),
+      proven against the search service rather than a page.
+- [x] `sites.yaml` documents every route the sites router serves, enforced by a drift test
+      (Issue 30), in both directions. **Partly (Issue 30):** the drift test compares method, path
+      and the *concrete* statuses FastAPI's own document declares; the `403`/`404`/`409` a handler
+      raises are invisible to it, so the contract's error half is proved by
+      `tests/integration/sites/test_sites_module.py` driving each documented refusal over HTTP.
 
 ## Demo at the end of the milestone
 
