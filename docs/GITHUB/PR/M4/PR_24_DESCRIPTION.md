@@ -74,6 +74,22 @@ by the integration tests, on any request publishing two events. The queue now li
 `Session.info` with two permanent listeners.
 `test_two_events_in_one_transaction_both_arrive` is the regression test.
 
+**A bug CI found that this machine could not, and the function that now prevents it.** The closure
+tests passed locally and failed in the pipeline with `assert None == 'The water is off.'`. SQLite
+has no `timestamptz`: it hands a business datetime back **naive**, with the offset gone, and
+`value.astimezone(APP_TIMEZONE)` then reads that naive value as the **server's** clock zone. A
+closure written at 17:02 SAST therefore resolved as 17:02 on a developer's SAST laptop and as 19:02
+in a UTC container — two hours in the future, so a clinic that had just closed still reported itself
+open. PostgreSQL is unaffected (it returns aware values), which is why only the test path showed it.
+
+`src.commons.time.stored_sast` is the fix, and it is a *third* function on purpose: `to_sast`
+refuses a naive value from outside, and is right to, because such a value does not say which instant
+it means; a value coming back out of **this application's own storage** does, because everything it
+writes is aware SAST. The same reading applies to a datetime parsed from a request body with no
+offset, since this API's times are documented as Africa/Johannesburg.
+`test_the_whole_closure_path_holds_in_a_utc_process` sets `TZ=UTC` and calls `tzset`, so it is a
+real reproduction: it fails against the old code on any machine.
+
 **"On every channel at once" is a property of the shape, not of four careful implementations.**
 `join_gate(site, schedule, moment)` has no channel parameter, so web, USSD, WhatsApp and walk-in
 cannot get different answers. The test asserts both halves: the gate refuses after a closure, and
@@ -106,7 +122,8 @@ raises; and the join routes (Issue 40), which call the gate this adds.
 - **`scripts/db/holidays.py`** (new): `easter_sunday`, `holidays_for`, `holidays_between`.
   **`scripts/db/seed_dev_data.py`:** `seed_opening_hours` and `seed_holidays`; `seed()` now returns
   a report per step and `main()` prints them in order.
-- **`tests/`:** `unit/sites/test_opening_hours.py` (23 cases), `test_public_holidays.py` (23),
+- **`src/commons/time.py`:** `stored_sast`, the fix above.
+- **`tests/`:** `unit/sites/test_opening_hours.py` (25 cases), `test_public_holidays.py` (23),
   `test_domain_events.py` (5), `integration/sites/test_opening_hours_api.py` (20). Three new
   cross-tenant cases (`siteopeninghours`, `siteholidayrule`, `siteclosure`) and the M4 fixture's
   clinics are now `verified`, with the reason written next to it.
@@ -114,7 +131,9 @@ raises; and the join routes (Issue 40), which call the gate this adds.
 ## Testing
 
 - [x] `ruff check` / `ruff format --check` clean; `mypy src/` clean (197 files).
-- [x] `make test`: **1319 passed**, 27 skipped, 9 xfailed.
+- [x] `make test`: **1321 passed**, 27 skipped, 9 xfailed — and **`TZ=UTC make test` too**, which
+      is what CI runs and what caught the timezone bug above. Both are green; before the fix, the
+      UTC run failed the two closure tests exactly as the pipeline did.
 - [x] `make test-postgres`: **25 passed**, including migration `0008` down and up and `alembic
       check` finding no drift.
 - [x] **Easter is checked against published dates**, not restated: 2024-03-31, 2025-04-20,
