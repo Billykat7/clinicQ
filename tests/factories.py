@@ -4,14 +4,15 @@
     manager = StaffFactory.create(db, role=UserRole.CLINIC_MANAGER, site_id=site.slug)
     patient = PatientFactory.create(db)                      # +27 10 555 0001, persisted
     site = SiteFactory.create(db, sector=SiteSector.PRIVATE)   # a clinic, persisted
-    tickets = TicketFactory.build_batch(5, queue=QueueFactory.build())
+    queue = QueueFactory.create(db, site_id=site.id)           # a queue at that clinic
+    tickets = TicketFactory.build_batch(5, queue=queue)
 
 **Real or stub.** :class:`StaffFactory`, :class:`PatientFactory` and :class:`SiteFactory`
-persist real models (Issues 15, 17 and 23): ``create(session)`` writes a row. :class:`QueueFactory`
-and :class:`TicketFactory` still build the agreed stubs in ``scripts/db/demo_dataset.py``
-(``QueueStub``, ``TicketStub``), because their tables arrive with Issues 25 and 39. When one of
-those lands, its author changes the factory's ``model`` to the new class and adds ``create``; the
-field names already match the specs, so callers do not change.
+persist real models (Issues 15, 17, 23 and 25): ``create(session)`` writes a row.
+:class:`TicketFactory` still builds the agreed stub in ``scripts/db/demo_dataset.py``
+(``TicketStub``), because its table arrives with Issue 39. When it lands, its author changes the
+factory's ``model`` to the new class and adds ``create``; the field names already match the spec, so
+callers do not change.
 
 **Why not factory_boy.** A dozen lines of typed Python give the three things tests need (defaults,
 per-factory sequences for unique fields, keyword overrides) with nothing global: the session is
@@ -27,17 +28,18 @@ from typing import Any, ClassVar
 
 from sqlalchemy.orm import Session
 
-from scripts.db.demo_dataset import (
-    CLINICS,
-    QueueStub,
-    TicketStub,
-    queues_for,
+from scripts.db.demo_dataset import CLINICS, TicketStub, queues_for
+from src.commons.enums import (
+    AssignmentScopeType,
+    QueueKind,
+    TicketSource,
+    TicketStatus,
+    UserRole,
 )
-from src.commons.enums import AssignmentScopeType, TicketSource, TicketStatus, UserRole
 from src.commons.geo import Coordinates
 from src.commons.time import now_sast
 from src.core.security import hash_password
-from src.database.models import Patient, Site, User, UserRoleAssignment
+from src.database.models import Patient, Queue, Site, User, UserRoleAssignment
 
 #: The password every factory-made staff account has, for tests that sign in. Development only.
 FACTORY_STAFF_PASSWORD = "clinicq-factory-password"
@@ -199,18 +201,43 @@ class SiteFactory(Factory[Site]):
         return site
 
 
-class QueueFactory(Factory[QueueStub]):
-    """A queue at a site: a public health centre's general consultation line unless overridden."""
+class QueueFactory(Factory[Queue]):
+    """A queue at a site: a public health centre's general consultation line unless overridden.
 
-    model = QueueStub
+    Issue 25 swapped the stub for the model. ``site_id`` has no sensible default — a queue does not
+    exist outside a clinic — so pass one (``QueueFactory.create(db, site_id=site.id)``), which is
+    also what stops a test accidentally building a queue that belongs nowhere.
+    """
+
+    model = Queue
 
     @classmethod
     def defaults(cls, n: int) -> dict[str, Any]:
-        """The general-consultation queue of the first clinic, with a unique slug."""
+        """The general-consultation queue of the first clinic, with a slug unique per call."""
         general = next(q for q in queues_for(CLINICS[0]) if q.slug == "general")
-        fields = {name: getattr(general, name) for name in general.__dataclass_fields__}
-        fields["slug"] = f"{general.slug}-{n}"
-        return fields
+        return {
+            "name": f"{general.name} {n}",
+            "slug": f"{general.slug}-{n}",
+            "kind": QueueKind.CONSULTATION.value,
+            "ticket_prefix": general.prefix,
+            "display_order": n,
+            "expected_service_minutes": general.service_minutes,
+        }
+
+    @classmethod
+    def build(cls, **overrides: Any) -> Queue:
+        """As :meth:`Factory.build`, accepting a :class:`QueueKind` member for ``kind``."""
+        if isinstance(overrides.get("kind"), StrEnum):
+            overrides["kind"] = overrides["kind"].value
+        return super().build(**overrides)
+
+    @classmethod
+    def create(cls, session: Session, *, site_id: str, **overrides: Any) -> Queue:
+        """Persist a queue at ``site_id``. Flushed, not committed: the test owns the transaction."""
+        queue = cls.build(site_id=site_id, **overrides)
+        session.add(queue)
+        session.flush()
+        return queue
 
 
 class TicketFactory(Factory[TicketStub]):
@@ -232,22 +259,28 @@ class TicketFactory(Factory[TicketStub]):
         }
 
     @classmethod
-    def build(cls, *, queue: QueueStub | None = None, **overrides: Any) -> TicketStub:
-        """As :meth:`Factory.build`; with ``queue``, the ticket belongs to it and takes its prefix."""
+    def build(cls, *, queue: Queue | None = None, **overrides: Any) -> TicketStub:
+        """As :meth:`Factory.build`; with ``queue``, the ticket belongs to it and takes its prefix.
+
+        ``queue`` is Issue 25's model now, and the ticket is still a stub until Issue 39 — so this
+        is where the two meet, and the field names the specs agreed on are what make it work.
+        """
         ticket = super().build(**overrides)
         if queue is None:
             return ticket
         fields = {name: getattr(ticket, name) for name in ticket.__dataclass_fields__}
         fields |= {
             "queue_slug": queue.slug,
-            "site_slug": queue.site_slug,
-            "number": overrides.get("number", f"{queue.prefix}{ticket.sequence:03d}"),
+            "site_slug": queue.site_id,
+            "number": overrides.get(
+                "number", f"{queue.ticket_prefix}{ticket.sequence:03d}"
+            ),
         }
         return TicketStub(**fields)
 
     @classmethod
     def build_batch(
-        cls, size: int, *, queue: QueueStub | None = None, **overrides: Any
+        cls, size: int, *, queue: Queue | None = None, **overrides: Any
     ) -> list[TicketStub]:
         """``size`` tickets in one queue, in sequence."""
         return [cls.build(queue=queue, **overrides) for _ in range(size)]
