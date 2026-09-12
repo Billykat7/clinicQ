@@ -36,6 +36,7 @@ from src.core.telemetry import (
 )
 from src.schemas.health import DependencyChecks, LivenessResponse, ReadinessResponse
 from src.web.dev import router as dev_router
+from src.web.discover import router as discover_router
 from src.web.routes import router as web_router
 
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -107,6 +108,8 @@ def create_app(settings_obj: Settings | None = None) -> FastAPI:
     install_error_handlers(app)
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
     app.include_router(web_router)
+    # Clinic discovery (Issue 32): the patient's first screen, on the discovery service.
+    app.include_router(discover_router)
     # The component catalogue and layout samples (Issue 5) exist only in development: in staging
     # and production the paths are not registered at all, so they answer 404.
     if cfg.environment is AppEnvironment.DEVELOPMENT:

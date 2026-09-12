@@ -1,0 +1,653 @@
+"""Clinic discovery pages: the first screen a patient sees (Issue 32).
+
+Server-rendered on the patient layout, with htmx swaps, because the screen has to work on a cheap
+Android phone on a weak connection. The page calls the discovery **service** directly, the same
+:func:`~src.modules.discovery.service.find_nearby_sites` and
+:func:`~src.modules.discovery.areas.search_areas` the JSON API, USSD and WhatsApp call, so the web
+list cannot disagree with them about which clinics are open or how far away they are.
+
+Three routes, each usable with and without JavaScript:
+
+* ``GET /discover`` is the whole page. With no origin it offers the location prompt **and** the
+  suburb search side by side, so declining the prompt, or a browser that cannot locate, lands on
+  something that works rather than on an empty page. With ``lat``/``lon`` or ``area_id`` it also
+  renders the first page of results.
+* ``GET /discover/results`` is the results fragment the Public / Private / All toggle, the radius
+  and the sort swap in. Asked by htmx it answers the fragment with ``HX-Push-Url`` set to the full
+  page's address, so the address bar, a refresh and a shared link all show the same list. Asked by
+  a browser without htmx it redirects to that address.
+* ``GET /discover/areas`` is the suburb typeahead's suggestions, with the same fallback.
+
+**What the templates render is decided here**, as plain dataclasses (:class:`DiscoverPage`,
+:class:`ResultsView`, :class:`ClinicCard`), so the words a patient reads ("Queue length not reported
+yet", "about 2.1 km from the middle of Soweto", "Closed, opens tomorrow at 07:00") are tested as
+data, never by reading HTML (``.cursor/rules/testing-strategy.mdc``).
+
+**Positions are rounded before they reach a URL.** ``discover.js`` sends the browser's fix to three
+decimal places (about 100 m), which is far finer than a clinic search needs and coarse enough that
+an access log never holds where a patient is standing.
+"""
+
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from enum import StrEnum
+from typing import Annotated, Final
+from urllib.parse import urlencode
+
+from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from sqlalchemy.orm import Session
+
+from src.commons.enums import DiscoverySort, SectorFilter, SiteSector
+from src.commons.geo import CoordinateOutOfRangeError, Coordinates
+from src.commons.time import APP_TIMEZONE, business_date
+from src.database.session import get_db
+from src.modules.discovery import areas, service
+from src.modules.discovery.areas import AreaSummary
+from src.modules.discovery.service import (
+    NearbyClinic,
+    NearbyResult,
+    OpenStatus,
+)
+from src.modules.queues.live import WaitRange
+from src.web.context import public_page_context
+from src.web.routes import templates
+
+router = APIRouter(prefix="/discover", include_in_schema=False)
+
+DbSession = Annotated[Session, Depends(get_db)]
+
+#: The header htmx sends with every request it makes.
+HX_REQUEST: Final = "HX-Request"
+#: The header that tells htmx which address to put in the bar after a swap.
+HX_PUSH_URL: Final = "HX-Push-Url"
+
+#: The radius choices the selector offers, in metres. 10 km is the default the empty state names.
+RADIUS_CHOICES_M: Final = (2_000, 5_000, 10_000, 20_000, 50_000)
+#: Decimal places a position keeps in a URL: about 110 m of latitude.
+POSITION_DECIMALS: Final = 3
+
+
+# --------------------------------------------------------------------------------------
+# What a card shows, decided as data
+# --------------------------------------------------------------------------------------
+
+
+class BadgeShape(StrEnum):
+    """The shape drawn beside a sector's name, so the two badges differ without colour.
+
+    Each value is a ``.sector-badge-<shape>`` class in ``discover.css`` and an icon in
+    ``discover/_sector_badge.html``. A square for a public facility, a diamond for a private
+    practice: the words differ, the shapes differ, and the border style differs, so a patient
+    with a colour-vision deficiency, a greyscale screen or a screen reader tells them apart.
+    """
+
+    SQUARE = "square"
+    DIAMOND = "diamond"
+
+
+@dataclass(frozen=True, slots=True)
+class SectorBadge:
+    """How one sector is shown: its word, what it means, and its shape."""
+
+    label: str
+    description: str
+    shape: BadgeShape
+
+
+#: Every sector's badge. A sector added to the enum without one fails
+#: ``tests/integration/discovery/test_discover_pages.py``.
+SECTOR_BADGES: Final[Mapping[SiteSector, SectorBadge]] = {
+    SiteSector.PUBLIC: SectorBadge(
+        label="Public",
+        description="A government clinic or community health centre",
+        shape=BadgeShape.SQUARE,
+    ),
+    SiteSector.PRIVATE: SectorBadge(
+        label="Private",
+        description="A private practice; fees may apply",
+        shape=BadgeShape.DIAMOND,
+    ),
+}
+
+#: What the toggle calls each position.
+SECTOR_FILTER_LABELS: Final[Mapping[SectorFilter, str]] = {
+    SectorFilter.ALL: "All",
+    SectorFilter.PUBLIC: "Public",
+    SectorFilter.PRIVATE: "Private",
+}
+
+#: What the sort selector calls each order.
+SORT_LABELS: Final[Mapping[DiscoverySort, str]] = {
+    DiscoverySort.NEAREST: "Nearest",
+    DiscoverySort.SHORTEST_QUEUE: "Shortest queue",
+}
+
+#: Shown for a length nobody has counted. Never "0": an unknown queue is not an empty one.
+QUEUE_NOT_REPORTED: Final = "Queue length not reported yet"
+#: Shown until the estimator (Issue 42) exists. Never an invented figure.
+WAIT_NOT_AVAILABLE: Final = "Wait estimate not available yet"
+
+
+def queue_label(waiting: int | None) -> str:
+    """How many people are waiting, in words; "not reported yet" when nobody counted."""
+    if waiting is None:
+        return QUEUE_NOT_REPORTED
+    if waiting == 0:
+        return "No one waiting"
+    return "1 person waiting" if waiting == 1 else f"{waiting} people waiting"
+
+
+def wait_label(ranges: Sequence[WaitRange | None]) -> str:
+    """The expected wait across a clinic's queues, always a range; "not available" until Issue 42.
+
+    With a range for every queue, the label spans the shortest low to the longest high, because a
+    patient does not yet know which queue they will join.
+    """
+    known = [wait for wait in ranges if wait is not None]
+    if not known or len(known) != len(ranges):
+        return WAIT_NOT_AVAILABLE
+    low = min(wait.low_minutes for wait in known)
+    high = max(wait.high_minutes for wait in known)
+    return f"Wait about {low}–{high} min"
+
+
+def travel_label(walking_minutes: int, driving_minutes: int) -> str:
+    """The rough trip in words: about 24 min on foot, 5 min by car."""
+    return f"About {walking_minutes} min on foot, {driving_minutes} min by car"
+
+
+def open_label(status_: OpenStatus, moment: datetime) -> str:
+    """Open or closed, and when it opens next, in Johannesburg wall-clock time.
+
+    ``moment`` is when the search was evaluated, so "today" and "tomorrow" agree with the answer.
+    """
+    if status_.is_open:
+        return "Open now"
+    reason = (
+        f"Closed: {status_.closure_reason.rstrip('.')}."
+        if status_.closure_reason
+        else "Closed"
+    )
+    if status_.next_open_at is None:
+        return reason if status_.closure_reason else "Closed, no opening hours listed"
+    opens = status_.next_open_at.astimezone(APP_TIMEZONE)
+    today = business_date(moment)
+    if opens.date() == today:
+        when = f"today at {opens:%H:%M}"
+    elif opens.date() == today + timedelta(days=1):
+        when = f"tomorrow at {opens:%H:%M}"
+    else:
+        when = f"{opens:%a %d %b} at {opens:%H:%M}"
+    return (
+        f"{reason} Opens {when}." if status_.closure_reason else f"Closed, opens {when}"
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class ClinicCard:
+    """One clinic in the list, as the patient reads it."""
+
+    slug: str
+    name: str
+    badge: SectorBadge
+    address: str
+    distance_label: str
+    distance_is_approximate: bool
+    travel_label: str
+    is_open: bool
+    open_label: str
+    queue_label: str
+    wait_label: str
+
+
+def clinic_card(clinic: NearbyClinic, moment: datetime) -> ClinicCard:
+    """The card for one search result."""
+    address = clinic.address_line
+    if clinic.suburb and clinic.suburb.casefold() not in address.casefold():
+        address = f"{address}, {clinic.suburb}"
+    return ClinicCard(
+        slug=clinic.slug,
+        name=clinic.name,
+        badge=SECTOR_BADGES[clinic.sector],
+        address=address,
+        distance_label=clinic.distance_label,
+        distance_is_approximate=clinic.distance_basis.approximate,
+        travel_label=travel_label(
+            clinic.travel.walking_minutes, clinic.travel.driving_minutes
+        ),
+        is_open=clinic.open_status.is_open,
+        open_label=open_label(clinic.open_status, moment),
+        queue_label=queue_label(clinic.total_waiting),
+        wait_label=wait_label([queue.wait_range for queue in clinic.queues]),
+    )
+
+
+# --------------------------------------------------------------------------------------
+# The page and the fragment, as data
+# --------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class Choice:
+    """One option of a toggle or selector."""
+
+    value: str
+    label: str
+    selected: bool
+
+
+@dataclass(frozen=True, slots=True)
+class FilterGroup:
+    """One radio group of the filter bar: its query parameter, its visible legend and its options."""
+
+    name: str
+    legend: str
+    choices: tuple[Choice, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class EmptyState:
+    """What the list says when nothing matched, and the one thing to try next."""
+
+    title: str
+    body: str
+    action_label: str | None = None
+    action_href: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Origin:
+    """Where the search starts from, as the URL carries it and the heading names it."""
+
+    latitude: float | None = None
+    longitude: float | None = None
+    area: AreaSummary | None = None
+
+    @property
+    def is_set(self) -> bool:
+        """Whether there is anywhere to search from yet."""
+        return self.area is not None or self.latitude is not None
+
+    @property
+    def params(self) -> dict[str, str]:
+        """The query parameters that name this origin."""
+        if self.area is not None:
+            return {"area_id": self.area.area_id}
+        if self.latitude is not None and self.longitude is not None:
+            return {"lat": f"{self.latitude}", "lon": f"{self.longitude}"}
+        return {}
+
+    @property
+    def heading(self) -> str:
+        """The results heading: clinics near Soweto, or near you."""
+        return f"Clinics near {self.area.name}" if self.area else "Clinics near you"
+
+
+@dataclass(frozen=True, slots=True)
+class ResultsView:
+    """Everything the results fragment renders."""
+
+    origin: Origin
+    sector: SectorFilter
+    sort: DiscoverySort
+    radius_m: int
+    total: int
+    cards: tuple[ClinicCard, ...]
+    summary: str
+    approximate_note: str | None
+    empty: EmptyState | None
+    more_href: str | None
+    offset: int
+
+    def href(self, **changes: object) -> str:
+        """The full page's address for this search, with ``changes`` applied."""
+        return page_href(self.origin, self.sector, self.sort, self.radius_m, **changes)
+
+
+@dataclass(frozen=True, slots=True)
+class DiscoverPage:
+    """Everything the whole page renders."""
+
+    origin: Origin
+    sector_choices: tuple[Choice, ...]
+    radius_choices: tuple[Choice, ...]
+    sort_choices: tuple[Choice, ...]
+    query: str
+    suggestions: tuple[AreaSummary, ...]
+    results: ResultsView | None
+    #: Shown instead of results when the origin could not be used.
+    problem: str | None = None
+    #: Whether to lead with the location prompt: only when there is nowhere to search from yet.
+    offer_location: bool = field(default=True)
+
+    @property
+    def filter_groups(self) -> tuple[FilterGroup, ...]:
+        """The filter bar, in order: which sector, how far, and in what order."""
+        return (
+            FilterGroup(name="sector", legend="Show", choices=self.sector_choices),
+            FilterGroup(name="radius_m", legend="Within", choices=self.radius_choices),
+            FilterGroup(name="sort", legend="Sort by", choices=self.sort_choices),
+        )
+
+
+def page_href(
+    origin: Origin,
+    sector: SectorFilter,
+    sort: DiscoverySort,
+    radius_m: int,
+    **changes: object,
+) -> str:
+    """``/discover?...`` for a search, leaving out whatever is at its default."""
+    params: dict[str, object] = {
+        **origin.params,
+        "sector": sector.value,
+        "radius_m": radius_m,
+        "sort": sort.value,
+    }
+    params.update(changes)
+    defaults = {
+        "sector": SectorFilter.ALL.value,
+        "radius_m": service.DEFAULT_RADIUS_M,
+        "sort": DiscoverySort.NEAREST.value,
+        "offset": 0,
+    }
+    kept = {
+        key: value
+        for key, value in params.items()
+        if value is not None and defaults.get(key) != value
+    }
+    return f"/discover?{urlencode(kept)}" if kept else "/discover"
+
+
+def _radius_words(metres: int) -> str:
+    """A radius in words: 10 km, or 500 m."""
+    return f"{metres // 1000} km" if metres >= 1000 else f"{metres} m"
+
+
+def _wider_radius(metres: int) -> int | None:
+    """The next radius choice above ``metres``, or ``None`` at the widest."""
+    return next((choice for choice in RADIUS_CHOICES_M if choice > metres), None)
+
+
+def results_view(result: NearbyResult, origin: Origin) -> ResultsView:
+    """Turn one search result into what the list shows, including its empty state."""
+    radius = result.radius.applied_m
+    cards = tuple(clinic_card(clinic, result.evaluated_at) for clinic in result.clinics)
+    sector_words = {
+        SectorFilter.ALL: "clinics",
+        SectorFilter.PUBLIC: "public clinics",
+        SectorFilter.PRIVATE: "private clinics",
+    }[result.sector]
+    noun = sector_words if result.total != 1 else sector_words.removesuffix("s")
+    summary = f"{result.total} {noun} within {_radius_words(radius)}"
+
+    empty: EmptyState | None = None
+    if not cards and result.offset == 0:
+        wider = _wider_radius(radius)
+        empty = EmptyState(
+            title=f"No {sector_words} within {_radius_words(radius)}",
+            body=(
+                "Try a wider radius."
+                if wider
+                else "Try another suburb, or show public and private clinics together."
+            ),
+            action_label=f"Search within {_radius_words(wider)}" if wider else None,
+            action_href=page_href(origin, result.sector, result.sort, wider)
+            if wider
+            else None,
+        )
+
+    next_offset = result.offset + len(cards)
+    more_href = (
+        page_href(origin, result.sector, result.sort, radius, offset=next_offset)
+        if next_offset < result.total
+        else None
+    )
+    note = (
+        f"Distances are approximate: they are measured from the middle of {origin.area.name}."
+        if result.distance_basis.approximate and origin.area is not None
+        else None
+    )
+    return ResultsView(
+        origin=origin,
+        sector=result.sector,
+        sort=result.sort,
+        radius_m=radius,
+        total=result.total,
+        cards=cards,
+        summary=summary,
+        approximate_note=note,
+        empty=empty,
+        more_href=more_href,
+        offset=result.offset,
+    )
+
+
+def _choices[T: StrEnum](labels: Mapping[T, str], selected: T) -> tuple[Choice, ...]:
+    """One :class:`Choice` per option, marking the selected one."""
+    return tuple(
+        Choice(value=value.value, label=label, selected=value is selected)
+        for value, label in labels.items()
+    )
+
+
+def _round(value: float | None) -> float | None:
+    """A coordinate rounded to :data:`POSITION_DECIMALS`, or ``None``."""
+    return None if value is None else round(value, POSITION_DECIMALS)
+
+
+def discover_page(
+    db: Session,
+    *,
+    lat: float | None = None,
+    lon: float | None = None,
+    area_id: str | None = None,
+    q: str = "",
+    sector: SectorFilter = SectorFilter.ALL,
+    radius_m: int = service.DEFAULT_RADIUS_M,
+    sort: DiscoverySort = DiscoverySort.NEAREST,
+    offset: int = 0,
+    moment: datetime | None = None,
+) -> DiscoverPage:
+    """Build the whole discovery page for one request.
+
+    A position is rounded (:data:`POSITION_DECIMALS`) before anything else sees it. An origin that
+    cannot be used (a coordinate outside the country, an area that no longer exists) becomes a
+    ``problem`` sentence above the suburb search, never an error page: the patient can still search.
+    """
+    radius = service.clamp_radius(radius_m).applied_m
+    problem: str | None = None
+    origin = Origin()
+    try:
+        if area_id:
+            origin = Origin(area=areas.get_area(db, area_id))
+        elif lat is not None and lon is not None:
+            point = Coordinates(
+                latitude=_round(lat) or 0.0, longitude=_round(lon) or 0.0
+            )
+            origin = Origin(latitude=point.latitude, longitude=point.longitude)
+    except areas.AreaNotFoundError:
+        problem = "That area is no longer listed. Search for your suburb again."
+    except CoordinateOutOfRangeError:
+        problem = (
+            "That location is outside South Africa. Search for your suburb instead."
+        )
+
+    results: ResultsView | None = None
+    if origin.is_set:
+        try:
+            results = search_results(
+                db,
+                origin,
+                sector=sector,
+                radius_m=radius,
+                sort=sort,
+                offset=offset,
+                moment=moment,
+            )
+        except CoordinateOutOfRangeError:
+            problem = (
+                "That location is outside South Africa. Search for your suburb instead."
+            )
+            origin = Origin()
+
+    suggestions = tuple(areas.search_areas(db, q)) if q.strip() else ()
+    return DiscoverPage(
+        origin=origin,
+        sector_choices=_choices(SECTOR_FILTER_LABELS, sector),
+        radius_choices=tuple(
+            Choice(
+                value=str(metres),
+                label=_radius_words(metres),
+                selected=metres == radius,
+            )
+            for metres in RADIUS_CHOICES_M
+        ),
+        sort_choices=_choices(SORT_LABELS, sort),
+        query=q,
+        suggestions=suggestions,
+        results=results,
+        problem=problem,
+        offer_location=not origin.is_set,
+    )
+
+
+def search_results(
+    db: Session,
+    origin: Origin,
+    *,
+    sector: SectorFilter,
+    radius_m: int,
+    sort: DiscoverySort,
+    offset: int = 0,
+    moment: datetime | None = None,
+) -> ResultsView:
+    """Run the one discovery search for ``origin`` and shape its answer for the list."""
+    search_from: service.SearchOrigin = (
+        service.AreaOrigin(area_id=origin.area.area_id)
+        if origin.area is not None
+        else Coordinates(
+            latitude=origin.latitude or 0.0, longitude=origin.longitude or 0.0
+        )
+    )
+    result = service.find_nearby_sites(
+        db,
+        search_from,
+        radius_m=radius_m,
+        sector=sector,
+        sort=sort,
+        offset=offset,
+        moment=moment,
+    )
+    return results_view(result, origin)
+
+
+# --------------------------------------------------------------------------------------
+# Routes
+# --------------------------------------------------------------------------------------
+
+Latitude = Annotated[float | None, Query(ge=-90, le=90)]
+Longitude = Annotated[float | None, Query(ge=-180, le=180)]
+AreaId = Annotated[str | None, Query(max_length=36)]
+RadiusM = Annotated[int, Query(ge=1)]
+Offset = Annotated[int, Query(ge=0, le=1000)]
+
+
+def _is_htmx(request: Request) -> bool:
+    """Whether htmx made this request (it sends ``HX-Request: true``)."""
+    return request.headers.get(HX_REQUEST, "").lower() == "true"
+
+
+def _render(request: Request, template: str, **context: object) -> HTMLResponse:
+    """Render a discovery template with the public page context."""
+    return templates.TemplateResponse(
+        request,
+        template,
+        public_page_context(request, page_title="Find a clinic", **context),
+    )
+
+
+@router.get("", response_class=HTMLResponse)
+def discover(
+    request: Request,
+    db: DbSession,
+    lat: Latitude = None,
+    lon: Longitude = None,
+    area_id: AreaId = None,
+    q: Annotated[str, Query(max_length=100)] = "",
+    sector: SectorFilter = SectorFilter.ALL,
+    radius_m: RadiusM = service.DEFAULT_RADIUS_M,
+    sort: DiscoverySort = DiscoverySort.NEAREST,
+    offset: Offset = 0,
+) -> HTMLResponse:
+    """The discovery page. Public: a patient looking for a clinic has no account."""
+    page = discover_page(
+        db,
+        lat=lat,
+        lon=lon,
+        area_id=area_id,
+        q=q,
+        sector=sector,
+        radius_m=radius_m,
+        sort=sort,
+        offset=offset,
+    )
+    return _render(request, "discover/list.html", page=page)
+
+
+@router.get("/results", response_class=HTMLResponse)
+def discover_results(
+    request: Request,
+    db: DbSession,
+    lat: Latitude = None,
+    lon: Longitude = None,
+    area_id: AreaId = None,
+    sector: SectorFilter = SectorFilter.ALL,
+    radius_m: RadiusM = service.DEFAULT_RADIUS_M,
+    sort: DiscoverySort = DiscoverySort.NEAREST,
+    offset: Offset = 0,
+) -> Response:
+    """The results fragment an htmx swap asks for; a plain browser is sent to the full page."""
+    page = discover_page(
+        db,
+        lat=lat,
+        lon=lon,
+        area_id=area_id,
+        sector=sector,
+        radius_m=radius_m,
+        sort=sort,
+        offset=offset,
+    )
+    address = page_href(
+        page.origin, sector, sort, page.results.radius_m if page.results else radius_m
+    )
+    if not _is_htmx(request):
+        return RedirectResponse(address, status_code=status.HTTP_303_SEE_OTHER)
+    template = "discover/_more.html" if offset else "discover/_results.html"
+    response = _render(request, template, page=page, view=page.results)
+    if page.results is None:
+        # Nothing to search from: tell htmx not to swap a half-empty list over a good one.
+        response.status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
+    elif not offset:
+        response.headers[HX_PUSH_URL] = address
+    return response
+
+
+@router.get("/areas", response_class=HTMLResponse)
+def discover_areas(
+    request: Request,
+    db: DbSession,
+    q: Annotated[str, Query(max_length=100)] = "",
+) -> Response:
+    """The suburb typeahead's suggestions; a plain browser gets the full page with them on it."""
+    if not _is_htmx(request):
+        return RedirectResponse(
+            f"/discover?{urlencode({'q': q})}" if q else "/discover",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+    suggestions = tuple(areas.search_areas(db, q)) if q.strip() else ()
+    return _render(
+        request, "discover/_area_suggestions.html", suggestions=suggestions, query=q
+    )

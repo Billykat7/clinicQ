@@ -1,0 +1,18 @@
+{#- The sector badge (Issue 32): Public or Private, told apart without colour.
+
+    {% from "discover/_sector_badge.html" import sector_badge %}
+    {{ sector_badge(card.badge) }}
+
+    Three differences, none of them colour: the word, the shape beside it (a square for a public
+    facility, a diamond for a private practice) and the border (solid, or dashed). The shape comes
+    from src.web.discover.SECTOR_BADGES; the title carries what the sector means. -#}
+{% macro sector_badge(badge) -%}
+<span class="sector-badge sector-badge-{{ badge.shape }}" title="{{ badge.description }}">
+  {%- if badge.shape == "square" %}
+  <svg class="sector-badge-icon" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><rect x="1.5" y="1.5" width="9" height="9" rx="1"/></svg>
+  {%- else %}
+  <svg class="sector-badge-icon" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M6 .9 11.1 6 6 11.1.9 6z"/></svg>
+  {%- endif %}
+  <span>{{ badge.label }}</span>
+</span>
+{%- endmacro %}
