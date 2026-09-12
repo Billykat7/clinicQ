@@ -71,6 +71,12 @@ _UNSCOPED_BY_DESIGN: dict[str, str] = {
         "from the row just created, and the function refuses to do anything if the clinic already "
         "has a queue (Issue 25)"
     ),
+    "modules/queue/snapshot.py::reconcile_snapshots": (
+        "the reconciliation sweep (Issue 36) is a scheduled system job with no caller and no "
+        "clinic: it recounts **every** active queue on the platform and repairs each snapshot row "
+        "against its own queue, so a site filter would be the wrong narrowing. It reads only "
+        "queue ids and snapshot figures and writes only snapshot rows"
+    ),
     "modules/staff/invitations.py::usable_invitation": (
         "an invitation link is opened by someone who has no account and therefore no clinic to be "
         "scoped by; the id comes from the signed token, and the row's own site_id is what "

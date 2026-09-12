@@ -383,6 +383,19 @@ class DiscoverySort(StrEnum):
     SHORTEST_QUEUE = "shortest_queue"
 
 
+class SnapshotReadOutcome(StrEnum):
+    """Where a queue length came from on a discovery read (Issue 36). The label of a metric.
+
+    - ``CACHE_HIT``: a fresh snapshot in Redis.
+    - ``TABLE``: Redis had nothing fresh; a fresh ``site_queue_snapshot`` row did.
+    - ``RECOUNTED``: neither was fresh, so the queue was counted from the source of truth.
+    """
+
+    CACHE_HIT = "cache_hit"
+    TABLE = "table"
+    RECOUNTED = "recounted"
+
+
 class AreaKind(StrEnum):
     """What kind of place an area is. Stored in ``area.kind`` (Issue 34).
 

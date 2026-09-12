@@ -9,7 +9,10 @@ jobs in the application timezone. The kernel registers only the sweeps it owns:
 * the **document retention sweep**, which purges every stored document whose retention has expired
   (see :func:`src.modules.documents.service.run_retention_sweep`), idempotently — it only ever
   removes rows still past their expiry, tombstoning each and recording the deletion; and
-* the **grant-usage flush**, which writes this instance's buffered permission hits.
+* the **grant-usage flush**, which writes this instance's buffered permission hits; and
+* the **queue snapshot reconciliation** (Issue 36), which recounts every active queue and repairs
+  any cached or stored snapshot that has drifted from the count (see
+  :func:`src.modules.queue.snapshot.reconcile_snapshots`).
 
 Your own sweeps are added the same way: a ``run_*`` function that takes the advisory lock, and one
 ``scheduler.add_job`` call in :func:`start_scheduler`.
@@ -47,6 +50,7 @@ from src.database.session import get_db_context
 from src.modules.documents import service as documents_service
 from src.modules.documents.storage import LocalObjectStorage
 from src.modules.notifications import service as notifications_service
+from src.modules.queue import snapshot as queue_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -66,12 +70,17 @@ _DOCUMENT_RETENTION_LOCK_KEY: int = 70
 # it, so nothing is lost by losing the race.
 _PERMISSION_USAGE_LOCK_KEY: int = 176
 
+# Stable 64-bit key for the queue snapshot reconciliation (Issue 36). Idempotent across instances
+# (it overwrites a snapshot with a fresh count), so the lock only saves a second instance the work.
+_QUEUE_SNAPSHOT_LOCK_KEY: int = 336
+
 # ── job identifiers ──────────────────────────────────────────────────────────
 # So a restart replaces rather than duplicates each job.
 
 _NOTIFICATION_RETRY_JOB_ID = "notification_retry_sweep"
 _DOCUMENT_RETENTION_JOB_ID = "document_retention_sweep"
 _PERMISSION_USAGE_JOB_ID = "permission_usage_flush"
+_QUEUE_SNAPSHOT_JOB_ID = "queue_snapshot_reconciliation"
 
 # Process-wide scheduler; created by :func:`start_scheduler`, stopped by :func:`shutdown_scheduler`.
 _scheduler: BackgroundScheduler | None = None
@@ -187,6 +196,28 @@ def run_permission_usage_flush(settings: Settings | None = None) -> int:
         return touched
 
 
+def run_queue_snapshot_reconciliation(settings: Settings | None = None) -> int:
+    """Run the queue snapshot reconciliation once; return the number of snapshots repaired.
+
+    Elects a single runner across instances via the advisory lock, then delegates to
+    :func:`src.modules.queue.snapshot.reconcile_snapshots`, which recounts every active queue and
+    repairs any snapshot, in Redis or in ``site_queue_snapshot``, that disagrees with the count.
+    Idempotent: a second run finds nothing to repair. Safe to call directly as well as from the
+    scheduler.
+    """
+    cfg = settings or get_settings()
+    with (
+        get_db_context() as db,
+        _advisory_lock(db, _QUEUE_SNAPSHOT_LOCK_KEY) as acquired,
+    ):
+        if not acquired:
+            logger.debug(
+                "Queue snapshot sweep skipped: another instance holds the lock."
+            )
+            return 0
+        return queue_snapshot.reconcile_snapshots(db, settings=cfg)
+
+
 def start_scheduler(settings: Settings | None = None) -> BackgroundScheduler | None:
     """Start the process-wide scheduler and register every enabled job.
 
@@ -242,6 +273,19 @@ def start_scheduler(settings: Settings | None = None) -> BackgroundScheduler | N
             coalesce=True,
             replace_existing=True,
         )
+    scheduler.add_job(
+        run_queue_snapshot_reconciliation,
+        trigger=IntervalTrigger(
+            seconds=cfg.queue_snapshot_reconcile_seconds, timezone=APP_TIMEZONE
+        ),
+        id=_QUEUE_SNAPSHOT_JOB_ID,
+        name="Queue snapshot reconciliation",
+        # A missed run is coalesced: the sweep recounts from the source, so one catch-up repairs
+        # whatever several missed runs would have.
+        misfire_grace_time=cfg.queue_snapshot_reconcile_seconds,
+        coalesce=True,
+        replace_existing=True,
+    )
     scheduler.start()
     _scheduler = scheduler
     logger.info(

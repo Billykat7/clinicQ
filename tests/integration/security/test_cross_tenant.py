@@ -151,6 +151,13 @@ PENDING: dict[str, str] = {
         "clinic-facing route reads consent: a patient reads their own through their session. A "
         "route that lists a clinic's consent events must add a case here"
     ),
+    "sitequeuesnapshot": (
+        "a queue snapshot carries its clinic for the index discovery reads by (Issue 36), but no "
+        "clinic-facing route reads it: patients see the figures through the public discovery "
+        "service, which only reaches published clinics (published_select), and staff will see "
+        "live counts from the tickets themselves. A route that lists a clinic's snapshots must add "
+        "a case here"
+    ),
     "sites.reports": "clinic reports land with M12",
     "queues.call": "call-next lands with Issue 42",
     "queues.tickets": "tickets land with Issue 39",

@@ -57,6 +57,7 @@ from src.database.models.site_hours import (
     SiteHolidayRule,
     SiteOpeningHours,
 )
+from src.database.models.site_queue_snapshot import SiteQueueSnapshot
 from src.database.models.staff_invitation import StaffInvitation
 from src.database.models.staff_queue_assignment import StaffQueueAssignment
 from src.database.models.stripe_event import StripeEvent
@@ -110,6 +111,7 @@ __all__ = [
     "SiteClosure",
     "SiteHolidayRule",
     "SiteOpeningHours",
+    "SiteQueueSnapshot",
     "SoftDeleteMixin",
     "StaffInvitation",
     "StaffQueueAssignment",
