@@ -27,6 +27,7 @@ from src.api.v1.routes.rbac_manifest import (
 )
 from src.commons.enums import GrantScope, ScopeShape
 from src.core.rbac_manifest import ModuleManifest, RoleGrant, iter_resources
+from src.modules.audit.rbac_manifest import MANIFEST as AUDIT_MANIFEST
 from src.modules.communications.rbac_manifest import MANIFEST as COMMUNICATIONS_MANIFEST
 from src.modules.documents.rbac_manifest import MANIFEST as DOCUMENTS_MANIFEST
 from src.modules.patients.rbac_manifest import MANIFEST as PATIENTS_MANIFEST
@@ -43,6 +44,7 @@ ALL_MANIFESTS: tuple[ModuleManifest, ...] = (
     RBAC_MANIFEST,
     COMMUNICATIONS_MANIFEST,
     DOCUMENTS_MANIFEST,
+    AUDIT_MANIFEST,
     WIDGETS_MANIFEST,
     PATIENTS_MANIFEST,
     SITES_MANIFEST,

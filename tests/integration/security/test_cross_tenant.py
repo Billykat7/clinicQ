@@ -56,10 +56,20 @@ _NOWHERE = "0199b0c0-0000-7000-8000-0000000000ff"
 #: The site-scoped surfaces whose routes exist, and how to probe each one.
 #:
 #: ``paths`` takes the site id and the id of a row at that site, so the same case can be pointed at
-#: Clinic A (the caller's own) and at Clinic B (the one they must not see).
+#: Clinic A (the caller's own) and at Clinic B (the one they must not see). ``reader`` is somebody
+#: at Clinic A who may read it there, so "another clinic answers 404" is never confused with "this
+#: caller may not read this at all".
 CASES: dict[str, dict[str, object]] = {
+    "auditevent": {
+        # The clinic's own audit trail (Issue 20). The model carries ``site_id``, so the discovery
+        # below finds it by its class name as well as by its resource key.
+        "resource": "sites.audit",
+        "reader": "manager.a@clinicq.example",
+        "paths": lambda site, _row: (f"/api/v1/sites/{site}/audit/events",),
+    },
     "staff": {
         "resource": "sites.staff",
+        "reader": "a@clinicq.example",
         "paths": lambda site, row: (
             f"/api/v1/sites/{site}/staff",
             f"/api/v1/sites/{site}/staff/{row}",
@@ -121,6 +131,8 @@ def clinics(monkeypatch: pytest.MonkeyPatch) -> Iterator[SimpleNamespace]:
             ("a", UserRole.RECEPTIONIST, _SITE_A),
             ("b", UserRole.RECEPTIONIST, _SITE_B),
             ("colleague_b", UserRole.NURSE_DOCTOR, _SITE_B),
+            ("manager.a", UserRole.CLINIC_MANAGER, _SITE_A),
+            ("manager.b", UserRole.CLINIC_MANAGER, _SITE_B),
         ):
             user = StaffFactory.create(
                 db, email=f"{name}@clinicq.example", role=role, site_id=site
@@ -156,6 +168,11 @@ def clinics(monkeypatch: pytest.MonkeyPatch) -> Iterator[SimpleNamespace]:
 def _paths(case: str, site: str, row: str) -> tuple[str, ...]:
     """The probe paths for one case, pointed at ``site``."""
     return CASES[case]["paths"](site, row)  # type: ignore[operator]
+
+
+def _reader(clinics: SimpleNamespace, case: str) -> TestClient:
+    """A client for somebody at Clinic A who may read this case there."""
+    return clinics.client(str(CASES[case]["reader"]))
 
 
 # --- the surface is covered ------------------------------------------------------------
@@ -211,23 +228,24 @@ def test_another_clinics_ids_are_not_found_and_look_exactly_like_ids_that_never_
     clinics: SimpleNamespace, case: str
 ) -> None:
     """The heart of Issue 19: 404, never 403, and the same body for "not yours" and "no such id"."""
-    receptionist_a = clinics.client("a@clinicq.example")
+    reader = _reader(clinics, case)
     colleague_b = clinics.people["colleague_b"].id
 
     for path in _paths(case, _SITE_B, colleague_b):
-        response = receptionist_a.get(path)
+        response = reader.get(path)
         assert response.status_code == status.HTTP_404_NOT_FOUND, path
-        nowhere = receptionist_a.get(path.replace(_SITE_B, _NOWHERE))
+        nowhere = reader.get(path.replace(_SITE_B, _NOWHERE))
         assert nowhere.status_code == status.HTTP_404_NOT_FOUND
         # Identical answers, down to the body, apart from the per-request id.
         assert _without_request_id(response.json()) == _without_request_id(
             nowhere.json()
         )
 
-    # And their own clinic works, so the suite is not simply refusing everything.
+    # And their own clinic works, so the suite is not simply refusing everything. The audit case
+    # needs a reader: the receptionist reads staff, the clinic manager the trail.
     own = clinics.people["a"].id
     for path in _paths(case, _SITE_A, own):
-        assert receptionist_a.get(path).status_code == status.HTTP_200_OK, path
+        assert reader.get(path).status_code == status.HTTP_200_OK, path
 
 
 def _without_request_id(body: dict) -> dict:
@@ -235,17 +253,20 @@ def _without_request_id(body: dict) -> dict:
     return {key: value for key, value in body.items() if key != "request_id"}
 
 
-@pytest.mark.parametrize("case", sorted(CASES))
+@pytest.mark.parametrize(
+    "case",
+    sorted(key for key in CASES if len(CASES[key]["paths"]("x", "y")) > 1),  # type: ignore[operator]
+)
 def test_a_sequential_walk_of_another_clinics_ids_leaks_nothing(
     clinics: SimpleNamespace, case: str
 ) -> None:
     """Every id a probe could try answers identically: the real one, and made-up neighbours."""
-    receptionist_a = clinics.client("a@clinicq.example")
+    reader = _reader(clinics, case)
     real = clinics.people["colleague_b"].id
     neighbours = [real[:-1] + digit for digit in "0123456789"]
     bodies = set()
     for candidate in [real, *neighbours]:
-        response = receptionist_a.get(_paths(case, _SITE_B, candidate)[1])
+        response = reader.get(_paths(case, _SITE_B, candidate)[1])
         assert response.status_code == status.HTTP_404_NOT_FOUND
         bodies.add(str(_without_request_id(response.json())))
     assert len(bodies) == 1, "a probe could tell the real id from a made-up one"
@@ -256,7 +277,7 @@ def test_the_caller_sees_only_their_own_clinics_staff(clinics: SimpleNamespace) 
     listing = clinics.client("a@clinicq.example").get(f"/api/v1/sites/{_SITE_A}/staff")
     assert listing.status_code == status.HTTP_200_OK
     emails = {member["email"] for member in listing.json()["items"]}
-    assert emails == {"a@clinicq.example"}
+    assert emails == {"a@clinicq.example", "manager.a@clinicq.example"}
 
 
 # --- the platform-admin escape hatch ---------------------------------------------------
@@ -281,6 +302,7 @@ def test_a_platform_admin_reads_another_clinic_only_on_purpose_and_it_is_audited
     assert {m["email"] for m in allowed.json()["items"]} == {
         "b@clinicq.example",
         "colleague_b@clinicq.example",
+        "manager.b@clinicq.example",
     }
     with clinics.session() as db:
         rows = db.execute(select(AuditEvent)).scalars().all()
@@ -360,6 +382,7 @@ def test_a_role_held_at_one_clinic_is_not_held_at_another(
     at_a = client.get(f"/api/v1/sites/{_SITE_A}/staff").json()["items"]
     assert {member["email"] for member in at_a} == {
         "a@clinicq.example",
+        "manager.a@clinicq.example",
         "manager@clinicq.example",
     }
     roles_at_a = next(

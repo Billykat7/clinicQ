@@ -106,25 +106,26 @@ class StaffFactory(Factory[User]):
     ) -> User:
         """Persist a staff member and the role assignment RBAC resolves them by.
 
-        The unscoped assignment mirrors ``User.role``, as the kernel's baseline backfills for every
-        user. With ``site_id``, a second assignment holds the role at that site
-        (:attr:`~src.commons.enums.AssignmentScopeType.SITE`, Issue 15): a staff member's site is a
-        scoped role assignment, never a column. Flushed, not committed: the test owns the
-        transaction.
+        With ``site_id`` the role is held **at that site** and nowhere else
+        (:attr:`~src.commons.enums.AssignmentScopeType.SITE`, Issues 15 and 19): a staff member's
+        clinic is a scoped role assignment, never a column, and an unscoped assignment beside it
+        would make them a manager at every clinic — which is precisely what the site guard exists
+        to prevent. Without ``site_id`` the assignment is unscoped, the kernel's shape for an
+        account that belongs to no clinic (the platform admin, the kernel's own roles).
+
+        Flushed, not committed: the test owns the transaction.
         """
         user = cls.build(**overrides)
         session.add(user)
         session.flush()
-        session.add(UserRoleAssignment(user_id=user.id, role=user.role))
-        if site_id is not None:
-            session.add(
-                UserRoleAssignment(
-                    user_id=user.id,
-                    role=user.role,
-                    scope_type=AssignmentScopeType.SITE.value,
-                    scope_id=site_id,
-                )
+        session.add(
+            UserRoleAssignment(
+                user_id=user.id,
+                role=user.role,
+                scope_type=None if site_id is None else AssignmentScopeType.SITE.value,
+                scope_id=site_id,
             )
+        )
         session.flush()
         return user
 

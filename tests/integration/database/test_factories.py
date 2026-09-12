@@ -47,7 +47,7 @@ def test_a_staff_member_is_persisted_with_no_arguments(
 def test_overrides_and_a_site_scope_apply(
     session_factory: sessionmaker[Session],
 ) -> None:
-    """Any field can be overridden; ``site_id`` adds the scoped assignment beside the unscoped one."""
+    """Any field can be overridden; ``site_id`` holds the role at that clinic and nowhere else."""
     with session_factory() as db:
         manager = StaffFactory.create(
             db,
@@ -65,10 +65,9 @@ def test_overrides_and_a_site_scope_apply(
                 ).where(UserRoleAssignment.user_id == manager.id)
             ).all()
         )
-        assert scopes == {
-            (None, None),
-            (AssignmentScopeType.SITE.value, "hillbrow-chc"),
-        }
+        # One assignment, scoped to the clinic: an unscoped one beside it would make them a
+        # manager at every clinic, which is what the site guard exists to prevent (Issue 19).
+        assert scopes == {(AssignmentScopeType.SITE.value, "hillbrow-chc")}
 
 
 def test_unique_fields_stay_unique_across_many_calls(

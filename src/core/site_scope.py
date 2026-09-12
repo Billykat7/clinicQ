@@ -209,6 +209,16 @@ def scoped_select(model: type[Any], access: SiteAccess) -> Select[Any]:
     return select(model).where(model.site_id.in_(access.site_ids))
 
 
+def select_in_scope(model: type[Any], access: SiteAccess | None) -> Select[Any]:
+    """``scoped_select`` for a clinic, or the whole platform when ``access`` is ``None``.
+
+    The one way a query reads across clinics, so "this read is platform-wide" is a visible argument
+    rather than a missing filter. Only a route whose gate demands a ``business``-tier grant may pass
+    ``None``; the audit read API is the first (Issue 20).
+    """
+    return select(model) if access is None else scoped_select(model, access)
+
+
 def get_in_site_or_404(
     db: Session, model: type[Any], row_id: str, access: SiteAccess
 ) -> Any:

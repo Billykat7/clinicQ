@@ -11,7 +11,8 @@ see their colleagues without seeing the reports.
     ├── settings        operational settings (Issue 27)
     ├── display         the waiting-room board's display mode (Issue 27)
     ├── staff           who works there: invitations, deactivation (Issues 22, 28)
-    └── reports         wait times, no-shows, channel mix (M12)
+    ├── reports         wait times, no-shows, channel mix (M12)
+    └── audit           the clinic's own audit trail (Issue 20)
 
 Grants at the ``assigned`` tier reach the sites a member holds a role at; the site guard (Issue 19)
 turns that into rows. ``platform_admin`` reaches every clinic at ``business``.
@@ -45,6 +46,11 @@ MANIFEST = ModuleManifest(
         ),
         ResourceSpec(
             key="reports", name="Sites / Reports", description="The clinic's reports."
+        ),
+        ResourceSpec(
+            key="audit",
+            name="Sites / Audit trail",
+            description="What happened at this clinic, and who did it (Issue 20).",
         ),
     ),
     grants=(

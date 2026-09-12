@@ -25,6 +25,9 @@ class AuditEventOut(BaseModel):
     entity_type: AuditEntityType
     entity_id: str
     diff: dict[str, Any] | None = None
+    site_id: str | None = None
+    request_id: str | None = None
+    actor_role: str | None = None
     ip_address: str | None = None
     context: str | None = None
     created_at: datetime

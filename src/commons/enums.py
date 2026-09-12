@@ -1091,8 +1091,27 @@ class AuditEntityType(StrEnum):
 # more) so the trail stays useful without becoming a second plaintext copy of the secret.
 AUDIT_REDACTED_FIELDS: frozenset[str] = frozenset(
     {
+        # Credentials: the trail records *that* one changed, never its value.
         "password",
         "hashed_password",
         "totp_secret",
+        "token_hash",
+        # Personal data (Issue 20): the audit exists to show *what changed*, not to become a
+        # second copy of a patient's record. The field name and the fact of the change are kept;
+        # the values are not. Anything a data subject could be identified or contacted by belongs
+        # here — add to this set when you add such a column.
+        "phone_e164",
+        "whatsapp_id",
+        "display_name",
+        "email",
+        "first_name",
+        "last_name",
+        "date_of_birth",
+        "id_number",
+        "avatar_url",
+        "reason_text",
+        "note_text",
+        "sign_in_ip",
+        "user_agent",
     }
 )

@@ -43,6 +43,7 @@ shows what ships.
 
 | Resource | `patient` | `receptionist` | `nurse_doctor` | `clinic_manager` | `platform_admin` | `admin` | `user` |
 |---|---|---|---|---|---|---|---|
+| `audit` | — | — | — | — | read · business | read · business | — |
 | `communications` | — | — | — | — | — | delete · business | — |
 | `communications.alerts` | — | — | — | — | — | delete · business | — |
 | `communications.alerts.deleted` | — | — | — | — | — | delete · business | — |
@@ -73,6 +74,7 @@ shows what ships.
 | `rbac` | — | — | — | — | — | delete · business | — |
 | `reports` | — | — | — | — | — | — | — |
 | `sites` | — | — | — | update · assigned | delete · business | — | — |
+| `sites.audit` | — | — | — | update · assigned | delete · business | — | — |
 | `sites.display` | — | read · assigned | — | update · assigned | delete · business | — | — |
 | `sites.profile` | — | read · assigned | read · assigned | update · assigned | delete · business | — | — |
 | `sites.reports` | — | — | — | update · assigned | delete · business | — | — |

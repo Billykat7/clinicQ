@@ -12,7 +12,8 @@ Three small pieces, deliberately decoupled from the ORM so any service can adopt
 * :func:`build_diff` — reduce two snapshots to only the fields that changed, redacting the
   values of sensitive/encrypted fields so the diff records *that* a secret changed without
   becoming a second plaintext copy of it;
-* :func:`record_audit_event` — construct the ``AuditEvent`` and add it to the session (it is
+* :func:`record_audit_event` — construct the ``AuditEvent`` (filling in the request's id and site
+  from the request context, Issue 20) and add it to the session (it is
   flushed/committed with the surrounding unit of work, so the audit row and the change it
   describes commit together — an audit write cannot be lost while the change lands, or vice
   versa).
@@ -32,6 +33,7 @@ from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 from src.commons.enums import AUDIT_REDACTED_FIELDS, AuditAction, AuditEntityType
+from src.core.request_logging import current_request_context
 from src.database.models.audit_event import AuditEvent
 
 # The placeholder a redacted value is replaced with in a diff. A fixed sentinel (never the real
@@ -157,6 +159,8 @@ def record_audit_event(
     diff: dict[str, dict[str, Any]] | None = None,
     ip_address: str | None = None,
     context: str | None = None,
+    site_id: str | None = None,
+    actor_role: str | None = None,
 ) -> AuditEvent:
     """Build an :class:`AuditEvent` for a change and add it to the session.
 
@@ -180,10 +184,16 @@ def record_audit_event(
         diff: A precomputed diff; takes precedence over ``before``/``after`` when given.
         ip_address: Caller IP (IPv4/IPv6), when resolvable.
         context: Optional free-text note (e.g. the search filter behind a read event).
+        site_id: The clinic the action happened at. Left unset it is taken from the request's site
+            context, which the site guard binds (Issue 19), so a route inside a clinic records the
+            clinic without every call site remembering to pass it.
+        actor_role: What the actor was acting as. Recorded at the time, so a role withdrawn later
+            does not change what the trail says.
 
     Returns:
         The added (unflushed) :class:`AuditEvent`.
     """
+    context_now = current_request_context()
     if diff is None and (before is not None or after is not None):
         diff = build_diff(before, after)
     event = AuditEvent(
@@ -193,6 +203,11 @@ def record_audit_event(
         entity_type=entity_type.value,
         entity_id=entity_id,
         diff=diff or None,
+        # The request the row belongs to: its id joins the row to that request's log lines, and its
+        # site is the clinic the guard resolved. A background job has neither.
+        site_id=site_id or (context_now.site_id if context_now else None),
+        request_id=context_now.request_id if context_now else None,
+        actor_role=actor_role,
         ip_address=ip_address,
         context=context,
     )
