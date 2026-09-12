@@ -124,15 +124,67 @@ def test_hash_refresh_token_is_sha256_hex() -> None:
 
 
 def test_create_access_token_carries_expected_claims(auth_settings: Settings) -> None:
-    """The access token decodes to ``sub``, ``email``, ``iat`` and ``exp``."""
-    token = security.create_access_token("user-123", email="alice@example.com")
-    payload = security.decode_token(token)
+    """The access token decodes to ``sub``, ``type``, ``role``, ``sites``, ``iat`` and ``exp``."""
+    token = security.create_access_token(
+        "user-123",
+        email="alice@example.com",
+        role="receptionist",
+        sites=["site-b", "site-a", "site-b"],
+    )
+    payload = security.decode_access_token(token)
     assert payload is not None
     assert payload["sub"] == "user-123"
+    assert payload["type"] == TokenType.ACCESS.value
     assert payload["email"] == "alice@example.com"
-    assert "iat" in payload
-    assert "exp" in payload
-    assert payload["exp"] > payload["iat"]
+    assert payload["role"] == "receptionist"
+    assert payload["sites"] == ["site-a", "site-b"]  # sorted, de-duplicated
+    assert payload["exp"] - payload["iat"] == 15 * 60
+
+
+def test_the_access_decoder_accepts_only_access_tokens(auth_settings: Settings) -> None:
+    """Every token shares the secret, so the type is what keeps a link from being a session."""
+    links = {
+        "activation": security.create_activation_token("user-1", "a@x.com"),
+        "reset": security.create_password_reset_token("user-1", "a@x.com"),
+        "email change": security.create_email_change_token("user-1", "b@x.com"),
+        "unsubscribe": security.create_unsubscribe_token("a@x.com", "marketing"),
+        "untyped": jwt.encode(
+            {"sub": "a@x.com", "exp": int(datetime.now(UTC).timestamp()) + 600},
+            _TEST_JWT_SECRET,
+            algorithm="HS256",
+        ),
+    }
+    for kind, token in links.items():
+        assert security.decode_token(token) is not None, kind  # validly signed...
+        assert security.decode_access_token(token) is None, (
+            kind
+        )  # ...and still not a session
+
+
+def test_production_hashes_are_bcrypt_cost_12(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A hash made under production settings is ``$2b$12$``, read back from the hash itself.
+
+    The conftest lowers the cost for the whole test process; this puts the real lookup back and
+    points it at production settings, so the assertion is about the hash, not the config value.
+    """
+    production = Settings(
+        _env_file=None,
+        environment=AppEnvironment.PRODUCTION,
+        jwt_secret=_TEST_JWT_SECRET,
+    )
+    monkeypatch.setattr(security, "get_settings", lambda: production)
+    monkeypatch.setattr(
+        security, "_bcrypt_rounds", lambda: security.get_settings().bcrypt_rounds
+    )
+    hashed = security.hash_password("Sup3r-Secret!")
+    assert hashed.startswith("$2b$12$")
+    assert security.verify_password("Sup3r-Secret!", hashed)
+
+
+def test_a_password_bcrypt_cannot_hash_whole_is_refused_by_name() -> None:
+    """Over 72 bytes, the hash call says so itself instead of surfacing bcrypt's error."""
+    with pytest.raises(ValueError, match="at most 72 bytes"):
+        security.hash_password("é" * 37)  # 37 characters, 74 bytes
 
 
 def test_access_token_is_signed_with_hs256(auth_settings: Settings) -> None:

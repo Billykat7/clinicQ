@@ -59,7 +59,7 @@ from src.core.refresh_token_policy import (
     get_valid_refresh_token_row,
 )
 from src.core.security import (
-    create_access_token,
+    CurrentStaff,
     create_activation_token,
     create_email_change_token,
     create_password_reset_token,
@@ -69,6 +69,8 @@ from src.core.security import (
     get_current_user,
     hash_password,
     hash_refresh_token,
+    issue_access_token,
+    resolve_active_user,
     verify_password,
 )
 from src.core.verification import enforce_verification_resend_cooldown
@@ -344,9 +346,7 @@ def _login_response(
     sign_ip = resolve_client_ip(request)
     user.last_login = datetime.now(UTC)
     db.commit()
-    access_token = create_access_token(
-        sub=user.email, email=user.email, uid=str(user.id)
-    )
+    access_token = issue_access_token(db, user)
     refresh_token = _create_refresh_token_for_user(
         db,
         str(user.id),
@@ -366,20 +366,12 @@ def _login_response(
 
 
 def _get_current_user_by_token(db: Session, current_user: dict) -> User:
-    """Resolve the current user from JWT claims; raise 401 if not found."""
-    email = (current_user.get("email") or current_user.get("sub") or "").strip()
-    if not email:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-        )
-    user = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
-    return user
+    """Resolve the current account from JWT claims; 401 if unknown, deactivated or deleted.
+
+    :func:`~src.core.security.resolve_active_user`, the identity path every authenticated route
+    shares (Issue 15).
+    """
+    return resolve_active_user(db, current_user)
 
 
 def _avatar_url_for(user: User) -> str | None:
@@ -565,7 +557,7 @@ async def request_otp(
         )
 
     user = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
-    if user is None or user.is_deleted or not user.is_verified:
+    if user is None or user.is_deleted or not user.is_active or not user.is_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="If this email is registered and activated, you will receive a code.",
@@ -612,7 +604,7 @@ async def verify_otp_endpoint(
         )
 
     user = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
-    if user is None or user.is_deleted:
+    if user is None or user.is_deleted or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User not found. Complete signup and activation first.",
@@ -666,6 +658,7 @@ async def password_login_endpoint(
     if (
         user is None
         or user.is_deleted
+        or not user.is_active
         or not user.is_verified
         or user.password is None
         or not verify_password(body.password, user.password)
@@ -807,9 +800,7 @@ async def refresh_access_token(
     new_raw = _rotate_refresh_token_for_session(
         db, row, settings, user_agent=ua, sign_in_ip=sign_ip
     )
-    access_token = create_access_token(
-        sub=user.email, email=user.email, uid=str(user.id)
-    )
+    access_token = issue_access_token(db, user)
     data = TokenResponse(
         access_token="",
         token_type=TokenType.BEARER.value,
@@ -840,13 +831,13 @@ async def logout(request: Request, db: DbSession, settings: SettingsDep) -> Resp
 
 
 @router.get("/me", response_model=MeResponse)
-async def get_me(db: DbSession, current_user: CurrentUser) -> MeResponse:
+def get_me(db: DbSession, user: CurrentStaff) -> MeResponse:
     """Return the current user's profile and effective RBAC permissions.
 
-    Requires a valid access token. ``permissions`` maps each resource the caller's role
-    can reach to its effective maximum verb (after parent-resource cascade).
+    Requires a valid access token (Bearer or cookie) for an active account
+    (:func:`~src.core.security.get_current_staff`). ``permissions`` maps each resource the caller's
+    role can reach to its effective maximum verb (after parent-resource cascade).
     """
-    user = _get_current_user_by_token(db, current_user)
     # Union of the user's active, unscoped role assignments (Issue #136); falls back to the
     # ``User.role`` mirror for a user with no assignment rows.
     permissions = resource_permissions_for_user(db, user)

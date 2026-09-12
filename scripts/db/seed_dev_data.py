@@ -58,14 +58,17 @@ class DemoStaff:
     last_name: str
 
 
-#: One account per staff role. The ``.test`` domain is reserved (RFC 2606): mail never leaves.
+#: One account per staff role. ``.example`` is reserved by RFC 2606 and never delegated, so mail
+#: to it cannot be delivered. Not ``.test``: that one is reserved too, but the email validator the
+#: sign-in form uses refuses it as a special-use name, so a ``.test`` account could never sign in
+#: (found by Issue 15).
 DEMO_STAFF: Final[tuple[DemoStaff, ...]] = (
     DemoStaff(
-        UserRole.PLATFORM_ADMIN, "platform-admin@clinicq.test", "Platform", "Admin"
+        UserRole.PLATFORM_ADMIN, "platform-admin@clinicq.example", "Platform", "Admin"
     ),
-    DemoStaff(UserRole.CLINIC_MANAGER, "manager@clinicq.test", "Clinic", "Manager"),
-    DemoStaff(UserRole.RECEPTIONIST, "reception@clinicq.test", "Front", "Desk"),
-    DemoStaff(UserRole.NURSE_DOCTOR, "nurse@clinicq.test", "Sister", "Nurse"),
+    DemoStaff(UserRole.CLINIC_MANAGER, "manager@clinicq.example", "Clinic", "Manager"),
+    DemoStaff(UserRole.RECEPTIONIST, "reception@clinicq.example", "Front", "Desk"),
+    DemoStaff(UserRole.NURSE_DOCTOR, "nurse@clinicq.example", "Sister", "Nurse"),
 )
 
 

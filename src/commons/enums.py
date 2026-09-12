@@ -348,8 +348,16 @@ SITE_DEFAULT_DISPLAY_MODE: DisplayMode = DisplayMode.NUMBER_ONLY
 
 
 class TokenType(StrEnum):
-    """Typed JWT ``type`` claim for non-access tokens plus the bearer scheme label."""
+    """Typed JWT ``type`` claim, plus the bearer scheme label.
 
+    Every token this app signs carries a ``type``, and every decoder accepts exactly one. They all
+    share ``JWT_SECRET``, so a decoder that did not check the type would take any of them: an
+    unsubscribe link (long-lived, and sitting in a mailbox) presented as ``Authorization: Bearer``
+    was a signed-in session until Issue 15 made the access token typed as well.
+    """
+
+    # The short-lived session token every authenticated request carries (Issue 15).
+    ACCESS = "access"
     ACTIVATION = "act"
     PASSWORD_RESET = "pwd_reset"
     BEARER = "bearer"
@@ -551,6 +559,23 @@ IMAGE_REENCODE_FORMAT: dict[ImageContentType, str] = {
     ImageContentType.PNG: "PNG",
     ImageContentType.WEBP: "WEBP",
 }
+
+
+class AssignmentScopeType(StrEnum):
+    """What a scoped role assignment (``user_roles.scope_type``) is scoped to.
+
+    ``NULL`` in the column is an unscoped assignment: the role applies everywhere. A value names the
+    kind of thing ``scope_id`` points at.
+
+    - ``INSTANCE``: the kernel's generic "these specific records" scope, written by the RBAC
+      console.
+    - ``SITE``: the clinic a staff member works at (Issue 15). A staff member's site is never a
+      column on ``user``: it is a role held at a site, so one person can hold different roles at
+      two clinics, and every site-scoped query resolves "which sites" from these rows (Issue 19).
+    """
+
+    INSTANCE = "instance"
+    SITE = "site"
 
 
 class ScopeShape(StrEnum):

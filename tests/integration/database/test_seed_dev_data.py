@@ -118,13 +118,13 @@ def test_a_second_run_creates_no_duplicates(migrated_database: URL) -> None:
         with engine.connect() as conn:
             users = conn.execute(
                 text(
-                    "SELECT count(*) FROM clinicq.\"user\" WHERE email LIKE '%@clinicq.test'"
+                    "SELECT count(*) FROM clinicq.\"user\" WHERE email LIKE '%@clinicq.example'"
                 )
             ).scalar_one()
             assignments = conn.execute(
                 text(
                     'SELECT count(*) FROM clinicq.user_roles r JOIN clinicq."user" u '
-                    "ON u.id = r.user_id WHERE u.email LIKE '%@clinicq.test'"
+                    "ON u.id = r.user_id WHERE u.email LIKE '%@clinicq.example'"
                 )
             ).scalar_one()
     finally:
@@ -145,7 +145,7 @@ def test_a_rerun_repairs_a_changed_account_instead_of_adding_one(
             conn.execute(
                 text(
                     "UPDATE clinicq.\"user\" SET role = 'user', is_active = false "
-                    "WHERE email = 'manager@clinicq.test'"
+                    "WHERE email = 'manager@clinicq.example'"
                 )
             )
         rerun = _run_seed(DATABASE_URL=url)
@@ -153,8 +153,8 @@ def test_a_rerun_repairs_a_changed_account_instead_of_adding_one(
             role, active, count = conn.execute(
                 text(
                     'SELECT role, is_active, (SELECT count(*) FROM clinicq."user" '
-                    "WHERE email LIKE '%@clinicq.test') FROM clinicq.\"user\" "
-                    "WHERE email = 'manager@clinicq.test'"
+                    "WHERE email LIKE '%@clinicq.example') FROM clinicq.\"user\" "
+                    "WHERE email = 'manager@clinicq.example'"
                 )
             ).one()
     finally:

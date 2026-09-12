@@ -34,9 +34,8 @@ from scripts.db.demo_dataset import (
     TicketStub,
     queues_for,
 )
-from src.commons.enums import TicketSource, TicketStatus, UserRole
+from src.commons.enums import AssignmentScopeType, TicketSource, TicketStatus, UserRole
 from src.commons.time import now_sast
-from src.core.scope import ASSIGNMENT_SCOPE_TYPE
 from src.core.security import hash_password
 from src.database.models import User, UserRoleAssignment
 
@@ -83,9 +82,9 @@ class StaffFactory(Factory[User]):
 
     @classmethod
     def defaults(cls, n: int) -> dict[str, Any]:
-        """``staff<n>@clinicq.test``: the reserved ``.test`` domain can never deliver mail."""
+        """``staff<n>@clinicq.example``: reserved (RFC 2606), never delivered, and a valid sign-in."""
         return {
-            "email": f"staff{n}@clinicq.test",
+            "email": f"staff{n}@clinicq.example",
             "first_name": "Staff",
             "last_name": f"Member {n}",
             "password": hash_password(FACTORY_STAFF_PASSWORD),
@@ -108,9 +107,10 @@ class StaffFactory(Factory[User]):
         """Persist a staff member and the role assignment RBAC resolves them by.
 
         The unscoped assignment mirrors ``User.role``, as the kernel's baseline backfills for every
-        user. With ``site_id``, a second assignment scopes the role to that site, using the kernel's
-        instance scope until Issue 19 settles how a site scope is written. Flushed, not committed:
-        the test owns the transaction.
+        user. With ``site_id``, a second assignment holds the role at that site
+        (:attr:`~src.commons.enums.AssignmentScopeType.SITE`, Issue 15): a staff member's site is a
+        scoped role assignment, never a column. Flushed, not committed: the test owns the
+        transaction.
         """
         user = cls.build(**overrides)
         session.add(user)
@@ -121,7 +121,7 @@ class StaffFactory(Factory[User]):
                 UserRoleAssignment(
                     user_id=user.id,
                     role=user.role,
-                    scope_type=ASSIGNMENT_SCOPE_TYPE,
+                    scope_type=AssignmentScopeType.SITE.value,
                     scope_id=site_id,
                 )
             )

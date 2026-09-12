@@ -96,7 +96,11 @@ from src.core.rbac_simulator import (
 )
 from src.core.s3_logging import APP_TIMEZONE
 from src.core.scope import ASSIGNMENT_SCOPE_TYPE, scope_tiers_for_roles
-from src.core.security import create_activation_token, get_current_user
+from src.core.security import (
+    create_activation_token,
+    find_active_user,
+    get_current_user,
+)
 from src.core.verification import enforce_verification_resend_cooldown
 from src.database.models import (
     Action,
@@ -1882,11 +1886,8 @@ async def remove_role_inheritance(
 
 def _acting_user_id(db: Session, current_user: dict[str, Any]) -> str | None:
     """Resolve the acting principal's user id from the token claims (for ``granted_by``)."""
-    email = (current_user.get("email") or current_user.get("sub") or "").strip().lower()
-    if not email or email == "anonymous":
-        return None
-    row = db.execute(select(User.id).where(User.email == email)).scalar_one_or_none()
-    return str(row) if row is not None else None
+    user = find_active_user(db, current_user)
+    return str(user.id) if user is not None else None
 
 
 def _actor_label(current_user: dict[str, Any]) -> str:

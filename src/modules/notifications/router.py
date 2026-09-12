@@ -17,7 +17,6 @@ import hmac
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.api.rbac_deps import require
@@ -29,7 +28,7 @@ from src.commons.enums import (
 )
 from src.commons.exceptions import InAppNotificationNotFoundError
 from src.core.config import Settings, get_settings
-from src.core.security import get_current_user
+from src.core.security import get_current_user, resolve_active_user
 from src.database.models.user import User
 from src.database.session import get_db
 from src.modules.notifications import center, preferences, service
@@ -72,18 +71,8 @@ CommunicationsNotificationsReadDep = Annotated[
 
 
 def _resolve_user(db: Session, claims: dict[str, Any]) -> User:
-    """Resolve the signed-in user row from JWT claims; 401 when it cannot be resolved."""
-    email = (claims.get("email") or claims.get("sub") or "").strip().lower()
-    user = (
-        db.execute(select(User).where(User.email == email)).scalar_one_or_none()
-        if email
-        else None
-    )
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
-        )
-    return user
+    """Resolve the signed-in user row from JWT claims; 401 when it cannot act (Issue 15)."""
+    return resolve_active_user(db, claims)
 
 
 @router.get("/preferences", response_model=NotificationPreferencesRead)

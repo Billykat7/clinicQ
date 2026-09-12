@@ -8,10 +8,35 @@ flags, the current-user profile, and refresh-token session listings.
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Annotated
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import AfterValidator, BaseModel, EmailStr, Field
 
 from src.commons.enums import TokenType
+from src.core.security import BCRYPT_MAX_PASSWORD_BYTES
+
+
+def _within_bcrypt_limit(value: str) -> str:
+    """Refuse a password bcrypt cannot hash whole (more than 72 UTF-8 bytes).
+
+    Counted in bytes, not characters: ``max_length`` counts characters, and an accented letter or
+    an emoji is two to four bytes, so a 60-character password can still be too long for bcrypt.
+    """
+    if len(value.encode("utf-8")) > BCRYPT_MAX_PASSWORD_BYTES:
+        raise ValueError(
+            f"Password must be at most {BCRYPT_MAX_PASSWORD_BYTES} bytes "
+            "(72 plain letters or digits; fewer with accented letters or emoji)."
+        )
+    return value
+
+
+#: A password being set (reset, change, invitation): 8 characters to 72 bytes. The lower bound is
+#: NIST SP 800-63B's; the upper one is bcrypt's (Issue 15).
+NewPassword = Annotated[
+    str,
+    Field(min_length=8, max_length=BCRYPT_MAX_PASSWORD_BYTES),
+    AfterValidator(_within_bcrypt_limit),
+]
 
 
 class SignupRequestIn(BaseModel):
@@ -78,11 +103,7 @@ class PasswordResetIn(BaseModel):
     """Request body for completing a password reset with a signed token."""
 
     token: str = Field(min_length=20, description="Signed password reset token.")
-    new_password: str = Field(
-        min_length=8,
-        max_length=128,
-        description="New account password.",
-    )
+    new_password: NewPassword = Field(description="New account password.")
 
 
 class PasswordResetOut(BaseModel):
@@ -189,11 +210,7 @@ class PasswordChangeIn(BaseModel):
         max_length=128,
         description="The account's current password (proves the request is the account holder).",
     )
-    new_password: str = Field(
-        min_length=8,
-        max_length=128,
-        description="The new account password.",
-    )
+    new_password: NewPassword = Field(description="The new account password.")
 
 
 class PasswordChangeOut(BaseModel):
