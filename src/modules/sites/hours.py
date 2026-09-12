@@ -26,7 +26,7 @@ schedule from the database.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 
@@ -34,9 +34,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.commons.time import APP_TIMEZONE, business_date, now_sast, stored_sast
-from src.core.site_scope import SiteAccess, scoped_select
+from src.core.site_scope import (
+    SiteAccess,
+    publicly_visible_site_clauses,
+    published_select,
+    scoped_select,
+)
 from src.database.models import (
     PublicHoliday,
+    Site,
     SiteClosure,
     SiteHolidayRule,
     SiteOpeningHours,
@@ -276,6 +282,65 @@ def _weekly(rows: Sequence[SiteOpeningHours]) -> dict[int, tuple[TimeSpan, ...]]
     }
 
 
+def _window(from_day: date | None, horizon_days: int) -> tuple[date, date]:
+    """The ``[start, end)`` dates holidays and holiday rules are loaded for.
+
+    A day earlier than ``from_day``, because a span that crosses midnight is anchored on the day it
+    started.
+    """
+    first = from_day or business_date()
+    return first - timedelta(days=1), first + timedelta(days=horizon_days + 1)
+
+
+def _public_holiday_dates(
+    db: Session, window_start: date, window_end: date
+) -> list[date]:
+    """The country's public holidays in the window. Not site-scoped: the calendar is everyone's."""
+    return list(
+        db.execute(
+            select(PublicHoliday.holiday_date).where(
+                PublicHoliday.holiday_date >= window_start,
+                PublicHoliday.holiday_date < window_end,
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+def _holidays(
+    holiday_dates: Iterable[date], rules: Mapping[date, SiteHolidayRule]
+) -> dict[date, tuple[TimeSpan, ...]]:
+    """``{holiday: spans}`` for one clinic, from the calendar and that clinic's own rules.
+
+    A public holiday with no rule is a day the clinic is shut: present in the mapping, with no
+    spans. That is the safe default, and writing a rule is how a clinic opts out of it.
+    """
+    holidays: dict[date, tuple[TimeSpan, ...]] = {}
+    for day in holiday_dates:
+        rule = rules.get(day)
+        holidays[day] = (
+            (TimeSpan(opens_at=rule.opens_at, closes_at=rule.closes_at),)
+            if rule is not None
+            and rule.opens_at is not None
+            and rule.closes_at is not None
+            else ()
+        )
+    return holidays
+
+
+def _closed_period(row: SiteClosure) -> ClosedPeriod:
+    """One stored closure as the pure logic sees it."""
+    return ClosedPeriod(
+        # ``stored_sast``, never ``astimezone``: SQLite hands these back naive, and Python would
+        # read a naive value as the *server's* zone — correct on a SAST laptop, two hours out in a
+        # UTC container. See src.commons.time.stored_sast.
+        starts_at=stored_sast(row.starts_at),
+        ends_at=None if row.ends_at is None else stored_sast(row.ends_at),
+        reason=row.reason,
+    )
+
+
 def schedule_for(
     db: Session,
     access: SiteAccess,
@@ -298,22 +363,8 @@ def schedule_for(
     Returns:
         The schedule, ready for the pure functions above.
     """
-    first = from_day or business_date()
-    # A day earlier, because a span that crosses midnight is anchored on the day it started.
-    window_start = first - timedelta(days=1)
-    window_end = first + timedelta(days=horizon_days + 1)
-
+    window_start, window_end = _window(from_day, horizon_days)
     weekly_rows = db.execute(scoped_select(SiteOpeningHours, access)).scalars().all()
-    holiday_dates = (
-        db.execute(
-            select(PublicHoliday.holiday_date).where(
-                PublicHoliday.holiday_date >= window_start,
-                PublicHoliday.holiday_date < window_end,
-            )
-        )
-        .scalars()
-        .all()
-    )
     rules = {
         rule.holiday_date: rule
         for rule in db.execute(
@@ -325,28 +376,8 @@ def schedule_for(
         .scalars()
         .all()
     }
-    # A public holiday with no rule is a day the clinic is shut: present in the mapping, with no
-    # spans. That is the safe default, and writing a rule is how a clinic opts out of it.
-    holidays: dict[date, tuple[TimeSpan, ...]] = {}
-    for day in holiday_dates:
-        rule = rules.get(day)
-        holidays[day] = (
-            (TimeSpan(opens_at=rule.opens_at, closes_at=rule.closes_at),)
-            if rule is not None
-            and rule.opens_at is not None
-            and rule.closes_at is not None
-            else ()
-        )
-
     closures = tuple(
-        ClosedPeriod(
-            # ``stored_sast``, never ``astimezone``: SQLite hands these back naive, and Python
-            # would read a naive value as the *server's* zone — correct on a SAST laptop, two
-            # hours out in a UTC container. See src.commons.time.stored_sast.
-            starts_at=stored_sast(row.starts_at),
-            ends_at=None if row.ends_at is None else stored_sast(row.ends_at),
-            reason=row.reason,
-        )
+        _closed_period(row)
         for row in db.execute(
             scoped_select(SiteClosure, access).where(SiteClosure.lifted_at.is_(None))
         )
@@ -354,5 +385,74 @@ def schedule_for(
         .all()
     )
     return OpeningSchedule(
-        weekly=_weekly(weekly_rows), holidays=holidays, closures=closures
+        weekly=_weekly(weekly_rows),
+        holidays=_holidays(_public_holiday_dates(db, window_start, window_end), rules),
+        closures=closures,
     )
+
+
+def published_schedules(
+    db: Session,
+    site_ids: Collection[str],
+    *,
+    from_day: date | None = None,
+    horizon_days: int = DEFAULT_HORIZON_DAYS,
+) -> dict[str, OpeningSchedule]:
+    """Build the schedules of many **publicly visible** clinics at once, for discovery (Issue 31).
+
+    The patient-facing counterpart of :func:`schedule_for`: a patient holds no role at any clinic,
+    so each query is built by :func:`~src.core.site_scope.published_select`, which admits only the
+    rows of clinics a patient may be shown. A draft or suspended clinic in ``site_ids`` simply has
+    no entry in the answer.
+
+    Four queries whatever the number of clinics (weekly hours, holiday rules, closures and the
+    calendar), rather than four per clinic, which is what keeps a page of twenty results inside
+    Issue 31's 200 ms budget.
+
+    Args:
+        db: The session.
+        site_ids: The clinics to load; typically one page of search results.
+        from_day: The first day to load holidays for; ``None`` means today in Johannesburg.
+        horizon_days: How far ahead holidays are loaded.
+
+    Returns:
+        ``{site_id: schedule}`` for every visible clinic in ``site_ids``, including one with no hours
+        set (an empty schedule, which is never open).
+    """
+    if not site_ids:
+        return {}
+    window_start, window_end = _window(from_day, horizon_days)
+    visible = set(
+        db.execute(
+            select(Site.id).where(
+                Site.id.in_(list(site_ids)), *publicly_visible_site_clauses()
+            )
+        ).scalars()
+    )
+    weekly: dict[str, list[SiteOpeningHours]] = {}
+    for row in db.execute(published_select(SiteOpeningHours, visible)).scalars():
+        weekly.setdefault(row.site_id, []).append(row)
+    rules: dict[str, dict[date, SiteHolidayRule]] = {}
+    for rule in db.execute(
+        published_select(SiteHolidayRule, visible).where(
+            SiteHolidayRule.holiday_date >= window_start,
+            SiteHolidayRule.holiday_date < window_end,
+        )
+    ).scalars():
+        rules.setdefault(rule.site_id, {})[rule.holiday_date] = rule
+    closures: dict[str, list[ClosedPeriod]] = {}
+    for row in db.execute(
+        published_select(SiteClosure, visible).where(SiteClosure.lifted_at.is_(None))
+    ).scalars():
+        closures.setdefault(row.site_id, []).append(_closed_period(row))
+    holiday_dates = (
+        _public_holiday_dates(db, window_start, window_end) if visible else []
+    )
+    return {
+        site_id: OpeningSchedule(
+            weekly=_weekly(weekly.get(site_id, ())),
+            holidays=_holidays(holiday_dates, rules.get(site_id, {})),
+            closures=tuple(closures.get(site_id, ())),
+        )
+        for site_id in visible
+    }

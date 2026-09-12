@@ -80,6 +80,7 @@ class BoundedContext(StrEnum):
     STAFF = "staff"
     SITES = "sites"
     QUEUES = "queues"
+    DISCOVERY = "discovery"
 
 
 class LogLevel(StrEnum):
@@ -311,6 +312,27 @@ SITE_DEFAULT_STATUS: SiteStatus = SiteStatus.DRAFT
 #: The only statuses a patient-facing surface may return: discovery, the channel menus and the
 #: clinic detail page all read this rather than naming the member (Issues 29, 31).
 SITE_PUBLICLY_VISIBLE_STATUSES: frozenset[SiteStatus] = frozenset({SiteStatus.VERIFIED})
+
+
+class SectorFilter(StrEnum):
+    """Which clinics a patient asked to see: the discovery toggle (Issues 31, 32).
+
+    Separate from :class:`SiteSector` on purpose. A clinic *is* public or private; a search can also
+    ask for **all**, and a stored ``sector`` column must never be able to hold that third value.
+
+    - ``PUBLIC``: public facilities only.
+    - ``PRIVATE``: private practices only.
+    - ``ALL``: both, which is the default a patient lands on.
+    """
+
+    PUBLIC = "public"
+    PRIVATE = "private"
+    ALL = "all"
+
+    @property
+    def sector(self) -> SiteSector | None:
+        """The one sector this filter narrows to, or ``None`` for :attr:`ALL`."""
+        return None if self is SectorFilter.ALL else SiteSector(self.value)
 
 
 class SaProvince(StrEnum):

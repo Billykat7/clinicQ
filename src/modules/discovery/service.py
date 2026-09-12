@@ -1,0 +1,303 @@
+"""The nearby-clinics search every channel calls (Issue 31).
+
+**One implementation, four doors.** The web list (Issue 32), the map (Issue 33), the USSD menu
+(Issue 73) and the WhatsApp bot (Issue 75) all answer "which clinics are near me?" by calling
+:func:`find_nearby_sites`. It returns frozen dataclasses (plain data, never HTML and never a
+Pydantic response model), so a channel adapter renders the answer its own way and never has a
+reason to write a second search. A second search in an adapter is the failure this module exists to
+prevent: the day the web page and the USSD menu disagree about which clinics are open is the day a
+patient stops trusting both.
+
+What a search does, in order:
+
+1. **Caps the radius on the server** (:func:`clamp_radius`). A caller may ask for 5,000 km; the query
+   runs with :data:`MAX_RADIUS_M`, and the answer says so, so a scraper cannot pull the whole
+   country in one request and a legitimate client can tell it was capped.
+2. **Narrows to clinics a patient may see**, through the one rule in
+   :func:`~src.core.site_scope.publicly_visible_site_clauses`: live, active and ``verified``.
+3. **Filters by radius with ``ST_DWithin`` on the geography column**, which the GiST index
+   ``ix_clinicq_site_location_gist`` serves, and orders by ``ST_Distance``. :func:`nearby_statement`
+   builds the statement, so a test can put the exact query the service runs under ``EXPLAIN``.
+4. **Joins what a patient decides on**: whether the clinic is open now and when it next opens
+   (Issue 24's pure functions over :func:`~src.modules.sites.hours.published_schedules`), a rough
+   travel time (:mod:`.travel`), and the live queue lengths
+   (:func:`~src.modules.queues.live.published_live_queues`).
+
+A page of twenty results costs a fixed number of queries whatever the directory's size: one for the
+clinics, four for their schedules and two for their queues. That, and the index, is what keeps it
+under the 200 ms budget with 500 clinics, which ``tests/integration/discovery/`` times.
+
+**PostgreSQL only.** ``ST_DWithin`` is PostGIS, so the tests for this module are marked
+``postgres`` and run against a real server.
+"""
+
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Final
+
+from sqlalchemy import Select, func, select
+from sqlalchemy.orm import Session
+
+from src.commons.enums import BoundedContext, SaProvince, SectorFilter, SiteSector
+from src.commons.geo import Coordinates, assert_within_operating_area
+from src.commons.schemas import ModuleInfo
+from src.commons.time import business_date, now_sast
+from src.core.site_scope import publicly_visible_site_clauses
+from src.database.models.site import Site
+from src.database.types import point_ewkt
+from src.modules.discovery.travel import TravelEstimate, estimate_travel
+from src.modules.queues.live import (
+    LiveQueue,
+    WaitingCountReader,
+    published_live_queues,
+    read_waiting_counts,
+    total_waiting,
+)
+from src.modules.sites.hours import OpeningSchedule, open_state, published_schedules
+from src.modules.sites.service import within_radius_clause
+
+#: The radius a search uses when the caller names none: the "within 10 km" of the empty state.
+DEFAULT_RADIUS_M: Final = 10_000
+#: The widest radius the server will search, whatever it is asked for. 50 km covers a metro and
+#: its surrounding townships, which is as far as anyone travels to a clinic for a queue; beyond it
+#: the only caller is one trying to copy the directory.
+MAX_RADIUS_M: Final = 50_000
+#: The narrowest radius worth running. Below it a GPS fix's own error is larger than the circle.
+MIN_RADIUS_M: Final = 100
+
+#: Results per page by default: a phone screen, not a console.
+DEFAULT_PAGE_SIZE: Final = 20
+#: The largest page a caller may ask for.
+MAX_PAGE_SIZE: Final = 50
+#: With ``open_now``, how many of the nearest clinics are examined before paginating. Opening hours
+#: are evaluated in Python (Issue 24's rules do not reduce to SQL), so the filter runs over a
+#: bounded candidate set rather than the whole radius; 500 is the whole seeded directory in the
+#: performance test and far more than a 50 km radius holds outside the three metros.
+MAX_OPEN_NOW_CANDIDATES: Final = 500
+
+
+def get_module_info() -> ModuleInfo:
+    """Return this module's metadata for its ``/info`` endpoint."""
+    return ModuleInfo(
+        context=BoundedContext.DISCOVERY,
+        summary="Find verified clinics near a place: distance, travel time, open now, queue length.",
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class SearchRadius:
+    """The radius a caller asked for, and the one the search actually used."""
+
+    requested_m: int
+    applied_m: int
+
+    @property
+    def capped(self) -> bool:
+        """Whether the server narrowed the request to :data:`MAX_RADIUS_M`."""
+        return self.applied_m < self.requested_m
+
+
+def clamp_radius(requested_m: int | None) -> SearchRadius:
+    """Bring a requested radius into ``[MIN_RADIUS_M, MAX_RADIUS_M]``.
+
+    Capping rather than refusing is deliberate: a patient's app that asks for 100 km should still
+    get the clinics within 50 km, and the answer reports that it was capped.
+    """
+    requested = DEFAULT_RADIUS_M if requested_m is None else requested_m
+    return SearchRadius(
+        requested_m=requested,
+        applied_m=min(MAX_RADIUS_M, max(MIN_RADIUS_M, requested)),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class OpenStatus:
+    """Open or closed at the moment of the search, with what a patient needs next."""
+
+    is_open: bool
+    #: When it next opens; the moment of the search itself when it is open. ``None`` when it does
+    #: not open again within Issue 24's horizon (closed until further notice, or no hours set).
+    next_open_at: datetime | None
+    #: The manager's reason, only when an ad-hoc closure is what keeps it shut.
+    closure_reason: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class NearbyClinic:
+    """One search result: the clinic, how far it is, and what it is like right now."""
+
+    site_id: str
+    slug: str
+    name: str
+    sector: SiteSector
+    location: Coordinates
+    address_line: str
+    suburb: str | None
+    city: str
+    province: SaProvince
+    phone_e164: str | None
+    #: Straight-line distance from the search origin, in whole metres.
+    distance_m: int
+    travel: TravelEstimate
+    open_status: OpenStatus
+    #: Active queues in the clinic's own display order, each with its live length.
+    queues: tuple[LiveQueue, ...]
+
+    @property
+    def total_waiting(self) -> int | None:
+        """Everyone waiting across the clinic's queues, or ``None`` when that is not measured."""
+        return total_waiting(self.queues)
+
+
+@dataclass(frozen=True, slots=True)
+class NearbyResult:
+    """One page of a search, with everything needed to say what was searched."""
+
+    origin: Coordinates
+    radius: SearchRadius
+    sector: SectorFilter
+    open_now: bool
+    #: How many clinics matched in all, across every page.
+    total: int
+    limit: int
+    offset: int
+    clinics: tuple[NearbyClinic, ...]
+    #: When the open/closed answers were evaluated (Johannesburg).
+    evaluated_at: datetime
+
+
+def nearby_statement(
+    origin: Coordinates, radius_m: int, sector: SectorFilter
+) -> Select[Any]:
+    """The search as one statement: visible clinics in the radius, nearest first.
+
+    Selects the clinic, its distance in metres and the total match count (a window function, so the
+    page and the total come back together). Pagination is applied by the caller. Exposed so the
+    ``EXPLAIN`` test reads the plan of the query the service really runs, not a hand-copied one.
+    """
+    centre = func.ST_GeogFromText(point_ewkt(origin))
+    distance = func.ST_Distance(Site.location, centre)
+    statement = (
+        select(Site, distance.label("distance_m"), func.count().over().label("total"))
+        .where(*publicly_visible_site_clauses())
+        .where(within_radius_clause(origin, radius_m))
+        .order_by(distance, Site.id)
+    )
+    if sector.sector is not None:
+        statement = statement.where(Site.sector == sector.sector.value)
+    return statement
+
+
+def _open_status(schedule: OpeningSchedule | None, moment: datetime) -> OpenStatus:
+    """Issue 24's answer for one clinic; a clinic with no schedule loaded is closed."""
+    state = open_state(schedule or OpeningSchedule(), moment)
+    return OpenStatus(
+        is_open=state.is_open,
+        next_open_at=state.next_open_at,
+        closure_reason=state.closure_reason,
+    )
+
+
+def find_nearby_sites(
+    db: Session,
+    origin: Coordinates,
+    *,
+    radius_m: int | None = None,
+    sector: SectorFilter = SectorFilter.ALL,
+    open_now: bool = False,
+    limit: int = DEFAULT_PAGE_SIZE,
+    offset: int = 0,
+    moment: datetime | None = None,
+    reader: WaitingCountReader = read_waiting_counts,
+) -> NearbyResult:
+    """Find the verified clinics near ``origin``, nearest first.
+
+    The one search every channel calls. See the module docstring for what it guarantees.
+
+    Args:
+        db: The session (PostgreSQL with PostGIS).
+        origin: Where the patient is: a GPS fix, or an area's centroid (Issue 34).
+        radius_m: The radius asked for, in metres; capped to :data:`MAX_RADIUS_M`. ``None`` means
+            :data:`DEFAULT_RADIUS_M`.
+        sector: Public, private or all.
+        open_now: Keep only the clinics open at ``moment``.
+        limit: Page size, clamped to ``1..MAX_PAGE_SIZE``.
+        offset: Results to skip.
+        moment: When "open now" means; ``None`` is now in Johannesburg.
+        reader: Where queue lengths come from (the direct read until Issue 36).
+
+    Returns:
+        The page, with the radius actually used and the total number of matches.
+
+    Raises:
+        CoordinateOutOfRangeError: If ``origin`` is outside the operating country.
+    """
+    assert_within_operating_area(origin)
+    moment = moment or now_sast()
+    radius = clamp_radius(radius_m)
+    limit = min(MAX_PAGE_SIZE, max(1, limit))
+    offset = max(0, offset)
+    statement = nearby_statement(origin, radius.applied_m, sector)
+
+    rows: Sequence[Any]
+    schedules: dict[str, OpeningSchedule]
+    if open_now:
+        candidates = db.execute(statement.limit(MAX_OPEN_NOW_CANDIDATES)).all()
+        schedules = published_schedules(
+            db, [row.Site.id for row in candidates], from_day=business_date(moment)
+        )
+        open_rows = [
+            row
+            for row in candidates
+            if _open_status(schedules.get(row.Site.id), moment).is_open
+        ]
+        total = len(open_rows)
+        rows = open_rows[offset : offset + limit]
+    else:
+        rows = db.execute(statement.limit(limit).offset(offset)).all()
+        if rows:
+            total = int(rows[0].total)
+        else:
+            # Past the last page the window function has no row to ride on; count directly.
+            total = int(
+                db.execute(
+                    select(func.count()).select_from(statement.subquery())
+                ).scalar_one()
+            )
+        schedules = published_schedules(
+            db, [row.Site.id for row in rows], from_day=business_date(moment)
+        )
+
+    site_ids = [row.Site.id for row in rows]
+    queues = published_live_queues(db, site_ids, reader=reader)
+    clinics = tuple(
+        NearbyClinic(
+            site_id=row.Site.id,
+            slug=row.Site.slug,
+            name=row.Site.name,
+            sector=row.Site.sector_enum,
+            location=row.Site.location,
+            address_line=row.Site.address_line,
+            suburb=row.Site.suburb,
+            city=row.Site.city,
+            province=row.Site.province_enum,
+            phone_e164=row.Site.phone_e164,
+            distance_m=round(float(row.distance_m)),
+            travel=estimate_travel(float(row.distance_m)),
+            open_status=_open_status(schedules.get(row.Site.id), moment),
+            queues=queues.get(row.Site.id, ()),
+        )
+        for row in rows
+    )
+    return NearbyResult(
+        origin=origin,
+        radius=radius,
+        sector=sector,
+        open_now=open_now,
+        total=total,
+        limit=limit,
+        offset=offset,
+        clinics=clinics,
+        evaluated_at=moment,
+    )

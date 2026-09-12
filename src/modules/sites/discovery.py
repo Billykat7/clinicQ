@@ -24,11 +24,9 @@ from __future__ import annotations
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
-from src.commons.enums import (
-    SITE_PUBLICLY_VISIBLE_STATUSES,
-    SiteSector,
-)
+from src.commons.enums import SiteSector
 from src.commons.geo import Coordinates
+from src.core.site_scope import publicly_visible_site_clauses
 from src.database.models.site import Site
 from src.database.types import point_ewkt
 
@@ -39,15 +37,12 @@ DEFAULT_LIMIT = 20
 def publicly_visible() -> Select[tuple[Site]]:
     """The base query every patient-facing read of ``site`` starts from.
 
-    The one place the "may a patient see this clinic" rule is written. A surface that builds its
-    own ``select(Site)`` and forgets one of these clauses is the bug Issue 29 exists to prevent, so
-    anything patient-facing calls this rather than repeating it.
+    The rule itself is :func:`~src.core.site_scope.publicly_visible_site_clauses`, written once
+    beside the site guard. A surface that builds its own ``select(Site)`` and forgets one of those
+    clauses is the bug Issue 29 exists to prevent, so anything patient-facing calls this rather
+    than repeating it.
     """
-    return select(Site).where(
-        Site.is_deleted.is_(False),
-        Site.is_active.is_(True),
-        Site.status.in_([status.value for status in SITE_PUBLICLY_VISIBLE_STATUSES]),
-    )
+    return select(Site).where(*publicly_visible_site_clauses())
 
 
 def search_sites(

@@ -76,8 +76,14 @@ Places where the specs and the repository disagree. None blocks sprint 1, but ea
 | 5 | Database sessions (**decided in Issue 3**) | Async everywhere | Both; most kernel routes use the sync `get_db`. **Sync by default, async for streams**: see the note below the table | 3 and every new module |
 | 6 | Seeding roles and grants (**decided in Issue 18**) | By migration | By module manifests and `make seed-rbac` (idempotent). **Kept, and run automatically**: see the note below the table | 18 |
 | 7 | Database topology | A production database of its own | A schema (`clinicq`) in a shared platform database, which `scripts/db/backup.sh` assumes | 102, 103 |
-| 8 | API paths | `/api/...` (for example `/api/clinics/nearby`) | Everything under `/api/v1/` | 31 and every API issue |
+| 8 | API paths (**decided in Issue 31**) | `/api/...` (for example `/api/clinics/nearby`) | Everything under `/api/v1/`. **Kept**: see the note below the table | 31 and every API issue |
 | 9 | USSD and WhatsApp identity (**decided in Issue 17**) | "A USSD session is trusted via the gateway MSISDN without a second OTP" | `patient_for_gateway()` in `src/modules/patients/service.py`. **Trusted, with conditions**: see the note below the table | 17, 73, 75 |
+
+**Decision 8, recorded in Issue 31:** every route stays under `/api/v1/`, the discovery search
+included: it is served at `GET /api/v1/clinics/nearby`, not `/api/clinics/nearby`. The version
+prefix is where the kernel's error responses, OpenAPI document, contract drift test and route-gate
+guard all look, and the channel adapters (M10) will be written against a versioned path they can
+keep when a `v2` appears. Specs that write `/api/...` mean `/api/v1/...`; no route is served at both.
 
 **Decision 6, recorded in Issue 18:** roles and grants are seeded from the module manifests by
 `make seed-rbac` (`scripts/db/seed_rbac.py` → `sync_rbac_catalog`), not by an Alembic migration.
