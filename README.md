@@ -210,8 +210,9 @@ Full detail: [engineering non-negotiables](docs/guideline.md) and
 
 ## Status
 
-**Phase:** building. **Sprint 4 of 14 complete** (semester 2), 22 of 109 issues closed, latest tag
-`v0.3.0`. Next: sprint 5 — `sites` and `queues` (M4).
+**Phase:** building. **Sprints 1–4 of 14 complete**, sprint 5 under way (semester 2). **30 of 109
+issues closed**, latest tag `v0.3.0`; the `v0.4.0` note is written and its tag follows M4's last
+merge. Next: M5 — discovery and geolocation.
 
 - [x] Idea finalised (**ClinicQ**, selected from the shortlist)
 - [x] Requirements gathered ([product docs](docs/PRODUCT/README.md))
@@ -221,7 +222,7 @@ Full detail: [engineering non-negotiables](docs/guideline.md) and
 - [x] Repo structure set up (M1, `v0.1.0`)
 - [x] CI/CD pipeline running (M2, `v0.2.0`)
 - [x] Identity, RBAC, site scoping, audit and consent (M3, `v0.3.0`)
-- [ ] Clinics and queues configurable (M4)
+- [x] Clinics and queues configurable (M4, `v0.4.0` to cut)
 - [ ] Queue engine running (M6) ⚠️ critical path
 - [ ] MVP complete (M8)
 - [ ] Pilot clinic live (M14)

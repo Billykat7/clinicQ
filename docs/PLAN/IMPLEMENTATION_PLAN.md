@@ -80,10 +80,10 @@ gantt
     axisFormat S%d
     section Foundation
     M1 Foundation            :done,   m1, 0, 2
-    M2 CI/CD                 :        m2, 1, 2
+    M2 CI/CD                 :done,   m2, 1, 2
     section Domain core
-    M3 Identity & RBAC       :crit,   m3, 2, 2
-    M4 Clinics & Queues      :crit,   m4, 3, 2
+    M3 Identity & RBAC       :crit, done, m3, 2, 2
+    M4 Clinics & Queues      :crit, done, m4, 3, 2
     section Product
     M5 Discovery             :        m5, 4, 2
     M6 QUEUE ENGINE          :crit,   m6, 5, 2
