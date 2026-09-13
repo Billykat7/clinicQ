@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 from src.commons.enums import SaProvince, ServiceCategory, SiteSector
 from src.commons.geo import Coordinates
 from src.commons.time import business_date, now_sast
+from src.core.config import get_settings
 from src.core.site_scope import published_select
 from src.database.models import ClinicService, Site
 from src.modules.discovery.service import OpenStatus
@@ -50,6 +51,7 @@ from src.modules.sites.hours import (
     open_state,
     published_schedules,
 )
+from src.modules.sites.payment_profile import PaymentProfile, published_profiles
 
 #: Monday first, as ``date.weekday()`` counts.
 WEEKDAY_NAMES: Final = (
@@ -122,6 +124,12 @@ class ClinicProfile:
     week: tuple[DayHours, ...]
     queues: tuple[LiveQueue, ...]
     services: tuple[ServiceOffered, ...]
+    #: What a private clinic reports accepting (Issue 37); ``None`` for a public clinic, one that
+    #: has listed nothing, or while the feature is off.
+    payment: PaymentProfile | None
+    #: Whether payment information is switched on for this read, so a surface can tell "not listed"
+    #: from "not shown".
+    payments_enabled: bool
     join: JoinAvailability
     evaluated_at: datetime
 
@@ -183,6 +191,7 @@ def clinic_profile(
     *,
     moment: datetime | None = None,
     reader: WaitingCountReader = cached_waiting_counts,
+    payments_enabled: bool | None = None,
 ) -> ClinicProfile | None:
     """One publicly visible clinic's profile, or ``None``.
 
@@ -194,11 +203,18 @@ def clinic_profile(
         slug: The clinic's public handle.
         moment: When "open now" means; ``None`` is now in Johannesburg.
         reader: Where queue lengths come from: the queue snapshot (Issue 36) by default.
+        payments_enabled: Whether to include payment information; ``None`` reads
+            ``PAYMENT_FILTER_ENABLED``.
     """
     site = db.execute(publicly_visible().where(Site.slug == slug)).scalar_one_or_none()
     if site is None:
         return None
     moment = moment or now_sast()
+    enabled = (
+        get_settings().payment_filter_enabled
+        if payments_enabled is None
+        else payments_enabled
+    )
     today = business_date(moment)
     schedule = published_schedules(db, [site.id], from_day=today).get(
         site.id, OpeningSchedule()
@@ -228,6 +244,10 @@ def clinic_profile(
         ),
         queues=queues,
         services=_services(db, site.id),
+        payment=published_profiles(db, [site.id], moment=moment).get(site.id)
+        if enabled
+        else None,
+        payments_enabled=enabled,
         join=_join(site, schedule, queues, moment),
         evaluated_at=moment,
     )

@@ -39,13 +39,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Final
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, exists, func, select
 from sqlalchemy.orm import Session
 
 from src.commons.enums import (
     BoundedContext,
     DiscoverySort,
     DistanceBasis,
+    MedicalAidScheme,
     SaProvince,
     SectorFilter,
     SiteSector,
@@ -53,7 +54,9 @@ from src.commons.enums import (
 from src.commons.geo import Coordinates, assert_within_operating_area
 from src.commons.schemas import ModuleInfo
 from src.commons.time import business_date, now_sast
+from src.core.config import get_settings
 from src.core.site_scope import publicly_visible_site_clauses
+from src.database.models import SitePaymentMedicalAid, SitePaymentProfile
 from src.database.models.site import Site
 from src.database.types import point_ewkt
 from src.modules.discovery.areas import AreaSummary, get_area
@@ -67,6 +70,7 @@ from src.modules.queues.live import (
     total_waiting,
 )
 from src.modules.sites.hours import OpeningSchedule, open_state, published_schedules
+from src.modules.sites.payment_profile import PaymentProfile, published_profiles
 from src.modules.sites.service import within_radius_clause
 
 #: The radius a search uses when the caller names none: the "within 10 km" of the empty state.
@@ -175,6 +179,9 @@ class NearbyClinic:
     open_status: OpenStatus
     #: Active queues in the clinic's own display order, each with its live length.
     queues: tuple[LiveQueue, ...]
+    #: What a private clinic reports accepting (Issue 37); ``None`` for a public clinic, one that has
+    #: declared nothing, or while the feature is off. Shown only with its notice.
+    payment: PaymentProfile | None = None
 
     @property
     def total_waiting(self) -> int | None:
@@ -204,8 +211,39 @@ class NearbyResult:
     evaluated_at: datetime
 
 
+@dataclass(frozen=True, slots=True)
+class PaymentFilter:
+    """What a patient filters private clinics by (Issue 37): cash, card, any of some schemes.
+
+    Schemes combine with **or**: a patient on Bonitas who also ticks GEMS wants a clinic that takes
+    either. Matching is against what clinics **report**, never an eligibility check.
+    """
+
+    accepts_cash: bool = False
+    accepts_card: bool = False
+    schemes: frozenset[MedicalAidScheme] = frozenset()
+
+    @property
+    def is_empty(self) -> bool:
+        """Whether nothing is being filtered on."""
+        return not (self.accepts_cash or self.accepts_card or self.schemes)
+
+
+#: Why a payment filter was refused outside Private. The filter does not exist under Public or All.
+PAYMENT_FILTER_PRIVATE_ONLY: Final = "Payment and medical-aid filters apply only to private clinics. Choose Private to use them."
+#: Why a payment filter was refused while the feature is switched off.
+PAYMENT_FILTER_OFF: Final = "Filtering by payment and medical aid is not switched on."
+
+
+class PaymentFilterRefusedError(ValueError):
+    """A payment filter was sent where it does not apply. Answered as 422."""
+
+
 def nearby_statement(
-    origin: Coordinates, radius_m: int, sector: SectorFilter
+    origin: Coordinates,
+    radius_m: int,
+    sector: SectorFilter,
+    payment: PaymentFilter | None = None,
 ) -> Select[Any]:
     """The search as one statement: visible clinics in the radius, nearest first.
 
@@ -223,6 +261,25 @@ def nearby_statement(
     )
     if sector.sector is not None:
         statement = statement.where(Site.sector == sector.sector.value)
+    if payment is not None and not payment.is_empty:
+        # Only a private clinic's reported profile can match; the caller has already refused a
+        # payment filter outside Private, and the join repeats the rule rather than trusting it.
+        statement = statement.join(
+            SitePaymentProfile, SitePaymentProfile.site_id == Site.id
+        ).where(Site.sector == SiteSector.PRIVATE.value)
+        if payment.accepts_cash:
+            statement = statement.where(SitePaymentProfile.accepts_cash.is_(True))
+        if payment.accepts_card:
+            statement = statement.where(SitePaymentProfile.accepts_card.is_(True))
+        if payment.schemes:
+            statement = statement.where(
+                exists().where(
+                    SitePaymentMedicalAid.site_id == Site.id,
+                    SitePaymentMedicalAid.scheme.in_(
+                        sorted(scheme.value for scheme in payment.schemes)
+                    ),
+                )
+            )
     return statement
 
 
@@ -258,6 +315,8 @@ def find_nearby_sites(
     offset: int = 0,
     moment: datetime | None = None,
     reader: WaitingCountReader = cached_waiting_counts,
+    payment: PaymentFilter | None = None,
+    payments_enabled: bool | None = None,
 ) -> NearbyResult:
     """Find the verified clinics near ``origin``, nearest first.
 
@@ -277,6 +336,10 @@ def find_nearby_sites(
         offset: Results to skip.
         moment: When "open now" means; ``None`` is now in Johannesburg.
         reader: Where queue lengths come from: the queue snapshot (Issue 36) by default.
+        payment: Filter private clinics by what they report accepting (Issue 37). Refused outside
+            Private, and while the feature is off.
+        payments_enabled: Whether payment information is part of this search; ``None`` reads
+            ``PAYMENT_FILTER_ENABLED``. While off, no result carries a payment profile.
 
     Returns:
         The page, with the radius actually used and the total number of matches.
@@ -284,7 +347,18 @@ def find_nearby_sites(
     Raises:
         CoordinateOutOfRangeError: If ``origin`` is outside the operating country.
         AreaNotFoundError: If ``origin`` names an area that does not exist.
+        PaymentFilterRefusedError: If a payment filter is sent outside Private or while it is off.
     """
+    enabled = (
+        get_settings().payment_filter_enabled
+        if payments_enabled is None
+        else payments_enabled
+    )
+    if payment is not None and not payment.is_empty:
+        if not enabled:
+            raise PaymentFilterRefusedError(PAYMENT_FILTER_OFF)
+        if sector is not SectorFilter.PRIVATE:
+            raise PaymentFilterRefusedError(PAYMENT_FILTER_PRIVATE_ONLY)
     origin_area: AreaSummary | None = None
     match origin:
         case AreaOrigin(area_id=area_id):
@@ -299,7 +373,7 @@ def find_nearby_sites(
     radius = clamp_radius(radius_m)
     limit = min(MAX_PAGE_SIZE, max(1, limit))
     offset = max(0, offset)
-    statement = nearby_statement(point, radius.applied_m, sector)
+    statement = nearby_statement(point, radius.applied_m, sector, payment)
 
     rows: Sequence[Any]
     needs_candidates = open_now or sort is DiscoverySort.SHORTEST_QUEUE
@@ -339,6 +413,11 @@ def find_nearby_sites(
         )
         queues = published_live_queues(db, [row.Site.id for row in rows], reader=reader)
 
+    payments = (
+        published_profiles(db, [row.Site.id for row in rows], moment=moment)
+        if enabled
+        else {}
+    )
     clinics = tuple(
         NearbyClinic(
             site_id=row.Site.id,
@@ -361,6 +440,7 @@ def find_nearby_sites(
             travel=estimate_travel(float(row.distance_m)),
             open_status=_open_status(schedules.get(row.Site.id), moment),
             queues=queues.get(row.Site.id, ()),
+            payment=payments.get(row.Site.id),
         )
         for row in rows
     )

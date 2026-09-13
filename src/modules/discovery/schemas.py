@@ -24,6 +24,7 @@ from src.modules.discovery.profile import ClinicProfile
 from src.modules.discovery.service import NearbyClinic, NearbyResult, OpenStatus
 from src.modules.queues.live import LiveQueue, WaitRange
 from src.modules.sites.hours import TimeSpan
+from src.modules.sites.payment_profile import PaymentProfile
 from src.modules.sites.schemas import SiteLocationOut
 
 
@@ -133,6 +134,39 @@ class TravelOut(BaseModel):
     driving_minutes: int
 
 
+class PaymentSummaryOut(BaseModel):
+    """What a private clinic reports accepting (Issue 37). Always shown with ``notice``."""
+
+    accepts_cash: bool
+    accepts_card: bool
+    medical_aids: list[str] = Field(
+        description="Scheme names as shown, in the controlled list's order."
+    )
+    copay_notice: str | None
+    last_confirmed_at: datetime
+    stale: bool = Field(
+        description="Not confirmed by the clinic in the last six months."
+    )
+    notice: str = Field(
+        description="Reported by the clinic; confirm before travelling."
+    )
+
+    @classmethod
+    def of(cls, profile: PaymentProfile | None) -> PaymentSummaryOut | None:
+        """The API shape of a payment profile, or ``None``."""
+        if profile is None:
+            return None
+        return cls(
+            accepts_cash=profile.accepts_cash,
+            accepts_card=profile.accepts_card,
+            medical_aids=[item.label for item in profile.schemes],
+            copay_notice=profile.copay_notice,
+            last_confirmed_at=profile.last_confirmed_at,
+            stale=profile.stale,
+            notice=profile.notice,
+        )
+
+
 class NearbyClinicOut(BaseModel):
     """One search result."""
 
@@ -161,6 +195,12 @@ class NearbyClinicOut(BaseModel):
         description="Everyone waiting across the clinic's queues; `null` when not measured."
     )
     queues: list[LiveQueueOut]
+    payment: PaymentSummaryOut | None = Field(
+        description=(
+            "A private clinic's self-reported payment methods and medical aids; `null` for a public "
+            "clinic, one that has listed nothing, or while the feature is off."
+        )
+    )
 
     @classmethod
     def of(cls, clinic: NearbyClinic) -> NearbyClinicOut:
@@ -186,6 +226,7 @@ class NearbyClinicOut(BaseModel):
             open_status=OpenStatusOut.of(clinic.open_status),
             total_waiting=clinic.total_waiting,
             queues=[LiveQueueOut.of(queue) for queue in clinic.queues],
+            payment=PaymentSummaryOut.of(clinic.payment),
         )
 
 
@@ -295,6 +336,7 @@ class ClinicProfileOut(BaseModel):
     )
     queues: list[LiveQueueOut]
     services: list[ServiceOfferedOut]
+    payment: PaymentSummaryOut | None
     join: JoinAvailabilityOut
     evaluated_at: datetime
 
@@ -338,6 +380,7 @@ class ClinicProfileOut(BaseModel):
                 )
                 for service in profile.services
             ],
+            payment=PaymentSummaryOut.of(profile.payment),
             join=JoinAvailabilityOut(
                 allowed=profile.join.allowed,
                 reason=profile.join.reason,

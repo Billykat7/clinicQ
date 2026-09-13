@@ -41,7 +41,7 @@ from fastapi import APIRouter, Depends, Path, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
-from src.commons.enums import DiscoverySort, SectorFilter, SiteSector
+from src.commons.enums import DiscoverySort, MedicalAidScheme, SectorFilter, SiteSector
 from src.commons.geo import CoordinateOutOfRangeError, Coordinates
 from src.commons.time import APP_TIMEZONE, business_date
 from src.core.config import get_settings
@@ -57,6 +57,11 @@ from src.modules.discovery.service import (
 )
 from src.modules.queues.live import WaitRange
 from src.modules.sites.hours import TimeSpan
+from src.modules.sites.payment_profile import (
+    CLINIC_REPORTED_NOTICE,
+    SCHEME_LABELS,
+    PaymentProfile,
+)
 from src.web.context import public_page_context
 from src.web.routes import templates
 
@@ -210,6 +215,74 @@ def open_label(status_: OpenStatus, moment: datetime) -> str:
 
 
 @dataclass(frozen=True, slots=True)
+class PaymentFilterView:
+    """The payment and medical-aid filter under Private (Issue 37): what is ticked, and the notice."""
+
+    cash: Choice
+    card: Choice
+    schemes: tuple[Choice, ...]
+    notice: str
+
+
+def payment_filter_view(payment: service.PaymentFilter | None) -> PaymentFilterView:
+    """The filter's options, with the request's choices ticked."""
+    chosen = payment or service.PaymentFilter()
+    return PaymentFilterView(
+        cash=Choice("true", "Cash", chosen.accepts_cash),
+        card=Choice("true", "Card", chosen.accepts_card),
+        schemes=tuple(
+            Choice(scheme.value, label, scheme in chosen.schemes)
+            for scheme, label in SCHEME_LABELS.items()
+            if scheme is not MedicalAidScheme.OTHER
+        ),
+        notice=PAYMENT_FILTER_NOTICE,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class PaymentLines:
+    """A private clinic's reported payment information in words, with its notice (Issue 37)."""
+
+    methods: str
+    medical_aids: str
+    copay_notice: str | None
+    stale_label: str | None
+    notice: str
+
+
+def payment_lines(profile: PaymentProfile | None) -> PaymentLines | None:
+    """What a card or the detail page says about payment; ``None`` when there is nothing reported."""
+    if profile is None:
+        return None
+    methods = [
+        word
+        for word, accepted in (
+            ("cash", profile.accepts_cash),
+            ("card", profile.accepts_card),
+        )
+        if accepted
+    ]
+    confirmed = profile.last_confirmed_at.astimezone(APP_TIMEZONE)
+    return PaymentLines(
+        methods=f"Takes {' and '.join(methods)}"
+        if methods
+        else "No cash or card listed",
+        medical_aids=(
+            "Medical aids: " + ", ".join(item.label for item in profile.schemes)
+            if profile.schemes
+            else "No medical aids listed"
+        ),
+        copay_notice=profile.copay_notice,
+        stale_label=(
+            f"Not confirmed by the clinic since {confirmed:%d %B %Y}"
+            if profile.stale
+            else None
+        ),
+        notice=profile.notice,
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class ClinicCard:
     """One clinic in the list, as the patient reads it."""
 
@@ -224,6 +297,8 @@ class ClinicCard:
     open_label: str
     queue_label: str
     wait_label: str
+    #: A private clinic's reported payment information, with its notice (Issue 37).
+    payment: PaymentLines | None = None
 
 
 def clinic_card(clinic: NearbyClinic, moment: datetime) -> ClinicCard:
@@ -249,6 +324,7 @@ def clinic_card(clinic: NearbyClinic, moment: datetime) -> ClinicCard:
             moment,
         ),
         wait_label=wait_label([queue.wait_range for queue in clinic.queues]),
+        payment=payment_lines(clinic.payment),
     )
 
 
@@ -328,10 +404,18 @@ class ResultsView:
     empty: EmptyState | None
     more_href: str | None
     offset: int
+    payment: service.PaymentFilter | None = None
 
     def href(self, **changes: object) -> str:
         """The full page's address for this search, with ``changes`` applied."""
-        return page_href(self.origin, self.sector, self.sort, self.radius_m, **changes)
+        return page_href(
+            self.origin,
+            self.sector,
+            self.sort,
+            self.radius_m,
+            payment=self.payment,
+            **changes,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -349,6 +433,9 @@ class DiscoverPage:
     problem: str | None = None
     #: Whether to lead with the location prompt: only when there is nowhere to search from yet.
     offer_location: bool = field(default=True)
+    #: The payment and medical-aid filter (Issue 37). ``None``, and so absent from the page, unless
+    #: the feature is on **and** Private is selected.
+    payment_filter: PaymentFilterView | None = None
 
     @property
     def filter_groups(self) -> tuple[FilterGroup, ...]:
@@ -360,19 +447,39 @@ class DiscoverPage:
         )
 
 
+def payment_params(payment: service.PaymentFilter | None) -> dict[str, object]:
+    """The query parameters that carry a payment filter; nothing for an empty one."""
+    if payment is None or payment.is_empty:
+        return {}
+    params: dict[str, object] = {}
+    if payment.accepts_cash:
+        params["accepts_cash"] = "true"
+    if payment.accepts_card:
+        params["accepts_card"] = "true"
+    if payment.schemes:
+        params["medical_aid"] = sorted(scheme.value for scheme in payment.schemes)
+    return params
+
+
 def page_href(
     origin: Origin,
     sector: SectorFilter,
     sort: DiscoverySort,
     radius_m: int,
+    *,
+    payment: service.PaymentFilter | None = None,
     **changes: object,
 ) -> str:
-    """``/discover?...`` for a search, leaving out whatever is at its default."""
+    """``/discover?...`` for a search, leaving out whatever is at its default.
+
+    A payment filter is carried only under Private, the one sector it exists for.
+    """
     params: dict[str, object] = {
         **origin.params,
         "sector": sector.value,
         "radius_m": radius_m,
         "sort": sort.value,
+        **(payment_params(payment) if sector is SectorFilter.PRIVATE else {}),
     }
     params.update(changes)
     defaults = {
@@ -386,7 +493,7 @@ def page_href(
         for key, value in params.items()
         if value is not None and defaults.get(key) != value
     }
-    return f"/discover?{urlencode(kept)}" if kept else "/discover"
+    return f"/discover?{urlencode(kept, doseq=True)}" if kept else "/discover"
 
 
 def _radius_words(metres: int) -> str:
@@ -399,7 +506,9 @@ def _wider_radius(metres: int) -> int | None:
     return next((choice for choice in RADIUS_CHOICES_M if choice > metres), None)
 
 
-def results_view(result: NearbyResult, origin: Origin) -> ResultsView:
+def results_view(
+    result: NearbyResult, origin: Origin, payment: service.PaymentFilter | None = None
+) -> ResultsView:
     """Turn one search result into what the list shows, including its empty state."""
     radius = result.radius.applied_m
     cards = tuple(clinic_card(clinic, result.evaluated_at) for clinic in result.clinics)
@@ -422,14 +531,23 @@ def results_view(result: NearbyResult, origin: Origin) -> ResultsView:
                 else "Try another suburb, or show public and private clinics together."
             ),
             action_label=f"Search within {_radius_words(wider)}" if wider else None,
-            action_href=page_href(origin, result.sector, result.sort, wider)
+            action_href=page_href(
+                origin, result.sector, result.sort, wider, payment=payment
+            )
             if wider
             else None,
         )
 
     next_offset = result.offset + len(cards)
     more_href = (
-        page_href(origin, result.sector, result.sort, radius, offset=next_offset)
+        page_href(
+            origin,
+            result.sector,
+            result.sort,
+            radius,
+            payment=payment,
+            offset=next_offset,
+        )
         if next_offset < result.total
         else None
     )
@@ -450,6 +568,7 @@ def results_view(result: NearbyResult, origin: Origin) -> ResultsView:
         empty=empty,
         more_href=more_href,
         offset=result.offset,
+        payment=payment,
     )
 
 
@@ -478,6 +597,8 @@ def discover_page(
     sort: DiscoverySort = DiscoverySort.NEAREST,
     offset: int = 0,
     moment: datetime | None = None,
+    payment: service.PaymentFilter | None = None,
+    payments_enabled: bool = False,
 ) -> DiscoverPage:
     """Build the whole discovery page for one request.
 
@@ -486,6 +607,11 @@ def discover_page(
     ``problem`` sentence above the suburb search, never an error page: the patient can still search.
     """
     radius = service.clamp_radius(radius_m).applied_m
+    # The filter exists only under Private with the feature on. Anywhere else a leftover checkbox
+    # from the previous position of the toggle is dropped, not refused: the page simply has no
+    # such filter there.
+    applies = payments_enabled and sector is SectorFilter.PRIVATE
+    payment = payment if applies else None
     problem: str | None = None
     origin = Origin()
     try:
@@ -514,6 +640,8 @@ def discover_page(
                 sort=sort,
                 offset=offset,
                 moment=moment,
+                payment=payment,
+                payments_enabled=payments_enabled,
             )
         except CoordinateOutOfRangeError:
             problem = (
@@ -539,6 +667,7 @@ def discover_page(
         results=results,
         problem=problem,
         offer_location=not origin.is_set,
+        payment_filter=payment_filter_view(payment) if applies else None,
     )
 
 
@@ -551,6 +680,8 @@ def search_results(
     sort: DiscoverySort,
     offset: int = 0,
     moment: datetime | None = None,
+    payment: service.PaymentFilter | None = None,
+    payments_enabled: bool = False,
 ) -> ResultsView:
     """Run the one discovery search for ``origin`` and shape its answer for the list."""
     search_from: service.SearchOrigin = (
@@ -568,8 +699,10 @@ def search_results(
         sort=sort,
         offset=offset,
         moment=moment,
+        payment=payment,
+        payments_enabled=payments_enabled,
     )
-    return results_view(result, origin)
+    return results_view(result, origin, payment)
 
 
 # --------------------------------------------------------------------------------------
@@ -581,6 +714,18 @@ Longitude = Annotated[float | None, Query(ge=-180, le=180)]
 AreaId = Annotated[str | None, Query(max_length=36)]
 RadiusM = Annotated[int, Query(ge=1)]
 Offset = Annotated[int, Query(ge=0, le=1000)]
+MedicalAids = Annotated[list[MedicalAidScheme] | None, Query()]
+
+
+def _payment(
+    accepts_cash: bool, accepts_card: bool, medical_aid: list[MedicalAidScheme] | None
+) -> service.PaymentFilter:
+    """The payment filter a request's query parameters describe."""
+    return service.PaymentFilter(
+        accepts_cash=accepts_cash,
+        accepts_card=accepts_card,
+        schemes=frozenset(medical_aid or ()),
+    )
 
 
 def _is_htmx(request: Request) -> bool:
@@ -609,6 +754,9 @@ def discover(
     radius_m: RadiusM = service.DEFAULT_RADIUS_M,
     sort: DiscoverySort = DiscoverySort.NEAREST,
     offset: Offset = 0,
+    accepts_cash: bool = False,
+    accepts_card: bool = False,
+    medical_aid: MedicalAids = None,
 ) -> HTMLResponse:
     """The discovery page. Public: a patient looking for a clinic has no account."""
     page = discover_page(
@@ -621,6 +769,8 @@ def discover(
         radius_m=radius_m,
         sort=sort,
         offset=offset,
+        payment=_payment(accepts_cash, accepts_card, medical_aid),
+        payments_enabled=get_settings().payment_filter_enabled,
     )
     return _render(request, "discover/list.html", page=page)
 
@@ -636,8 +786,15 @@ def discover_results(
     radius_m: RadiusM = service.DEFAULT_RADIUS_M,
     sort: DiscoverySort = DiscoverySort.NEAREST,
     offset: Offset = 0,
+    accepts_cash: bool = False,
+    accepts_card: bool = False,
+    medical_aid: MedicalAids = None,
 ) -> Response:
-    """The results fragment an htmx swap asks for; a plain browser is sent to the full page."""
+    """The results fragment an htmx swap asks for; a plain browser is sent to the full page.
+
+    The fragment also carries the payment filter's slot, swapped out of band (Issue 37), so moving
+    the toggle away from Private removes the filter from the page rather than hiding it.
+    """
     page = discover_page(
         db,
         lat=lat,
@@ -647,13 +804,19 @@ def discover_results(
         radius_m=radius_m,
         sort=sort,
         offset=offset,
+        payment=_payment(accepts_cash, accepts_card, medical_aid),
+        payments_enabled=get_settings().payment_filter_enabled,
     )
     address = page_href(
-        page.origin, sector, sort, page.results.radius_m if page.results else radius_m
+        page.origin,
+        sector,
+        sort,
+        page.results.radius_m if page.results else radius_m,
+        payment=page.results.payment if page.results else None,
     )
     if not _is_htmx(request):
         return RedirectResponse(address, status_code=status.HTTP_303_SEE_OTHER)
-    template = "discover/_more.html" if offset else "discover/_results.html"
+    template = "discover/_more.html" if offset else "discover/_results_swap.html"
     response = _render(request, template, page=page, view=page.results)
     if page.results is None:
         # Nothing to search from: tell htmx not to swap a half-empty list over a good one.
@@ -701,9 +864,10 @@ PAYMENT_NOT_LISTED: Final = (
     "This clinic has not listed the payment methods or medical aids it accepts. Ask the clinic "
     "before you travel."
 )
-#: The one sentence every piece of payment or medical-aid data is shown with (Issues 35 and 37).
-CLINIC_REPORTED_NOTICE: Final = (
-    "Reported by the clinic. Please confirm with the clinic before you travel."
+#: Shown above the filter, so the patient reads it before choosing (Issue 37).
+PAYMENT_FILTER_NOTICE: Final = (
+    "Payment methods and medical aids are reported by each clinic, not checked by ClinicQ. "
+    "Please confirm with the clinic before you travel."
 )
 
 
@@ -770,8 +934,11 @@ class DetailView:
     live: LiveView
     week: tuple[HoursRow, ...]
     services: tuple[ServiceOffered, ...]
-    #: ``None`` for a public clinic, which never carries payment information.
+    #: The payment section's sentence when nothing is reported: ``None`` for a public clinic (which
+    #: never carries payment information), or while the feature is off.
     payment_note: str | None
+    #: What a private clinic reports accepting, with the notice. ``None`` when nothing is reported.
+    payment: PaymentLines | None
     reported_notice: str
 
 
@@ -879,8 +1046,11 @@ def detail_view(profile: ClinicProfile, *, join_enabled: bool) -> DetailView:
         ),
         services=profile.services,
         payment_note=PAYMENT_NOT_LISTED
-        if profile.sector is SiteSector.PRIVATE
+        if profile.payments_enabled
+        and profile.sector is SiteSector.PRIVATE
+        and profile.payment is None
         else None,
+        payment=payment_lines(profile.payment),
         reported_notice=CLINIC_REPORTED_NOTICE,
     )
 
@@ -896,7 +1066,9 @@ def _join_enabled() -> bool:
 @router.get("/clinics/{slug}", response_class=HTMLResponse)
 def clinic_detail(request: Request, slug: Slug, db: DbSession) -> HTMLResponse:
     """One clinic's detail page. A clinic a patient may not see is the same 404 as a missing one."""
-    found = profile_service.clinic_profile(db, slug)
+    found = profile_service.clinic_profile(
+        db, slug, payments_enabled=get_settings().payment_filter_enabled
+    )
     if found is None:
         response = _render(request, "discover/not_found.html")
         response.status_code = status.HTTP_404_NOT_FOUND

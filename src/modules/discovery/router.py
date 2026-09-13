@@ -23,8 +23,9 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, st
 from sqlalchemy.orm import Session
 
 from src.api.rbac_deps import require_patient
-from src.commons.enums import DiscoverySort, SaProvince, SectorFilter
+from src.commons.enums import DiscoverySort, MedicalAidScheme, SaProvince, SectorFilter
 from src.commons.geo import CoordinateOutOfRangeError, Coordinates
+from src.core.config import Settings, get_settings
 from src.database.models import Patient
 from src.database.session import get_db
 from src.modules.discovery import areas, profile, service
@@ -38,6 +39,7 @@ from src.modules.discovery.schemas import (
 router = APIRouter(prefix="/clinics", tags=["discovery"])
 
 DbSession = Annotated[Session, Depends(get_db)]
+SettingsDep = Annotated[Settings, Depends(get_settings)]
 #: A signed-in patient reading or changing their own recently used areas.
 OwnRecordRead = Annotated[Patient, Depends(require_patient("patients.self", "read"))]
 OwnRecordUpdate = Annotated[
@@ -66,6 +68,7 @@ def discovery_info() -> dict[str, str]:
 )
 def clinics_nearby(
     db: DbSession,
+    settings: SettingsDep,
     lat: Annotated[
         float | None, Query(ge=-90, le=90, description="Latitude, WGS 84.")
     ] = None,
@@ -106,6 +109,25 @@ def clinics_nearby(
         service.DEFAULT_PAGE_SIZE
     ),
     offset: Annotated[int, Query(ge=0)] = 0,
+    accepts_cash: Annotated[
+        bool,
+        Query(
+            description="Private clinics that report taking cash (Issue 37). Private only."
+        ),
+    ] = False,
+    accepts_card: Annotated[
+        bool,
+        Query(description="Private clinics that report taking cards. Private only."),
+    ] = False,
+    medical_aid: Annotated[
+        list[MedicalAidScheme] | None,
+        Query(
+            description=(
+                "Private clinics that report accepting any of these schemes. Private only; a "
+                "directory tag, not an eligibility check."
+            )
+        ),
+    ] = None,
 ) -> NearbyPageOut:
     """Search the directory. **No session**: see the module docstring."""
     has_position = lat is not None and lon is not None
@@ -126,8 +148,14 @@ def clinics_nearby(
             sort=sort,
             limit=limit,
             offset=offset,
+            payment=service.PaymentFilter(
+                accepts_cash=accepts_cash,
+                accepts_card=accepts_card,
+                schemes=frozenset(medical_aid or ()),
+            ),
+            payments_enabled=settings.payment_filter_enabled,
         )
-    except CoordinateOutOfRangeError as exc:
+    except (CoordinateOutOfRangeError, service.PaymentFilterRefusedError) as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except areas.AreaNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No such area.") from exc
@@ -206,9 +234,12 @@ def remember_my_area(area_id: str, patient: OwnRecordUpdate, db: DbSession) -> R
 def clinic_profile(
     slug: Annotated[str, Path(max_length=80, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")],
     db: DbSession,
+    settings: SettingsDep,
 ) -> ClinicProfileOut:
     """A clinic that is not verified answers the same 404 as one that does not exist."""
-    found = profile.clinic_profile(db, slug)
+    found = profile.clinic_profile(
+        db, slug, payments_enabled=settings.payment_filter_enabled
+    )
     if found is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No such clinic.")
     return ClinicProfileOut.of(found)

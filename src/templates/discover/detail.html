@@ -72,7 +72,18 @@
     {% endif %}
   </section>
 
-  {% if view.payment_note is not none %}
+  {% if view.payment %}
+  <section class="card" aria-labelledby="payment-heading">
+    <h2 id="payment-heading">Payment and medical aid</h2>
+    <p class="payment-notice payment-notice-strong">{{ view.payment.notice }}</p>
+    <ul class="payment-lines">
+      <li>{{ view.payment.methods }}</li>
+      <li>{{ view.payment.medical_aids }}</li>
+      {% if view.payment.copay_notice %}<li>{{ view.payment.copay_notice }}</li>{% endif %}
+    </ul>
+    {% if view.payment.stale_label %}<p class="stale-tag">{{ view.payment.stale_label }}</p>{% endif %}
+  </section>
+  {% elif view.payment_note is not none %}
   <section class="card" aria-labelledby="payment-heading">
     <h2 id="payment-heading">Payment and medical aid</h2>
     <p>{{ view.payment_note }}</p>

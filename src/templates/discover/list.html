@@ -94,6 +94,7 @@
         </div>
       </fieldset>
       {% endfor %}
+      {% with oob = False %}{% include "discover/_payment_filter.html" %}{% endwith %}
       <noscript><button class="btn btn-quiet btn-sm" type="submit">Update the list</button></noscript>
     </form>
 

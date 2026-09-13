@@ -32,6 +32,16 @@
         <dt>Getting there</dt>
         <dd>{{ card.travel_label }}</dd>
       </div>
+      {%- if card.payment %}
+      <div class="clinic-fact clinic-fact-wide">
+        <dt>Payment, as reported by the clinic</dt>
+        <dd>
+          {{ card.payment.methods }}. {{ card.payment.medical_aids }}.
+          {%- if card.payment.stale_label %} <span class="stale-tag">{{ card.payment.stale_label }}</span>{% endif %}
+          <span class="payment-notice">{{ card.payment.notice }}</span>
+        </dd>
+      </div>
+      {%- endif %}
     </dl>
   </article>
 </li>

@@ -1,0 +1,5 @@
+{#- What an htmx swap of the results receives (Issues 32 and 37): the results for #results, and the
+    payment filter's slot out of band, so the filter appears under Private and leaves the page
+    everywhere else. -#}
+{% with view = page.results %}{% include "discover/_results.html" %}{% endwith %}
+{% with oob = True %}{% include "discover/_payment_filter.html" %}{% endwith %}
