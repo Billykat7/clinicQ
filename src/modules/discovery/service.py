@@ -379,10 +379,15 @@ def find_nearby_sites(
     needs_candidates = open_now or sort is DiscoverySort.SHORTEST_QUEUE
     if needs_candidates:
         # Opening hours and queue lengths are not columns, so filtering or ordering by them runs
-        # over a bounded set of the nearest candidates, then paginates.
+        # over a bounded set of the nearest candidates, then paginates. Each is read for every
+        # candidate only when it decides the order or the filter, and for the page otherwise.
         rows = db.execute(statement.limit(MAX_CANDIDATES)).all()
-        schedules = published_schedules(
-            db, [row.Site.id for row in rows], from_day=business_date(moment)
+        schedules = (
+            published_schedules(
+                db, [row.Site.id for row in rows], from_day=business_date(moment)
+            )
+            if open_now
+            else {}
         )
         if open_now:
             rows = [
@@ -390,13 +395,24 @@ def find_nearby_sites(
                 for row in rows
                 if _open_status(schedules.get(row.Site.id), moment).is_open
             ]
-        queues = published_live_queues(db, [row.Site.id for row in rows], reader=reader)
+        queues = (
+            published_live_queues(db, [row.Site.id for row in rows], reader=reader)
+            if sort is DiscoverySort.SHORTEST_QUEUE
+            else {}
+        )
         if sort is DiscoverySort.SHORTEST_QUEUE:
             rows = sorted(
                 rows, key=lambda row: _queue_order(queues.get(row.Site.id, ()))
             )
         total = len(rows)
         rows = rows[offset : offset + limit]
+        page_ids = [row.Site.id for row in rows]
+        if not open_now:
+            schedules = published_schedules(
+                db, page_ids, from_day=business_date(moment)
+            )
+        if sort is not DiscoverySort.SHORTEST_QUEUE:
+            queues = published_live_queues(db, page_ids, reader=reader)
     else:
         rows = db.execute(statement.limit(limit).offset(offset)).all()
         if rows:
