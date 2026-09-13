@@ -7,7 +7,7 @@
 | Upstream | <https://leafletjs.com> |
 | Source | `https://unpkg.com/leaflet@1.9.4/dist/…` |
 | Licence | BSD-2-Clause (see the banner at the top of `leaflet.js`) |
-| Vendored for | Issue #129 — the property form's address search and map |
+| Vendored for | Issue #129 (the property form's map, since removed with the kernel's property module) and ClinicQ's discovery map, Issue 33 (`src/static/js/discover-map.js`) |
 
 ## Why it is vendored rather than loaded from a CDN
 
