@@ -1,4 +1,4 @@
-# PR: Time the open-now search as a median of seven runs (Issue 31 / M5-31 follow-up)
+# PR: Time the open-now search as a median of seven runs, and write progress as it will be on merge (Issue 31 / M5-31 follow-up)
 
 **Milestone:** [Milestone 5: Discovery & Geolocation](https://github.com/Billykat7/clinicQ/milestone/5) ·
 **Issue:** [#31](https://github.com/Billykat7/clinicQ/issues/31) (closed by #147; this is its
@@ -16,7 +16,12 @@ so `main` does not have it. Two things follow from that:
   merges, the commit is in `main` and drops out of those PRs' commit lists after `main` is merged
   forward into each, the same recipe that landed M4's stack.
 
-No source file changes.
+It also fixes how every pull request writes the milestone progress bars. #147 and #148 merged
+without regenerating them, so `main` shows M5 at 0/8 while GitHub has two issues closed, and every
+open M5 branch carried the same stale figures. A pull request's own issue is still open in review,
+so the generator could only ever write a bar that goes wrong on merge.
+
+No application source changes.
 
 ## Summary
 
@@ -24,12 +29,27 @@ No source file changes.
   a warm-up, which is how the main 500-clinic budget test already measured. It asserts the median is
   under 200 ms and prints the slowest run, so a real regression still fails and a single noisy run
   does not.
+- **`make milestone-progress ARGS='--assume-closed 32'`** counts the issues a pull request closes as
+  closed and takes everything else from GitHub, so the committed bars are right the moment it merges.
+  A stacked pull request names its whole stack (`--assume-closed 32,35,36`). A number in no
+  milestone is an error, and `--check` accepts the same flag.
+- **This branch's bars are brought up to date** with no assumption, because it closes nothing:
+  M5 is at 2/8 (25%) and the project at 32/109. The hand-written status agrees: the README count, M5's
+  Status row (Planned → In progress) and sprint 5's row.
+- **CONTRIBUTING and QUICKSTART** now say to run it with the pull request's issues, and that the
+  README's hand-written count must match the generated total.
 
 ## Changes
 
 - **`tests/integration/discovery/test_nearby_search.py`:** the open-now timing test (commit `d9a54d6`).
 - **`docs/GITHUB/PR/M5/PR_31_FOLLOWUP_DESCRIPTION.md`:** this description.
-- A merge of `origin/main` into the branch, so the PR's diff is exactly the two above.
+- **`scripts/update_milestone_progress.py`:** `--assume-closed`, `count_closed`,
+  `parse_issue_numbers`. **`tests/unit/scripts/test_milestone_progress.py`** (new, 6 tests).
+  **`Makefile`:** `milestone-progress-check` passes `ARGS`.
+- **`CONTRIBUTING.md`**, **`docs/QUICKSTART.md`:** the rule.
+- **`README.md`**, **`docs/GITHUB/README.md`**, **`docs/GITHUB/MILESTONES/M5_discovery_geolocation.md`**,
+  **`docs/TEAM/WORKLOAD_SPLIT.md`:** the regenerated bars and the hand-written status beside them.
+- A merge of `origin/main` into the branch.
 
 ## Testing
 
@@ -44,10 +64,21 @@ open_now over 500 candidates: median 57.0 ms, slowest 159.5 ms
 
       The slowest open-now run here was 159.5 ms against a 57.0 ms median. That spread on a quiet
       laptop is why a single sample on a shared CI runner can cross 200 ms.
+- [x] The generator, without GitHub (`pytest tests/unit/scripts`): 6 passed. Against GitHub:
+
+```text
+$ python scripts/update_milestone_progress.py --check
+  M5  🟩🟩⬜⬜⬜⬜⬜⬜⬜⬜ **25%** (2/8 issues)
+14 milestone(s): up to date
+$ python scripts/update_milestone_progress.py --check --assume-closed 999
+--assume-closed names issues in no milestone: 999
+$ python scripts/update_milestone_progress.py --assume-closed x
+update_milestone_progress.py: error: argument --assume-closed: not an issue number: 'x'
+```
 
 ## Risk and rollback
 
-Test-only. Rollback is a revert, which brings the flaky single-sample timing back.
+Test and documentation tooling only. Rollback is a revert, which brings back the flaky single-sample timing and bars that are only right after a later regeneration.
 
 **Merge order:** merge this first. Then `main` is merged forward into #149 (Issue 32) and on up the
 stack, one PR at a time.
