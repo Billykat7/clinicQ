@@ -18,7 +18,7 @@ import json
 import random
 import statistics
 import time as clock
-from collections.abc import Collection, Mapping
+from collections.abc import Collection, Iterator, Mapping
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
@@ -38,7 +38,8 @@ from src.modules.discovery.service import (
     find_nearby_sites,
     nearby_statement,
 )
-from src.modules.queues.live import LiveQueue
+from src.modules.queue.snapshot import NoSnapshotCache, set_snapshot_cache
+from src.modules.queues.live import LiveQueue, QueueReading
 from tests.factories import QueueFactory
 from tests.integration.discovery.conftest import JOHANNESBURG, add_verified_clinic
 
@@ -300,8 +301,8 @@ def test_a_measured_queue_length_travels_intact_to_the_result(
 ) -> None:
     """The reader seam Issues 36 and 39 plug into: counts in, per-queue and clinic totals out."""
 
-    def reader(db: Session, queues: Collection[Queue]) -> Mapping[str, int | None]:
-        return {queue.id: queue.display_order + 2 for queue in queues}
+    def reader(db: Session, queues: Collection[Queue]) -> Mapping[str, QueueReading]:
+        return {queue.id: QueueReading(queue.display_order + 2) for queue in queues}
 
     with directory.session() as db:
         result = find_nearby_sites(db, JOHANNESBURG, radius_m=2_000, reader=reader)
@@ -353,8 +354,13 @@ _BOX = ((-26.45, -25.95), (27.80, 28.30))
 
 
 @pytest.fixture
-def five_hundred_clinics(migrated_engine: Engine) -> Engine:
-    """500 verified clinics spread over Gauteng, each with three queues and weekday hours."""
+def five_hundred_clinics(migrated_engine: Engine) -> Iterator[Engine]:
+    """500 verified clinics spread over Gauteng, each with three queues and weekday hours.
+
+    The queue snapshot runs with no cache, the slow path (Issue 36): every length comes from the
+    table or a recount, so the budget holds without Redis's help.
+    """
+    set_snapshot_cache(NoSnapshotCache())
     rng = random.Random(_PERF_SEED)
     (lat_lo, lat_hi), (lon_lo, lon_hi) = _BOX
     with Session(migrated_engine) as db:
@@ -376,7 +382,8 @@ def five_hundred_clinics(migrated_engine: Engine) -> Engine:
         conn.execute(text("ANALYZE clinicq.site"))
         conn.execute(text("ANALYZE clinicq.queue"))
         conn.execute(text("ANALYZE clinicq.site_opening_hours"))
-    return migrated_engine
+    yield migrated_engine
+    set_snapshot_cache(None)
 
 
 def test_the_query_uses_the_gist_index(five_hundred_clinics: Engine) -> None:

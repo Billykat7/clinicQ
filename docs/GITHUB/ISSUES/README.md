@@ -69,7 +69,7 @@ Places where the specs and the repository disagree. None blocks sprint 1, but ea
 
 | # | Decision | The specs say | The repository has | Affects |
 |---|----------|---------------|--------------------|---------|
-| 1 | Background jobs | `arq` workers | APScheduler with a PostgreSQL advisory lock (`src/core/scheduler.py`), already running the notification retry and retention sweeps | 36, 43, 63, 81, 82, 85, 88, 91, 95, 99 |
+| 1 | Background jobs | `arq` workers | APScheduler with a PostgreSQL advisory lock (`src/core/scheduler.py`), already running the notification retry and retention sweeps, and since Issue 36 the queue snapshot reconciliation (`run_queue_snapshot_reconciliation`) | 36, 43, 63, 81, 82, 85, 88, 91, 95, 99 |
 | 2 | Styling (**decided in Issue 5**) | Tailwind, compiled; Alpine.js for local state | Hand-written CSS design tokens (`site.css`, `admin.css`, `landing.css`) with light and dark themes. **Kept, with htmx and no Alpine**: see the note below the table | 5 and every UI issue |
 | 3 | Packaging and layout (**decided in Issue 1**) | `uv` and `uv sync`; an `app/` package | `requirements.txt` with setuptools (`pyproject.toml`); a `src/` package. **Kept as is**: see the note below the table | 1, 7, 9 |
 | 4 | PostgreSQL version (**decided in Issue 2**) | 18 | `postgis/postgis:16-3.4` in `infra/docker/docker-compose.db.yml`. **Now `postgis/postgis:18-3.6`**: see the note below the table | 2, 3, 9, 102 |

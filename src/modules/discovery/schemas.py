@@ -91,6 +91,9 @@ class LiveQueueOut(BaseModel):
     wait_range: WaitRangeOut | None = Field(
         description="The expected wait as a range. `null` until the estimator (Issue 42) exists."
     )
+    as_of: datetime | None = Field(
+        description="When `waiting` was counted (the queue snapshot's time); `null` when not counted."
+    )
 
     @classmethod
     def of(cls, queue: LiveQueue) -> LiveQueueOut:
@@ -102,6 +105,7 @@ class LiveQueueOut(BaseModel):
             allows_remote_join=queue.allows_remote_join,
             waiting=queue.waiting,
             wait_range=WaitRangeOut.of(queue.wait_range),
+            as_of=queue.as_of,
         )
 
 

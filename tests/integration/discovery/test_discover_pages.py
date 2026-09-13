@@ -22,6 +22,7 @@ from src.commons.time import APP_TIMEZONE
 from src.database.models import Queue
 from src.modules.discovery.areas import search_areas
 from src.modules.discovery.service import MAX_RADIUS_M, find_nearby_sites
+from src.modules.queues.live import QueueReading
 from src.web.discover import (
     HX_PUSH_URL,
     QUEUE_NOT_REPORTED,
@@ -273,9 +274,9 @@ def test_the_shortest_queue_sort_puts_unmeasured_queues_last(
     with directory.session() as db:
         ids = directory.ids
 
-    def reader(db: Session, queues: Collection[Queue]) -> Mapping[str, int | None]:
+    def reader(db: Session, queues: Collection[Queue]) -> Mapping[str, QueueReading]:
         lengths = {ids["medicross-randburg"]: 1, ids["mandela-sisulu-clinic"]: 4}
-        return {queue.id: lengths.get(queue.site_id) for queue in queues}
+        return {queue.id: QueueReading(lengths.get(queue.site_id)) for queue in queues}
 
     with directory.session() as db:
         result = find_nearby_sites(

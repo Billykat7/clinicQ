@@ -1113,6 +1113,37 @@ class Settings(BaseSettings):
         ),
     )
 
+    # The queue snapshot (Issue 36): one cached length per queue, so a list of twenty clinics is one
+    # read rather than twenty counts. A snapshot older than the bound is never served, and a cold or
+    # unreachable cache falls back to the database and then to a fresh count: slower, never wrong.
+    queue_snapshot_ttl_seconds: int = Field(
+        default=15,
+        ge=1,
+        le=300,
+        description=(
+            "How long a queue snapshot lives in Redis before it expires (env: "
+            "QUEUE_SNAPSHOT_TTL_SECONDS). Short, because a miss only costs a recount."
+        ),
+    )
+    queue_snapshot_max_age_seconds: int = Field(
+        default=30,
+        ge=1,
+        le=300,
+        description=(
+            "The oldest a snapshot may be and still be shown to a patient, in seconds (env: "
+            "QUEUE_SNAPSHOT_MAX_AGE_SECONDS). Older ones are recounted. M5's bound is 30."
+        ),
+    )
+    queue_snapshot_reconcile_seconds: int = Field(
+        default=60,
+        ge=10,
+        le=3600,
+        description=(
+            "How often the reconciliation sweep compares every snapshot with a fresh count and "
+            "repairs any drift, in seconds (env: QUEUE_SNAPSHOT_RECONCILE_SECONDS)."
+        ),
+    )
+
     @property
     def database_url_async(self) -> str:
         """The request-path async DSN: ``database_url`` with an async driver (Issue #81).

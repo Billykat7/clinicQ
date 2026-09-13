@@ -59,11 +59,11 @@ from src.database.types import point_ewkt
 from src.modules.discovery.areas import AreaSummary, get_area
 from src.modules.discovery.travel import TravelEstimate, estimate_travel
 from src.modules.discovery.wording import distance_label
+from src.modules.queue.snapshot import cached_waiting_counts
 from src.modules.queues.live import (
     LiveQueue,
     WaitingCountReader,
     published_live_queues,
-    read_waiting_counts,
     total_waiting,
 )
 from src.modules.sites.hours import OpeningSchedule, open_state, published_schedules
@@ -257,7 +257,7 @@ def find_nearby_sites(
     limit: int = DEFAULT_PAGE_SIZE,
     offset: int = 0,
     moment: datetime | None = None,
-    reader: WaitingCountReader = read_waiting_counts,
+    reader: WaitingCountReader = cached_waiting_counts,
 ) -> NearbyResult:
     """Find the verified clinics near ``origin``, nearest first.
 
@@ -276,7 +276,7 @@ def find_nearby_sites(
         limit: Page size, clamped to ``1..MAX_PAGE_SIZE``.
         offset: Results to skip.
         moment: When "open now" means; ``None`` is now in Johannesburg.
-        reader: Where queue lengths come from (the direct read until Issue 36).
+        reader: Where queue lengths come from: the queue snapshot (Issue 36) by default.
 
     Returns:
         The page, with the radius actually used and the total number of matches.
