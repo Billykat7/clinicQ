@@ -44,6 +44,7 @@ from sqlalchemy.orm import Session
 
 from src.commons.enums import (
     BoundedContext,
+    DiscoverySort,
     DistanceBasis,
     SaProvince,
     SectorFilter,
@@ -81,11 +82,12 @@ MIN_RADIUS_M: Final = 100
 DEFAULT_PAGE_SIZE: Final = 20
 #: The largest page a caller may ask for.
 MAX_PAGE_SIZE: Final = 50
-#: With ``open_now``, how many of the nearest clinics are examined before paginating. Opening hours
-#: are evaluated in Python (Issue 24's rules do not reduce to SQL), so the filter runs over a
-#: bounded candidate set rather than the whole radius; 500 is the whole seeded directory in the
-#: performance test and far more than a 50 km radius holds outside the three metros.
-MAX_OPEN_NOW_CANDIDATES: Final = 500
+#: With ``open_now`` or the shortest-queue sort, how many of the nearest clinics are examined before
+#: paginating. Opening hours are evaluated in Python (Issue 24's rules do not reduce to SQL) and queue
+#: lengths come from a reader, so both run over a bounded candidate set rather than the whole radius;
+#: 500 is the whole seeded directory in the performance test and far more than a 50 km radius holds
+#: outside the three metros.
+MAX_CANDIDATES: Final = 500
 
 
 def get_module_info() -> ModuleInfo:
@@ -192,6 +194,7 @@ class NearbyResult:
     radius: SearchRadius
     sector: SectorFilter
     open_now: bool
+    sort: DiscoverySort
     #: How many clinics matched in all, across every page.
     total: int
     limit: int
@@ -223,6 +226,16 @@ def nearby_statement(
     return statement
 
 
+def _queue_order(queues: tuple[LiveQueue, ...]) -> tuple[bool, int]:
+    """The shortest-queue sort key: measured lengths ascending, then every unmeasured one.
+
+    ``sorted`` is stable and the candidates arrive nearest first, so equal keys stay in distance
+    order. An unmeasured clinic is never ranked as if its queue were empty.
+    """
+    waiting = total_waiting(queues)
+    return (waiting is None, waiting or 0)
+
+
 def _open_status(schedule: OpeningSchedule | None, moment: datetime) -> OpenStatus:
     """Issue 24's answer for one clinic; a clinic with no schedule loaded is closed."""
     state = open_state(schedule or OpeningSchedule(), moment)
@@ -240,6 +253,7 @@ def find_nearby_sites(
     radius_m: int | None = None,
     sector: SectorFilter = SectorFilter.ALL,
     open_now: bool = False,
+    sort: DiscoverySort = DiscoverySort.NEAREST,
     limit: int = DEFAULT_PAGE_SIZE,
     offset: int = 0,
     moment: datetime | None = None,
@@ -257,6 +271,8 @@ def find_nearby_sites(
             :data:`DEFAULT_RADIUS_M`.
         sector: Public, private or all.
         open_now: Keep only the clinics open at ``moment``.
+        sort: Nearest first (the default), or shortest queue first (Issue 32). A queue whose
+            length is not measured sorts after every measured one, nearest first among them.
         limit: Page size, clamped to ``1..MAX_PAGE_SIZE``.
         offset: Results to skip.
         moment: When "open now" means; ``None`` is now in Johannesburg.
@@ -286,19 +302,43 @@ def find_nearby_sites(
     statement = nearby_statement(point, radius.applied_m, sector)
 
     rows: Sequence[Any]
-    schedules: dict[str, OpeningSchedule]
-    if open_now:
-        candidates = db.execute(statement.limit(MAX_OPEN_NOW_CANDIDATES)).all()
-        schedules = published_schedules(
-            db, [row.Site.id for row in candidates], from_day=business_date(moment)
+    needs_candidates = open_now or sort is DiscoverySort.SHORTEST_QUEUE
+    if needs_candidates:
+        # Opening hours and queue lengths are not columns, so filtering or ordering by them runs
+        # over a bounded set of the nearest candidates, then paginates. Each is read for every
+        # candidate only when it decides the order or the filter, and for the page otherwise.
+        rows = db.execute(statement.limit(MAX_CANDIDATES)).all()
+        schedules = (
+            published_schedules(
+                db, [row.Site.id for row in rows], from_day=business_date(moment)
+            )
+            if open_now
+            else {}
         )
-        open_rows = [
-            row
-            for row in candidates
-            if _open_status(schedules.get(row.Site.id), moment).is_open
-        ]
-        total = len(open_rows)
-        rows = open_rows[offset : offset + limit]
+        if open_now:
+            rows = [
+                row
+                for row in rows
+                if _open_status(schedules.get(row.Site.id), moment).is_open
+            ]
+        queues = (
+            published_live_queues(db, [row.Site.id for row in rows], reader=reader)
+            if sort is DiscoverySort.SHORTEST_QUEUE
+            else {}
+        )
+        if sort is DiscoverySort.SHORTEST_QUEUE:
+            rows = sorted(
+                rows, key=lambda row: _queue_order(queues.get(row.Site.id, ()))
+            )
+        total = len(rows)
+        rows = rows[offset : offset + limit]
+        page_ids = [row.Site.id for row in rows]
+        if not open_now:
+            schedules = published_schedules(
+                db, page_ids, from_day=business_date(moment)
+            )
+        if sort is not DiscoverySort.SHORTEST_QUEUE:
+            queues = published_live_queues(db, page_ids, reader=reader)
     else:
         rows = db.execute(statement.limit(limit).offset(offset)).all()
         if rows:
@@ -313,9 +353,8 @@ def find_nearby_sites(
         schedules = published_schedules(
             db, [row.Site.id for row in rows], from_day=business_date(moment)
         )
+        queues = published_live_queues(db, [row.Site.id for row in rows], reader=reader)
 
-    site_ids = [row.Site.id for row in rows]
-    queues = published_live_queues(db, site_ids, reader=reader)
     clinics = tuple(
         NearbyClinic(
             site_id=row.Site.id,
@@ -348,6 +387,7 @@ def find_nearby_sites(
         radius=radius,
         sector=sector,
         open_now=open_now,
+        sort=sort,
         total=total,
         limit=limit,
         offset=offset,

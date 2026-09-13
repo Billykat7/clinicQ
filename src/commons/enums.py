@@ -371,6 +371,18 @@ class GeocodingProvider(StrEnum):
     NOMINATIM = "nominatim"
 
 
+class DiscoverySort(StrEnum):
+    """How a discovery list is ordered (Issue 32).
+
+    - ``NEAREST``: by distance, the default.
+    - ``SHORTEST_QUEUE``: by the number waiting; clinics whose length is not measured come last,
+      because an unknown queue is not an empty one.
+    """
+
+    NEAREST = "nearest"
+    SHORTEST_QUEUE = "shortest_queue"
+
+
 class AreaKind(StrEnum):
     """What kind of place an area is. Stored in ``area.kind`` (Issue 34).
 

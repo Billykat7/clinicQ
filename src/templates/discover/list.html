@@ -1,0 +1,119 @@
+{% extends "layouts/patient.html" %}
+{#- Find a clinic (Issue 32): the first screen a patient sees.
+
+    Server-rendered by src.web.discover.discover, with htmx swapping the results in place when the
+    sector, radius or sort changes. Everything a patient reads was decided as data in that module;
+    this file lays it out.
+
+    Two ways in, offered together so neither is a dead end: the location prompt (discover.js asks the
+    browser only when the patient presses the button, and sends the position rounded to about 100 m)
+    and the suburb search, which is a plain form that works without JavaScript. Declining the prompt,
+    or a browser that cannot locate, moves the focus to the suburb search with a sentence saying why. -#}
+{% from "components/skeleton.html" import skeleton %}
+
+{% block title %}Find a clinic · {{ app_name }}{% endblock %}
+
+{% block styles %}
+  {{ super() }}
+  <link rel="stylesheet" href="/static/css/discover.css">
+{% endblock %}
+
+{% block scripts %}
+  <script src="/static/js/discover.js" defer></script>
+{% endblock %}
+
+{% block content %}
+{#- The suburb search is written once and placed by the page's state: first when there is nowhere to
+    search from yet, after the results once there is, so a list is never pushed below a form. -#}
+{% set area_search %}
+  <section class="card discover-area" id="area-search" aria-labelledby="area-heading">
+    <h2 id="area-heading">{{ "Search by suburb or township" if page.offer_location else "Search somewhere else" }}</h2>
+    <form class="area-form" method="get" action="/discover" role="search">
+      <label class="area-label" for="area-q">Suburb, township or town</label>
+      <div class="area-row">
+        <input class="area-input" id="area-q" name="q" type="search" value="{{ page.query }}"
+               autocomplete="off" autocapitalize="words" spellcheck="false" maxlength="100"
+               placeholder="For example Soweto"
+               aria-controls="area-suggestions" aria-describedby="area-hint"
+               hx-get="/discover/areas" hx-trigger="input changed delay:300ms, search"
+               hx-target="#area-suggestions" hx-sync="this:replace">
+        <button class="btn btn-quiet" type="submit">Search</button>
+      </div>
+      <p class="area-hint" id="area-hint">Spelling does not have to be exact.</p>
+    </form>
+    <div class="area-suggestions" id="area-suggestions" aria-live="polite">
+      {% with suggestions = page.suggestions, query = page.query %}{% include "discover/_area_suggestions.html" %}{% endwith %}
+    </div>
+    {% if not page.offer_location %}
+    <p class="discover-restart"><a href="/discover">Use my location instead</a></p>
+    {% endif %}
+  </section>
+{% endset %}
+<div class="stack discover">
+  <div>
+    <h1>Find a clinic</h1>
+    <p class="lead">Nearby clinics, public or private, with how many people are waiting and whether they are open.</p>
+  </div>
+
+  {% if page.problem %}
+  <p class="msg msg-error" role="alert">{{ page.problem }}</p>
+  {% endif %}
+
+  {% if page.offer_location %}
+  <section class="card discover-locate" id="locate" aria-labelledby="locate-heading">
+    <h2 id="locate-heading">Use your location</h2>
+    <p class="card-sub">We use it once, on this page, to show the clinics closest to you. It is rounded to about 100 m and is not saved.</p>
+    <button class="btn btn-block" type="button" id="locate-button" data-locate hidden>Use my location</button>
+    <p class="msg msg-muted" id="locate-status" role="status" hidden></p>
+    <noscript><p class="msg msg-muted">Your browser is not running scripts, so it cannot share a location. Search by suburb below.</p></noscript>
+  </section>
+  {% endif %}
+
+  {% if not page.results %}{{ area_search }}{% endif %}
+
+  {% if page.results %}
+  <section class="discover-results" aria-labelledby="results-heading">
+    <h2 id="results-heading">{{ page.origin.heading }}</h2>
+
+    <form class="discover-filters" id="filters" method="get" action="/discover"
+          hx-get="/discover/results" hx-trigger="change" hx-target="#results"
+          hx-indicator="#results-loading" hx-sync="this:replace">
+      {% for name, value in page.origin.params.items() %}
+      <input type="hidden" name="{{ name }}" value="{{ value }}">
+      {% endfor %}
+      {#- Three radio groups rather than selects: arrow keys move within each group on every browser,
+          each option is a 44px target, and nothing opens a native popup a small screen has to scroll. -#}
+      {% for group in page.filter_groups %}
+      <fieldset class="segmented">
+        <legend class="segmented-legend">{{ group.legend }}</legend>
+        <div class="segmented-options segmented-{{ group.choices | length }}">
+          {% for choice in group.choices %}
+          <input class="segmented-input" type="radio" name="{{ group.name }}" id="{{ group.name }}-{{ choice.value }}" value="{{ choice.value }}"{% if choice.selected %} checked{% endif %}>
+          <label class="segmented-option" for="{{ group.name }}-{{ choice.value }}">{{ choice.label }}</label>
+          {% endfor %}
+        </div>
+      </fieldset>
+      {% endfor %}
+      <noscript><button class="btn btn-quiet btn-sm" type="submit">Update the list</button></noscript>
+    </form>
+
+    <div class="results-loading htmx-indicator" id="results-loading" aria-hidden="true">
+      {{ skeleton(lines=4, label="Loading clinics") }}
+    </div>
+
+    <div class="results-error card" id="results-error" role="alert" hidden>
+      <h3>We could not load clinics just now</h3>
+      <p>Check your connection and try again. The list below is the last one that loaded.</p>
+      <button class="btn btn-quiet btn-sm" type="button" id="results-retry">Try again</button>
+    </div>
+
+    <div class="results" id="results" aria-live="polite" aria-busy="false">
+      {% with view = page.results %}{% include "discover/_results.html" %}{% endwith %}
+    </div>
+  </section>
+  {{ area_search }}
+  {% endif %}
+
+  <p class="discover-attribution">Place names and positions © <a href="https://www.openstreetmap.org/copyright" rel="noopener">OpenStreetMap contributors</a>.</p>
+</div>
+{% endblock %}

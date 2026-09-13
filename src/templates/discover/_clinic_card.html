@@ -1,0 +1,37 @@
+{#- One clinic in the discovery list (Issue 32). Every word here was decided by
+    src.web.discover.clinic_card, so the template only lays it out.
+
+    The three things that drive the decision come first: distance, queue length and open or
+    closed. Open and closed are words, not a coloured dot. -#}
+{% from "discover/_sector_badge.html" import sector_badge %}
+<li class="clinic-card">
+  <article aria-labelledby="clinic-{{ card.slug }}">
+    <div class="clinic-card-head">
+      <h3 id="clinic-{{ card.slug }}" class="clinic-card-name">{{ card.name }}</h3>
+      {{ sector_badge(card.badge) }}
+    </div>
+    <p class="clinic-card-address">{{ card.address }}</p>
+    <dl class="clinic-facts">
+      <div class="clinic-fact">
+        <dt>Distance</dt>
+        <dd>{{ card.distance_label }}</dd>
+      </div>
+      <div class="clinic-fact">
+        <dt>Open</dt>
+        <dd class="open-state {{ 'is-open' if card.is_open else 'is-closed' }}">{{ card.open_label }}</dd>
+      </div>
+      <div class="clinic-fact">
+        <dt>Queue</dt>
+        <dd>{{ card.queue_label }}</dd>
+      </div>
+      <div class="clinic-fact">
+        <dt>Wait</dt>
+        <dd>{{ card.wait_label }}</dd>
+      </div>
+      <div class="clinic-fact clinic-fact-wide">
+        <dt>Getting there</dt>
+        <dd>{{ card.travel_label }}</dd>
+      </div>
+    </dl>
+  </article>
+</li>

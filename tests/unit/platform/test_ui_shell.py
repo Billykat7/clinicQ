@@ -44,7 +44,7 @@ CSS = REPO_ROOT / "src" / "static" / "css"
 FONTS = REPO_ROOT / "src" / "static" / "fonts"
 
 #: Stylesheets written on the token rule from the start (Issue 5).
-TOKEN_ONLY_STYLESHEETS = ("components.css", "layouts.css", "dev.css")
+TOKEN_ONLY_STYLESHEETS = ("components.css", "layouts.css", "dev.css", "discover.css")
 
 #: The three layouts, and the only templates allowed to extend base.html directly.
 LAYOUTS = ("layouts/patient.html", "layouts/dashboard.html", "layouts/board.html")

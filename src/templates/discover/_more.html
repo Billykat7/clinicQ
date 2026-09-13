@@ -1,0 +1,12 @@
+{#- The next page of clinics (Issue 32): cards, then the next "Show more", swapped in place of the
+    button that asked for them. -#}
+{% for card in view.cards %}
+  {% include "discover/_clinic_card.html" %}
+{% endfor %}
+{% if view.more_href %}
+<li class="clinic-list-more">
+  <a class="btn btn-quiet btn-block" href="{{ view.more_href }}"
+     hx-get="{{ view.more_href | replace('/discover?', '/discover/results?', 1) }}"
+     hx-target="closest li" hx-swap="outerHTML">Show more clinics</a>
+</li>
+{% endif %}

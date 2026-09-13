@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from src.commons.enums import (
     AreaKind,
+    DiscoverySort,
     DistanceBasis,
     QueueKind,
     SaProvince,
@@ -202,6 +203,7 @@ class NearbyPageOut(BaseModel):
     radius: SearchRadiusOut
     sector: SectorFilter
     open_now: bool
+    sort: DiscoverySort
     total: int
     limit: int
     offset: int
@@ -222,6 +224,7 @@ class NearbyPageOut(BaseModel):
             ),
             sector=result.sector,
             open_now=result.open_now,
+            sort=result.sort,
             total=result.total,
             limit=result.limit,
             offset=result.offset,

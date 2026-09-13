@@ -1,0 +1,19 @@
+{#- The discovery results (Issue 32): what the Public / Private / All toggle, the radius and the sort
+    swap in without a page load. Rendered inside the page on first load and on its own for htmx.
+
+    view is a src.web.discover.ResultsView: the summary, the note that distances are approximate
+    when the search started from an area, the cards, the designed empty state, and the next page. -#}
+{% from "components/empty_state.html" import empty_state %}
+{% if not view.empty %}
+<p class="results-summary" id="results-summary">{{ view.summary }}</p>
+{% endif %}
+{% if view.approximate_note %}
+<p class="results-note">{{ view.approximate_note }}</p>
+{% endif %}
+{% if view.empty %}
+  {{ empty_state(view.empty.title, body=view.empty.body, action_label=view.empty.action_label, action_href=view.empty.action_href) }}
+{% else %}
+<ul class="clinic-list" aria-describedby="results-summary">
+  {% include "discover/_more.html" %}
+</ul>
+{% endif %}
