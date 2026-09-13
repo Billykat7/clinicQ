@@ -5,7 +5,7 @@ effective grants, not a hardcoded role list, so a role an admin builds in the RB
 exactly the destinations its grants imply — and the server re-checks every route, so the same
 grant that shows a console admits its URL and its absence refuses the rest with ``403`` (the
 defence-in-depth guarantee). This proves that end to end for a custom READ-only management role,
-per ``.cursor/rules/testing-strategy.mdc`` (status codes only, never HTML body).
+per ``docs/IDE/RULES/testing-strategy.mdc`` (status codes only, never HTML body).
 """
 
 # ── kernel half ──────────────────────────────────────────────────────────────────────────

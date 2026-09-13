@@ -1,6 +1,6 @@
 """One function normalises a phone number (Issue 17): every spelling of a number is one patient.
 
-Essential logic with no I/O, so a unit test (``.cursor/rules/testing-strategy.mdc``).
+Essential logic with no I/O, so a unit test (``docs/IDE/RULES/testing-strategy.mdc``).
 """
 
 import pytest

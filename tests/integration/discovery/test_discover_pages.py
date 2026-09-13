@@ -1,6 +1,6 @@
 """The discovery list page, tested through the data it renders (Issue 32).
 
-``.cursor/rules/testing-strategy.mdc`` forbids asserting rendered HTML, so the page's decisions are
+``docs/IDE/RULES/testing-strategy.mdc`` forbids asserting rendered HTML, so the page's decisions are
 tested where they are made: :func:`src.web.discover.discover_page` and :func:`results_view` return
 dataclasses, and the routes are tested by status code and header. The browser half (the swap
 itself, Slow 3G, a keyboard-only run and the accessibility check) is in the pull request.

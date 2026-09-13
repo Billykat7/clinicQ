@@ -19,7 +19,7 @@ Plus the regression that motivated the milestone: simulating the ``tenant`` role
 ``/admin/leases`` reproduces M28 #165's finding as a single API call — the thing that originally
 took two git worktrees and a bespoke probe.
 
-Per ``.cursor/rules/testing-strategy.mdc`` these assert JSON, status codes and resolver outcomes —
+Per ``docs/IDE/RULES/testing-strategy.mdc`` these assert JSON, status codes and resolver outcomes —
 never HTML — and build isolated ``Settings`` (``_env_file=None``) so a developer's local ``.env``
 cannot change outcomes.
 """

@@ -179,7 +179,7 @@ def can_explain_denial(nav: NavVisibility) -> bool:
 
     A pure function of an already-resolved :class:`NavVisibility` so the property can be asserted
     directly, rather than through the rendered HTML that
-    ``.cursor/rules/testing-strategy.mdc`` forbids testing.
+    ``docs/IDE/RULES/testing-strategy.mdc`` forbids testing.
     """
     return nav.can(RBAC_RESOURCE, PermissionVerb.READ, GrantScope.BUSINESS)
 

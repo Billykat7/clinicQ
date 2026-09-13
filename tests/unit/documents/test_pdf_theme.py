@@ -1,6 +1,6 @@
 """Unit tests for the shared branded-PDF theme (Issue 98 / M16).
 
-Essential, isolated logic only (per ``.cursor/rules/testing-strategy.mdc``): the pure pieces every
+Essential, isolated logic only (per ``docs/IDE/RULES/testing-strategy.mdc``): the pure pieces every
 generator now shares — the aligned **money table** (right-justified amounts, currency, ruled total
 from exact minor units), the **determinism** of the render given fixed metadata, and that the
 themed render still emits real, multi-page PDF bytes. The per-document content of each generator is

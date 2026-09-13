@@ -1,6 +1,6 @@
 """The map view's data: the same search, the same cards, with somewhere to put each pin (Issue 33).
 
-The map itself is JavaScript over Leaflet, and ``.cursor/rules/testing-strategy.mdc`` keeps rendered
+The map itself is JavaScript over Leaflet, and ``docs/IDE/RULES/testing-strategy.mdc`` keeps rendered
 output out of the suite, so what is tested here is the contract the map is built on: the map view
 is the **same page and the same search** as the list, every card carries its clinic's coordinates
 and a directions hand-off, the address bar keeps the view with the filters, and the map knows where

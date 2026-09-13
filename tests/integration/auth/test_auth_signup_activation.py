@@ -7,7 +7,7 @@ invalid tokens are rejected; ``SIGNUP_ENABLED`` gates the endpoint; and
 duplicate-email signup returns the same generic response without leaking whether
 the account already exists.
 
-Per ``.cursor/rules/testing-strategy.mdc`` these assert JSON, status codes,
+Per ``docs/IDE/RULES/testing-strategy.mdc`` these assert JSON, status codes,
 redirects and DB state — never HTML body content — and build isolated
 ``Settings`` (``_env_file=None``) so a developer's local ``.env`` (SMTP creds,
 feature flags) cannot change outcomes.

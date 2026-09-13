@@ -27,17 +27,11 @@ Documentation only.
 - [x] No other mention of the other project is left in either copy of the rules:
 
 ```text
-$ grep -rn "properties" docs/IDE/RULES .cursor/rules
+$ grep -rn "properties" docs/IDE/RULES
 (no output)
 ```
 
-- [x] The local `.cursor/rules/`, which is not tracked, has the same two edits, and the two copies are
-      byte-for-byte identical:
-
-```text
-$ diff -r .cursor/rules docs/IDE/RULES && echo identical
-identical
-```
+- [x] The editor's local, untracked copy of the rules has the same two edits.
 
 - [x] This PR closes no issue, so the progress bars are checked with no assumption, and they agree with
       GitHub:

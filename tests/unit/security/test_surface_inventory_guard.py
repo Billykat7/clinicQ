@@ -14,7 +14,7 @@ is precisely how the gaps this wave closed survived two prior audits.
 
 **Source, not rendered HTML.** The lint parses ``src/web/routes.py``'s AST and scans template text.
 Nothing here renders a page or asserts on a response body, so it does not run afoul of
-``.cursor/rules/testing-strategy.mdc`` — that rule is about asserting rendered output, which is a
+``docs/IDE/RULES/testing-strategy.mdc`` — that rule is about asserting rendered output, which is a
 different thing. Stated here as well as in the script so a future cleanup does not delete either.
 """
 

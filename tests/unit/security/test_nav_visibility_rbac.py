@@ -15,7 +15,7 @@ regression (or a new console wired to a bare READ) fails here. The HTTP defence-
 direct URL to a hidden console 403s) lives in
 ``tests/integration/admin/test_rbac_console_gating.py``.
 
-Per ``.cursor/rules/testing-strategy.mdc`` these are the essential, isolated RBAC rules unit tests
+Per ``docs/IDE/RULES/testing-strategy.mdc`` these are the essential, isolated RBAC rules unit tests
 are reserved for; allow/deny over real HTTP is the integration suite's job.
 """
 

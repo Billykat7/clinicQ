@@ -11,7 +11,7 @@ service layer (the HTTP surface is covered in ``tests/integration/test_documents
 * retention stamps ``expires_at`` from the class, and the sweep purges expired documents,
   tombstones the row and records the deletion — leaving permanent documents untouched.
 
-Per ``.cursor/rules/testing-strategy.mdc`` these build isolated ``Settings`` (``_env_file=None``) so
+Per ``docs/IDE/RULES/testing-strategy.mdc`` these build isolated ``Settings`` (``_env_file=None``) so
 a developer's local ``.env`` cannot change outcomes.
 """
 

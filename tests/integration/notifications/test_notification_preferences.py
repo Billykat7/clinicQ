@@ -2,7 +2,7 @@
 
 Real HTTP against an in-memory database, asserting JSON / status codes / DB state (never HTML),
 with isolated ``Settings`` (``_env_file=None``) so a developer's local ``.env`` cannot change
-outcomes (per ``.cursor/rules/testing-strategy.mdc``):
+outcomes (per ``docs/IDE/RULES/testing-strategy.mdc``):
 
 * ``GET/PUT /api/v1/notifications/preferences`` — the signed-in user reads and updates their
   preferences; an essential category set off is coerced to email; an unknown timezone is a 422; an

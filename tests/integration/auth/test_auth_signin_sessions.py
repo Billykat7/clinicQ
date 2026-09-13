@@ -20,7 +20,7 @@ in-memory database:
   clients skip the token check;
 * a password-reset link works once.
 
-Per ``.cursor/rules/testing-strategy.mdc`` these assert JSON, status codes, cookies and
+Per ``docs/IDE/RULES/testing-strategy.mdc`` these assert JSON, status codes, cookies and
 DB state — never HTML body content — and build isolated ``Settings`` (``_env_file=None``)
 so a developer's local ``.env`` (SMTP creds, feature flags, JWT secret) cannot change
 outcomes.

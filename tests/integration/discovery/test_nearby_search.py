@@ -10,7 +10,7 @@ Each acceptance criterion has a test named after it:
 * the **radius is capped** on the server.
 
 Behaviour is asserted from the service's dataclasses and the API's JSON, never from markup
-(``.cursor/rules/testing-strategy.mdc``).
+(``docs/IDE/RULES/testing-strategy.mdc``).
 """
 
 import dataclasses

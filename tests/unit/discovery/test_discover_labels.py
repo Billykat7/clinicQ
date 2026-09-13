@@ -1,7 +1,7 @@
 """The words the discovery list shows, decided as data (Issue 32).
 
 These are the sentences a patient acts on, so each is pinned here rather than read back out of
-rendered HTML (``.cursor/rules/testing-strategy.mdc``): an unknown queue is never "0 waiting", a wait
+rendered HTML (``docs/IDE/RULES/testing-strategy.mdc``): an unknown queue is never "0 waiting", a wait
 is a range or nothing, and "closed" always says when it opens.
 """
 

@@ -11,7 +11,7 @@ that gains a ``site_id`` tomorrow is covered without anyone remembering this fil
 the bottom prove the check fails on the two shapes it exists to catch, and passes the same code
 written through the helper: a guard that cannot fail passes forever.
 
-Reads source, never rendered output (``.cursor/rules/testing-strategy.mdc``).
+Reads source, never rendered output (``docs/IDE/RULES/testing-strategy.mdc``).
 """
 
 from __future__ import annotations

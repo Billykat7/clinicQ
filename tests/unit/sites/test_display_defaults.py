@@ -16,7 +16,7 @@ the failure is always the **new** path somebody adds. So there are two halves he
 
 The fixtures at the bottom prove the source walk can fail. A guard that cannot fail passes forever.
 
-Reads source, never rendered output (``.cursor/rules/testing-strategy.mdc``).
+Reads source, never rendered output (``docs/IDE/RULES/testing-strategy.mdc``).
 """
 
 from __future__ import annotations

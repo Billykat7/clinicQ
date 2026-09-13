@@ -10,7 +10,7 @@ Two operational endpoints back the notification service:
   row advances to ``delivered``), a wrong secret (401), an unknown message id (404) and the
   feature-off case where no secret is configured (404, endpoint hidden).
 
-Per ``.cursor/rules/testing-strategy.mdc`` these drive real HTTP against an in-memory database and
+Per ``docs/IDE/RULES/testing-strategy.mdc`` these drive real HTTP against an in-memory database and
 assert JSON / status codes / DB state — never HTML — and build isolated ``Settings``
 (``_env_file=None``) so a developer's local ``.env`` cannot change outcomes.
 """

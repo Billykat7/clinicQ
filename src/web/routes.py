@@ -435,7 +435,7 @@ async def site_payment_profile_page(
 
 #: The verification console's tabs. Each is its own URL and its own ``SiteStatus``; the bare group
 #: URL redirects to the first, and an unrecognised section redirects there too rather than 404ing
-#: (the list-view convention, ``.cursor/rules/list-view-ui-pattern.mdc``).
+#: (the list-view convention, ``docs/IDE/RULES/list-view-ui-pattern.mdc``).
 _VERIFICATION_SECTIONS: dict[str, SiteStatus] = {
     "pending": SiteStatus.PENDING_VERIFICATION,
     "verified": SiteStatus.VERIFIED,

@@ -11,7 +11,7 @@ the same navigation exists without any script.
 
 The panel's open/close, `aria-expanded`, Escape, outside-click and focus-trap
 behaviours are client-side and verified in the browser, not here. Per
-`.cursor/rules/testing-strategy.mdc` these tests assert status codes only, never
+`docs/IDE/RULES/testing-strategy.mdc` these tests assert status codes only, never
 HTML body content or template markup.
 """
 

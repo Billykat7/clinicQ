@@ -12,7 +12,7 @@ and sets a new password):
 * an invalid/expired token is refused with 400;
 * both endpoints are gated by ``AUTH_PASSWORD_LOGIN_ENABLED`` (403 when off).
 
-Per ``.cursor/rules/testing-strategy.mdc`` these assert JSON, status codes and DB state —
+Per ``docs/IDE/RULES/testing-strategy.mdc`` these assert JSON, status codes and DB state —
 never HTML — and build isolated ``Settings`` (``_env_file=None``) so a developer's local
 ``.env`` cannot change outcomes. The reset email is captured in-process (no live SMTP).
 """

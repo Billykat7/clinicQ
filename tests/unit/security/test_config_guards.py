@@ -6,7 +6,7 @@ the rules this issue added (debug mode, open CORS, DB_* parts that contradict DA
 "all at once" behaviour both callers promise, and that neither ever prints a value.
 
 Every Settings here is built with ``_env_file=None`` so a developer's ``.env`` cannot change the
-outcome (``.cursor/rules/testing-strategy.mdc``).
+outcome (``docs/IDE/RULES/testing-strategy.mdc``).
 """
 
 import io

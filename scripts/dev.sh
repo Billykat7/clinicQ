@@ -45,7 +45,7 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
-# Same venv the rest of the tooling uses (see .cursor/rules/activate-venv-before-commands.mdc).
+# Same venv the rest of the tooling uses (see docs/IDE/RULES/activate-venv-before-commands.mdc).
 # shellcheck disable=SC1091  # the venv is created per clone, so there is no file to follow
 if [[ -z "${VIRTUAL_ENV:-}" ]]; then
   if [[ -f .venv/bin/activate ]]; then

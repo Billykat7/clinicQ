@@ -3,7 +3,7 @@
 Navigation and in-page action rendering derive from one declarative registry
 (:mod:`src.core.nav_registry`) evaluated against the caller's *effective* grant matrix
 (:class:`src.core.nav_visibility.NavVisibility`). These are the essential, deterministic RBAC
-rules unit tests are reserved for (``.cursor/rules/testing-strategy.mdc``): they assert what
+rules unit tests are reserved for (``docs/IDE/RULES/testing-strategy.mdc``): they assert what
 :meth:`~src.core.nav_visibility.NavVisibility.can`, ``visible`` and the group helpers return per
 role — including a **custom** role built only from grants — so a future regression fails here.
 

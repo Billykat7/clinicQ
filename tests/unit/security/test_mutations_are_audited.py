@@ -12,7 +12,7 @@ ClinicQ modules is what makes this guard grow with the product rather than with 
 the priority reorder (Issue 46), the display-mode change (Issue 27) and the no-show (Issue 43)
 land in ``queues`` and ``sites``, they are covered the day their route appears.
 
-Reads source, never rendered output (``.cursor/rules/testing-strategy.mdc``).
+Reads source, never rendered output (``docs/IDE/RULES/testing-strategy.mdc``).
 """
 
 from __future__ import annotations

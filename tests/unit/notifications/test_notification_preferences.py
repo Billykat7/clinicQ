@@ -1,7 +1,7 @@
 """Unit tests for notification preference resolution and unsubscribe (Issue 72 / M11).
 
 The preference layer is the one place a send is checked against the recipient's wishes, and two of
-its rules are load-bearing enough to test in isolation (per ``.cursor/rules/testing-strategy.mdc``,
+its rules are load-bearing enough to test in isolation (per ``docs/IDE/RULES/testing-strategy.mdc``,
 unit tests are reserved for exactly this kind of essential logic):
 
 * essential mail is never dropped — an essential category set to ``off`` is coerced to email, and

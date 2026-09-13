@@ -13,7 +13,7 @@ The acceptance criteria under test:
   * an email change only takes effect after the link sent to the new address is confirmed —
     the account keeps its old address until then.
 
-Per ``.cursor/rules/testing-strategy.mdc`` the assertions are JSON, status codes and DB state —
+Per ``docs/IDE/RULES/testing-strategy.mdc`` the assertions are JSON, status codes and DB state —
 never HTML — and ``Settings`` are built with ``_env_file=None`` so a developer's local ``.env``
 cannot change the outcome. ``smtp_host`` is blanked so the confirmation mail takes the
 "logged, not sent" path — no network, no SMTP.

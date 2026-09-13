@@ -3,7 +3,7 @@
 
 **This reads template and router SOURCE. It never renders a page and never inspects a response
 body.** That distinction is the whole point, and it is deliberate:
-``.cursor/rules/testing-strategy.mdc`` forbids tests that assert HTML body content, and this lint
+``docs/IDE/RULES/testing-strategy.mdc`` forbids tests that assert HTML body content, and this lint
 does not — it parses `src/web/routes.py`'s AST and scans template text the way
 ``test_rbac_manifest_registry.py`` scans ``src/``. Please do not delete it as a rule violation; the
 rule is about asserting on rendered output, which is a different thing.

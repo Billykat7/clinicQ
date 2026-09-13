@@ -24,7 +24,7 @@ half of the file feeds each rule the violations it exists to catch, and the near
 through. A guard that cannot fail passes forever.
 
 It reads source, not behaviour, and asserts nothing about rendered HTML
-(``.cursor/rules/testing-strategy.mdc``). Migrations (``alembic/``) are deliberately out of scope:
+(``docs/IDE/RULES/testing-strategy.mdc``). Migrations (``alembic/``) are deliberately out of scope:
 a migration freezes the literal values of its day, which is correct even after an enum changes.
 """
 

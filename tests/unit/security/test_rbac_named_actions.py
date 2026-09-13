@@ -8,7 +8,7 @@ overriding a cascaded parent ALLOW. The pure resolver (`named_action_allowed`) i
 path (`role_has_named_action`) is checked to agree with it over real `role_permission` rows and the
 role-inheritance closure.
 
-Essential, isolated RBAC invariants (per `.cursor/rules/testing-strategy.mdc`); the end-to-end route
+Essential, isolated RBAC invariants (per `docs/IDE/RULES/testing-strategy.mdc`); the end-to-end route
 enforcement is covered by the leases signature integration suite.
 """
 
