@@ -94,8 +94,8 @@ ever empty: that is the whole design goal. Issue numbers in brackets.
 | **2** | 3–4 | M1 · M2 | ✅ done |
 | **3** | 5–6 | M3 | ✅ done |
 | **4** | 7–8 | M3 · M4 | ✅ done — M3 closed, tag `v0.3.0` |
-| **5** | 9–10 | M4 · M5 | 🚧 in progress — M4 closed, tag `v0.4.0` to follow; M5 not started |
-| **6** | 11–12 | M5 · M6 | 📋 planned |
+| **5** | 9–10 | M4 · M5 | ✅ done — M4 closed, tag `v0.4.0` to follow; M5 delivered with it |
+| **6** | 11–12 | M5 · M6 | 🚧 in progress — M5 delivered (issues 31–38, tag `v0.5.0` to follow); M6 not started |
 | **7** | 13–14 | M6 ⚠️ | 📋 planned |
 | **8** | 15–16 | M7 | 📋 planned |
 | **9** | 17–18 | M7 · M8 · M9 | 📋 planned |
@@ -105,10 +105,11 @@ ever empty: that is the whole design goal. Issue numbers in brackets.
 | **13** | 25–26 | M13 · M14 | 📋 planned |
 | **14** | 27–28 | M14 | 📋 planned |
 
-**4 of 14 sprints done** 🟩🟩🟩⬜⬜⬜⬜⬜⬜⬜ **29%**, carrying milestones M1–M3 (issues 1–22) and
-tags `v0.1.0`–`v0.3.0`. **Sprint 5 is under way, not done:** its M4 half is closed (issues 23–30,
-release note `v0.4.0`), its M5 half has not started — and by the rule below a sprint is ticked only
-when *every* issue its lanes deliver is closed.
+**5 of 14 sprints done** 🟩🟩🟩🟩⬜⬜⬜⬜⬜⬜ **36%**, carrying milestones M1–M5 (issues 1–38) and
+tags `v0.1.0`–`v0.5.0`, the last two cut after their pull requests merge. **Sprint 6 is under way, not
+done:** its M5 half is delivered (issues 31–38), its M6 half has not started — and by the rule below a
+sprint is ticked only when *every* issue its lanes deliver is closed. Sprint 5 and M5 are only true
+once the stacked M5 pull requests (#147–#153 and Issue 38's) have merged.
 
 A sprint is **done** when every issue its lanes *deliver* is closed. That is marked by hand, not
 generated, because a lane also names issues it works **against** — a contract stub, a fixture, a

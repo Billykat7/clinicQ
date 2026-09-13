@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Status** | 📋 Planned |
+| **Status** | ✅ Done once #147–#153 and Issue 38's pull request merge, in that order: issues 31–38, release note `v0.5.0` to follow the last merge. One exit criterion and the throttled-phone demo are met only in part (below) |
 | **Progress** | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
 | **Sprints** | 5–6 (weeks 9–12), semester 2. The sprint plan spreads its issues over sprints 2–6: some start early against stubs (see the table) |
 | **Release tag** | `v0.5.0` |
@@ -94,18 +94,37 @@ flowchart LR
 
 ## Exit criteria
 
-- [ ] Searching from a coordinate returns clinics within the radius, nearest first, in under 200 ms with 500 seeded clinics
-- [ ] The sector toggle filters correctly, and payment filters are hidden entirely when 'Public' is selected
-- [ ] Declining GPS still produces results via a typed suburb name
-- [ ] Each result shows a live queue length no more than 30 seconds stale
-- [ ] The map degrades to the list view on a slow connection rather than blocking the page
-- [ ] A medical-aid tag is visibly labelled as clinic-reported, with a confirm-with-the-clinic disclaimer
+- [x] Searching from a coordinate returns clinics within the radius, nearest first, in under 200 ms
+      with 500 seeded clinics (Issue 31). The GiST index is asserted from `EXPLAIN`, and the budget
+      is the median of seven runs against PostGIS, including `open_now`.
+- [x] The sector toggle filters correctly, and payment filters are hidden entirely when 'Public' is
+      selected (Issues 32, 37). Absent from the page, not greyed out, and refused by the API with a
+      `422` under any sector but Private, so no client can send them.
+- [x] Declining GPS still produces results via a typed suburb name (Issue 34), misspellings included,
+      from 2,081 OpenStreetMap places in Gauteng and KwaZulu-Natal. Distances from an area's centroid
+      are labelled approximate everywhere they appear.
+- [x] Each result shows a live queue length no more than 30 seconds stale (Issue 36). **Partly:** the
+      snapshot refuses to serve a figure older than `QUEUE_SNAPSHOT_MAX_AGE_SECONDS` (30) and a
+      flushed cache is slower, never wrong, but there are no tickets to count until Issue 39 (M6), so
+      every queue reads "not measured" rather than a number until then.
+- [x] The map degrades to the list view on a slow connection rather than blocking the page (Issue 33).
+      Leaflet loads only when the map is opened; tile failures and an eight-second timeout fall back
+      to the list, demonstrated by blocking the tile host.
+- [x] A medical-aid tag is visibly labelled as clinic-reported, with a confirm-with-the-clinic
+      disclaimer (Issue 37), on the card, the detail page, the API and the manager's editor.
+
+Also delivered with the last issue (38): anonymous discovery events (search, clinic view, join
+started, join completed) whose stored rows carry no identifier beyond a daily-rotating session
+reference, a per-clinic opt-out and view-to-join report, a rate limit on the public search, and
+`contracts/discovery.yaml` under the Issue 30 drift test.
 
 ## Demo at the end of the milestone
 
 What the team shows at the sprint review to prove the milestone is done:
 
 - On a throttled phone, the list of nearby clinics appears within 2 seconds, and the sector toggle re-filters it without a reload.
+  **Partly (Issue 32):** about 1.5 s on DevTools' 3G preset and 2.1 s on a return visit, but about
+  5 s for a cold first load on the Slow 3G preset; the re-filter is an htmx swap, no reload.
 - With location declined, a typed suburb (misspelt on purpose) still finds clinics.
 - The map shows the same clinics, and "Directions" opens the phone's maps app.
 

@@ -210,9 +210,9 @@ Full detail: [engineering non-negotiables](docs/guideline.md) and
 
 ## Status
 
-**Phase:** building. **Sprints 1–4 of 14 complete**, sprint 5 under way (semester 2). **30 of 109
-issues closed**, latest tag `v0.3.0`; the `v0.4.0` note is written and its tag follows M4's last
-merge. Next: M5 — discovery and geolocation.
+**Phase:** building. **Sprints 1–5 of 14 complete**, sprint 6 under way (semester 2). **30 of 109
+issues closed**, with M5's eight (31–38) in review as stacked pull requests; latest tag `v0.3.0`,
+and the `v0.4.0` and `v0.5.0` tags follow their milestones' last merges. Next: M6, the queue engine.
 
 - [x] Idea finalised (**ClinicQ**, selected from the shortlist)
 - [x] Requirements gathered ([product docs](docs/PRODUCT/README.md))
@@ -223,6 +223,7 @@ merge. Next: M5 — discovery and geolocation.
 - [x] CI/CD pipeline running (M2, `v0.2.0`)
 - [x] Identity, RBAC, site scoping, audit and consent (M3, `v0.3.0`)
 - [x] Clinics and queues configurable (M4, `v0.4.0` to cut)
+- [x] Patients find nearby clinics by GPS or suburb, on a list or a map (M5, once merged; `v0.5.0` to cut)
 - [ ] Queue engine running (M6) ⚠️ critical path
 - [ ] MVP complete (M8)
 - [ ] Pilot clinic live (M14)

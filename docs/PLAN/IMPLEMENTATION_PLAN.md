@@ -85,7 +85,7 @@ gantt
     M3 Identity & RBAC       :crit, done, m3, 2, 2
     M4 Clinics & Queues      :crit, done, m4, 3, 2
     section Product
-    M5 Discovery             :        m5, 4, 2
+    M5 Discovery             :done,   m5, 4, 2
     M6 QUEUE ENGINE          :crit,   m6, 5, 2
     M7 Dashboard             :crit,   m7, 7, 2
     M8 Display board         :crit,   m8, 8, 2
