@@ -175,13 +175,14 @@ def test_each_sector_position_shows_only_its_own_clinics(
 def test_the_filter_bar_carries_sector_radius_and_sort(
     directory: SimpleNamespace,
 ) -> None:
-    """Three groups, each with exactly one option chosen, matching the request."""
+    """Every group, each with exactly one option chosen, matching the request (the list/map view
+    joined them in Issue 33)."""
     with directory.session() as db:
         page = discover_page(
             db, lat=-26.2, lon=28.02, radius_m=5_000, sort=DiscoverySort.SHORTEST_QUEUE
         )
     groups = {group.name: group for group in page.filter_groups}
-    assert list(groups) == ["sector", "radius_m", "sort"]
+    assert list(groups) == ["sector", "radius_m", "sort", "view"]
     chosen = {
         name: [c.value for c in group.choices if c.selected]
         for name, group in groups.items()
@@ -190,6 +191,7 @@ def test_the_filter_bar_carries_sector_radius_and_sort(
         "sector": ["all"],
         "radius_m": ["5000"],
         "sort": ["shortest_queue"],
+        "view": ["list"],
     }
 
 

@@ -263,3 +263,56 @@
 }
 .scheme-picker summary:focus-visible,
 .check-option input:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+
+/* ── The map (Issue 33) ─────────────────────────────────────── */
+
+/* In map view the cards stay in the page, because the map is drawn from them, but only the map and
+   the preview are shown. A tile failure removes .is-map and the list comes back. */
+.discover-results.is-map #results .clinic-list,
+.discover-results.is-map .results-summary + .results-note { display: none; }
+
+.discover-map[hidden] { display: none; }
+.map-canvas {
+  height: min(60vh, 26rem);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--bg-soft);
+  overflow: hidden;
+}
+.map-canvas .leaflet-control-attribution { font-size: var(--step--2); }
+.map-canvas .leaflet-control-attribution a { color: var(--brand-deep); text-decoration: underline; }
+
+.map-legend { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); font-size: var(--step--1); }
+.map-legend li { display: inline-flex; align-items: center; gap: var(--space-1); }
+.map-legend-icon svg { width: .9rem; height: .9rem; display: block; }
+.map-status, .map-note { margin-top: var(--space-2); font-size: var(--step--1); color: var(--muted); }
+
+/* A pin: a shape (square or diamond) in the sector's colour with a light outline, so it reads on any
+   tile and in greyscale. The origin is a ring, not a pin. */
+.map-pin { background: transparent; border: 0; }
+.map-pin svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.map-pin-square { color: var(--brand); }
+.map-pin-diamond { color: var(--warn-ink); }
+.map-pin-square svg, .map-pin-diamond svg { fill: currentColor; stroke: var(--surface); stroke-width: 1.4; }
+.map-pin-origin { color: var(--ink); }
+.map-pin-origin svg { fill: var(--surface); stroke: currentColor; stroke-width: 2.4; }
+.map-pin:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; border-radius: 2px; }
+
+.map-cluster {
+  display: grid; place-items: center;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--surface);
+  font-weight: 700;
+  font-size: var(--step--1);
+}
+.map-cluster:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+
+.map-preview { margin-top: var(--space-3); }
+.map-preview .clinic-card { list-style: none; }
+.map-preview-close { margin-top: var(--space-2); }
+
+.map-fallback[hidden] { display: none; }
+.clinic-card-actions { margin-top: var(--space-3); }
