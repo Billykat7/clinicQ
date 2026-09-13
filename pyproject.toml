@@ -116,7 +116,7 @@ select = [
     "G",     # flake8-logging-format — no f-strings in log calls
     "LOG",   # flake8-logging — logger misuse
     "ASYNC", # flake8-async — blocking calls in async defs
-    "DTZ",   # flake8-datetimez — naive datetimes (see .cursor/rules/timezone-johannesburg.mdc)
+    "DTZ",   # flake8-datetimez — naive datetimes (see docs/IDE/RULES/timezone-johannesburg.mdc)
     "T20",   # flake8-print — no stray print() in application code
     "TID",   # flake8-tidy-imports
     "PTH",   # flake8-use-pathlib

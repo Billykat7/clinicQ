@@ -14,7 +14,7 @@ there is no second one:
   ``Patient.display_name`` at all, so a board handler cannot build its own row from a patient.
 
 Each rule has a fixture proving it fails on the shape it exists to catch. Reads source, not
-rendered output (``.cursor/rules/testing-strategy.mdc``).
+rendered output (``docs/IDE/RULES/testing-strategy.mdc``).
 """
 
 from __future__ import annotations

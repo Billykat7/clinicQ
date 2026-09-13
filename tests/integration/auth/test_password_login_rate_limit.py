@@ -10,7 +10,7 @@ in-memory database and assert that:
 * a throttled attempt is refused *before* credentials are checked — a correct password is
   still rejected with ``429`` once the window is exhausted.
 
-Per ``.cursor/rules/testing-strategy.mdc`` these assert JSON and status codes (never HTML)
+Per ``docs/IDE/RULES/testing-strategy.mdc`` these assert JSON and status codes (never HTML)
 and build isolated ``Settings`` (``_env_file=None``) so a developer's local ``.env`` cannot
 change outcomes. The process-global limiter is reset around every test by the root
 ``conftest`` autouse fixture, so counts never leak between tests.

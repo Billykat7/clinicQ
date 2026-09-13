@@ -14,7 +14,7 @@ not the 38 the enum happened to hold — so the expectations merge ``PORTAL_ROLE
 module's own grant seed (:func:`~src.core.rbac.default_reporting_role_permissions` today), which is
 what a deployed database actually holds.
 
-These are essential, isolated RBAC rules (per ``.cursor/rules/testing-strategy.mdc`` unit tests
+These are essential, isolated RBAC rules (per ``docs/IDE/RULES/testing-strategy.mdc`` unit tests
 are reserved for exactly this); allow/deny over real HTTP is covered by the admin and
 ``/auth/me`` integration suites.
 """

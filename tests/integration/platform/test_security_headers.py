@@ -6,7 +6,7 @@ expected values — including the ``Permissions-Policy`` and ``Cross-Origin-Open
 added in the M17 hardening pass, and the CSP directives (``frame-ancestors``, ``object-src``,
 ``form-action``) that anchor the framing/clickjacking controls.
 
-Per ``.cursor/rules/testing-strategy.mdc`` these assert response headers (never HTML body)
+Per ``docs/IDE/RULES/testing-strategy.mdc`` these assert response headers (never HTML body)
 and build isolated ``Settings`` (``_env_file=None``) so a developer's local ``.env`` cannot
 change outcomes.
 """

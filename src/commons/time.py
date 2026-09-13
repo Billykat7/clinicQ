@@ -1,6 +1,6 @@
 """Business time: every "when" in ClinicQ is read and presented in ``Africa/Johannesburg``.
 
-The rule (``.cursor/rules/timezone-johannesburg.mdc``, non-negotiable 5 in ``docs/guideline.md``):
+The rule (``docs/IDE/RULES/timezone-johannesburg.mdc``, non-negotiable 5 in ``docs/guideline.md``):
 
 * **Business datetimes are timezone-aware and in SAST.** Take "now" from :func:`now_sast`, never
   from a bare ``datetime.now()``: a naive value takes the server's clock zone, which is UTC in the

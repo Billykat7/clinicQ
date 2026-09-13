@@ -93,7 +93,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Activate venv if present (matches .cursor/rules: activate-venv-before-commands)
+# Activate venv if present (matches docs/IDE/RULES: activate-venv-before-commands)
 if [[ -f .venv/bin/activate ]]; then
   source .venv/bin/activate
 elif [[ -f venv/bin/activate ]]; then

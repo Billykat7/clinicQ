@@ -2,7 +2,7 @@
 
 The notification service is the one place transactional email and SMS are delivered from, with a
 durable per-message status. These tests exercise its essential logic directly against an in-memory
-database (per ``.cursor/rules/testing-strategy.mdc``, unit tests are reserved for exactly this kind
+database (per ``docs/IDE/RULES/testing-strategy.mdc``, unit tests are reserved for exactly this kind
 of non-trivial core behaviour):
 
 * an SMS is recorded and delivered through the pluggable provider, and its OTP body renders;

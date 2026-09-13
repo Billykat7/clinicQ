@@ -11,7 +11,7 @@ at the HTTP layer against an in-memory database:
 * the password forgot/reset flow issues a signed, expiring token, updates the password
   and revokes every existing session, and rejects invalid tokens.
 
-Per ``.cursor/rules/testing-strategy.mdc`` these assert JSON, status codes and DB state
+Per ``docs/IDE/RULES/testing-strategy.mdc`` these assert JSON, status codes and DB state
 — never HTML body content — and build isolated ``Settings`` (``_env_file=None``) so a
 developer's local ``.env`` (SMTP creds, feature flags, JWT secret) cannot change
 outcomes. ``AUTH_ENABLED`` is on so RBAC is actually enforced; the seeded ``admin`` role

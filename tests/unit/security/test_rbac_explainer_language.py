@@ -1,7 +1,7 @@
 """Operator language and the 403 "why" gate (Issue #175, M29).
 
 Two properties, both of which the explainer's whole value rests on and neither of which can be
-asserted through rendered HTML — which ``.cursor/rules/testing-strategy.mdc`` forbids testing
+asserted through rendered HTML — which ``docs/IDE/RULES/testing-strategy.mdc`` forbids testing
 anyway:
 
 1. **The 403 affordance is gated on the ``rbac:READ`` grant and on nothing else.** A caller without

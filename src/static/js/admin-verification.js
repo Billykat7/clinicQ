@@ -2,7 +2,7 @@
  *
  * A fully server-rendered list: every row for this tab is already in the DOM, so sorting and the
  * row quick-view work against the rows themselves with no network call, which is the second of the
- * two wiring styles in .cursor/rules/list-view-ui-pattern.mdc. The filter bar submits as a real
+ * two wiring styles in docs/IDE/RULES/list-view-ui-pattern.mdc. The filter bar submits as a real
  * navigation, which is what keeps the filtered state in the URL.
  *
  * The decision is the one thing that is a request, because it changes something.

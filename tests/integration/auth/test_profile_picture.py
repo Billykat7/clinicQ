@@ -15,7 +15,7 @@ matter here are security ones, so each is asserted directly:
 * **A replaced picture stops serving.** Each upload gets a fresh token, so the previous URL 404s
   immediately; that is what makes the stable, session-free serving URL safe and cacheable.
 
-Per ``.cursor/rules/testing-strategy.mdc`` these assert JSON, status codes, headers and stored
+Per ``docs/IDE/RULES/testing-strategy.mdc`` these assert JSON, status codes, headers and stored
 bytes — never HTML — and build isolated ``Settings`` (``_env_file=None``) so a developer's local
 ``.env`` cannot change outcomes.
 """

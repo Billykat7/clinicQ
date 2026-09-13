@@ -23,7 +23,7 @@ Three routes, each usable with and without JavaScript:
 **What the templates render is decided here**, as plain dataclasses (:class:`DiscoverPage`,
 :class:`ResultsView`, :class:`ClinicCard`), so the words a patient reads ("Queue length not reported
 yet", "about 2.1 km from the middle of Soweto", "Closed, opens tomorrow at 07:00") are tested as
-data, never by reading HTML (``.cursor/rules/testing-strategy.mdc``).
+data, never by reading HTML (``docs/IDE/RULES/testing-strategy.mdc``).
 
 **Positions are rounded before they reach a URL.** ``discover.js`` sends the browser's fix to three
 decimal places (about 100 m), which is far finer than a clinic search needs and coarse enough that

@@ -10,7 +10,7 @@ Resources are plain string keys throughout (Issue #154 deleted the ``PermissionR
 these tests were originally written against); the resource *tree* they inherit through comes from
 the registered module manifests, via :func:`~src.core.rbac.load_resource_parent_map`.
 
-These are essential, isolated rules (per ``.cursor/rules/testing-strategy.mdc`` unit tests
+These are essential, isolated rules (per ``docs/IDE/RULES/testing-strategy.mdc`` unit tests
 are reserved for exactly this); the allow/deny behaviour over real HTTP is exercised by the
 admin and ``/auth/me`` integration tests.
 """

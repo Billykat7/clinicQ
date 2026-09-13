@@ -14,7 +14,7 @@ running it with the ``ensure_*`` layer mocked (the technique
 ``test_rbac_issue155_surface_audit.py`` established) — so neither side is a restatement of what the
 test author believed.
 
-**On the testing rules.** ``.cursor/rules/testing-strategy.mdc`` forbids tests that assert HTML body
+**On the testing rules.** ``docs/IDE/RULES/testing-strategy.mdc`` forbids tests that assert HTML body
 content. Nothing here renders a page or inspects a response: the templates are read as **source
 text**, the same way ``test_rbac_manifest_registry.py`` reads ``src/``. That distinction is the
 whole reason this file exists rather than a browser-level check — and it is why Issue #168's own

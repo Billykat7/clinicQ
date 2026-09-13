@@ -3,7 +3,7 @@
 * ``/dev/components`` documents every component macro: what it renders, and how to call it.
 * ``/dev/layouts/{patient|dashboard|board}`` shows each layout filled with realistic content, the
   same component set and tokens behind all three. Each is its own URL (the list-view rule in
-  ``.cursor/rules``); the bare ``/dev/layouts`` and an unknown layout redirect to the patient one.
+  ``docs/IDE/RULES``); the bare ``/dev/layouts`` and an unknown layout redirect to the patient one.
 * ``/dev/fragments/*`` are the htmx fragments those pages swap in: a queue refresh that also
   raises a toast from the server, and stat tiles that lazy-load behind a skeleton.
 * ``/dev/outbox`` lists the messages the logging SMS provider and the no-SMTP email fallback

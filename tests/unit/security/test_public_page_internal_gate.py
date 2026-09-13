@@ -8,7 +8,7 @@ the operator grant :func:`~src.web.context.can_view_internals` resolves.
 
 Three properties are worth pinning, and all three are pure functions of an already-resolved
 :class:`~src.core.nav_visibility.NavVisibility` — no HTTP, no database, and no assertion about
-rendered markup, which ``.cursor/rules/testing-strategy.mdc`` forbids:
+rendered markup, which ``docs/IDE/RULES/testing-strategy.mdc`` forbids:
 
 1. a signed-out visitor never sees the internals;
 2. being *signed in* is not enough — a caller with no grant on the gated resource is refused,

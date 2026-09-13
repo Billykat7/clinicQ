@@ -5,7 +5,7 @@ database seeded with the same system roles and grants as the Alembic migration: 
 ``permissions`` map returned by ``/auth/me`` carries each resource the caller's role can
 reach, resolved to its effective maximum verb (after parent->child cascade).
 
-Per ``.cursor/rules/testing-strategy.mdc`` these assert JSON and status codes only and
+Per ``docs/IDE/RULES/testing-strategy.mdc`` these assert JSON and status codes only and
 build isolated ``Settings`` (``_env_file=None``) with ``AUTH_ENABLED`` on so RBAC is
 actually enforced.
 """

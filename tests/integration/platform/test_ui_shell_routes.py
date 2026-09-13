@@ -1,6 +1,6 @@
 """The UI shell's routes and assets, over real requests (Issue 5).
 
-Behaviour only, per ``.cursor/rules/testing-strategy.mdc``: status codes, redirects, headers and
+Behaviour only, per ``docs/IDE/RULES/testing-strategy.mdc``: status codes, redirects, headers and
 content types. Nothing here reads a page's markup; what the pages look like is in the PR's
 screenshots of all three layouts in both themes.
 """

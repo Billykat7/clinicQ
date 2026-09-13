@@ -4,7 +4,7 @@ POPIA requires the public site to carry a privacy notice and terms, linked from 
 footer. Both belong to the DB-independent front door: like ``/`` and ``/features`` they
 render from config alone, so a database outage never takes the legal pages down.
 
-Per ``.cursor/rules/testing-strategy.mdc`` these tests assert status codes only — never
+Per ``docs/IDE/RULES/testing-strategy.mdc`` these tests assert status codes only — never
 HTML body content or template markup. The page copy, the retention table and the footer
 links are verified in review, not here.
 """

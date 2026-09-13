@@ -6,7 +6,7 @@ way that stays true is that there is one implementation: this walks the source a
 module other than :mod:`src.modules.discovery.areas` reads the ``area_name`` table (by model or by
 table name), or if the discovery routes stop calling it.
 
-It reads source, not rendered output (``.cursor/rules/testing-strategy.mdc``), and the second test
+It reads source, not rendered output (``docs/IDE/RULES/testing-strategy.mdc``), and the second test
 proves it can fail.
 """
 

@@ -36,7 +36,7 @@ ISSUE_BRANCH = re.compile(
 #: ``Release/v<X.Y.Z>``: the branch that carries a milestone's release note.
 RELEASE_BRANCH = re.compile(r"^Release/v(?P<version>\d+\.\d+\.\d+)$")
 
-#: "Short and sweet" (.cursor/rules/issue-branch-commits.mdc): two to four words, five at most.
+#: "Short and sweet" (docs/IDE/RULES/issue-branch-commits.mdc): two to four words, five at most.
 MAX_SLUG_WORDS = 5
 
 #: Files whose change a reviewer has to see: templates and the app's own CSS and JS.

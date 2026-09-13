@@ -9,7 +9,7 @@ exactly: keys, names, the parent tree, and one permission row per resource x its
 actions. That the manifests in turn reproduce the *shipped, pre-M27* catalog is asserted separately,
 against a committed snapshot, in ``tests/integration/test_rbac_m27_full_parity.py``.
 
-Essential, isolated RBAC invariants (per ``.cursor/rules/testing-strategy.mdc``); the Postgres
+Essential, isolated RBAC invariants (per ``docs/IDE/RULES/testing-strategy.mdc``); the Postgres
 trigger/closure behaviour is exercised by the Postgres-gated integration suite. Seeding here uses the
 Python twins (``seed_resource_catalog`` / ``refresh_resource_descendants_py``), since the unit DB is
 SQLite.

@@ -175,8 +175,8 @@ the boot guard and `scripts/check_config.py` both read ([`docs/CICD/ENVIRONMENTS
   generated total. When the pull request closes a milestone's **last** issue, it also ticks the exit
   criteria (leaving anything met only in part unticked, with the reason beside it), marks the
   milestone done and closes it on GitHub with
-  `make milestone-progress ARGS='--close-completed'`. Editors that read
-  `.cursor/rules/` pick the same rule up from `milestone-progress.mdc`.
+  `make milestone-progress ARGS='--close-completed'`. The same rule is written down in
+  `docs/IDE/RULES/milestone-progress.mdc`.
 
 CI checks all four: the branch name, every commit's prefix, the closing line and the screenshot
 (`scripts/check_pr_conventions.py`). A slip fails the **CI gate** without stopping the tests; fix the

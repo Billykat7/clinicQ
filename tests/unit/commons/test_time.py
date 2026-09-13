@@ -1,7 +1,7 @@
 """Business time helpers (Issue 4): SAST in, SAST out, and the service day turns at SAST midnight.
 
 Unit tests, because this is the essential rule the queue's daily numbering rests on
-(``.cursor/rules/testing-strategy.mdc``): a service day that turned at UTC midnight would restart
+(``docs/IDE/RULES/testing-strategy.mdc``): a service day that turned at UTC midnight would restart
 every queue's numbers at 02:00 in the middle of the night shift.
 """
 

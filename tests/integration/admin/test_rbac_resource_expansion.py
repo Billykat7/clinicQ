@@ -14,7 +14,7 @@ Proves the acceptance criteria the issue pins, over the real HTTP stack against 
 The RBAC verb gate runs as a route dependency *before* the handler, so a permitted caller gets
 past it (then a ``404`` for the deliberately-absent lease) while a refused caller gets ``403``.
 Asserting "403 vs not-403" isolates the permission decision from the domain logic and needs no full
-payment lifecycle. Per ``.cursor/rules/testing-strategy.mdc`` the assertions are status codes only,
+payment lifecycle. Per ``docs/IDE/RULES/testing-strategy.mdc`` the assertions are status codes only,
 ``Settings`` are built with ``_env_file=None``, and ``smtp_host`` is blanked so nothing sends.
 """
 

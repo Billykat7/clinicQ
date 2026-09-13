@@ -12,7 +12,7 @@ Both endpoints are gated by the ``logs`` READ verb: unauthenticated -> 401,
 under-privileged (standard ``user`` role) -> 403. Invalid or missing keys are rejected
 cleanly.
 
-Per ``.cursor/rules/testing-strategy.mdc`` these assert JSON and status codes — never
+Per ``docs/IDE/RULES/testing-strategy.mdc`` these assert JSON and status codes — never
 HTML — and build isolated ``Settings`` (``_env_file=None``) so a developer's local
 ``.env`` cannot change outcomes. ``AUTH_ENABLED`` is on so RBAC is enforced; the seeded
 ``admin`` role holds DELETE on ``logs`` (see

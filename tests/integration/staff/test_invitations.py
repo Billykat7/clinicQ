@@ -11,7 +11,7 @@ Every acceptance criterion, over real HTTP:
 * a staff member can change their own password and never their own role;
 * only a clinic manager or a platform admin may invite, and only for their own clinic.
 
-Per ``.cursor/rules/testing-strategy.mdc`` these assert JSON, status codes and DB state, never HTML,
+Per ``docs/IDE/RULES/testing-strategy.mdc`` these assert JSON, status codes and DB state, never HTML,
 and build isolated ``Settings`` so a developer's ``.env`` cannot change the outcome.
 """
 

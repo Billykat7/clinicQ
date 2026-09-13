@@ -15,7 +15,7 @@ Then the content: every stage reports, *including the ones that did nothing*, be
 ``leases``, walked to parent" is the step that explains most surprises and a trace that only logs
 matches explains nothing.
 
-Per ``.cursor/rules/testing-strategy.mdc`` this is a unit file because the properties above are
+Per ``docs/IDE/RULES/testing-strategy.mdc`` this is a unit file because the properties above are
 properties of pure resolvers; the endpoint that exposes them is covered end-to-end in
 ``tests/integration/admin/test_rbac_simulator.py``.
 """

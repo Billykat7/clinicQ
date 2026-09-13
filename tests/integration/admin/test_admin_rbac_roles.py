@@ -16,7 +16,7 @@ Every endpoint is gated by verb-based RBAC on the ``rbac`` resource (READ for re
 CREATE/UPDATE for writes, DELETE for role deletion): unauthenticated -> 401,
 under-privileged -> 403.
 
-Per ``.cursor/rules/testing-strategy.mdc`` these assert JSON, status codes and DB state
+Per ``docs/IDE/RULES/testing-strategy.mdc`` these assert JSON, status codes and DB state
 — never HTML — and build isolated ``Settings`` (``_env_file=None``) so a developer's
 local ``.env`` cannot change outcomes. ``AUTH_ENABLED`` is on so RBAC is enforced; the
 seeded ``admin`` role holds DELETE on ``rbac`` (see

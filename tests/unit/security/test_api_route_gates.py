@@ -17,7 +17,7 @@ entry with its reason:
   visible; nothing new may be added to it.
 
 A new route that is on none of them fails this test, and the fixture at the bottom proves the check
-can fail. Reads route objects, not rendered output (``.cursor/rules/testing-strategy.mdc``).
+can fail. Reads route objects, not rendered output (``docs/IDE/RULES/testing-strategy.mdc``).
 """
 
 from __future__ import annotations

@@ -2,7 +2,7 @@
 
 Source and token checks, in the shape of ``test_no_inline_styles.py``: they read the shipped
 templates and stylesheets, never a rendered page, so they stay inside
-``.cursor/rules/testing-strategy.mdc``. What a browser does with them (the htmx swap, the layouts
+``docs/IDE/RULES/testing-strategy.mdc``. What a browser does with them (the htmx swap, the layouts
 in both themes) is shown in the PR with screenshots; the routes' behaviour is covered by
 ``tests/integration/platform/test_ui_shell_routes.py``.
 

@@ -1,7 +1,7 @@
 """Tab-level RBAC for the alerts console (Issue #145 / M26).
 
 Real HTTP against an in-memory database, asserting JSON/status codes (never HTML), per
-``.cursor/rules/testing-strategy.mdc``. No prior test file covered ``GET /api/v1/alerts`` or the
+``docs/IDE/RULES/testing-strategy.mdc``. No prior test file covered ``GET /api/v1/alerts`` or the
 ``/alerts/drafts*`` endpoints at all (confirmed by grep before writing this), so every case here is
 new coverage, not a migration of an existing one.
 
