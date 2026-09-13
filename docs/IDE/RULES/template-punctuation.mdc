@@ -1,0 +1,76 @@
+---
+description: Punctuation in src/templates/**/*.html, visible text and comments alike. Dashes only where correct; colons, semicolons, commas, full stops and parentheses do the rest
+globs: "src/templates/**/*.html"
+alwaysApply: true
+---
+
+# Template punctuation
+
+Every template in `src/templates/` (including subfolders) follows these rules. They apply to **visible
+text and to comments alike**: Jinja comments (`{# … #}`), HTML comments (`<!-- … -->`) and
+attribute text (`title`, `aria-label`, `alt`, `placeholder`, `<meta name="description">`).
+
+When you add or edit a template, fix the punctuation of anything you touch, and check the whole file
+before committing (see *Checking* below).
+
+## Dashes: only where needed, and the right one
+
+| Mark | Use it for | Never for |
+|------|-----------|-----------|
+| **Hyphen** `-` | Compound words and modifiers: `waiting-room`, `sign-in`, `number-only`, `walk-in`. | A pause or break in a sentence. A spaced hyphen (` - `) is never correct in prose. |
+| **En dash** `–` | Ranges: `~15–25 min`, `#1–#8`, `weeks 11–14`, `$45–80`. No spaces around it. | Anything that is not a range. |
+| **Em dash** `—` | A placeholder that means "no value": `{{ user.last_login or '—' }}`, a "nothing selected" option such as `<option value="">— verb —</option>`, an empty table cell. | Joining clauses, introducing an explanation, or wrapping an aside. Use the marks below instead. |
+
+Do not use `--` as a dash anywhere.
+
+**Exception:** text that reproduces machine output verbatim keeps that system's characters. The
+USSD transcript on the landing page is GSM 7-bit ASCII, so `2.4km - 6 waiting` and `15-25 min` stay
+as they are; say so in a comment next to it.
+
+## What to use instead of a dash
+
+- **Colon** `:` when what follows explains, lists or names what came before.
+  `Uses only existing shell classes: no inline styles or handlers.`
+- **Semicolon** `;` to join two complete clauses that belong together.
+  `This is a read; nothing is changed and nothing is recorded.`
+- **Comma** `,` for a light aside or a contrast.
+  `Reason text and visit notes are deleted automatically after a short window, with a test that proves they are gone.`
+- **Parentheses** `( )` for a true aside or a citation.
+  `Some records (the audit trail, and clinical records the clinic must keep by law) cannot be erased.`
+  `Performance of the service you asked for (s11(1)(b))`
+- **Full stop** `.` when the sentence is doing two jobs: split it.
+- **Question mark** `?` for a real question, including in headings and FAQ text.
+
+## Quotes, apostrophes and ellipses
+
+- Straight quotes only: `'` for apostrophes (`it's`, `clinic's`) and `"` for quoted speech. No curly
+  quotes (`“ ” ‘ ’`): mixing the two styles is what this rule exists to prevent.
+- An ellipsis (`…`) only for a genuine omission or trailing off. Code notation such as `can(...)` or
+  `'nonce-...'` in a comment is code, not prose, and stays as written.
+
+## House style
+
+- No serial (Oxford) comma before `and` / `or` in a list: `queues, services, staff and display mode`.
+- A label and its value take a colon, not a dash: `Zola Clinic: front desk`, `Display mode: number only`.
+- Sentences in body text end with a full stop; short UI fragments (buttons, badges, table cells) do not need one.
+- Keep `aria-label` and `title` text punctuated like body text: screen readers read it aloud.
+
+## Examples (from this codebase)
+
+| Before | After |
+|--------|-------|
+| `the kernel version shows the destinations their grants make reachable —` | `the kernel version shows the destinations their grants make reachable:` |
+| `Essential messages — account & security and financial notices — are always delivered` | `Essential messages (account & security and financial notices) are always delivered` |
+| `Please raise a concern with us first — most are a misunderstanding` | `Please raise a concern with us first; most are a misunderstanding` |
+| `{# Widgets — the example module's console. #}` | `{# Widgets: the example module's console. #}` |
+| `“You're next — head inside”` | `"You're next, head inside"` |
+| `Estimated wait 15-25 min` (web page) | `Estimated wait 15–25 min` |
+
+## Checking
+
+Run this before committing any template change; the only hits allowed are the placeholders and the
+verbatim machine output described above:
+
+```bash
+grep -rnE "—|“|”|‘|’|[[:alnum:])\"'] - [[:alnum:]\"'(]| -- " src/templates
+```

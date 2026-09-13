@@ -73,7 +73,7 @@ removing any is a code change with its own issue.
 - **`infra/docker/Dockerfile`:** venv stripping moved to the builder stage; `COPY --chown`; `scripts/`
   (`__init__.py`, `db/`) copied; `VERSION`, `GIT_SHA` and `BUILD_TIME` build arguments, env and OCI
   labels, declared last so a new commit rebuilds only metadata layers.
-- **`.dockerignore`** (new, repository root, as `.cursor/rules/infra-layout.mdc` requires): the allowlist.
+- **`.dockerignore`** (new, repository root, as `docs/IDE/RULES/infra-layout.mdc` requires): the allowlist.
 - **`src/core/config.py`:** `GIT_SHA`; the `VERSION` description says the image sets it.
   **`src/schemas/health.py`**, **`src/main.py`:** `git_sha` in the liveness response.
   **`.env.example`:** regenerated (`# GIT_SHA=unknown`, documented as image-set).

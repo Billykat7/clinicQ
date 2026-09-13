@@ -89,7 +89,7 @@ image host, no network and nothing to rot. Ten cells, so a percentage rounds to 
 pushing. `ARGS='--close-completed'` closes a GitHub milestone whose last issue is closed — **M1, M2
 and M3 are now closed there**; they had been left open.
 
-The rule itself lives in `.cursor/rules/milestone-progress.mdc` and is summarised in
+The rule itself lives in `docs/IDE/RULES/milestone-progress.mdc` and is summarised in
 `CONTRIBUTING.md`, which is what the README links to (see *Note on `.cursor/`* below).
 
 ## Sprints

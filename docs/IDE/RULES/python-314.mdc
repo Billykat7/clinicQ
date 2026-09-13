@@ -1,0 +1,27 @@
+---
+description: Target Python 3.14; follow latest 3.14 docs and best practices.
+alwaysApply: true
+---
+
+# Python 3.14
+
+All code in this project **must** target **Python 3.14**. Local venv, CI, and the runtime image are all 3.14 (`requires-python = ">=3.14"`).
+
+## Source of truth
+
+- Prefer the official docs over memory or older tutorials: [What’s new in Python 3.14](https://docs.python.org/3/whatsnew/3.14.html) and the current [Python 3 docs](https://docs.python.org/3/).
+- When unsure about syntax, typing, stdlib APIs, or idioms, look up the **3.14** docs and follow current recommendations.
+- Do **not** write code for older interpreters (3.11–3.13 workarounds, polyfills, or version checks) unless explicitly required for a third-party constraint.
+
+## Coding practices (3.14)
+
+- Use modern typing: deferred annotation evaluation is the default (PEP 649/749) — no need for `from __future__ import annotations` for forward refs.
+- Prefer stdlib 3.14 APIs when they fit (e.g. `compression.zstd`, improved `uuid`, asyncio introspection) over reinventing or pulling in duplicates.
+- Use template strings (`t""`, PEP 750) when building strings that need safe/custom processing (e.g. structured logging, escaping); keep `f""` for ordinary formatting.
+- Follow language rules added in 3.14 (e.g. do not `return`/`break`/`continue` out of a `finally` — PEP 765).
+- Prefer clear, current idioms (built-in generics, `match`/`case` where it improves clarity, Enums over magic strings) over outdated patterns from older Python guides.
+
+## Environment
+
+- Create/run against **Python 3.14** only (`python3.14 -m venv .venv`).
+- Activate the project venv before running tests, lint, type-check, or the app (see activate-venv rule).

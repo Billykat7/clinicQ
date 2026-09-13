@@ -1,0 +1,60 @@
+---
+description: Every admin/report list view gets a filters bar, sortable columns, row-click quick view; every tab/sub-tab is its own URL
+globs: "src/templates/**/*.html,src/static/js/admin-*.js,src/static/js/reports-*.js,src/web/routes.py"
+alwaysApply: true
+---
+
+# List-view UI pattern
+
+Every table-based console or report list in this app follows one interaction pattern. Canonical
+worked example: `/admin/maintenance/requests` — [src/web/routes.py](src/web/routes.py)
+(`admin_maintenance_section`, `_MAINTENANCE_SECTIONS`), `admin/maintenance.html`,
+`admin-maintenance.js`.
+
+## 1. Every tab and sub-tab is its own URL
+
+A tab is a real link (`<a href>`), never JS-only state. Deep links and refreshes always land on
+the right view.
+
+- Top-level console groups: `partials/admin_group_tabs.html`.
+- Sub-tabs within a group's console: `.tabs-branch > .tabs-scroll > .tabs.tabs-sub`, e.g.
+  `/admin/maintenance/{requests|work-orders}`, `/admin/invoices/{lease_id}/{section}`,
+  `/owner/{section}`, `/reports/income/{collected-trend|by-charge-type|by-month}`.
+- The bare group/console URL 302-redirects to its default sub-tab; an unrecognised section also
+  redirects to the default rather than 404ing (`admin_maintenance()` / `admin_rbac()` pattern).
+- If a filter meaningfully changes what a tab shows (e.g. a reporting period), reflect it in the
+  URL too, and have every sibling tab's link carry the currently resolved filter forward — see
+  `reports/income.html`'s sub-tab links, which append `?start=&end=`.
+
+## 2. Every list view gets a filters bar
+
+`.filter-bar` — collapsible, `data-filter-key` for its remembered open/closed state, wired with
+`A.mountFilterBar()` in [src/static/js/admin-crud.js](src/static/js/admin-crud.js).
+
+## 3. Every sortable table gets click-to-sort columns
+
+`<th data-sort-key="...">` wired with `A.mountSortableHeaders()` — cycles asc → desc → default.
+
+## 4. Clicking a row opens a quick "slider" view
+
+`.slideover.slideover-inset` via `A.mountDetailSlideover()` — a non-modal panel beside the list,
+not a full navigation. A "Full view" link inside it goes to the record's full detail page when one
+exists.
+
+## The two valid wiring styles
+
+Most consoles (maintenance, invoices, leases, owner) are **live AJAX consoles**: the `<tbody>`
+starts empty, filters/sort/pager re-fetch JSON (`A.getJson`), and the row click fetches the detail
+by id before opening the slideover.
+
+A page with **no live data fetch** — a fully server-rendered report where the whole result set is
+baked into the HTML per request (e.g. `reports/income.html`) — may instead do sort and the row
+quick-view **client-side** against the rows already in the DOM (`reports-income.js` is the
+reference): each `<tr>` carries `data-*` attributes for its own values, sort re-orders the rows
+in place with no network call, and the row click populates the slideover from those same
+attributes. The filter bar still submits as a real navigation (a plain `<form method="get">`),
+which is what keeps the filtered state part of the bookmarkable URL — don't invent a JSON
+list endpoint just to satisfy this pattern when the page doesn't otherwise need one.
+
+Pick whichever style matches how the rest of the page already gets its data — don't mix them
+within one table.

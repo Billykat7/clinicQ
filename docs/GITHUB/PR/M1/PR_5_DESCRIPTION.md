@@ -188,7 +188,7 @@ session, and signing in means typing a password, which this verification did not
 
 - [x] Computed-style equality of the moved components, `main` against this branch: 37,206
       properties across 39 elements in light and dark, 0 differences
-- [x] Template punctuation check (`.cursor/rules/template-punctuation.mdc`): the only hits are the
+- [x] Template punctuation check (`docs/IDE/RULES/template-punctuation.mdc`): the only hits are the
       existing em-dash placeholders and the verbatim USSD transcript
 - [ ] Linux and a real kiosk TV: checked in Chrome on macOS only
 
