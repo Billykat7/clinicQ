@@ -85,6 +85,20 @@ POSITION_DECIMALS: Final = 3
 # --------------------------------------------------------------------------------------
 
 
+class DiscoverView(StrEnum):
+    """How the results are shown (Issue 33). The same clinics either way: the map draws the list."""
+
+    LIST = "list"
+    MAP = "map"
+
+
+#: What the view toggle calls each position.
+VIEW_LABELS: Final[Mapping[DiscoverView, str]] = {
+    DiscoverView.LIST: "List",
+    DiscoverView.MAP: "Map",
+}
+
+
 class BadgeShape(StrEnum):
     """The shape drawn beside a sector's name, so the two badges differ without colour.
 
@@ -299,6 +313,12 @@ class ClinicCard:
     wait_label: str
     #: A private clinic's reported payment information, with its notice (Issue 37).
     payment: PaymentLines | None = None
+    #: Where the pin goes on the map (Issue 33), read from the card itself so the map cannot show a
+    #: clinic the list does not.
+    latitude: float = 0.0
+    longitude: float = 0.0
+    #: Hand-off to the phone's own maps app, from the card and the map's preview.
+    directions_href: str = ""
 
 
 def clinic_card(clinic: NearbyClinic, moment: datetime) -> ClinicCard:
@@ -325,6 +345,9 @@ def clinic_card(clinic: NearbyClinic, moment: datetime) -> ClinicCard:
         ),
         wait_label=wait_label([queue.wait_range for queue in clinic.queues]),
         payment=payment_lines(clinic.payment),
+        latitude=clinic.location.latitude,
+        longitude=clinic.location.longitude,
+        directions_href=directions_href(clinic.location),
     )
 
 
@@ -405,6 +428,7 @@ class ResultsView:
     more_href: str | None
     offset: int
     payment: service.PaymentFilter | None = None
+    view: DiscoverView = DiscoverView.LIST
 
     def href(self, **changes: object) -> str:
         """The full page's address for this search, with ``changes`` applied."""
@@ -414,7 +438,19 @@ class ResultsView:
             self.sort,
             self.radius_m,
             payment=self.payment,
+            view=self.view,
             **changes,
+        )
+
+    @property
+    def map_note(self) -> str | None:
+        """Said on the map when the list has more clinics than it has loaded (Issue 33)."""
+        shown = self.offset + len(self.cards)
+        if self.total <= shown:
+            return None
+        return (
+            f"The map shows the {shown} nearest of {self.total} clinics, the same ones as the "
+            "list. Switch to the list to load more."
         )
 
 
@@ -436,6 +472,8 @@ class DiscoverPage:
     #: The payment and medical-aid filter (Issue 37). ``None``, and so absent from the page, unless
     #: the feature is on **and** Private is selected.
     payment_filter: PaymentFilterView | None = None
+    view_choices: tuple[Choice, ...] = ()
+    view: DiscoverView = DiscoverView.LIST
 
     @property
     def filter_groups(self) -> tuple[FilterGroup, ...]:
@@ -444,7 +482,25 @@ class DiscoverPage:
             FilterGroup(name="sector", legend="Show", choices=self.sector_choices),
             FilterGroup(name="radius_m", legend="Within", choices=self.radius_choices),
             FilterGroup(name="sort", legend="Sort by", choices=self.sort_choices),
+            FilterGroup(name="view", legend="See them as", choices=self.view_choices),
         )
+
+    @property
+    def origin_label(self) -> str:
+        """What the map calls the point the search started from."""
+        return f"The middle of {self.origin.area.name}" if self.origin.area else "You"
+
+    @property
+    def origin_point(self) -> tuple[float, float] | None:
+        """``(latitude, longitude)`` of the search origin, for the map's own marker."""
+        if self.origin.area is not None:
+            return (
+                self.origin.area.centroid.latitude,
+                self.origin.area.centroid.longitude,
+            )
+        if self.origin.latitude is not None and self.origin.longitude is not None:
+            return self.origin.latitude, self.origin.longitude
+        return None
 
 
 def payment_params(payment: service.PaymentFilter | None) -> dict[str, object]:
@@ -468,6 +524,7 @@ def page_href(
     radius_m: int,
     *,
     payment: service.PaymentFilter | None = None,
+    view: DiscoverView = DiscoverView.LIST,
     **changes: object,
 ) -> str:
     """``/discover?...`` for a search, leaving out whatever is at its default.
@@ -480,6 +537,7 @@ def page_href(
         "radius_m": radius_m,
         "sort": sort.value,
         **(payment_params(payment) if sector is SectorFilter.PRIVATE else {}),
+        "view": view.value,
     }
     params.update(changes)
     defaults = {
@@ -487,6 +545,7 @@ def page_href(
         "radius_m": service.DEFAULT_RADIUS_M,
         "sort": DiscoverySort.NEAREST.value,
         "offset": 0,
+        "view": DiscoverView.LIST.value,
     }
     kept = {
         key: value
@@ -507,7 +566,10 @@ def _wider_radius(metres: int) -> int | None:
 
 
 def results_view(
-    result: NearbyResult, origin: Origin, payment: service.PaymentFilter | None = None
+    result: NearbyResult,
+    origin: Origin,
+    payment: service.PaymentFilter | None = None,
+    view: DiscoverView = DiscoverView.LIST,
 ) -> ResultsView:
     """Turn one search result into what the list shows, including its empty state."""
     radius = result.radius.applied_m
@@ -532,7 +594,7 @@ def results_view(
             ),
             action_label=f"Search within {_radius_words(wider)}" if wider else None,
             action_href=page_href(
-                origin, result.sector, result.sort, wider, payment=payment
+                origin, result.sector, result.sort, wider, payment=payment, view=view
             )
             if wider
             else None,
@@ -546,6 +608,7 @@ def results_view(
             result.sort,
             radius,
             payment=payment,
+            view=view,
             offset=next_offset,
         )
         if next_offset < result.total
@@ -569,6 +632,7 @@ def results_view(
         more_href=more_href,
         offset=result.offset,
         payment=payment,
+        view=view,
     )
 
 
@@ -599,6 +663,7 @@ def discover_page(
     moment: datetime | None = None,
     payment: service.PaymentFilter | None = None,
     payments_enabled: bool = False,
+    view: DiscoverView = DiscoverView.LIST,
 ) -> DiscoverPage:
     """Build the whole discovery page for one request.
 
@@ -642,6 +707,7 @@ def discover_page(
                 moment=moment,
                 payment=payment,
                 payments_enabled=payments_enabled,
+                view=view,
             )
         except CoordinateOutOfRangeError:
             problem = (
@@ -668,6 +734,8 @@ def discover_page(
         problem=problem,
         offer_location=not origin.is_set,
         payment_filter=payment_filter_view(payment) if applies else None,
+        view_choices=_choices(VIEW_LABELS, view),
+        view=view,
     )
 
 
@@ -682,6 +750,7 @@ def search_results(
     moment: datetime | None = None,
     payment: service.PaymentFilter | None = None,
     payments_enabled: bool = False,
+    view: DiscoverView = DiscoverView.LIST,
 ) -> ResultsView:
     """Run the one discovery search for ``origin`` and shape its answer for the list."""
     search_from: service.SearchOrigin = (
@@ -702,7 +771,7 @@ def search_results(
         payment=payment,
         payments_enabled=payments_enabled,
     )
-    return results_view(result, origin, payment)
+    return results_view(result, origin, payment, view)
 
 
 # --------------------------------------------------------------------------------------
@@ -757,6 +826,7 @@ def discover(
     accepts_cash: bool = False,
     accepts_card: bool = False,
     medical_aid: MedicalAids = None,
+    view: DiscoverView = DiscoverView.LIST,
 ) -> HTMLResponse:
     """The discovery page. Public: a patient looking for a clinic has no account."""
     page = discover_page(
@@ -771,6 +841,7 @@ def discover(
         offset=offset,
         payment=_payment(accepts_cash, accepts_card, medical_aid),
         payments_enabled=get_settings().payment_filter_enabled,
+        view=view,
     )
     return _render(request, "discover/list.html", page=page)
 
@@ -789,6 +860,7 @@ def discover_results(
     accepts_cash: bool = False,
     accepts_card: bool = False,
     medical_aid: MedicalAids = None,
+    view: DiscoverView = DiscoverView.LIST,
 ) -> Response:
     """The results fragment an htmx swap asks for; a plain browser is sent to the full page.
 
@@ -806,6 +878,7 @@ def discover_results(
         offset=offset,
         payment=_payment(accepts_cash, accepts_card, medical_aid),
         payments_enabled=get_settings().payment_filter_enabled,
+        view=view,
     )
     address = page_href(
         page.origin,
@@ -813,6 +886,7 @@ def discover_results(
         sort,
         page.results.radius_m if page.results else radius_m,
         payment=page.results.payment if page.results else None,
+        view=view,
     )
     if not _is_htmx(request):
         return RedirectResponse(address, status_code=status.HTTP_303_SEE_OTHER)

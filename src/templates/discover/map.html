@@ -1,0 +1,26 @@
+{#- The map view (Issue 33): the clinics in the list, as pins.
+
+    The map is an enhancement layered on a list that already works: discover-map.js draws a pin for
+    each clinic card in #results and nothing else, so the map cannot disagree with the list. Leaflet
+    (vendored) is loaded only when the map is first shown, so the list view pays nothing for it.
+
+    Pins differ by shape as well as colour (a square for public, a diamond for private, as on the
+    badges); nearby pins cluster; a pin opens a preview that is a copy of that clinic's own card, with
+    Directions. If the map tiles do not arrive, the map gives way to the list with a sentence saying
+    why, never a blank grey area. The OpenStreetMap attribution is the tile licence's requirement. -#}
+<section class="discover-map" id="discover-map" aria-labelledby="map-heading"
+         data-origin-label="{{ page.origin_label }}"
+         {%- if page.origin_point %} data-origin-lat="{{ page.origin_point[0] }}" data-origin-lon="{{ page.origin_point[1] }}"{% endif %}
+         {%- if page.view != "map" %} hidden{% endif %}>
+  <h3 class="sr-only" id="map-heading">Map of the clinics in the list</h3>
+  <div class="map-canvas" id="map-canvas"></div>
+  <ul class="map-legend" aria-label="What the pins mean">
+    <li><span class="map-legend-icon map-pin-square" aria-hidden="true"><svg viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9" rx="1"/></svg></span> Public</li>
+    <li><span class="map-legend-icon map-pin-diamond" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M6 .9 11.1 6 6 11.1.9 6z"/></svg></span> Private</li>
+    <li><span class="map-legend-icon map-pin-origin" aria-hidden="true"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5"/></svg></span> {{ page.origin_label }}</li>
+  </ul>
+  <p class="map-status" id="map-status" role="status"></p>
+  {% if page.results and page.results.map_note %}<p class="map-note">{{ page.results.map_note }}</p>{% endif %}
+  <div class="map-preview" id="map-preview" hidden></div>
+  <noscript><p class="msg msg-muted">The map needs JavaScript. The list below shows the same clinics.</p></noscript>
+</section>

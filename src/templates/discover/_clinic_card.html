@@ -4,7 +4,9 @@
     The three things that drive the decision come first: distance, queue length and open or
     closed. Open and closed are words, not a coloured dot. -#}
 {% from "discover/_sector_badge.html" import sector_badge %}
-<li class="clinic-card">
+{#- The data-* attributes are what the map (Issue 33) pins: it reads the cards, so it can only ever show
+    the clinics this list shows. -#}
+<li class="clinic-card" data-clinic="{{ card.slug }}" data-lat="{{ card.latitude }}" data-lon="{{ card.longitude }}" data-shape="{{ card.badge.shape }}" data-sector-label="{{ card.badge.label }}" data-name="{{ card.name }}" data-directions="{{ card.directions_href }}">
   <article aria-labelledby="clinic-{{ card.slug }}">
     <div class="clinic-card-head">
       <h3 id="clinic-{{ card.slug }}" class="clinic-card-name"><a href="/discover/clinics/{{ card.slug }}">{{ card.name }}</a></h3>
@@ -43,5 +45,6 @@
       </div>
       {%- endif %}
     </dl>
+    <p class="clinic-card-actions"><a class="btn btn-quiet btn-sm" href="{{ card.directions_href }}" rel="noopener">Directions</a></p>
   </article>
 </li>
