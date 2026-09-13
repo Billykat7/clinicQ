@@ -1,5 +1,5 @@
 ---
-description: Every PR updates the docs, its milestone's progress and the hand-written status (sprints, README Status block, delivery gantt); the last issue of a milestone marks it done
+description: Every PR updates the docs, its milestone's progress bars as they will read once it merges (--assume-closed), and the hand-written status (sprints, README Status block, delivery gantt); the last issue of a milestone marks it done
 alwaysApply: true
 ---
 
@@ -9,19 +9,24 @@ A milestone's state is part of the deliverable, not an afterthought at release t
 request that closes an issue also moves the milestone**, so the documents are never staler than the
 work they describe.
 
+**Every pull request carries the bars as they will read the moment it merges.** If it merges, the
+docs on `main` are already right; nobody has to remember a follow-up. That holds for a stacked pull
+request too.
+
 ## What every pull request does
 
 1. **Update the docs the change touches.** A new setting means `.env.example` (`make env-example`);
    a new permission means the RBAC matrix (`make rbac-matrix`); a new command, endpoint or workflow
    means the README or the document that already describes that area. A reviewer should never learn
    something from the diff that the docs still contradict.
-2. **Update the milestone's progress:**
+2. **Update the milestone's progress, counting this pull request's issue as closed:**
 
    ```bash
-   make milestone-progress
+   make milestone-progress ARGS='--assume-closed <N>'
    ```
 
-   It reads the issue states from GitHub (issues only — pull requests are not counted) and writes,
+   It reads the issue states from GitHub (issues only — pull requests are not counted), counts
+   `<N>` as closed because merging this pull request closes it, and writes,
    into the milestone document's header table, the README's *Delivery at a glance* table and the
    *Milestone summary* table in `docs/GITHUB/README.md` (whose **Status** column it owns, with a
    roll-up line under it):
@@ -32,14 +37,34 @@ work they describe.
 
    Ten cells, green for done, with the percentage and the count behind it. Commit the result in the
    same pull request.
-3. **Check it before pushing:** `make milestone-progress-check` fails when a document disagrees with
-   GitHub and prints which one.
+3. **Check it before pushing:** `make milestone-progress-check ARGS='--assume-closed <N>'` fails
+   when a document disagrees with GitHub plus that assumption, and prints which one.
+4. **Make the hand-written status agree with the bar** (see *The hand-written status nobody
+   generates*): the README Status block's issue count must equal the generated total, and the
+   milestone's Status row and sprint row must not contradict the percentage. For example, a bar at 25%
+   next to a Status row reading `📋 Planned` is wrong.
 
-### When the pull requests are stacked
+### Which issues to assume closed
 
-A stacked branch cannot do step 2 honestly: its issue is still open, so the generator would write a
-bar that is about to be wrong. In that case the bar moves in the PR that **merges last**, or in a
-short follow-up PR opened on the same branch afterwards — never by hand-editing it forward.
+| Pull request | `--assume-closed` |
+|---|---|
+| Closes one issue, based on `main` | that issue: `32` |
+| **Stacked** on other open pull requests | **every** issue its branch closes, its own and those of every branch below it: `32,35,36`. Merging it means all of them have merged |
+| A follow-up that closes nothing (`Refs #<N>`) | nothing: plain `make milestone-progress` |
+| Closes a milestone's last issue | the whole remaining set; the bar reads 100% and the Status row says done |
+
+An issue number that is in no milestone is an error, so a typo cannot silently change nothing.
+Never hand-edit a bar forward. The assumption is the generator's input, so the bar stays generated.
+
+**Stacked branches each carry different figures.** When a lower branch is merged forward into the one
+above it, the generated rows conflict or carry the lower branch's numbers. Take either side, then
+**re-run the generator with the upper branch's own assumption** and commit that as the branch's
+`Issue <N>: ` commit. Do it bottom-up, one branch at a time, so each branch's bars say "everything up
+to and including me has merged".
+
+**When a pull request merges without its bars** (as #147 and #148 did), `main` is stale. The next
+pull request, or a `Refs #<N>` follow-up, regenerates with its own assumption, and that includes the
+already-closed issues because GitHub has them closed.
 
 A follow-up PR of that kind is still an issue branch: it keeps the `Issue/<N>/<slug>` branch and the
 `Issue <N>: ` commit prefix, and its description says **`Refs #<N>`**, not `Closes #<N>`, because the
@@ -61,10 +86,13 @@ The pull request that closes it **also marks the milestone done**, in three plac
   note [`v0.<n>.0`](../RELEASES/RELEASE_v0_<n>_0.md)`;
 - its **Exit criteria**: tick what is met, and for anything met only in part, say **which half is
   done and what the other half waits for** — never tick a criterion that is not true;
-- the **GitHub milestone** itself: `make milestone-progress ARGS='--close-completed'`.
+- the **GitHub milestone** itself: `make milestone-progress ARGS='--close-completed'`, run **after**
+  the merge, when GitHub has the issues closed. The pull request itself carries the 100% bar through
+  `--assume-closed`.
 
-Then write the release note (`docs/GITHUB/RELEASES/RELEASE_v0_<n>_0.md`) from the template in
-`docs/GITHUB/RELEASES/README.md`, and only then is the tag cut.
+**In the same pull request**, write the release note (`docs/GITHUB/RELEASES/RELEASE_v0_<n>_0.md`) from
+the template in `docs/GITHUB/RELEASES/README.md`. The tag is cut only after that pull request merges.
+Run `--close-completed` after the merge, because it needs the issues really closed on GitHub.
 
 ## Sprints
 
@@ -117,21 +145,26 @@ thing in prose, and go stale silently — check all three whenever a milestone o
 ## Rules
 
 - **Progress is read from GitHub, never typed by hand.** A hand-edited bar is a claim; a generated
-  one is a fact. If the number looks wrong, the issue states are wrong — fix those.
-- **A bar at 100% and an open issue cannot coexist.** The script counts issues in the milestone, so
-  an issue closed without its work done inflates it; close issues when the work merges, not before.
+  one is a fact. The only input a pull request adds is `--assume-closed`, the issues it closes. If
+  the number looks wrong, either the issue states or that list are wrong: fix those.
+- **On `main`, a bar at 100% and an open issue cannot coexist.** The script counts issues in the
+  milestone, so an issue closed without its work done inflates it. Close issues when the work merges,
+  not before. On a branch in review the bar is allowed to lead GitHub by exactly the issues that
+  branch closes, and no others.
 - **Partly-met exit criteria stay unticked, with the reason written next to them.** "Partly (Issue
   N): <what is done> — <what it waits for>" is the shape; see M2 and M3 for worked examples.
 - The bar is emoji, not an image: it renders on GitHub, in an editor and in a terminal, with no
   external image host and no network.
 - **Never tick something ahead of the fact it claims.** A milestone is not done before its last
   issue closes, a sprint is not done before every issue it delivers closes, and a tag is not
-  referenced before it is cut. Each of those is cheap to state honestly and expensive to unpick.
+  referenced before it is cut. The one allowed exception is a pull request's own `--assume-closed`
+  set, because it describes the state its own merge creates. Anything beyond that set is still ahead
+  of the fact. Each of those is cheap to state honestly and expensive to unpick.
 
 ## Before pushing
 
 ```bash
-make milestone-progress-check     # the bars agree with GitHub
+make milestone-progress-check ARGS='--assume-closed <N>'   # the bars agree with GitHub once this merges
 ```
 
 Then read your own diff against this list: the milestone header, the sprint row, the README Status
