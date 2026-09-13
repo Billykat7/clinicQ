@@ -20,7 +20,7 @@ the change and its trail land in one transaction.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -36,6 +36,7 @@ from src.commons.enums import (
     SiteSector,
     SiteStatus,
 )
+from src.commons.time import business_date, now_sast
 from src.core.audit import record_audit_event
 from src.core.client_ip import resolve_client_ip
 from src.core.request_logging import bind_request_context
@@ -47,6 +48,7 @@ from src.core.site_scope import (
     site_not_found,
 )
 from src.database.models.site import Site
+from src.modules.discovery import analytics as discovery_analytics
 from src.modules.sites import (
     catalogue,
     hours_service,
@@ -60,12 +62,15 @@ from src.modules.sites.geocoding import GeocodingUnavailableError, geocode_addre
 from src.modules.sites.hours import open_state, schedule_for
 from src.modules.sites.schemas import (
     AcceptedSchemeOut,
+    AnalyticsSettingsIn,
+    AnalyticsSettingsOut,
     ClinicServiceIn,
     ClinicServiceListOut,
     ClinicServiceOut,
     ClosureIn,
     ClosureListOut,
     ClosureOut,
+    DiscoveryConversionOut,
     DisplayModeOptionOut,
     DisplayOptionsOut,
     DisplaySettingsIn,
@@ -133,6 +138,18 @@ SiteDisplayRead = Annotated[
 ]
 SiteDisplayUpdate = Annotated[
     SiteAccess, Depends(require_site_access("sites.display", "update"))
+]
+
+#: Operational settings (``sites.settings``) and the clinic's reports (``sites.reports``) are the
+#: clinic manager's: a receptionist neither sees nor changes them (Issue 38).
+SiteSettingsRead = Annotated[
+    SiteAccess, Depends(require_site_access("sites.settings", "read"))
+]
+SiteSettingsUpdate = Annotated[
+    SiteAccess, Depends(require_site_access("sites.settings", "update"))
+]
+SiteReportsRead = Annotated[
+    SiteAccess, Depends(require_site_access("sites.reports", "read"))
 ]
 
 #: The services catalogue is part of the clinic's profile: the front desk reads it (it is what a
@@ -1096,3 +1113,106 @@ def confirm_payment_profile(
     )
     db.commit()
     return _payment_out(site, confirmed)
+
+
+# --------------------------------------------------------------------------------------
+# Discovery analytics (Issue 38): the opt-out and the view-to-join report
+# --------------------------------------------------------------------------------------
+
+
+def _analytics_out(site: Site) -> AnalyticsSettingsOut:
+    return AnalyticsSettingsOut(
+        site_id=site.id,
+        analytics_enabled=site.analytics_enabled,
+        explanation=discovery_analytics.ANALYTICS_EXPLANATION,
+    )
+
+
+@router.get(
+    "/{site_id}/settings/analytics",
+    response_model=AnalyticsSettingsOut,
+    operation_id="sitesGetAnalyticsSettings",
+    summary="Whether patients' views of and joins at this clinic are counted",
+)
+def get_analytics_settings(
+    access: SiteSettingsRead, db: DbSession
+) -> AnalyticsSettingsOut:
+    """The clinic's analytics switch and what it means."""
+    return _analytics_out(_site_or_404(db, access))
+
+
+@router.put(
+    "/{site_id}/settings/analytics",
+    response_model=AnalyticsSettingsOut,
+    operation_id="sitesSetAnalyticsSettings",
+    summary="Turn counting this clinic's views and joins on or off",
+)
+def set_analytics_settings(
+    payload: AnalyticsSettingsIn,
+    request: Request,
+    access: SiteSettingsUpdate,
+    db: DbSession,
+) -> AnalyticsSettingsOut:
+    """Opt the clinic in or out. Events already recorded stay; nothing new is counted while off."""
+    site = _site_or_404(db, access)
+    if site.analytics_enabled != payload.analytics_enabled:
+        site.analytics_enabled = payload.analytics_enabled
+        _audit(
+            db,
+            request,
+            access.user.email,
+            str(access.user.id),
+            AuditAction.UPDATE,
+            site.id,
+            f"discovery analytics {'on' if payload.analytics_enabled else 'off'} for {site.slug}",
+        )
+    db.commit()
+    db.refresh(site)
+    return _analytics_out(site)
+
+
+@router.get(
+    "/{site_id}/reports/discovery-conversion",
+    response_model=DiscoveryConversionOut,
+    operation_id="sitesDiscoveryConversion",
+    summary="How many patients viewed this clinic, and how many joined a queue",
+    responses={
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {
+            "description": "The range is backwards or longer than a year."
+        }
+    },
+)
+def discovery_conversion(
+    access: SiteReportsRead,
+    db: DbSession,
+    start: Annotated[
+        date | None, Query(description="First service day, inclusive.")
+    ] = None,
+    end: Annotated[
+        date | None, Query(description="Last service day, inclusive.")
+    ] = None,
+) -> DiscoveryConversionOut:
+    """Views and joins over a range of service days; the last 30 days by default."""
+    site = _site_or_404(db, access)
+    last = end or business_date(now_sast())
+    first = start or last - timedelta(days=discovery_analytics.DEFAULT_REPORT_DAYS - 1)
+    if first > last:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "The start comes after the end."
+        )
+    if (last - first).days + 1 > discovery_analytics.MAX_REPORT_DAYS:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"A report covers at most {discovery_analytics.MAX_REPORT_DAYS} days.",
+        )
+    found = discovery_analytics.conversion_for_site(db, access, start=first, end=last)
+    return DiscoveryConversionOut(
+        site_id=found.site_id,
+        start=found.start,
+        end=found.end,
+        views=found.views,
+        joins_started=found.joins_started,
+        joins_completed=found.joins_completed,
+        conversion_rate=found.conversion_rate,
+        analytics_enabled=site.analytics_enabled,
+    )

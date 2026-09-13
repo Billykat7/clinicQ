@@ -93,10 +93,26 @@ CASES: dict[str, dict[str, object]] = {
     "sites.display": {
         # What the waiting-room board may show (Issue 27, non-negotiable 4). A receptionist reads
         # it and cannot change it; naming ``sites.settings`` here covers that sibling too, whose
-        # own routes (the operational settings) are still to come.
+        # first route of its own (the analytics switch, Issue 38) has its own case below.
         "resource": "sites.settings",
         "reader": "a@clinicq.example",
         "paths": lambda site, _row: (f"/api/v1/sites/{site}/settings/display",),
+    },
+    "discoveryevent": {
+        # Patients' anonymous views of and joins at a clinic (Issue 38). The events carry the
+        # clinic they are about, and the only clinic-facing read is its manager's view-to-join
+        # report: the first of the clinic's reports, so it is ``sites.reports`` that it covers.
+        "resource": "sites.reports",
+        "reader": "manager.a@clinicq.example",
+        "paths": lambda site, _row: (
+            f"/api/v1/sites/{site}/reports/discovery-conversion",
+        ),
+    },
+    "sites.settings": {
+        # The clinic's analytics switch (Issue 38): the first operational setting, the manager's.
+        "resource": "sites.settings",
+        "reader": "manager.a@clinicq.example",
+        "paths": lambda site, _row: (f"/api/v1/sites/{site}/settings/analytics",),
     },
     "sitepaymentprofile": {
         # What a private clinic says it accepts (Issue 37). Part of the profile: the front desk
@@ -171,7 +187,6 @@ PENDING: dict[str, str] = {
         "live counts from the tickets themselves. A route that lists a clinic's snapshots must add "
         "a case here"
     ),
-    "sites.reports": "clinic reports land with M12",
     "queues.call": "call-next lands with Issue 42",
     "queues.tickets": "tickets land with Issue 39",
     "queues.tickets.priority": "the priority override lands with Issue 46",
