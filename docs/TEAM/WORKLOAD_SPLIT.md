@@ -94,7 +94,7 @@ ever empty: that is the whole design goal. Issue numbers in brackets.
 | **2** | 3–4 | M1 · M2 | ✅ done |
 | **3** | 5–6 | M3 | ✅ done |
 | **4** | 7–8 | M3 · M4 | ✅ done — M3 closed, tag `v0.3.0` |
-| **5** | 9–10 | M4 · M5 | 🚧 in progress — M4 closed, tag `v0.4.0` to follow; M5 not started |
+| **5** | 9–10 | M4 · M5 | 🚧 in progress — M4 closed, tag `v0.4.0` to follow; M5 under way (issues 31, 32, 34, 35 closed) |
 | **6** | 11–12 | M5 · M6 | 📋 planned |
 | **7** | 13–14 | M6 ⚠️ | 📋 planned |
 | **8** | 15–16 | M7 | 📋 planned |
@@ -107,7 +107,7 @@ ever empty: that is the whole design goal. Issue numbers in brackets.
 
 **4 of 14 sprints done** 🟩🟩🟩⬜⬜⬜⬜⬜⬜⬜ **29%**, carrying milestones M1–M3 (issues 1–22) and
 tags `v0.1.0`–`v0.3.0`. **Sprint 5 is under way, not done:** its M4 half is closed (issues 23–30,
-release note `v0.4.0`), its M5 half has not started — and by the rule below a sprint is ticked only
+release note `v0.4.0`), its M5 half is under way — and by the rule below a sprint is ticked only
 when *every* issue its lanes deliver is closed.
 
 A sprint is **done** when every issue its lanes *deliver* is closed. That is marked by hand, not

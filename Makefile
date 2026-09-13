@@ -233,7 +233,7 @@ milestone-progress:
 	python scripts/update_milestone_progress.py $(ARGS)
 
 milestone-progress-check:
-	python scripts/update_milestone_progress.py --check
+	python scripts/update_milestone_progress.py --check $(ARGS)
 
 # Apply the branch rulesets in .github/rulesets/ to main (Issue 13): update by name, create if missing.
 # Preview: make gh-sync-rulesets ARGS='--dry-run'. Needs admin rights on the repository.
