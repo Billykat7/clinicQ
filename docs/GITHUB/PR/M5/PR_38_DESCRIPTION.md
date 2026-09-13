@@ -7,7 +7,8 @@ merged), and #31–#37 in the stack (PRs #147–#153)
 > **Merge order:** last, after PRs #147 → #148 → #149 → #150 → #151 → #152 → #153. The issue says to
 > start only once #31–#37 are merged. They are not merged yet, so this branch is stacked on #33's, and
 > the Conventions check fails on the earlier issues' commits until they merge. Every test job passes.
-> **This is M5's last issue**: the `v0.5.0` release note is written after this merges, not in this PR.
+> **This is M5's last issue**, so it carries the milestone's release note,
+> [`RELEASE_v0_5_0.md`](../../RELEASES/RELEASE_v0_5_0.md). The `v0.5.0` tag is cut once this merges.
 >
 > **Who did what, to agree in review:** the spec names F as the single owner. The sprint plan gives
 > the events to C and the contract to F, and the issue asks for that split to be agreed first.
@@ -113,6 +114,9 @@ in `sites.yaml` (now `0.5.0`) with every other route behind the site guard.
   `test_a_discovery_route_added_without_documenting_it_is_caught`.
   **Guards:** cross-tenant cases for `discoveryevent`, `sites.reports` and `sites.settings`; the site
   guard's reasoned exception for `conversion_by_site`.
+- **Release note:** `docs/GITHUB/RELEASES/RELEASE_v0_5_0.md` (new). It covers what #147–#154 shipped,
+  migrations `0014`–`0017` and whether each is reversible, the upgrade notes, and the known issues,
+  including the partial exit criteria and what still stands from v0.4.0.
 - **Milestone close:** `docs/GITHUB/MILESTONES/M5_discovery_geolocation.md` (Status, exit criteria
   with the partial ones marked), `README.md` Status, `docs/TEAM/WORKLOAD_SPLIT.md` sprint rows,
   `docs/PLAN/IMPLEMENTATION_PLAN.md` gantt.

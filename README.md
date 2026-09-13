@@ -212,7 +212,7 @@ Full detail: [engineering non-negotiables](docs/guideline.md) and
 
 **Phase:** building. **Sprints 1–5 of 14 complete**, sprint 6 under way (semester 2). **30 of 109
 issues closed**, with M5's eight (31–38) in review as stacked pull requests; latest tag `v0.3.0`,
-and the `v0.4.0` and `v0.5.0` tags follow their milestones' last merges. Next: M6, the queue engine.
+and the `v0.4.0` and `v0.5.0` notes are written, with each tag following its milestone's last merge. Next: M6, the queue engine.
 
 - [x] Idea finalised (**ClinicQ**, selected from the shortlist)
 - [x] Requirements gathered ([product docs](docs/PRODUCT/README.md))
