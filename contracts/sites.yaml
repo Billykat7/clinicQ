@@ -8,7 +8,8 @@
 #
 # What is in scope: every route under /api/v1/sites that M4 owns — the clinic profile (Issue 23),
 # opening hours, holidays and closures (24), queues (25), the services catalogue (26), display and
-# privacy settings (27), staff and room assignment (22, 28) and onboarding (29).
+# privacy settings (27), staff and room assignment (22, 28), onboarding (29) and, from M5, a private
+# clinic's self-reported payment profile (37).
 #
 # What is deliberately **not**: /api/v1/sites/{site_id}/audit/events. It sits under this prefix but
 # belongs to the audit module (Issue 20), and it will be documented by that module's own contract.
@@ -662,6 +663,90 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  # ── Payment and medical aid (Issue 37) ────────────────────────────────────────────────
+  /sites/{site_id}/payment-profile:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    get:
+      tags: [sites]
+      operationId: sitesGetPaymentProfile
+      summary: What this clinic says it accepts, cash, card and medical aids
+      description: |
+        A **self-reported directory tag**, never an eligibility or claims check. `applicable` is
+        false for a public clinic, which never holds a profile. `notice` is the sentence every
+        surface shows beside this information.
+      responses:
+        "200":
+          description: The profile (all nulls when none is declared), the notice and the scheme list.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentProfileOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    put:
+      tags: [sites]
+      operationId: sitesSetPaymentProfile
+      summary: Declare what this private clinic accepts, confirming it as of now
+      description: |
+        Replaces the profile and stamps `last_confirmed_at`. **Refused for a public clinic on the
+        server** (`409`), whatever a client shows. `other_scheme_name` is required with `other` and
+        refused without it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PaymentProfileIn" }
+      responses:
+        "200":
+          description: The profile, as saved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentProfileOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: The clinic is public, and public clinics never carry a payment profile.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "Only a private clinic can list payment methods and medical aids. Public clinics never carry a payment profile." }
+        "422":
+          description: A scheme outside the controlled list, a duplicate, or `other` without its name.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationError" }
+
+  /sites/{site_id}/payment-profile/confirm:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    post:
+      tags: [sites]
+      operationId: sitesConfirmPaymentProfile
+      summary: Re-confirm this clinic's payment profile unchanged
+      description: Stamps today's date, which clears the six-month staleness mark.
+      responses:
+        "200":
+          description: The profile, confirmed now.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentProfileOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: No such clinic, not your clinic, or no profile declared yet.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: The clinic is public.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
   # ── Queues (Issue 25) ───────────────────────────────────────────────────────────────────
@@ -1644,6 +1729,68 @@ components:
         retention_ceiling_days: { type: integer }
         comment_warning: { type: string }
         comment_with_full_name_warning: { type: string }
+
+    # ── Payment and medical aid ───────────────────────────────────────────────────────────
+    MedicalAidScheme:
+      type: string
+      enum: [discovery_health, gems, bonitas, momentum_health, medshield, bestmed, fedhealth, medihelp, profmed, keyhealth, sizwe_hosmed, compcare, bankmed, polmed, la_health, other]
+    PaymentProfileIn:
+      type: object
+      additionalProperties: false
+      required: [accepts_cash, accepts_card]
+      properties:
+        accepts_cash: { type: boolean }
+        accepts_card: { type: boolean }
+        schemes: { type: array, items: { $ref: "#/components/schemas/MedicalAidScheme" }, uniqueItems: true }
+        other_scheme_name: { type: [string, "null"], maxLength: 80, description: "Required with `other`, refused without it." }
+        copay_notice: { type: [string, "null"], maxLength: 300 }
+      example:
+        accepts_cash: true
+        accepts_card: true
+        schemes: [discovery_health, bonitas, other]
+        other_scheme_name: Umvuzo Health
+        copay_notice: A co-payment may apply for some plans.
+    PaymentProfileOut:
+      type: object
+      required: [applicable, accepts_cash, accepts_card, schemes, copay_notice, last_confirmed_at, stale, notice, scheme_options]
+      properties:
+        applicable: { type: boolean, description: False for a public clinic. }
+        accepts_cash: { type: [boolean, "null"] }
+        accepts_card: { type: [boolean, "null"] }
+        schemes:
+          type: array
+          items:
+            type: object
+            required: [scheme, label]
+            properties:
+              scheme: { $ref: "#/components/schemas/MedicalAidScheme" }
+              label: { type: string }
+        copay_notice: { type: [string, "null"] }
+        last_confirmed_at: { type: [string, "null"], format: date-time }
+        stale: { type: boolean, description: Not confirmed in the last six months. }
+        notice: { type: string }
+        scheme_options:
+          type: array
+          items:
+            type: object
+            required: [value, label]
+            properties:
+              value: { $ref: "#/components/schemas/MedicalAidScheme" }
+              label: { type: string }
+      example:
+        applicable: true
+        accepts_cash: true
+        accepts_card: true
+        schemes:
+          - { scheme: discovery_health, label: Discovery Health }
+          - { scheme: other, label: Umvuzo Health }
+        copay_notice: A co-payment may apply for some plans.
+        last_confirmed_at: "2026-09-13T09:15:00+02:00"
+        stale: false
+        notice: Reported by the clinic. Please confirm with the clinic before you travel.
+        scheme_options:
+          - { value: discovery_health, label: Discovery Health }
+          - { value: other, label: Other }
 
     # ── Queues ────────────────────────────────────────────────────────────────────────────
     QueueIn:

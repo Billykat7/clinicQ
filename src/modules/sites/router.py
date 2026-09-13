@@ -47,12 +47,19 @@ from src.core.site_scope import (
     site_not_found,
 )
 from src.database.models.site import Site
-from src.modules.sites import catalogue, hours_service, onboarding, service
+from src.modules.sites import (
+    catalogue,
+    hours_service,
+    onboarding,
+    payment_profile,
+    service,
+)
 from src.modules.sites import settings as display_settings
 from src.modules.sites.availability import join_gate
 from src.modules.sites.geocoding import GeocodingUnavailableError, geocode_address
 from src.modules.sites.hours import open_state, schedule_for
 from src.modules.sites.schemas import (
+    AcceptedSchemeOut,
     ClinicServiceIn,
     ClinicServiceListOut,
     ClinicServiceOut,
@@ -70,6 +77,9 @@ from src.modules.sites.schemas import (
     HolidayOut,
     HolidayRuleIn,
     OpenStateOut,
+    PaymentProfileIn,
+    PaymentProfileOut,
+    SchemeOptionOut,
     SiteIn,
     SiteListOut,
     SiteLocationOut,
@@ -453,6 +463,8 @@ def update_site(
         service.update_site(db, site, payload)
     except service.SlugAlreadyUsedError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    # A clinic that is now public keeps no payment profile (Issue 37): the rule is the server's.
+    dropped = payment_profile.remove_if_public(db, access, site)
     _audit(
         db,
         request,
@@ -460,7 +472,8 @@ def update_site(
         str(access.user.id),
         AuditAction.UPDATE,
         site.id,
-        f"updated the profile of {site.slug}",
+        f"updated the profile of {site.slug}"
+        + ("; removed its payment profile, as a public clinic" if dropped else ""),
     )
     db.commit()
     db.refresh(site)
@@ -962,3 +975,124 @@ def _site_or_404(db: Session, access: SiteAccess) -> Site:
 
         raise site_not_found()
     return site
+
+
+# --------------------------------------------------------------------------------------
+# Payment and medical aid (Issue 37)
+# --------------------------------------------------------------------------------------
+
+
+def _payment_out(
+    site: Site, found: payment_profile.PaymentProfile | None
+) -> PaymentProfileOut:
+    """The API shape of a clinic's payment profile, with the controlled scheme list."""
+    return PaymentProfileOut(
+        applicable=site.sector_enum is SiteSector.PRIVATE,
+        accepts_cash=found.accepts_cash if found else None,
+        accepts_card=found.accepts_card if found else None,
+        schemes=[
+            AcceptedSchemeOut(scheme=item.scheme, label=item.label)
+            for item in (found.schemes if found else ())
+        ],
+        copay_notice=found.copay_notice if found else None,
+        last_confirmed_at=found.last_confirmed_at if found else None,
+        stale=found.stale if found else False,
+        notice=payment_profile.CLINIC_REPORTED_NOTICE,
+        scheme_options=[
+            SchemeOptionOut(value=scheme, label=label)
+            for scheme, label in payment_profile.SCHEME_LABELS.items()
+        ],
+    )
+
+
+@router.get(
+    "/{site_id}/payment-profile",
+    response_model=PaymentProfileOut,
+    operation_id="sitesGetPaymentProfile",
+    summary="What this clinic says it accepts: cash, card and medical aids",
+)
+def get_payment_profile(access: SiteProfileRead, db: DbSession) -> PaymentProfileOut:
+    """The clinic's self-reported payment profile. ``applicable`` is false for a public clinic."""
+    site = _site_or_404(db, access)
+    return _payment_out(site, payment_profile.get_profile(db, access))
+
+
+@router.put(
+    "/{site_id}/payment-profile",
+    response_model=PaymentProfileOut,
+    operation_id="sitesSetPaymentProfile",
+    summary="Declare what this private clinic accepts, confirming it as of now",
+    responses={status.HTTP_409_CONFLICT: {"description": "The clinic is public."}},
+)
+def set_payment_profile(
+    payload: PaymentProfileIn,
+    request: Request,
+    access: SiteProfileUpdate,
+    db: DbSession,
+) -> PaymentProfileOut:
+    """Replace the profile. Refused for a public clinic on the server, whatever the client shows."""
+    site = _site_or_404(db, access)
+    try:
+        saved = payment_profile.save_profile(
+            db,
+            access,
+            site,
+            payment_profile.PaymentChange(
+                accepts_cash=payload.accepts_cash,
+                accepts_card=payload.accepts_card,
+                schemes=frozenset(payload.schemes),
+                other_name=payload.other_scheme_name,
+                copay_notice=payload.copay_notice,
+            ),
+            confirmed_by=str(access.user.id),
+        )
+    except payment_profile.PublicClinicPaymentProfileError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    _audit(
+        db,
+        request,
+        access.user.email,
+        str(access.user.id),
+        AuditAction.UPDATE,
+        site.id,
+        f"declared the payment profile of {site.slug}: cash {payload.accepts_cash}, card "
+        f"{payload.accepts_card}, {len(payload.schemes)} scheme(s)",
+    )
+    db.commit()
+    return _payment_out(site, saved)
+
+
+@router.post(
+    "/{site_id}/payment-profile/confirm",
+    response_model=PaymentProfileOut,
+    operation_id="sitesConfirmPaymentProfile",
+    summary="Re-confirm this clinic's payment profile unchanged",
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "No profile has been declared yet."},
+        status.HTTP_409_CONFLICT: {"description": "The clinic is public."},
+    },
+)
+def confirm_payment_profile(
+    request: Request, access: SiteProfileUpdate, db: DbSession
+) -> PaymentProfileOut:
+    """Stamp today's date on the profile, which clears its staleness."""
+    site = _site_or_404(db, access)
+    try:
+        confirmed = payment_profile.confirm_profile(
+            db, access, site, confirmed_by=str(access.user.id)
+        )
+    except payment_profile.PublicClinicPaymentProfileError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except payment_profile.PaymentProfileNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    _audit(
+        db,
+        request,
+        access.user.email,
+        str(access.user.id),
+        AuditAction.UPDATE,
+        site.id,
+        f"re-confirmed the payment profile of {site.slug}",
+    )
+    db.commit()
+    return _payment_out(site, confirmed)

@@ -396,6 +396,35 @@ class SnapshotReadOutcome(StrEnum):
     RECOUNTED = "recounted"
 
 
+class MedicalAidScheme(StrEnum):
+    """The medical schemes a private clinic may say it accepts: a controlled list (Issue 37).
+
+    A directory **tag** a clinic reports about itself, never an eligibility or claims check (that is
+    backlog item 1). Closed so that a patient's filter and a clinic's declaration meet on the same
+    value ("GEMS", "Gems" and "Government Employees Medical Scheme" are one scheme). The open and
+    restricted schemes with the most members on the Council for Medical Schemes' register, plus
+    ``OTHER``, which carries the scheme's name as free text. The words shown for each live in
+    ``src.modules.sites.payment_profile.SCHEME_LABELS``.
+    """
+
+    DISCOVERY_HEALTH = "discovery_health"
+    GEMS = "gems"
+    BONITAS = "bonitas"
+    MOMENTUM_HEALTH = "momentum_health"
+    MEDSHIELD = "medshield"
+    BESTMED = "bestmed"
+    FEDHEALTH = "fedhealth"
+    MEDIHELP = "medihelp"
+    PROFMED = "profmed"
+    KEYHEALTH = "keyhealth"
+    SIZWE_HOSMED = "sizwe_hosmed"
+    COMPCARE = "compcare"
+    BANKMED = "bankmed"
+    POLMED = "polmed"
+    LA_HEALTH = "la_health"
+    OTHER = "other"
+
+
 class AreaKind(StrEnum):
     """What kind of place an area is. Stored in ``area.kind`` (Issue 34).
 
