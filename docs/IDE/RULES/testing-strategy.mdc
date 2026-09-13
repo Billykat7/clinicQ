@@ -1,0 +1,79 @@
+---
+description: Prioritise integration tests over unit tests; unit tests for essentials only; integration tests run via Docker
+globs: "**/test*.py,**/tests/**/*.py,**/conftest.py"
+alwaysApply: false
+---
+
+# Testing Strategy
+
+## Priority: Integration Over Unit
+
+- **Prefer integration tests** that hit real HTTP endpoints, DB, and external services.
+- **Unit tests** only for **essential** logic: critical business rules, pure functions, edge cases. Do not unit-test everything (e.g. avoid testing every trivial getter or framework glue).
+- **Integration tests** must be runnable via **Docker**: run the app (and dependencies) in containers and assert behaviour end-to-end (e.g. `docker run` or `docker-compose` then `pytest tests/integration/`).
+
+## Do not test HTML responses
+
+- **Do not add tests** that assert HTML body content, template markup, static asset text, or page rendering smoke tests.
+- Test **API JSON responses**, auth flows, RBAC behaviour, redirects via status codes, and core business logic instead.
+- When cleaning up tests, remove files that only verify `response.text` contains HTML fragments or template strings.
+
+## Isolate tests from local `.env`
+
+`Settings` loads `.env` by default. A developer's local overrides (e.g. `JWT_SECRET`, `AUTH_PASSWORD_LOGIN_ENABLED=false`) must **not** change test outcomes.
+
+- In test helpers that build `Settings`, pass explicit values for fields under test (e.g. `auth_password_login_enabled=True`).
+- For settings validation tests, disable the env file: `Settings(_env_file=None, ...)`.
+- Prefer dependency overrides (`app.dependency_overrides[get_settings]`) with explicit `Settings(...)` kwargs over bare `Settings(environment=...)`.
+- Follow the patterns in `tests/test_auth_signin.py`, `tests/test_auth_password_reset.py`, and `tests/test_security.py`.
+
+```python
+# ✅ GOOD — explicit auth flags; not affected by local .env
+def override_get_settings() -> Settings:
+    return Settings(
+        environment=AppEnvironment.DEVELOPMENT,
+        auth_password_login_enabled=True,
+    )
+
+# ✅ GOOD — production guard test ignores .env JWT_SECRET
+with pytest.raises(ValidationError):
+    Settings(
+        _env_file=None,
+        environment=AppEnvironment.PRODUCTION,
+        jwt_secret=_DEFAULT_JWT_SECRET,
+    )
+
+# ❌ BAD — local .env can change jwt_secret or disable password login
+Settings(environment=AppEnvironment.PRODUCTION)
+Settings(environment=AppEnvironment.DEVELOPMENT)
+```
+
+## Structure
+
+- `tests/unit/` — minimal unit tests for core logic only.
+- `tests/integration/` — API and DB integration tests; documented to run against a running container (e.g. `make test-integration` or `./scripts/run-integration-tests.sh` that uses `docker run`).
+
+## When Writing Tests
+
+- Add integration tests for new endpoints and flows first.
+- Add unit tests only when a function has non-trivial, essential behaviour worth isolating.
+- Ensure CI or pre-commit can run integration tests using Docker (build image, run container, execute integration test suite).
+
+## Example
+
+```python
+# ✅ Integration test (preferred): real request to app
+def test_health_returns_200(client):
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "healthy"
+
+# ✅ Unit test only for essential logic
+def test_normalize_province_name():
+    assert normalize_province_name("  LUSAKA  ") == "Lusaka"
+
+# ❌ BAD — HTML/template smoke test
+def test_dashboard_renders_sidebar(client):
+    r = client.get("/dashboard")
+    assert "sidebar-item" in r.text
+```

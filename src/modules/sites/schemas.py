@@ -618,3 +618,41 @@ class PaymentProfileOut(BaseModel):
     stale: bool = Field(description="True when not confirmed in the last six months.")
     notice: str = Field(description="Shown with this information wherever it appears.")
     scheme_options: list[SchemeOptionOut]
+
+
+# --------------------------------------------------------------------------------------
+# Discovery analytics (Issue 38): the opt-out and the view-to-join report
+# --------------------------------------------------------------------------------------
+
+
+class AnalyticsSettingsIn(BaseModel):
+    """Whether patients' views of and joins at this clinic are counted."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    analytics_enabled: bool
+
+
+class AnalyticsSettingsOut(BaseModel):
+    """A clinic's analytics setting, with what it means."""
+
+    site_id: str
+    analytics_enabled: bool
+    explanation: str = Field(description="What is and is not recorded, in plain words.")
+
+
+class DiscoveryConversionOut(BaseModel):
+    """How many patients opened this clinic's page, and how many went on to join a queue."""
+
+    site_id: str
+    start: date
+    end: date
+    views: int
+    joins_started: int
+    joins_completed: int
+    conversion_rate: float | None = Field(
+        description="Joins completed per view; null when there were no views."
+    )
+    analytics_enabled: bool = Field(
+        description="False when the clinic has opted out: nothing new is being counted."
+    )

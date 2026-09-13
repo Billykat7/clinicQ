@@ -179,6 +179,11 @@ signed_link_limiter = SlidingWindowRateLimiter()
 # to IP), so one busy user cannot spend everyone's budget. Reset in tests.
 geocoding_limiter = SlidingWindowRateLimiter()
 
+# Module-global limiter for the public discovery search (Issue 38): the web list, its fragments and
+# the JSON API. Not a bot wall: a patient refining a search never reaches it, and a script walking
+# the country tile by tile to copy the directory does. Keys are ``ip:`` and ``session:`` prefixed.
+discovery_search_limiter = SlidingWindowRateLimiter()
+
 #: Every module-global limiter, so a test (or a reconfiguration) can reach them all without
 #: naming each one and silently missing the next one added.
 ALL_LIMITERS: tuple[SlidingWindowRateLimiter, ...] = (
@@ -188,6 +193,7 @@ ALL_LIMITERS: tuple[SlidingWindowRateLimiter, ...] = (
     otp_request_limiter,
     signed_link_limiter,
     geocoding_limiter,
+    discovery_search_limiter,
 )
 
 

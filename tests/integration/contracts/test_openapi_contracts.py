@@ -84,6 +84,7 @@ CONTRACTS: tuple[Contract, ...] = (
             ),
         },
     ),
+    Contract(name="discovery", filename="discovery.yaml", prefix="/api/v1/clinics"),
 )
 
 _IDS = [contract.name for contract in CONTRACTS]
@@ -385,3 +386,18 @@ def test_the_example_check_fails_on_an_example_its_schema_refuses() -> None:
         for error in _validator(broken, schema).iter_errors(example)
     ]
     assert failures and "42" in failures[0]
+
+
+def test_a_discovery_route_added_without_documenting_it_is_caught() -> None:
+    """Issue 38's criterion on the real application, not a fixture: add a route, and it is named.
+
+    A route added to the running app under ``/api/v1/clinics`` (a bulk export of the directory is
+    exactly the kind of thing that would appear quietly) is undocumented in ``discovery.yaml``, and
+    the same comparison the drift test runs names it.
+    """
+    app = create_app()
+    app.add_api_route("/api/v1/clinics/export", lambda: {"items": []}, methods=["GET"])
+    (discovery,) = [c for c in CONTRACTS if c.name == "discovery"]
+    served = set(_application_operations(app.openapi(), discovery))
+    documented = set(_contract_operations(discovery.document()))
+    assert served - documented == {("GET", "/api/v1/clinics/export")}

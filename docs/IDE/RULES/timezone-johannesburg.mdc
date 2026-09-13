@@ -1,0 +1,32 @@
+---
+description: Project timezone is South Africa Johannesburg; do not use UTC for business datetimes.
+alwaysApply: true
+---
+
+# Timezone: South Africa Johannesburg
+
+This project **must** use **South Africa Johannesburg** timezone (`Africa/Johannesburg`, SAST, UTC+2) for all business and user-facing datetimes. Do **not** use UTC for application logic or stored timestamps that represent "when" something happened in the business sense.
+
+## Rules
+
+- **Use the helpers in `src.commons.time`** for business time: `now_sast()` for "now", `business_date()` for the service day (never `date.today()`), `business_day_bounds(day)` to filter a day's rows, `to_sast()` to present a stored value. For any other aware construction, use `APP_TIMEZONE` (defined in `src.commons.time`; `src.core.s3_logging` re-exports it for older imports).
+- **A naive datetime fails the build.** `tests/unit/commons/test_conventions.py` reports `datetime.now()`, `datetime.today()`, `date.today()`, `datetime.utcnow()` and the other naive forms by file and line.
+- **Do not use `timezone.utc`** or `datetime.now(timezone.utc)` for such datetimes; reserve UTC only where a standard explicitly requires it (e.g. JWT `exp`/`iat` are Unix timestamps in UTC). The same guard allows UTC "now" only in the modules listed in its `UTC_REQUIRED_BY_A_STANDARD`, each with the standard named.
+- New datetime fields on models (e.g. `last_login`, `created_at`-style fields) should be documented as being in South Africa Johannesburg when relevant.
+- In migrations, describe new datetime columns as Johannesburg (or SAST) when they represent business time.
+- Frontend display of log timestamps should use `Africa/Johannesburg` (see `src/static/js/logs-app.js`).
+
+## Example
+
+```python
+# ✅ GOOD — business datetime in Johannesburg
+from src.commons.time import now_sast
+user.last_login = now_sast()
+
+# ❌ BAD — business datetime in UTC (unless standard requires it)
+user.last_login = datetime.now(timezone.utc)
+```
+
+## Constant
+
+- **`APP_TIMEZONE`**: `ZoneInfo("Africa/Johannesburg")`, defined once in `src.commons.time` and re-exported by `src.core.s3_logging`. Prefer `now_sast()` over `datetime.now(APP_TIMEZONE)` in new code.

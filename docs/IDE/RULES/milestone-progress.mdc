@@ -1,0 +1,172 @@
+---
+description: Every PR updates the docs, its milestone's progress bars as they will read once it merges (--assume-closed), and the hand-written status (sprints, README Status block, delivery gantt); the last issue of a milestone marks it done
+alwaysApply: true
+---
+
+# Milestone Status and Progress (every PR)
+
+A milestone's state is part of the deliverable, not an afterthought at release time. **The pull
+request that closes an issue also moves the milestone**, so the documents are never staler than the
+work they describe.
+
+**Every pull request carries the bars as they will read the moment it merges.** If it merges, the
+docs on `main` are already right; nobody has to remember a follow-up. That holds for a stacked pull
+request too.
+
+## What every pull request does
+
+1. **Update the docs the change touches.** A new setting means `.env.example` (`make env-example`);
+   a new permission means the RBAC matrix (`make rbac-matrix`); a new command, endpoint or workflow
+   means the README or the document that already describes that area. A reviewer should never learn
+   something from the diff that the docs still contradict.
+2. **Update the milestone's progress, counting this pull request's issue as closed:**
+
+   ```bash
+   make milestone-progress ARGS='--assume-closed <N>'
+   ```
+
+   It reads the issue states from GitHub (issues only — pull requests are not counted), counts
+   `<N>` as closed because merging this pull request closes it, and writes,
+   into the milestone document's header table, the README's *Delivery at a glance* table and the
+   *Milestone summary* table in `docs/GITHUB/README.md` (whose **Status** column it owns, with a
+   roll-up line under it):
+
+   ```text
+   | **Progress** | 🟩🟩🟩🟩🟩⬜⬜⬜⬜⬜ **50%** (4/8 issues) |
+   ```
+
+   Ten cells, green for done, with the percentage and the count behind it. Commit the result in the
+   same pull request.
+3. **Check it before pushing:** `make milestone-progress-check ARGS='--assume-closed <N>'` fails
+   when a document disagrees with GitHub plus that assumption, and prints which one.
+4. **Make the hand-written status agree with the bar** (see *The hand-written status nobody
+   generates*): the README Status block's issue count must equal the generated total, and the
+   milestone's Status row and sprint row must not contradict the percentage. For example, a bar at 25%
+   next to a Status row reading `📋 Planned` is wrong.
+
+### Which issues to assume closed
+
+| Pull request | `--assume-closed` |
+|---|---|
+| Closes one issue, based on `main` | that issue: `32` |
+| **Stacked** on other open pull requests | **every** issue its branch closes, its own and those of every branch below it: `32,35,36`. Merging it means all of them have merged |
+| A follow-up that closes nothing (`Refs #<N>`) | nothing: plain `make milestone-progress` |
+| Closes a milestone's last issue | the whole remaining set; the bar reads 100% and the Status row says done |
+
+An issue number that is in no milestone is an error, so a typo cannot silently change nothing.
+Never hand-edit a bar forward. The assumption is the generator's input, so the bar stays generated.
+
+**Stacked branches each carry different figures.** When a lower branch is merged forward into the one
+above it, the generated rows conflict or carry the lower branch's numbers. Take either side, then
+**re-run the generator with the upper branch's own assumption** and commit that as the branch's
+`Issue <N>: ` commit. Do it bottom-up, one branch at a time, so each branch's bars say "everything up
+to and including me has merged".
+
+**When a pull request merges without its bars** (as #147 and #148 did), `main` is stale. The next
+pull request, or a `Refs #<N>` follow-up, regenerates with its own assumption, and that includes the
+already-closed issues because GitHub has them closed.
+
+A follow-up PR of that kind is still an issue branch: it keeps the `Issue/<N>/<slug>` branch and the
+`Issue <N>: ` commit prefix, and its description says **`Refs #<N>`**, not `Closes #<N>`, because the
+issue is already closed. Name its description file `PR_<N>_FOLLOWUP_DESCRIPTION.md`.
+
+Two things to know when the milestone is already closed on GitHub: `gh pr create --milestone` cannot
+find a **closed** milestone and fails the whole command, so create the PR first and attach it after —
+
+```bash
+num=$(gh api "repos/<owner>/<repo>/milestones?state=all" --jq '.[] | select(.title | startswith("Milestone <n>")) | .number')
+gh api -X PATCH "repos/<owner>/<repo>/issues/<pr>" -F milestone="$num"
+```
+
+## When the last issue of a milestone closes
+
+The pull request that closes it **also marks the milestone done**, in three places:
+
+- the milestone document's **Status** row: `✅ Done: issues <first>–<last> closed on <date>, release
+  note [`v0.<n>.0`](../RELEASES/RELEASE_v0_<n>_0.md)`;
+- its **Exit criteria**: tick what is met, and for anything met only in part, say **which half is
+  done and what the other half waits for** — never tick a criterion that is not true;
+- the **GitHub milestone** itself: `make milestone-progress ARGS='--close-completed'`, run **after**
+  the merge, when GitHub has the issues closed. The pull request itself carries the 100% bar through
+  `--assume-closed`.
+
+**In the same pull request**, write the release note (`docs/GITHUB/RELEASES/RELEASE_v0_<n>_0.md`) from
+the template in `docs/GITHUB/RELEASES/README.md`. The tag is cut only after that pull request merges.
+Run `--close-completed` after the merge, because it needs the issues really closed on GitHub.
+
+## Sprints
+
+The sprint tables in [`docs/TEAM/WORKLOAD_SPLIT.md` §3](../../docs/TEAM/WORKLOAD_SPLIT.md) are
+**marked by hand**, because a lane names issues it works *against* — a contract stub, a fixture, a
+forward reference such as `[→95]` — as well as the ones it delivers, so no script can tell the two
+apart. A sprint has **three** states in *Where we are*, and a sprint spanning two milestones will
+sit in the middle one for a while:
+
+| State | When | What the row says after the marker |
+|---|---|---|
+| 📋 planned / 📋 next | nothing delivered yet | nothing |
+| 🚧 in progress | **some** of its delivered issues are closed | what closed; what has not started |
+| ✅ done | **every** issue its lanes deliver is closed | which milestone closed, and its tag |
+
+**A sprint that carries two milestones is not done when the first one closes.** Sprint 5 delivers M4
+and M5: when M4 closed and M5 had not started, the row became `🚧 in progress` and the
+"**N of 14 sprints done**" line stayed put, with one sentence under the table saying *why* it had
+not moved. Leaving it on `📋 next` would have been wrong, and ticking it would have been worse.
+
+The pull request that moves a sprint into either later state:
+
+- updates its row in *Where we are* and, if it finished the sprint, the "**N of 14 sprints done**"
+  line and the `📋 next` marker on the sprint after it;
+- puts `✅` in front of that sprint's number in *The lanes* table once it is done;
+- updates the root `README.md` **Status** block (below).
+
+All fourteen sprints run in **semester 2**. Say `semester 2` where a document names one; there is no
+semester 1 in this schedule.
+
+## The hand-written status nobody generates
+
+`make milestone-progress` owns the **bars** and nothing else. These live beside them, say the same
+thing in prose, and go stale silently — check all three whenever a milestone or a sprint moves:
+
+1. **The root `README.md` `## Status` block.** Its phase sentence (sprints done, issues closed,
+   latest tag, what is next) **and** its milestone checklist. Its issue count must equal the
+   generated *Delivery at a glance* total a few lines above it — they have disagreed before, and the
+   hand-written one was the wrong one. A milestone whose tag is not cut yet is ticked as
+   ``(M<n>, `v0.<n>.0` to cut)``, never with a bare tag it does not have.
+2. **The delivery gantt in
+   [`docs/PLAN/IMPLEMENTATION_PLAN.md`](../../docs/PLAN/IMPLEMENTATION_PLAN.md).** A shipped
+   milestone gets `done`, combined with `crit` where that is already set
+   (`M3 Identity & RBAC  :crit, done, m3, 2, 2`). It went three milestones without being touched.
+3. **Any note explaining a temporary disagreement between two rows.** Such a note is written for a
+   state that ends, and **the pull request that ends it deletes the note** — a paragraph explaining
+   why a bar reads 12% is worse than useless once the bar reads 100%, because a reader goes looking
+   for a number that is not on the page.
+
+## Rules
+
+- **Progress is read from GitHub, never typed by hand.** A hand-edited bar is a claim; a generated
+  one is a fact. The only input a pull request adds is `--assume-closed`, the issues it closes. If
+  the number looks wrong, either the issue states or that list are wrong: fix those.
+- **On `main`, a bar at 100% and an open issue cannot coexist.** The script counts issues in the
+  milestone, so an issue closed without its work done inflates it. Close issues when the work merges,
+  not before. On a branch in review the bar is allowed to lead GitHub by exactly the issues that
+  branch closes, and no others.
+- **Partly-met exit criteria stay unticked, with the reason written next to them.** "Partly (Issue
+  N): <what is done> — <what it waits for>" is the shape; see M2 and M3 for worked examples.
+- The bar is emoji, not an image: it renders on GitHub, in an editor and in a terminal, with no
+  external image host and no network.
+- **Never tick something ahead of the fact it claims.** A milestone is not done before its last
+  issue closes, a sprint is not done before every issue it delivers closes, and a tag is not
+  referenced before it is cut. The one allowed exception is a pull request's own `--assume-closed`
+  set, because it describes the state its own merge creates. Anything beyond that set is still ahead
+  of the fact. Each of those is cheap to state honestly and expensive to unpick.
+
+## Before pushing
+
+```bash
+make milestone-progress-check ARGS='--assume-closed <N>'   # the bars agree with GitHub once this merges
+```
+
+Then read your own diff against this list: the milestone header, the sprint row, the README Status
+block and its checklist, the gantt, and any note whose subject has gone away. The generator catches
+exactly one of those five.

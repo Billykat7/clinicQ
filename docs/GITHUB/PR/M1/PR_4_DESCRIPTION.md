@@ -223,7 +223,7 @@ is a revert of this PR.
   PR.
 - `last_login` is written in UTC by `auth.py`, the very example the timezone rule forbids; Issue 15
   owns it.
-- The `.cursor/rules` files are ignored by git here (a global ignore on `.cursor/`), so the local
+- The `docs/IDE/RULES` files are ignored by git here (a global ignore on `.cursor/`), so the local
   timezone and magic-string rules were updated to point at `src.commons.time` and the guard. The
   tracked `docs/guideline.md` carries the same convention for everyone else.
 

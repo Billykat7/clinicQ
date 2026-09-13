@@ -1,0 +1,41 @@
+---
+description: Always activate the project virtual environment before running tests, commands, or scripts
+alwaysApply: true
+---
+
+# Activate venv before project commands
+
+Before running any project-related command in the terminal (tests, scripts, lint, format, type check, app server, etc.), **activate the project virtual environment** so the correct Python and dependencies are used.
+
+## How to activate
+
+From the project root (`properties`):
+
+- **If the venv is `.venv`:**
+  `source .venv/bin/activate`
+- **If the venv is `venv`:**
+  `source venv/bin/activate`
+
+Then run the command in the same shell, e.g.:
+
+```bash
+source .venv/bin/activate   # or: source venv/bin/activate
+pytest tests/ -v
+```
+
+Or in one line:
+
+```bash
+source .venv/bin/activate && pytest tests/ -v
+```
+
+## When this applies
+
+- Running the test suite (`pytest`, etc.)
+- Running lint/format/type-check (`ruff`, `mypy`, etc.)
+- Running app or dev servers (`uvicorn`, `python -m src.main`, etc.)
+- Running any project script or tool that depends on project dependencies
+
+If the project uses a different venv path (e.g. documented in README), use that path instead. Prefer activating the venv in the same shell as the command rather than relying on the system or another environment’s Python.
+
+`scripts/ci-local.sh` auto-activates `.venv`/`venv` when present.

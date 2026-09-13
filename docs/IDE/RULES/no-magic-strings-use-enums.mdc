@@ -1,0 +1,40 @@
+---
+description: No magic strings; use Enums (or Literal/constants) instead, always.
+alwaysApply: true
+---
+
+# No Magic Strings — Use Enums
+
+Do **not** use raw string literals for fixed sets of values (statuses, types, roles, etc.). Use **Enums** (or `Literal` / named constants where appropriate) so values are defined in one place and type-safe.
+
+## Rules
+
+- **Always** replace magic strings with an Enum (or `Literal` for very small, inline sets).
+- Define Enums in a logical module: shared wire values in `src/commons/enums.py`, a module's own in `src/modules/<name>/enums.py`.
+- `tests/unit/commons/test_conventions.py` fails the build on a string literal compared with, assigned to or passed as a status-like value (`status`, `role`, `source`, `sector`, `display_mode`…), naming the file and line.
+- Use the Enum (or constant) everywhere: in models, schemas, API responses, and business logic.
+
+## Examples
+
+```python
+# ❌ BAD — magic strings
+if user.role == "admin":
+    ...
+payload["type"] = "act"
+
+# ✅ GOOD — Enum
+class UserRole(str, Enum):
+    USER = "user"
+    ADMIN = "admin"
+
+if user.role == UserRole.ADMIN:
+    ...
+payload["type"] = TokenType.ACTIVATION.value
+```
+
+```python
+# ✅ GOOD — Literal for tiny, local sets
+def handle(mode: Literal["read", "write"]) -> None: ...
+```
+
+When in doubt, prefer an Enum over a magic string.

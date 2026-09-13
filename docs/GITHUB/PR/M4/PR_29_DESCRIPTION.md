@@ -21,7 +21,7 @@ add sites without a developer running SQL.
   session attached. It arrives **ready** — default queues and a services catalogue — so an approving
   admin sees a working clinic rather than an empty shell.
 - **The verification console** (`/admin/verification/{pending|verified|draft|suspended}`) follows
-  `.cursor/rules/list-view-ui-pattern.mdc`: a tab per URL, a collapsible filter bar with its own
+  `docs/IDE/RULES/list-view-ui-pattern.mdc`: a tab per URL, a collapsible filter bar with its own
   remembered state, click-to-sort columns, and a row click that opens the kernel's anchored
   slideover beside the list.
 - **The lifecycle is a state machine with one writer.** `ALLOWED_TRANSITIONS` is the whole of it and

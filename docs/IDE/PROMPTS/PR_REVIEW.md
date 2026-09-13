@@ -1,6 +1,6 @@
 Review the work done (only committed changes) in this branch and improve where needs be.
 The review MUST be done following the best coding practices, highest industry standards,
-the latest language (Python 3.14) docs and this project's rules defined in .cursor/rules.
+the latest language (Python 3.14) docs and this project's rules defined in docs/IDE/RULES.
 
 Pay particular attention to this project's non-negotiables (docs/guideline.md):
 

@@ -82,6 +82,12 @@ _UNSCOPED_BY_DESIGN: dict[str, str] = {
         "scoped by; the id comes from the signed token, and the row's own site_id is what "
         "acceptance then writes (Issue 22)"
     ),
+    "modules/discovery/analytics.py::conversion_by_site": (
+        "the platform-wide view-to-join numbers the M12 reports read (Issue 38): a report across "
+        "clinics has no single clinic to scope by. It returns counts per site id, never an event "
+        "row, and no clinic-facing route calls it; a clinic's own report goes through "
+        "conversion_for_site, which uses scoped_select"
+    ),
 }
 
 

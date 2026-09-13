@@ -43,7 +43,7 @@ sprint 3.
 
 ## Design notes
 
-**The words are decided as data.** `.cursor/rules/testing-strategy.mdc` forbids asserting rendered
+**The words are decided as data.** `docs/IDE/RULES/testing-strategy.mdc` forbids asserting rendered
 HTML, so every sentence a patient reads is built in `src/web/discover.py` as dataclasses
 (`DiscoverPage`, `ResultsView`, `ClinicCard`, `EmptyState`). The templates only lay them out, and the
 tests assert the data. `queue_label(None)` is "Queue length not reported yet" and only a counted zero

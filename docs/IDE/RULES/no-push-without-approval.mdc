@@ -1,0 +1,42 @@
+---
+description: Require explicit user approval before any push or sync to a remote repo/branch
+alwaysApply: true
+---
+
+# No Push / Remote Sync Without Approval
+
+Do **not** push, sync, or otherwise update a remote repository or branch unless the user has explicitly approved it in the current conversation.
+
+## Requires approval before running
+
+- `git push` (any form, including `-u`, `--force-with-lease`, tags)
+- `git push --delete` / remote branch deletion
+- Sync actions that update the remote (e.g. IDE “Sync”, “Publish Branch”, push-after-commit)
+- Any other command that uploads commits, tags, or refs to `origin` (or another remote)
+
+## Allowed without extra approval
+
+- Local-only git operations: `status`, `diff`, `log`, `add`, `commit` (still follow the separate “only commit when asked” rule)
+- `git fetch` / `git pull` only when needed to inspect or update the local view — still ask first if the user has not asked you to pull/rebase/merge from remote
+
+## How to request approval
+
+Before any remote update:
+
+1. Briefly state what you would push/sync (branch name, remote, and whether it is first publish or new commits).
+2. Ask for explicit approval (e.g. “Push `Issue/N/slug` to `origin`?”).
+3. Wait for a clear yes (e.g. “push”, “yes”, “go ahead”) before running the command.
+
+## Examples
+
+```text
+❌ BAD — push without asking
+git push -u origin HEAD
+
+✅ GOOD — ask first, then push only after approval
+"Ready to push Issue/12/csv-ingest to origin. Should I push?"
+# wait for user: "yes" / "push it"
+git push -u origin HEAD
+```
+
+If unclear whether the user approved a push, ask again — do not push.

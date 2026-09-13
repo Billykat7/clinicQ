@@ -32,7 +32,7 @@ an access log never holds where a patient is standing.
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from enum import StrEnum
 from typing import Annotated, Final
 from urllib.parse import urlencode
@@ -41,12 +41,20 @@ from fastapi import APIRouter, Depends, Path, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
-from src.commons.enums import DiscoverySort, MedicalAidScheme, SectorFilter, SiteSector
+from src.commons.enums import (
+    DiscoveryChannel,
+    DiscoverySort,
+    DistanceBasis,
+    MedicalAidScheme,
+    SectorFilter,
+    SiteSector,
+)
 from src.commons.geo import CoordinateOutOfRangeError, Coordinates
-from src.commons.time import APP_TIMEZONE, business_date
+from src.commons.time import APP_TIMEZONE, business_date, now_sast
 from src.core.config import get_settings
+from src.core.rate_limit_deps import DISCOVERY_SESSION_COOKIE, DiscoverySearchLimit
 from src.database.session import get_db
-from src.modules.discovery import areas, service
+from src.modules.discovery import analytics, areas, service
 from src.modules.discovery import profile as profile_service
 from src.modules.discovery.areas import AreaSummary
 from src.modules.discovery.profile import ClinicProfile, ServiceOffered
@@ -797,6 +805,56 @@ def _payment(
     )
 
 
+def _session_token(request: Request) -> str:
+    """This browser's discovery session token: the cookie's, or a new one (Issue 38)."""
+    return (
+        request.cookies.get(DISCOVERY_SESSION_COOKIE) or analytics.new_session_token()
+    )
+
+
+def _with_session[R: Response](response: R, request: Request, token: str) -> R:
+    """Set the discovery session cookie when the browser did not send one.
+
+    It lasts until midnight in Johannesburg, so a session never spans two service days; the stored
+    reference rotates daily anyway (:func:`src.modules.discovery.analytics.session_ref`). It is
+    httpOnly and ``SameSite=Lax``, and ``Secure`` outside development.
+    """
+    if request.cookies.get(DISCOVERY_SESSION_COOKIE) == token:
+        return response
+    now = now_sast()
+    midnight = datetime.combine(
+        business_date(now) + timedelta(days=1), time(0), APP_TIMEZONE
+    )
+    response.set_cookie(
+        DISCOVERY_SESSION_COOKIE,
+        token,
+        max_age=max(60, int((midnight - now).total_seconds())),
+        httponly=True,
+        samesite="lax",
+        secure=not get_settings().is_development,
+        path="/",
+    )
+    return response
+
+
+def _record_search(db: Session, page: DiscoverPage, token: str) -> None:
+    """Record the first page of a search as an anonymous event; later pages are the same search."""
+    results = page.results
+    if results is None or results.offset:
+        return
+    analytics.record_search(
+        db,
+        channel=DiscoveryChannel.WEB,
+        session_token=token,
+        sector=results.sector,
+        origin_basis=DistanceBasis.AREA_CENTROID
+        if results.origin.area is not None
+        else DistanceBasis.POSITION,
+        radius_m=results.radius_m,
+        result_count=results.total,
+    )
+
+
 def _is_htmx(request: Request) -> bool:
     """Whether htmx made this request (it sends ``HX-Request: true``)."""
     return request.headers.get(HX_REQUEST, "").lower() == "true"
@@ -815,6 +873,7 @@ def _render(request: Request, template: str, **context: object) -> HTMLResponse:
 def discover(
     request: Request,
     db: DbSession,
+    _limit: DiscoverySearchLimit,
     lat: Latitude = None,
     lon: Longitude = None,
     area_id: AreaId = None,
@@ -843,13 +902,18 @@ def discover(
         payments_enabled=get_settings().payment_filter_enabled,
         view=view,
     )
-    return _render(request, "discover/list.html", page=page)
+    token = _session_token(request)
+    _record_search(db, page, token)
+    return _with_session(
+        _render(request, "discover/list.html", page=page), request, token
+    )
 
 
 @router.get("/results", response_class=HTMLResponse)
 def discover_results(
     request: Request,
     db: DbSession,
+    _limit: DiscoverySearchLimit,
     lat: Latitude = None,
     lon: Longitude = None,
     area_id: AreaId = None,
@@ -897,6 +961,9 @@ def discover_results(
         response.status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
     elif not offset:
         response.headers[HX_PUSH_URL] = address
+        token = _session_token(request)
+        _record_search(db, page, token)
+        return _with_session(response, request, token)
     return response
 
 
@@ -904,6 +971,7 @@ def discover_results(
 def discover_areas(
     request: Request,
     db: DbSession,
+    _limit: DiscoverySearchLimit,
     q: Annotated[str, Query(max_length=100)] = "",
 ) -> Response:
     """The suburb typeahead's suggestions; a plain browser gets the full page with them on it."""
@@ -1148,11 +1216,16 @@ def clinic_detail(request: Request, slug: Slug, db: DbSession) -> HTMLResponse:
         response.status_code = status.HTTP_404_NOT_FOUND
         return response
     view = detail_view(found, join_enabled=_join_enabled())
-    return templates.TemplateResponse(
+    token = _session_token(request)
+    analytics.record_clinic_viewed(
+        db, found.site_id, channel=DiscoveryChannel.WEB, session_token=token
+    )
+    response = templates.TemplateResponse(
         request,
         "discover/detail.html",
         public_page_context(request, page_title=found.name, view=view),
     )
+    return _with_session(response, request, token)
 
 
 @router.get("/clinics/{slug}/live", response_class=HTMLResponse)

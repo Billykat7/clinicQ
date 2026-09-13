@@ -1,0 +1,43 @@
+---
+description: Check code quality before commits; always add docstrings to functions and comments when needed
+globs: "**/*.py"
+alwaysApply: true
+---
+
+# Code Quality & Documentation
+
+## Pre-Commit Quality Checks
+
+Before every commit, run and fix:
+
+- **Linting**: `ruff check src/ tests/` (or flake8/black).
+- **Formatting**: `ruff format src/ tests/` (or black/isort).
+- **Type checking**: `mypy src/` where applicable.
+- **Tests**: At least run the test suite (unit + integration if available).
+
+Prefer running `./scripts/ci-local.sh` (or `make check`) before pushing — it mirrors GitHub Actions CI locally.
+
+## Docstrings
+
+- **Every function** (including module-level) must have a docstring.
+- Use a consistent style (e.g. Google or NumPy); one-line for simple functions, multi-line for complex ones.
+- Describe purpose, arguments, return value, and raised exceptions when relevant.
+
+```python
+# ✅ GOOD
+def get_db() -> Generator[Session, None, None]:
+    """Dependency that yields a DB session and closes it after request."""
+    ...
+
+# ✅ GOOD — more complex
+def merge_publications_with_boundaries(gdf: gpd.GeoDataFrame, data: pd.DataFrame) -> gpd.GeoDataFrame:
+    """
+    Merge publication counts with province boundaries on province name.
+    Unmatched provinces are left with null count.
+    """
+```
+
+## Comments
+
+- Add **comments** when logic is non-obvious: business rules, workarounds, non-intuitive ordering, or "why" not "what".
+- Avoid commenting the obvious; keep comments up to date when code changes.

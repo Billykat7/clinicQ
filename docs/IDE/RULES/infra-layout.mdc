@@ -1,0 +1,27 @@
+---
+description: Docker assets live under infra/docker; nginx configs live under infra/nginx
+alwaysApply: true
+---
+
+# Infrastructure Layout
+
+Keep infrastructure files in their designated directories. Do not place Docker or nginx assets at the repo root or under the wrong subtree.
+
+## Docker
+
+- **All Docker files** belong under **`infra/docker/`**:
+  - `Dockerfile`
+  - `docker-compose.yml` and variants (`docker-compose.prod.yml`, `docker-compose.https.yml`, etc.)
+- Build from repo root: `docker build -f infra/docker/Dockerfile -t properties-app:local .`
+- **Exception:** `.dockerignore` lives at the **repo root**, not under `infra/docker/` — Docker reads it only from the build-context root, and every build uses the repo root as context.
+- Compose uses `--project-directory infra/docker` with build context pointing at repo root.
+
+## Nginx
+
+- **All nginx configs** belong under **`infra/nginx/`** — not under `infra/docker/nginx/`.
+- Compose files in `infra/docker/` reference nginx configs via paths like `../nginx/docker-compose.dev.conf`.
+
+## When moving or adding files
+
+- Update all references: `Makefile`, `scripts/ci-local.sh`, GitHub Actions workflows, README, and compose volume mounts.
+- Keep paths consistent so local CI (`./scripts/ci-local.sh`) and production deploys use the same layout.

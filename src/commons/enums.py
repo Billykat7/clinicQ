@@ -425,6 +425,33 @@ class MedicalAidScheme(StrEnum):
     OTHER = "other"
 
 
+class DiscoveryEventKind(StrEnum):
+    """What a discovery analytics event records (Issue 38). Stored in ``discovery_event.kind``.
+
+    A view and a join are separate events on purpose, so a clinic can ask how many people looked
+    and did not come.
+
+    - ``SEARCH_PERFORMED``: a list of clinics was shown. Carries no clinic.
+    - ``CLINIC_VIEWED``: one clinic's detail was opened.
+    - ``JOIN_STARTED``: the patient began joining a queue at that clinic (Issue 40 records it).
+    - ``JOIN_COMPLETED``: they got a ticket (Issue 40 records it).
+    """
+
+    SEARCH_PERFORMED = "search_performed"
+    CLINIC_VIEWED = "clinic_viewed"
+    JOIN_STARTED = "join_started"
+    JOIN_COMPLETED = "join_completed"
+
+
+class DiscoveryChannel(StrEnum):
+    """Where a discovery event came from (Issue 38). Stored in ``discovery_event.channel``."""
+
+    WEB = "web"
+    API = "api"
+    USSD = "ussd"
+    WHATSAPP = "whatsapp"
+
+
 class AreaKind(StrEnum):
     """What kind of place an area is. Stored in ``area.kind`` (Issue 34).
 

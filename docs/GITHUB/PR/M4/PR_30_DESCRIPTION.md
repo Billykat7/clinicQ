@@ -142,7 +142,7 @@ its own milestone's, and each is one line in `CONTRACTS` plus a YAML file.
 
 ## Closing the milestone
 
-Per `.cursor/rules/milestone-progress.mdc`, the pull request that closes a milestone's last issue
+Per `docs/IDE/RULES/milestone-progress.mdc`, the pull request that closes a milestone's last issue
 also marks the milestone done. This one does two of the three:
 
 - the milestone document's **Status** row, and its **exit criteria** ticked with the one partial

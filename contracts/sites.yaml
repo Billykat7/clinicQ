@@ -9,7 +9,8 @@
 # What is in scope: every route under /api/v1/sites that M4 owns — the clinic profile (Issue 23),
 # opening hours, holidays and closures (24), queues (25), the services catalogue (26), display and
 # privacy settings (27), staff and room assignment (22, 28), onboarding (29) and, from M5, a private
-# clinic's self-reported payment profile (37).
+# clinic's self-reported payment profile (37), and a clinic's discovery analytics switch and
+# view-to-join report (38).
 #
 # What is deliberately **not**: /api/v1/sites/{site_id}/audit/events. It sits under this prefix but
 # belongs to the audit module (Issue 20), and it will be documented by that module's own contract.
@@ -29,7 +30,7 @@ openapi: 3.1.0
 
 info:
   title: ClinicQ sites and queues
-  version: "0.4.0"
+  version: "0.5.0"
   description: |
     A clinic, its opening hours, its named queues, the services it offers, what its waiting-room
     board may show, who works there, and how it gets listed in the first place.
@@ -748,6 +749,82 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "422": { $ref: "#/components/responses/Unprocessable" }
+
+  # ── Discovery analytics (Issue 38) ──────────────────────────────────────────────────────
+  /sites/{site_id}/settings/analytics:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    get:
+      tags: [sites]
+      operationId: sitesGetAnalyticsSettings
+      summary: Whether patients' views of and joins at this clinic are counted
+      description: |
+        The clinic manager's (`sites.settings:read`). `explanation` is the sentence shown beside the
+        switch: what is counted, and that no patient's identity, phone or position ever is.
+      responses:
+        "200":
+          description: The switch and what it means.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnalyticsSettingsOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    put:
+      tags: [sites]
+      operationId: sitesSetAnalyticsSettings
+      summary: Turn counting this clinic's views and joins on or off
+      description: |
+        `sites.settings:update`. Turning it off stops new events about this clinic at once; events
+        already recorded stay, because the reports over past days would otherwise change under the
+        people reading them. A change is written to the clinic's audit trail.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AnalyticsSettingsIn" }
+      responses:
+        "200":
+          description: The switch, as saved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnalyticsSettingsOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/reports/discovery-conversion:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    get:
+      tags: [sites]
+      operationId: sitesDiscoveryConversion
+      summary: How many patients viewed this clinic, and how many joined a queue
+      description: |
+        `sites.reports:read`. Views of the clinic's discovery page and joins started and completed,
+        over a range of service days (the last 30 by default, at most 366). Counts only: the events
+        behind them carry no patient identifier. `conversion_rate` is `null` with no views, because a
+        rate of nothing is not zero.
+      parameters:
+        - { name: start, in: query, required: false, description: "First service day, inclusive.", schema: { type: [string, "null"], format: date }, example: "2026-08-15" }
+        - { name: end, in: query, required: false, description: "Last service day, inclusive; today by default.", schema: { type: [string, "null"], format: date }, example: "2026-09-13" }
+      responses:
+        "200":
+          description: The counts for the range.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DiscoveryConversionOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422":
+          description: The start is after the end, the range is longer than 366 days, or a date is malformed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationError" }
+              example: { detail: "A report covers at most 366 days." }
 
   # ── Queues (Issue 25) ───────────────────────────────────────────────────────────────────
   /sites/{site_id}/queues:
@@ -1711,6 +1788,45 @@ components:
         reason_retention_days: { type: integer }
         reason_retention_ceiling_days: { type: integer, description: The platform ceiling a clinic cannot raise. }
         warning_lines: { type: array, items: { type: string }, description: What these settings put on the screen, in plain language. }
+    AnalyticsSettingsIn:
+      type: object
+      required: [analytics_enabled]
+      additionalProperties: false
+      properties:
+        analytics_enabled: { type: boolean }
+      example: { analytics_enabled: false }
+    AnalyticsSettingsOut:
+      type: object
+      required: [site_id, analytics_enabled, explanation]
+      properties:
+        site_id: { type: string, format: uuid }
+        analytics_enabled: { type: boolean }
+        explanation: { type: string }
+      example:
+        site_id: "0199b0c0-0000-7000-8000-00000000a001"
+        analytics_enabled: true
+        explanation: "When this is on, ClinicQ counts how many times patients open this clinic's page and how many go on to join a queue. It never records who they are, their phone number or where they were. When it is off, nothing about this clinic is counted from then on."
+    DiscoveryConversionOut:
+      type: object
+      required: [site_id, start, end, views, joins_started, joins_completed, conversion_rate, analytics_enabled]
+      properties:
+        site_id: { type: string, format: uuid }
+        start: { type: string, format: date }
+        end: { type: string, format: date }
+        views: { type: integer, minimum: 0 }
+        joins_started: { type: integer, minimum: 0 }
+        joins_completed: { type: integer, minimum: 0 }
+        conversion_rate: { type: [number, "null"], minimum: 0, description: Joins completed per view. }
+        analytics_enabled: { type: boolean, description: False when the clinic has opted out and nothing new is counted. }
+      example:
+        site_id: "0199b0c0-0000-7000-8000-00000000a001"
+        start: "2026-08-15"
+        end: "2026-09-13"
+        views: 240
+        joins_started: 0
+        joins_completed: 0
+        conversion_rate: 0.0
+        analytics_enabled: true
     DisplayOptionsOut:
       type: object
       required: [modes, languages, retention_floor_days, retention_ceiling_days, comment_warning, comment_with_full_name_warning]
