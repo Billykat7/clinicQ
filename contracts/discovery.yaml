@@ -1,0 +1,654 @@
+# ClinicQ: the discovery contract (Issue 38).
+#
+# Hand-written from src/modules/discovery/router.py as it actually is at the end of M5, so that the
+# web pages (C), the USSD menu (Issue 73) and the WhatsApp bot (Issue 75) can be built against a
+# stable document. It is checked against the running application's /openapi.json in **both**
+# directions by tests/integration/contracts/test_openapi_contracts.py, the same harness Issue 30
+# wrote for sites.yaml: an undocumented route under /api/v1/clinics fails the suite, and so does a
+# documented path with no handler.
+#
+# What is in scope: every route under /api/v1/clinics — the nearby search (Issue 31), the area
+# typeahead and a patient's recent areas (34), one clinic's profile (35), the payment filter (37)
+# and the rate limit on the public search (38).
+#
+# What is deliberately **not**: the HTML pages under /discover (C's, not an API), and a clinic
+# manager's analytics switch and view-to-join report, which name a {site_id} and live in sites.yaml
+# with every other route that goes through the site guard.
+#
+# Four conventions every operation follows:
+#
+#   * the search and profile routes are **public**: a patient looking for a clinic has no account.
+#     They only ever return verified clinics; an unverified or unknown clinic is the same 404;
+#   * a search is rate-limited per client address and per discovery session, and a refused search is
+#     a 429 with Retry-After. The typeahead shares the budget, because it is the same scraping risk;
+#   * a search and a profile view are each recorded as an **anonymous** event: channel, time, radius,
+#     sector, result count, and a session reference that rotates daily. Never the position searched
+#     from, a phone number or an account. Nothing in a response depends on it;
+#   * every example is validated against the schema it claims to be an example of.
+
+openapi: 3.1.0
+
+info:
+  title: ClinicQ discovery
+  version: "0.5.0"
+  description: |
+    Finding a clinic before thinking about a queue: verified clinics near a position or a named
+    place, the place-name typeahead behind that, and everything a patient needs to decide on one
+    clinic.
+
+    **Authentication.** None, except the two `/clinics/areas/recent` routes, which read and change
+    a signed-in patient's own recently used areas.
+
+    **Rate limit.** `GET /clinics/nearby` and `GET /clinics/areas` share a sliding-window budget per
+    client address (`DISCOVERY_SEARCH_RATE_LIMIT_PER_IP`, 300 a minute by default, loose because mobile
+    carriers share addresses) and, when the `clinicq_discovery_session` cookie is sent, per session
+    (`..._PER_SESSION`, 60 a minute). Past
+    either, the answer is `429` with `Retry-After` in seconds.
+
+    **Distances.** Straight-line, in metres. Measured from an area's centroid when the search
+    started from an area: then `distance_is_approximate` is true and `distance_label` says so in
+    words. Every surface shows the label, not a bare number.
+
+    **Waits.** `waiting` is `null` when not measured, which is not the same as `0`. A wait is only
+    ever a range (`wait_range`), and `null` until the estimator (Issue 42) exists.
+
+    **Payment.** A private clinic's self-reported directory tag, never an eligibility check, and
+    always shown with its `notice`. The filters are refused unless `sector=private`.
+
+    **Time.** Every datetime is ISO 8601 with an offset, in `Africa/Johannesburg` (`+02:00`).
+
+servers:
+  - url: /api/v1
+    description: This deployment.
+
+tags:
+  - name: discovery
+    description: Clinics near a patient, the places they can search from, and one clinic's profile.
+
+paths:
+  # ── Module metadata ─────────────────────────────────────────────────────────────────────
+  /clinics/info:
+    get:
+      tags: [discovery]
+      operationId: discoveryInfo
+      summary: Discovery module metadata
+      description: Unauthenticated, like every module's `/info`.
+      responses:
+        "200":
+          description: The module's bounded context and a one-line summary.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModuleInfo" }
+              example: { context: discovery, summary: "Find verified clinics near a place: distance, travel time, open now, queue length." }
+
+  # ── The search (Issues 31, 34, 37) ──────────────────────────────────────────────────────
+  /clinics/nearby:
+    get:
+      tags: [discovery]
+      operationId: discoveryNearby
+      summary: Verified clinics near a position or an area, nearest first
+      description: |
+        Give **either** `lat` and `lon` **or** `area_id`, never both and never neither. The radius is
+        capped by the server at 50 km; `radius.capped` says when it was. `open_now` narrows to clinics
+        open at the moment the search ran (`evaluated_at`). `sort=shortest_queue` puts unmeasured
+        queues last.
+
+        `accepts_cash`, `accepts_card` and `medical_aid` only apply to private clinics and only while
+        the payment filter is switched on: with any `sector` but `private`, or while it is off, they
+        are a `422`, not silently ignored.
+      parameters:
+        - { name: lat, in: query, required: false, description: "Latitude, WGS 84.", schema: { type: [number, "null"], minimum: -90, maximum: 90 }, example: -26.2485 }
+        - { name: lon, in: query, required: false, description: "Longitude, WGS 84.", schema: { type: [number, "null"], minimum: -180, maximum: 180 }, example: 27.854 }
+        - name: area_id
+          in: query
+          required: false
+          description: Search from this area's centroid instead (from `GET /clinics/areas`). Distances are then approximate.
+          schema: { type: [string, "null"], maxLength: 36 }
+        - { name: radius_m, in: query, required: false, description: "Metres; capped at 50000.", schema: { type: integer, minimum: 1, default: 10000 } }
+        - { name: sector, in: query, required: false, schema: { $ref: "#/components/schemas/SectorFilter" } }
+        - { name: open_now, in: query, required: false, schema: { type: boolean, default: false } }
+        - { name: sort, in: query, required: false, schema: { $ref: "#/components/schemas/DiscoverySort" } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: accepts_cash, in: query, required: false, description: "Private clinics that report taking cash.", schema: { type: boolean, default: false } }
+        - { name: accepts_card, in: query, required: false, description: "Private clinics that report taking cards.", schema: { type: boolean, default: false } }
+        - name: medical_aid
+          in: query
+          required: false
+          description: Private clinics that report accepting **any** of these schemes. Repeat the parameter for more than one.
+          style: form
+          explode: true
+          schema: { type: [array, "null"], items: { $ref: "#/components/schemas/MedicalAidScheme" } }
+      responses:
+        "200":
+          description: One page of clinics, nearest first (or shortest queue first).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NearbyPageOut" }
+        "404":
+          description: No area has that `area_id`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "No such area." }
+        "422":
+          description: No origin or two, a coordinate out of range, or a payment filter where it may not apply.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationError" }
+              example: { detail: "Search from a position (lat and lon) or from an area (area_id), not both." }
+        "429": { $ref: "#/components/responses/SearchLimited" }
+
+  # ── Places to search from (Issue 34) ────────────────────────────────────────────────────
+  /clinics/areas:
+    get:
+      tags: [discovery]
+      operationId: discoveryAreaSearch
+      summary: Suggest the places a typed suburb, township or town name means
+      description: |
+        The typeahead a patient without GPS uses. Misspellings and alternative names are tolerated
+        (`matched_name` says which name matched). Fewer than two letters or digits answers an empty
+        list, not an error. Place names are OpenStreetMap data (ODbL).
+      parameters:
+        - { name: q, in: query, required: true, description: "What the patient typed.", schema: { type: string, maxLength: 100 }, example: "sowetto" }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 20, default: 8 } }
+        - { name: province, in: query, required: false, schema: { oneOf: [{ $ref: "#/components/schemas/SaProvince" }, { type: "null" }] } }
+      responses:
+        "200":
+          description: Suggestions, best match first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AreaListOut" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "429": { $ref: "#/components/responses/SearchLimited" }
+
+  /clinics/areas/recent:
+    get:
+      tags: [discovery]
+      operationId: discoveryRecentAreas
+      summary: The signed-in patient's recently used areas, newest first
+      description: Each item's `id` goes straight into `GET /clinics/nearby?area_id=`.
+      security:
+        - bearerAuth: []
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Up to five areas, newest first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AreaListOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /clinics/areas/recent/{area_id}:
+    put:
+      tags: [discovery]
+      operationId: discoveryRememberArea
+      summary: Remember that the signed-in patient searched from this area
+      description: Moves the area to the top of the patient's recent areas and keeps only the latest five.
+      security:
+        - bearerAuth: []
+        - sessionCookie: []
+      parameters:
+        - { name: area_id, in: path, required: true, schema: { type: string }, example: "0199b0c0-0000-7000-8000-0000000a0001" }
+      responses:
+        "204": { description: Remembered. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: No area has that id.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "No such area." }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  # ── One clinic (Issue 35) ───────────────────────────────────────────────────────────────
+  /clinics/{slug}:
+    get:
+      tags: [discovery]
+      operationId: discoveryClinicProfile
+      summary: One verified clinic, hours, live queues, services, contact and joinability
+      description: |
+        A clinic that is not verified answers the same `404` as one that does not exist. `join`
+        says whether a patient may join a queue here now; when they may not, `reason` says why, and
+        a client shows the button disabled with that reason rather than hiding it.
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string, maxLength: 80, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+          example: "chiawelo-community-health-centre"
+      responses:
+        "200":
+          description: The clinic's profile.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClinicProfileOut" }
+        "404":
+          description: No verified clinic has that slug.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "No such clinic." }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: An access token from the patient sign-in.
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: bk_clinicq_access
+      description: |
+        The browser session. An unsafe request must also echo the readable CSRF cookie
+        (`bk_clinicq_csrf`) in `X-CSRF-Token`.
+
+  responses:
+    Unauthenticated:
+      description: No session, or an expired one.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { detail: "Not authenticated" }
+    Forbidden:
+      description: Signed in, but not as a patient.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { detail: "Forbidden" }
+    Unprocessable:
+      description: A parameter failed validation.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ValidationError" }
+    SearchLimited:
+      description: |
+        Too many searches from this address or this discovery session in the window. Wait the
+        `Retry-After` seconds; the budget is a sliding window, so a burst frees up gradually.
+      headers:
+        Retry-After:
+          description: Seconds until the window has room again.
+          schema: { type: integer, minimum: 1 }
+          example: 60
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { detail: "Too many searches in a short time. Please wait a minute and try again." }
+
+  schemas:
+    # ── Errors ────────────────────────────────────────────────────────────────────────────
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail: { type: string, description: A sentence a person can act on. }
+        code: { type: string, description: A stable machine-readable code, when the handler sets one. }
+        request_id: { type: string, description: This request's id, for correlating with the logs. }
+      example: { detail: "No such clinic.", code: "http.not_found" }
+    ValidationError:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: object
+                required: [loc, msg, type]
+                properties:
+                  loc: { type: array, items: { anyOf: [{ type: string }, { type: integer }] } }
+                  msg: { type: string }
+                  type: { type: string }
+      example:
+        detail:
+          - loc: [query, limit]
+            msg: "Input should be less than or equal to 50"
+            type: less_than_equal
+
+    ModuleInfo:
+      type: object
+      required: [context, summary]
+      properties:
+        context: { type: string }
+        summary: { type: string }
+
+    # ── Vocabularies ─────────────────────────────────────────────────────────────────────
+    SectorFilter:
+      type: string
+      enum: [public, private, all]
+      default: all
+      example: all
+    SiteSector:
+      type: string
+      enum: [public, private]
+      example: public
+    DiscoverySort:
+      type: string
+      enum: [nearest, shortest_queue]
+      default: nearest
+      example: nearest
+    DistanceBasis:
+      type: string
+      enum: [position, area_centroid]
+      description: What distances were measured from. `area_centroid` makes every distance approximate.
+      example: area_centroid
+    AreaKind:
+      type: string
+      enum: [city, town, suburb, village, neighbourhood]
+      example: suburb
+    QueueKind:
+      type: string
+      enum: [triage, consultation, pharmacy, other]
+      example: consultation
+    ServiceCategory:
+      type: string
+      enum: [consultation, chronic, maternal, child_health, hiv_tb, screening, pharmacy, other]
+      example: chronic
+    MedicalAidScheme:
+      type: string
+      enum: [discovery_health, gems, bonitas, momentum_health, medshield, bestmed, fedhealth, medihelp, profmed, keyhealth, sizwe_hosmed, compcare, bankmed, polmed, la_health, other]
+      example: gems
+    SaProvince:
+      type: string
+      enum: ["Eastern Cape", "Free State", "Gauteng", "KwaZulu-Natal", "Limpopo", "Mpumalanga", "North West", "Northern Cape", "Western Cape"]
+      example: Gauteng
+
+    Location:
+      type: object
+      required: [latitude, longitude]
+      description: WGS 84, latitude first.
+      properties:
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+      example: { latitude: -26.2485, longitude: 27.854 }
+
+    # ── Places ───────────────────────────────────────────────────────────────────────────
+    AreaOut:
+      type: object
+      required: [id, name, label, matched_name, kind, municipality, province, centroid]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        label: { type: string, description: The name with its municipality, to tell same-named places apart. }
+        matched_name: { type: [string, "null"], description: The alternative name the text matched, when it was not the place's own. }
+        kind: { $ref: "#/components/schemas/AreaKind" }
+        municipality: { type: [string, "null"] }
+        province: { $ref: "#/components/schemas/SaProvince" }
+        centroid: { $ref: "#/components/schemas/Location" }
+      example:
+        id: "0199b0c0-0000-7000-8000-0000000a0001"
+        name: Soweto
+        label: "Soweto, City of Johannesburg"
+        matched_name: null
+        kind: suburb
+        municipality: City of Johannesburg
+        province: Gauteng
+        centroid: { latitude: -26.2485, longitude: 27.854 }
+    AreaListOut:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AreaOut" } }
+      example:
+        items:
+          - id: "0199b0c0-0000-7000-8000-0000000a0001"
+            name: Soweto
+            label: "Soweto, City of Johannesburg"
+            matched_name: null
+            kind: suburb
+            municipality: City of Johannesburg
+            province: Gauteng
+            centroid: { latitude: -26.2485, longitude: 27.854 }
+
+    # ── A clinic's live state ────────────────────────────────────────────────────────────
+    WaitRangeOut:
+      type: object
+      required: [low_minutes, high_minutes]
+      description: An expected wait, only ever a range.
+      properties:
+        low_minutes: { type: integer, minimum: 0 }
+        high_minutes: { type: integer, minimum: 1 }
+      example: { low_minutes: 20, high_minutes: 45 }
+    LiveQueueOut:
+      type: object
+      required: [id, name, kind, allows_remote_join, waiting, wait_range, as_of]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        kind: { $ref: "#/components/schemas/QueueKind" }
+        allows_remote_join: { type: boolean }
+        waiting: { type: [integer, "null"], minimum: 0, description: "`null` means not measured, which is not 0." }
+        wait_range:
+          oneOf: [{ $ref: "#/components/schemas/WaitRangeOut" }, { type: "null" }]
+        as_of: { type: [string, "null"], format: date-time, description: When `waiting` was counted. }
+      example:
+        id: "0199b0c0-0000-7000-8000-00000000b001"
+        name: General consultation
+        kind: consultation
+        allows_remote_join: true
+        waiting: null
+        wait_range: null
+        as_of: null
+    OpenStatusOut:
+      type: object
+      required: [is_open, next_open_at, closure_reason]
+      properties:
+        is_open: { type: boolean }
+        next_open_at: { type: [string, "null"], format: date-time }
+        closure_reason: { type: [string, "null"], description: Set while a declared closure is in force. }
+      example: { is_open: false, next_open_at: "2026-09-14T07:00:00+02:00", closure_reason: null }
+    TravelOut:
+      type: object
+      required: [walking_minutes, driving_minutes]
+      description: A rough travel time from the straight-line distance, never a route.
+      properties:
+        walking_minutes: { type: integer, minimum: 1 }
+        driving_minutes: { type: integer, minimum: 1 }
+      example: { walking_minutes: 25, driving_minutes: 5 }
+    PaymentSummaryOut:
+      type: object
+      required: [accepts_cash, accepts_card, medical_aids, copay_notice, last_confirmed_at, stale, notice]
+      description: What a private clinic reports accepting. Always shown with `notice`.
+      properties:
+        accepts_cash: { type: boolean }
+        accepts_card: { type: boolean }
+        medical_aids: { type: array, items: { type: string }, description: Scheme names as shown. }
+        copay_notice: { type: [string, "null"] }
+        last_confirmed_at: { type: string, format: date-time }
+        stale: { type: boolean, description: Not confirmed by the clinic in the last six months. }
+        notice: { type: string }
+      example:
+        accepts_cash: true
+        accepts_card: true
+        medical_aids: [GEMS, Bonitas]
+        copay_notice: null
+        last_confirmed_at: "2026-08-02T10:15:00+02:00"
+        stale: false
+        notice: "Reported by the clinic. Please confirm with the clinic before you travel."
+
+    # ── The search ───────────────────────────────────────────────────────────────────────
+    NearbyClinicOut:
+      type: object
+      required: [id, slug, name, sector, location, address_line, suburb, city, province, phone_e164, distance_m, distance_is_approximate, distance_label, travel, open_status, total_waiting, queues, payment]
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        name: { type: string }
+        sector: { $ref: "#/components/schemas/SiteSector" }
+        location: { $ref: "#/components/schemas/Location" }
+        address_line: { type: string }
+        suburb: { type: [string, "null"] }
+        city: { type: string }
+        province: { $ref: "#/components/schemas/SaProvince" }
+        phone_e164: { type: [string, "null"] }
+        distance_m: { type: integer, minimum: 0, description: Straight-line distance from the origin. }
+        distance_is_approximate: { type: boolean }
+        distance_label: { type: string, description: 'The distance in words, e.g. "about 4.0 km from the middle of Soweto".' }
+        travel: { $ref: "#/components/schemas/TravelOut" }
+        open_status: { $ref: "#/components/schemas/OpenStatusOut" }
+        total_waiting: { type: [integer, "null"], description: "`null` when not measured." }
+        queues: { type: array, items: { $ref: "#/components/schemas/LiveQueueOut" } }
+        payment:
+          oneOf: [{ $ref: "#/components/schemas/PaymentSummaryOut" }, { type: "null" }]
+          description: "`null` for a public clinic, one that has listed nothing, or while the feature is off."
+      example:
+        id: "0199b0c0-0000-7000-8000-00000000a001"
+        slug: chiawelo-community-health-centre
+        name: Chiawelo Community Health Centre
+        sector: public
+        location: { latitude: -26.2791, longitude: 27.8606 }
+        address_line: "Cnr Chiawelo and Mahalefele Streets"
+        suburb: Chiawelo
+        city: Johannesburg
+        province: Gauteng
+        phone_e164: "+27119840720"
+        distance_m: 3450
+        distance_is_approximate: true
+        distance_label: "about 3.5 km from the middle of Soweto"
+        travel: { walking_minutes: 60, driving_minutes: 11 }
+        open_status: { is_open: true, next_open_at: null, closure_reason: null }
+        total_waiting: null
+        queues:
+          - id: "0199b0c0-0000-7000-8000-00000000b001"
+            name: General consultation
+            kind: consultation
+            allows_remote_join: true
+            waiting: null
+            wait_range: null
+            as_of: null
+        payment: null
+    SearchRadiusOut:
+      type: object
+      required: [requested_m, applied_m, capped]
+      properties:
+        requested_m: { type: integer }
+        applied_m: { type: integer }
+        capped: { type: boolean, description: True when the server narrowed the request to its maximum. }
+      example: { requested_m: 80000, applied_m: 50000, capped: true }
+    NearbyPageOut:
+      type: object
+      required: [origin, origin_area, distance_basis, radius, sector, open_now, sort, total, limit, offset, evaluated_at, items]
+      properties:
+        origin: { $ref: "#/components/schemas/Location" }
+        origin_area:
+          oneOf: [{ $ref: "#/components/schemas/AreaOut" }, { type: "null" }]
+        distance_basis: { $ref: "#/components/schemas/DistanceBasis" }
+        radius: { $ref: "#/components/schemas/SearchRadiusOut" }
+        sector: { $ref: "#/components/schemas/SectorFilter" }
+        open_now: { type: boolean }
+        sort: { $ref: "#/components/schemas/DiscoverySort" }
+        total: { type: integer, minimum: 0 }
+        limit: { type: integer }
+        offset: { type: integer }
+        evaluated_at: { type: string, format: date-time }
+        items: { type: array, items: { $ref: "#/components/schemas/NearbyClinicOut" } }
+      example:
+        origin: { latitude: -26.2485, longitude: 27.854 }
+        origin_area: null
+        distance_basis: position
+        radius: { requested_m: 10000, applied_m: 10000, capped: false }
+        sector: all
+        open_now: false
+        sort: nearest
+        total: 0
+        limit: 20
+        offset: 0
+        evaluated_at: "2026-09-13T09:30:00+02:00"
+        items: []
+
+    # ── One clinic ───────────────────────────────────────────────────────────────────────
+    SpanOut:
+      type: object
+      required: [opens_at, closes_at]
+      description: Wall-clock time in Africa/Johannesburg. `closes_at` at or before `opens_at` crosses midnight.
+      properties:
+        opens_at: { type: string, pattern: "^\\d{2}:\\d{2}$" }
+        closes_at: { type: string, pattern: "^\\d{2}:\\d{2}$" }
+      example: { opens_at: "07:00", closes_at: "16:00" }
+    DayHoursOut:
+      type: object
+      required: [weekday, name, spans]
+      properties:
+        weekday: { type: integer, minimum: 0, maximum: 6, description: Monday is 0. }
+        name: { type: string }
+        spans: { type: array, items: { $ref: "#/components/schemas/SpanOut" }, description: Empty on a day the clinic does not open. }
+      example: { weekday: 0, name: Monday, spans: [{ opens_at: "07:00", closes_at: "16:00" }] }
+    ServiceOfferedOut:
+      type: object
+      required: [name, category, description, requires_appointment]
+      properties:
+        name: { type: string }
+        category: { $ref: "#/components/schemas/ServiceCategory" }
+        description: { type: [string, "null"] }
+        requires_appointment: { type: boolean }
+      example: { name: Chronic medication collection, category: chronic, description: null, requires_appointment: false }
+    JoinAvailabilityOut:
+      type: object
+      required: [allowed, reason, next_open_at, remote_queue_count]
+      description: Whether a patient may join a queue here now. `reason` is set exactly when they may not.
+      properties:
+        allowed: { type: boolean }
+        reason: { type: [string, "null"] }
+        next_open_at: { type: [string, "null"], format: date-time }
+        remote_queue_count: { type: integer, minimum: 0 }
+      example: { allowed: false, reason: "Joining from your phone is not switched on yet.", next_open_at: null, remote_queue_count: 1 }
+    ClinicProfileOut:
+      type: object
+      required: [id, slug, name, sector, location, address_line, suburb, city, province, phone_e164, open_status, today, week, total_waiting, queues, services, payment, join, evaluated_at]
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        name: { type: string }
+        sector: { $ref: "#/components/schemas/SiteSector" }
+        location: { $ref: "#/components/schemas/Location" }
+        address_line: { type: string }
+        suburb: { type: [string, "null"] }
+        city: { type: string }
+        province: { $ref: "#/components/schemas/SaProvince" }
+        phone_e164: { type: [string, "null"] }
+        open_status: { $ref: "#/components/schemas/OpenStatusOut" }
+        today: { type: array, items: { $ref: "#/components/schemas/SpanOut" } }
+        week: { type: array, items: { $ref: "#/components/schemas/DayHoursOut" } }
+        total_waiting: { type: [integer, "null"] }
+        queues: { type: array, items: { $ref: "#/components/schemas/LiveQueueOut" } }
+        services: { type: array, items: { $ref: "#/components/schemas/ServiceOfferedOut" } }
+        payment:
+          oneOf: [{ $ref: "#/components/schemas/PaymentSummaryOut" }, { type: "null" }]
+        join: { $ref: "#/components/schemas/JoinAvailabilityOut" }
+        evaluated_at: { type: string, format: date-time }
+      example:
+        id: "0199b0c0-0000-7000-8000-00000000a001"
+        slug: chiawelo-community-health-centre
+        name: Chiawelo Community Health Centre
+        sector: public
+        location: { latitude: -26.2791, longitude: 27.8606 }
+        address_line: "Cnr Chiawelo and Mahalefele Streets"
+        suburb: Chiawelo
+        city: Johannesburg
+        province: Gauteng
+        phone_e164: "+27119840720"
+        open_status: { is_open: true, next_open_at: null, closure_reason: null }
+        today: [{ opens_at: "07:00", closes_at: "16:00" }]
+        week:
+          - { weekday: 0, name: Monday, spans: [{ opens_at: "07:00", closes_at: "16:00" }] }
+          - { weekday: 6, name: Sunday, spans: [] }
+        total_waiting: null
+        queues:
+          - id: "0199b0c0-0000-7000-8000-00000000b001"
+            name: General consultation
+            kind: consultation
+            allows_remote_join: true
+            waiting: null
+            wait_range: null
+            as_of: null
+        services:
+          - { name: Chronic medication collection, category: chronic, description: null, requires_appointment: false }
+        payment: null
+        join: { allowed: false, reason: "Joining from your phone is not switched on yet.", next_open_at: null, remote_queue_count: 1 }
+        evaluated_at: "2026-09-13T09:30:00+02:00"

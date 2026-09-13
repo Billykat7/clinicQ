@@ -6,9 +6,10 @@ week.
 
 | Contract | Covers | Issue |
 |---|---|---|
-| [`sites.yaml`](sites.yaml) | Clinics, hours, queues, services, display settings, staff, onboarding | [30](../docs/GITHUB/ISSUES/M4/ISSUE_30_sites_openapi_contract_tests.md) |
+| [`sites.yaml`](sites.yaml) | Clinics, hours, queues, services, display settings, staff, onboarding, payment profile, analytics switch and conversion report | [30](../docs/GITHUB/ISSUES/M4/ISSUE_30_sites_openapi_contract_tests.md) |
+| [`discovery.yaml`](discovery.yaml) | The nearby search, place-name typeahead, recent areas, one clinic's profile, the search rate limit | [38](../docs/GITHUB/ISSUES/M5/ISSUE_38_discovery_analytics_contract.md) |
 
-Discovery (38), queue (47), notifications (71), channels (79) and reporting (94) each add their own
+Queue (47), notifications (71), channels (79) and reporting (94) each add their own
 file here and one `Contract(...)` entry to `tests/integration/contracts/test_openapi_contracts.py`.
 Nothing else about the harness changes.
 
