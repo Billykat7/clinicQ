@@ -93,7 +93,7 @@ ever empty: that is the whole design goal. Issue numbers in brackets.
 | **1** | 1–2 | M1 | ✅ done |
 | **2** | 3–4 | M1 · M2 | ✅ done |
 | **3** | 5–6 | M3 | ✅ done |
-| **4** | 7–8 | M3 · M4 | ✅ done — M3 closed, tag `v0.3.0` |
+| **4** | 7–8 | M3 · M4 | ✅ done — M3 closed, tag `v0.3.0` to cut |
 | **5** | 9–10 | M4 · M5 | ✅ done — M4 closed, tag `v0.4.0` to follow; M5 delivered with it |
 | **6** | 11–12 | M5 · M6 | 🚧 in progress — M5 delivered (issues 31–38, tag `v0.5.0` to follow); M6 not started |
 | **7** | 13–14 | M6 ⚠️ | 📋 planned |
@@ -106,7 +106,7 @@ ever empty: that is the whole design goal. Issue numbers in brackets.
 | **14** | 27–28 | M14 | 📋 planned |
 
 **5 of 14 sprints done** 🟩🟩🟩🟩⬜⬜⬜⬜⬜⬜ **36%**, carrying milestones M1–M5 (issues 1–38) and
-tags `v0.1.0`–`v0.5.0`, the last two cut after their pull requests merge. **Sprint 6 is under way, not
+release notes `v0.1.0`–`v0.5.0`. Only `v0.2.0` is tagged so far; the others are still to cut. **Sprint 6 is under way, not
 done:** its M5 half is delivered (issues 31–38), its M6 half has not started — and by the rule below a
 sprint is ticked only when *every* issue its lanes deliver is closed.
 

@@ -1,6 +1,6 @@
 # Release v0.5.0: Discovery & Geolocation
 
-**Date:** 2026-09-13 · **Milestone:** M5 · **Issues closed:** 31–38
+**Date:** 2026-09-14 · **Milestone:** M5 · **Issues closed:** 31–38
 
 A pre-release. v0.4.0 put clinics in the system; this one lets a patient **find** one. Nearby
 verified clinics, public or private, from a phone's location or a typed suburb, on a list or a map,
@@ -17,8 +17,9 @@ makes a second query, so it cannot disagree with the list. And **analytics are a
 table can hold**, not by policy: `discovery_event` has no column for a person or a position, and a
 test reads the stored rows to prove it.
 
-The tag is cut when the last of the eight stacked pull requests (#147–#154) merges. This note is
-written in the last one, as the milestone's closing record.
+All eight pull requests merged on 12 and 13 September 2026, in stack order: #147 → #148 → #149 →
+#150 → #151 → #152 → #153 → #154. Four follow-ups (#155–#158) landed commits that reached a branch after
+its pull request had merged. The tag is cut from `main` once this note merges.
 
 ## What shipped
 
@@ -29,7 +30,8 @@ written in the last one, as the milestone's closing record.
   capped at 50 km **in the service**. Only verified clinics are reachable, by construction:
   `published_select()` beside the site guard is the only way a patient-facing read reaches a clinic's
   hours or queues. `EXPLAIN` proves the GiST index is used. With 500 seeded clinics the search takes a
-  median of about 13 ms against a 200 ms budget.
+  median of about 13 ms against a 200 ms budget, and an `open_now` search over every candidate about
+  40 ms (see *Verification* for how that figure was reached).
 - **A suburb instead of GPS** (Issue 34, PR #148; migration `0014`). There are 2,081 OpenStreetMap
   places in Gauteng and KwaZulu-Natal (ODbL 1.0; source, date and queries are in the migration
   docstring), plus 68 alternative names. `search_areas()` matches exactly, then by prefix, then by
@@ -76,6 +78,14 @@ written in the last one, as the milestone's closing record.
   rate limited per address and per session, answering `429` with `Retry-After`.
   `contracts/discovery.yaml` documents every route under `/api/v1/clinics`, under v0.4.0's drift test
   by one added line.
+- **Progress bars that are right on merge** (#155, #156). `make milestone-progress
+  ARGS='--assume-closed <N>'` counts the issues a pull request closes as closed and takes every other
+  figure from GitHub. A pull request can therefore commit the bars as they will read once it merges,
+  and a stacked one names its whole stack. `docs/IDE/RULES/milestone-progress.mdc` makes that the
+  rule for every pull request. #147 and #148 had merged with M5 still showing 0/8, which is how this
+  was found.
+- **The editor rules are committed** under `docs/IDE/RULES/` (#154, #158), because the editor's own
+  rules folder is gitignored. #158 corrected two rules that still named another project.
 
 ## Migrations
 
@@ -162,33 +172,53 @@ base and back to head.
   *declares*, so the discovery routers now declare their `422` and `429`; a refusal a handler raises
   without declaring it is proved by the module tests, not by the drift test. The contract is still
   read from a checkout, not published.
+- **The `open_now` budget test is the one to watch on CI.** #152's integration job failed it with a
+  median of 200.04 ms over seven runs. The search was genuinely slower on that branch (70 ms locally
+  against 54 ms on `main`), and a CI runner is about three times slower than a laptop. The fix, in
+  #152, reads opening hours as plain rows instead of ORM objects, and decides "open now" from
+  yesterday's and today's spans instead of a 14-day schedule. Locally the median fell to about 40 ms
+  and every later CI run passed, but CI does not print its timings, so its margin is not known.
+- **A platform admin's notification bell answers `403`.** Every dashboard page asks
+  `/api/v1/notifications/center/unread-count`, and for the seeded platform admin that request is
+  refused, which shows up as a console error. It was found while taking #159's screenshot and is not
+  from this milestone's code; it needs its own issue.
 - **Two tests failed once locally and passed on a rerun.**
   `test_email_change_request_does_not_change_the_address` reads the SMTP host from a developer's
   `.env` and fails when that DNS lookup does. `test_offload_is_dramatically_faster_than_blocking` is a
   timing benchmark that failed under load. Neither has been made independent of the machine yet.
-- **A developer's `.env` is stale.** `REDIS_URL` names the compose hostname, which does not resolve
-  from the host, and `DB_PASSWORD` does not match the container. Tests and demos work around both.
+- **A developer's `.env` is half stale.** `REDIS_URL` names the compose hostname, which does not
+  resolve from the host, so tests and demos override it with `localhost:6379`. `DB_PASSWORD` now
+  matches the natively installed PostgreSQL 18 the suite runs against, but not the older compose
+  database container.
+- **#159 is still open.** It points the remaining docstring and comment citations of the editor rules
+  at `docs/IDE/RULES/`. Until it merges, those citations name a path that does not exist in a clone.
 - **Everything from v0.4.0's list still stands**, except one item this release closes: the public
   discovery search is now rate limited. The clinic registration form and the geocoding proxy still
   are not. A new clinic's first manager still cannot be appointed through a route. The one-time-code
   store is still process-local. The credential in the repository's history has still not been
-  rotated, and nothing is provisioned. **The `v0.4.0` tag has not been cut either**; it should be cut
-  before this one.
+  rotated, and nothing is provisioned. **Only `v0.2.0` has ever been tagged**: `v0.1.0`, `v0.3.0` and
+  `v0.4.0` have release notes but no tags on `origin`. This release's note and the README now say so,
+  where they used to name `v0.3.0` as the latest tag. The tags should be cut in order before this one.
 
 ## Verification
 
-Run on `Issue/38/discovery-analytics-contract`, with PostgreSQL 18 + PostGIS 3.6 and Redis 8 in the
-development stack, both required rather than skippable:
+Run on `main` at `3ac264d`, after every M5 pull request and the #155–#158 follow-ups merged. It used
+PostgreSQL 18.6 + PostGIS and Redis 7.0 installed natively, both required rather than skippable:
 
 ```text
-TZ=UTC pytest -q -n auto tests        1659 passed, 9 xfailed in 133.95s
-ruff check . / ruff format --check    clean (392 files)
+TZ=UTC pytest -q -n auto tests        1665 passed, 9 xfailed in 142.01s
+ruff check . / ruff format --check    clean (438 files)
 mypy src/                             clean (227 files)
+
+500 clinics, 48 within 10 km:         median 13.4 ms, slowest 16.1 ms
+open_now over 500 candidates:         median 43.5 ms, slowest 61.8 ms
 ```
 
-CI ran the unit, integration and flow suites on every one of PRs #147–#154. Because the branches are
-**stacked**, `Conventions` stays red on each until the branches below it merge, and every other job
-is green.
+CI ran the unit, integration and flow suites on every pull request, and every one merged with all
+checks green. Getting there took two things the suite alone did not show. First, while the branches
+were **stacked**, `Conventions` stayed red on each until the branches below it merged and `main` was
+merged forward. Second, it rejected commits that had reached a branch after that branch's pull request
+merged, which is what the four follow-ups are for.
 
 Each pull request carries its own evidence, and it is worth reading beside the suite:
 

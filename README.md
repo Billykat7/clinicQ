@@ -211,19 +211,19 @@ Full detail: [engineering non-negotiables](docs/guideline.md) and
 ## Status
 
 **Phase:** building. **Sprints 1–5 of 14 complete**, sprint 6 under way (semester 2). **38 of 109
-issues closed**, latest tag `v0.3.0`; the `v0.4.0` and `v0.5.0` notes are written, and each tag
-follows its milestone's last merge. Next: M6, the queue engine.
+issues closed**. `v0.2.0` is the only tag cut so far; the notes for `v0.1.0` and `v0.3.0`–`v0.5.0` are
+written and their tags are still to cut, in order. Next: M6, the queue engine.
 
 - [x] Idea finalised (**ClinicQ**, selected from the shortlist)
 - [x] Requirements gathered ([product docs](docs/PRODUCT/README.md))
 - [x] Architecture agreed ([implementation plan](docs/PLAN/IMPLEMENTATION_PLAN.md))
 - [x] Milestones and issues defined (14 milestones, 109 issues)
 - [x] Workload split and dependency analysis ([workload split](docs/TEAM/WORKLOAD_SPLIT.md))
-- [x] Repo structure set up (M1, `v0.1.0`)
+- [x] Repo structure set up (M1, `v0.1.0` to cut)
 - [x] CI/CD pipeline running (M2, `v0.2.0`)
-- [x] Identity, RBAC, site scoping, audit and consent (M3, `v0.3.0`)
+- [x] Identity, RBAC, site scoping, audit and consent (M3, `v0.3.0` to cut)
 - [x] Clinics and queues configurable (M4, `v0.4.0` to cut)
-- [x] Patients find nearby clinics by GPS or suburb, on a list or a map (M5, once merged; `v0.5.0` to cut)
+- [x] Patients find nearby clinics by GPS or suburb, on a list or a map (M5, `v0.5.0` to cut)
 - [ ] Queue engine running (M6) ⚠️ critical path
 - [ ] MVP complete (M8)
 - [ ] Pilot clinic live (M14)
