@@ -176,7 +176,7 @@ What the checks expect, and why:
 | Every commit subject starts `Issue <N>: ` | `Issue 39: Add the ticket sequence` | same — merge commits are skipped |
 | The description ends with `Closes #<N>` | `Closes #39` | same |
 | A screenshot when `src/templates/` or `src/static/` changed | an image in the body | same |
-| **The milestone's progress is updated in the same PR** | `make milestone-progress` | [CONTRIBUTING.md](../CONTRIBUTING.md#branches-commits-and-pull-requests) |
+| **The milestone's progress is updated in the same PR, as it will read once merged** | `make milestone-progress ARGS='--assume-closed <N>'` | [CONTRIBUTING.md](../CONTRIBUTING.md#branches-commits-and-pull-requests) |
 | The CI gate is green, and a code owner approves | | branch ruleset on `main` |
 
 Write the description **before** opening the pull request, in
