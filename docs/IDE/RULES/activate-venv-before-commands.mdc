@@ -9,7 +9,7 @@ Before running any project-related command in the terminal (tests, scripts, lint
 
 ## How to activate
 
-From the project root (`properties`):
+From the project root (`clinicQ`):
 
 - **If the venv is `.venv`:**
   `source .venv/bin/activate`

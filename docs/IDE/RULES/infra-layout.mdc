@@ -12,7 +12,7 @@ Keep infrastructure files in their designated directories. Do not place Docker o
 - **All Docker files** belong under **`infra/docker/`**:
   - `Dockerfile`
   - `docker-compose.yml` and variants (`docker-compose.prod.yml`, `docker-compose.https.yml`, etc.)
-- Build from repo root: `docker build -f infra/docker/Dockerfile -t properties-app:local .`
+- Build from repo root: `docker build -f infra/docker/Dockerfile -t clinicq:local .`
 - **Exception:** `.dockerignore` lives at the **repo root**, not under `infra/docker/` — Docker reads it only from the build-context root, and every build uses the repo root as context.
 - Compose uses `--project-directory infra/docker` with build context pointing at repo root.
 
