@@ -1,0 +1,18 @@
+{#- Suburb suggestions (Issue 34's search, offered by Issue 32's page). Each is a plain link, so a
+    tap, the Enter key or a browser without JavaScript all choose it the same way. The label names
+    the municipality, which tells the two Riversides apart. -#}
+{% if suggestions %}
+<ul class="area-suggestions-list" aria-label="Places matching {{ query }}">
+  {% for area in suggestions %}
+  <li>
+    <a class="area-suggestion" href="/discover?area_id={{ area.area_id }}">
+      <span class="area-suggestion-name">{{ area.name }}</span>
+      {%- if area.matched_name %} <span class="area-suggestion-alias">({{ area.matched_name }})</span>{% endif %}
+      {%- if area.municipality %}<span class="area-suggestion-where">{{ area.municipality }}</span>{% endif %}
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% elif query and query | length > 1 %}
+<p class="msg msg-muted">No place called "{{ query }}". Check the spelling, or try the nearest town.</p>
+{% endif %}

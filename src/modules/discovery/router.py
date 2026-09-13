@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from src.api.rbac_deps import require_patient
-from src.commons.enums import SaProvince, SectorFilter
+from src.commons.enums import DiscoverySort, SaProvince, SectorFilter
 from src.commons.geo import CoordinateOutOfRangeError, Coordinates
 from src.database.models import Patient
 from src.database.session import get_db
@@ -89,6 +89,12 @@ def clinics_nearby(
     open_now: Annotated[
         bool, Query(description="Only clinics open at the moment of the search.")
     ] = False,
+    sort: Annotated[
+        DiscoverySort,
+        Query(
+            description="Nearest first, or shortest queue first (unmeasured queues last)."
+        ),
+    ] = DiscoverySort.NEAREST,
     limit: Annotated[int, Query(ge=1, le=service.MAX_PAGE_SIZE)] = (
         service.DEFAULT_PAGE_SIZE
     ),
@@ -110,6 +116,7 @@ def clinics_nearby(
             radius_m=radius_m,
             sector=sector,
             open_now=open_now,
+            sort=sort,
             limit=limit,
             offset=offset,
         )
