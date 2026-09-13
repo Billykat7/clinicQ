@@ -10,6 +10,7 @@ from src.database.models.action import Action
 from src.database.models.alert import Alert
 from src.database.models.alert_draft import AlertDraft
 from src.database.models.alert_recipient import AlertRecipient
+from src.database.models.area import Area, AreaName, PatientRecentArea
 from src.database.models.audit_event import AuditEvent
 from src.database.models.base import Base, metadata
 from src.database.models.clinic_service import ClinicService, queue_clinic_service
@@ -70,6 +71,8 @@ __all__ = [
     "Alert",
     "AlertDraft",
     "AlertRecipient",
+    "Area",
+    "AreaName",
     "AuditEvent",
     "Base",
     "ClinicService",
@@ -89,6 +92,7 @@ __all__ = [
     "Patient",
     "PatientConsent",
     "PatientConsentEvent",
+    "PatientRecentArea",
     "PaystackEvent",
     "Permission",
     "PermissionAuditLog",

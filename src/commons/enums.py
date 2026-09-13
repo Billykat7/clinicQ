@@ -371,6 +371,45 @@ class GeocodingProvider(StrEnum):
     NOMINATIM = "nominatim"
 
 
+class AreaKind(StrEnum):
+    """What kind of place an area is. Stored in ``area.kind`` (Issue 34).
+
+    Read from OpenStreetMap's ``place`` tag, folded into the five kinds a patient would recognise.
+    South African townships are tagged ``suburb`` or ``town`` in OSM, so there is no separate
+    member for them: Soweto is a city, Orlando West a suburb.
+
+    - ``CITY``: Johannesburg, Durban, Soweto.
+    - ``TOWN``: Thembisa, Pinetown.
+    - ``SUBURB``: Hillbrow, KwaMashu, Orlando West.
+    - ``VILLAGE``: a rural settlement.
+    - ``NEIGHBOURHOOD``: a named part of a suburb (OSM ``quarter`` and ``neighbourhood``).
+    """
+
+    CITY = "city"
+    TOWN = "town"
+    SUBURB = "suburb"
+    VILLAGE = "village"
+    NEIGHBOURHOOD = "neighbourhood"
+
+
+class DistanceBasis(StrEnum):
+    """What a discovery distance was measured from (Issues 31, 34).
+
+    - ``POSITION``: the patient's own position, a GPS fix. As exact as the fix.
+    - ``AREA_CENTROID``: the middle of a suburb or town the patient typed. **Approximate**, and
+      labelled so everywhere it appears: the patient may live at the edge of Soweto, 10 km from
+      its middle.
+    """
+
+    POSITION = "position"
+    AREA_CENTROID = "area_centroid"
+
+    @property
+    def approximate(self) -> bool:
+        """Whether a distance measured from here must be shown as approximate."""
+        return self is DistanceBasis.AREA_CENTROID
+
+
 class QueueKind(StrEnum):
     """What kind of line a queue is. Stored in ``queue.kind`` (Issue 25).
 
