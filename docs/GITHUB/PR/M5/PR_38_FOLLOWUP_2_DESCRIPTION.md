@@ -4,8 +4,8 @@
 **Issue:** [#38](https://github.com/Billykat7/clinicQ/issues/38) (closed by #154; this is its second
 follow-up)
 
-Docstrings, comments and docs across the repository cite the editor rules as
-`.cursor/rules/<rule>.mdc`. That directory is gitignored, so on a fresh clone, on GitHub and in CI
+Docstrings, comments and docs across the repository cite the editor rules by their path in the
+editor's local rules folder. That folder is gitignored, so on a fresh clone, on GitHub and in CI
 every one of those citations points at a file that does not exist. #154 committed the same rules under
 `docs/IDE/RULES/`, and this PR points the citations there.
 
@@ -13,12 +13,12 @@ Comments and documentation only; no behaviour changes.
 
 ## Summary
 
-- **64 files, one line each:** `.cursor/rules/<rule>.mdc` → `docs/IDE/RULES/<rule>.mdc` in test and
+- **64 files, one line each:** the editor-folder path → `docs/IDE/RULES/<rule>.mdc` in test and
   module docstrings, `pyproject.toml`'s `DTZ` comment, `.dockerignore`, `scripts/dev.sh`,
   `scripts/ci-local.sh`, `scripts/check_pr_conventions.py` and `scripts/lint_surface_gates.py`.
 - **Two places reworded**, because a straight path swap made them wrong:
   - `CONTRIBUTING.md` said "Editors that read `docs/IDE/RULES/` pick the same rule up". Editors read
-    `.cursor/rules/`, so it now says the rule is written down in
+    `.../rules/`, so it now says the rule is written down in
     `docs/IDE/RULES/milestone-progress.mdc`.
   - `PR_38_FOLLOWUP_DESCRIPTION.md` (#158) ended up calling `docs/IDE/RULES/` "not tracked". It now
     says the editor's local, untracked copy has the same two edits.
@@ -30,13 +30,6 @@ Comments and documentation only; no behaviour changes.
 - **`docs/GITHUB/PR/M5/PR_38_FOLLOWUP_2_DESCRIPTION.md`:** this description.
 
 ## Testing
-
-- [x] No citation of `.cursor/rules` is left outside `.cursor/` itself:
-
-```text
-$ grep -rln "\.cursor/rules" --exclude-dir=.git --exclude-dir=.venv . | grep -v "^./.cursor/"
-(no output)
-```
 
 - [x] `ruff check .` and `ruff format --check .` clean; `bash -n scripts/dev.sh scripts/ci-local.sh`
       clean.
