@@ -164,11 +164,15 @@ the boot guard and `scripts/check_config.py` both read ([`docs/CICD/ENVIRONMENTS
   template, stylesheet or script under `src/` shows a screenshot. A follow-up to an issue an
   earlier PR closed says `Refs #<N>` instead.
 
-- **The same pull request updates the docs and the milestone.** Run `make milestone-progress`: it
-  reads the issue states from GitHub and writes the green progress bar and percentage into the
-  milestone document, the README's delivery table and the milestone summary in
-  `docs/GITHUB/README.md`. `make milestone-progress-check` says whether
-  they are stale. When the pull request closes a milestone's **last** issue, it also ticks the exit
+- **The same pull request updates the docs and the milestone, as they will read once it merges.**
+  Run `make milestone-progress ARGS='--assume-closed <N>'`. It reads the issue states from GitHub,
+  counts the issue this pull request closes as closed, and writes the green progress bar and
+  percentage into the milestone document, the README's delivery table and the milestone summary in
+  `docs/GITHUB/README.md`. A **stacked** pull request names every issue its branch closes,
+  including those of the branches below it (`--assume-closed 32,35,36`). A follow-up that closes
+  nothing runs it with no assumption. `make milestone-progress-check ARGS=...` with the same flag says
+  whether they are stale. The hand-written issue count in the README's Status block must match the
+  generated total. When the pull request closes a milestone's **last** issue, it also ticks the exit
   criteria (leaving anything met only in part unticked, with the reason beside it), marks the
   milestone done and closes it on GitHub with
   `make milestone-progress ARGS='--close-completed'`. Editors that read
