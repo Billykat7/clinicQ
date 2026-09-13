@@ -108,8 +108,7 @@ ever empty: that is the whole design goal. Issue numbers in brackets.
 **5 of 14 sprints done** 🟩🟩🟩🟩⬜⬜⬜⬜⬜⬜ **36%**, carrying milestones M1–M5 (issues 1–38) and
 tags `v0.1.0`–`v0.5.0`, the last two cut after their pull requests merge. **Sprint 6 is under way, not
 done:** its M5 half is delivered (issues 31–38), its M6 half has not started — and by the rule below a
-sprint is ticked only when *every* issue its lanes deliver is closed. Sprint 5 and M5 are only true
-once the stacked M5 pull requests (#147–#153 and Issue 38's) have merged.
+sprint is ticked only when *every* issue its lanes deliver is closed.
 
 A sprint is **done** when every issue its lanes *deliver* is closed. That is marked by hand, not
 generated, because a lane also names issues it works **against** — a contract stub, a fixture, a

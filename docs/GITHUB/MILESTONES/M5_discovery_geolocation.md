@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Status** | ✅ Done once #147–#153 and Issue 38's pull request merge, in that order: issues 31–38, release note [`v0.5.0`](../RELEASES/RELEASE_v0_5_0.md), whose tag follows the last merge. One exit criterion and the throttled-phone demo are met only in part (below) |
-| **Progress** | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
+| **Status** | ✅ Done: issues 31–38 closed with the merge of #154, release note [`v0.5.0`](../RELEASES/RELEASE_v0_5_0.md). One exit criterion and the throttled-phone demo are met only in part (below) |
+| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (8/8 issues) |
 | **Sprints** | 5–6 (weeks 9–12), semester 2. The sprint plan spreads its issues over sprints 2–6: some start early against stubs (see the table) |
 | **Release tag** | `v0.5.0` |
 | **Primary owner** | C, Frontend/Patient · A, Backend Lead |
