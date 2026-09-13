@@ -69,7 +69,12 @@ from src.modules.queues.live import (
     published_live_queues,
     total_waiting,
 )
-from src.modules.sites.hours import OpeningSchedule, open_state, published_schedules
+from src.modules.sites.hours import (
+    OpeningSchedule,
+    is_open_now,
+    open_state,
+    published_schedules,
+)
 from src.modules.sites.payment_profile import PaymentProfile, published_profiles
 from src.modules.sites.service import within_radius_clause
 
@@ -390,10 +395,12 @@ def find_nearby_sites(
             else {}
         )
         if open_now:
+            # Only "open or not" decides the filter; the full answer, with when it next opens, is
+            # built for the page's clinics below.
             rows = [
                 row
                 for row in rows
-                if _open_status(schedules.get(row.Site.id), moment).is_open
+                if is_open_now(schedules.get(row.Site.id) or OpeningSchedule(), moment)
             ]
         queues = (
             published_live_queues(db, [row.Site.id for row in rows], reader=reader)
