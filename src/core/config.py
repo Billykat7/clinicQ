@@ -1113,6 +1113,18 @@ class Settings(BaseSettings):
         ),
     )
 
+    # The payment and medical-aid directory filter (Issue 37). A self-reported tag a private clinic
+    # declares, never a claims check. Off by default so it can ship after the MVP without a code
+    # change: while off, no patient-facing surface shows or filters by it, and the clinic editor page
+    # is not served (the API still accepts a profile, so clinics can fill theirs in beforehand).
+    payment_filter_enabled: bool = Field(
+        default=False,
+        description=(
+            "Show private clinics' self-reported payment methods and medical aids in discovery, and "
+            "let patients filter by them under Private (env: PAYMENT_FILTER_ENABLED)."
+        ),
+    )
+
     # The queue snapshot (Issue 36): one cached length per queue, so a list of twenty clinics is one
     # read rather than twenty counts. A snapshot older than the bound is never served, and a cold or
     # unreachable cache falls back to the database and then to a fresh count: slower, never wrong.

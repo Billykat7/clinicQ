@@ -72,6 +72,8 @@ logger = logging.getLogger(__name__)
 #: The resource whose grants gate the waiting-room screen settings page (Issue 27). Named here so
 #: the page gate and the API gate cannot drift to different resources.
 SITE_DISPLAY_RESOURCE = "sites.display"
+#: The clinic profile resource, which a clinic's payment profile belongs to (Issue 37).
+SITE_PROFILE_RESOURCE = "sites.profile"
 
 #: And the one gating the operator's clinic-verification console (Issue 29), at ``business`` tier.
 SITES_RESOURCE = "sites"
@@ -402,6 +404,33 @@ async def site_display_settings_page(
         return _not_found_html(request, db)
     ctx["site"] = site
     return templates.TemplateResponse(request, "dashboard/settings_display.html", ctx)
+
+
+@router.get("/dashboard/sites/{site_id}/settings/payment", response_class=HTMLResponse)
+async def site_payment_profile_page(
+    site_id: str, request: Request, db: Session = Depends(get_db)
+) -> HTMLResponse:
+    """A private clinic's payment methods and medical aids, as it reports them (Issue 37).
+
+    Behind ``PAYMENT_FILTER_ENABLED``: while the feature is off the page is not served at all (the
+    API still accepts a profile, so a clinic can fill it in beforehand). The same two gates as the
+    display settings page: a role **at this clinic**, then the ``sites.profile`` grant. The page
+    renders no rule: whether the clinic may hold a profile, the scheme list and the notice all come
+    from ``/api/v1/sites/{site_id}/payment-profile``, and the server refuses a public clinic's save.
+    """
+    if not get_settings().payment_filter_enabled:
+        return _not_found_html(request, db)
+    if not require_authenticated_html(request, db):
+        return _redirect_to_sign_in(request)  # type: ignore[return-value]
+    ctx = page_context(request, db, active_nav="", page_title="Payment and medical aid")
+    if not ctx["nav"].can(SITE_PROFILE_RESOURCE, PermissionVerb.READ.value):
+        return _forbidden_html(request, db)
+    staff = peek_user_from_refresh_cookie(db, request)
+    site = _site_for_staff(db, staff, site_id)
+    if site is None:
+        return _not_found_html(request, db)
+    ctx["site"] = site
+    return templates.TemplateResponse(request, "dashboard/settings_payment.html", ctx)
 
 
 #: The verification console's tabs. Each is its own URL and its own ``SiteStatus``; the bare group

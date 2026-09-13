@@ -57,6 +57,10 @@ from src.database.models.site_hours import (
     SiteHolidayRule,
     SiteOpeningHours,
 )
+from src.database.models.site_payment_profile import (
+    SitePaymentMedicalAid,
+    SitePaymentProfile,
+)
 from src.database.models.site_queue_snapshot import SiteQueueSnapshot
 from src.database.models.staff_invitation import StaffInvitation
 from src.database.models.staff_queue_assignment import StaffQueueAssignment
@@ -111,6 +115,8 @@ __all__ = [
     "SiteClosure",
     "SiteHolidayRule",
     "SiteOpeningHours",
+    "SitePaymentMedicalAid",
+    "SitePaymentProfile",
     "SiteQueueSnapshot",
     "SoftDeleteMixin",
     "StaffInvitation",

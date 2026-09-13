@@ -30,6 +30,7 @@ from src.commons.enums import (
     SITE_DEFAULT_BOARD_LANGUAGE,
     BoardLanguage,
     DisplayMode,
+    MedicalAidScheme,
     SaProvince,
     ServiceCategory,
     SiteSector,
@@ -555,3 +556,65 @@ class VerificationQueueOut(BaseModel):
     total: int = Field(ge=0)
     status: SiteStatus
     items: list[VerificationQueueItemOut]
+
+
+# --------------------------------------------------------------------------------------
+# Payment and medical aid (Issue 37): a private clinic's self-reported directory tag
+# --------------------------------------------------------------------------------------
+
+
+class PaymentProfileIn(BaseModel):
+    """What a private clinic declares it accepts. Saving it confirms it as of now."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    accepts_cash: bool
+    accepts_card: bool
+    schemes: list[MedicalAidScheme] = Field(
+        default_factory=list, max_length=len(MedicalAidScheme)
+    )
+    other_scheme_name: str | None = Field(default=None, max_length=80)
+    """The scheme's name, required when ``schemes`` includes ``other`` and refused otherwise."""
+    copay_notice: str | None = Field(default=None, max_length=300)
+
+    @model_validator(mode="after")
+    def _other_needs_a_name(self) -> PaymentProfileIn:
+        """``other`` carries its name; a name without ``other`` is a mistake, not a scheme."""
+        if len(set(self.schemes)) != len(self.schemes):
+            raise ValueError("Each scheme can be listed once.")
+        named = bool((self.other_scheme_name or "").strip())
+        if MedicalAidScheme.OTHER in self.schemes and not named:
+            raise ValueError("Name the scheme when you choose 'Other'.")
+        if named and MedicalAidScheme.OTHER not in self.schemes:
+            raise ValueError("A scheme name is only needed with 'Other'.")
+        return self
+
+
+class SchemeOptionOut(BaseModel):
+    """One entry of the controlled scheme list."""
+
+    value: MedicalAidScheme
+    label: str
+
+
+class AcceptedSchemeOut(BaseModel):
+    """One scheme the clinic says it accepts."""
+
+    scheme: MedicalAidScheme
+    label: str
+
+
+class PaymentProfileOut(BaseModel):
+    """A clinic's payment profile, whether it may hold one, and the words shown with it."""
+
+    applicable: bool = Field(
+        description="False for a public clinic, which never holds a profile."
+    )
+    accepts_cash: bool | None
+    accepts_card: bool | None
+    schemes: list[AcceptedSchemeOut]
+    copay_notice: str | None
+    last_confirmed_at: datetime | None
+    stale: bool = Field(description="True when not confirmed in the last six months.")
+    notice: str = Field(description="Shown with this information wherever it appears.")
+    scheme_options: list[SchemeOptionOut]

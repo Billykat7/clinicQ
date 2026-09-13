@@ -98,6 +98,19 @@ CASES: dict[str, dict[str, object]] = {
         "reader": "a@clinicq.example",
         "paths": lambda site, _row: (f"/api/v1/sites/{site}/settings/display",),
     },
+    "sitepaymentprofile": {
+        # What a private clinic says it accepts (Issue 37). Part of the profile: the front desk
+        # reads it, the manager declares it. A public clinic's read is still a 200 at one's own
+        # clinic (``applicable: false``) and a 404 at another's, so the sector does not matter here.
+        "resource": "sites.profile",
+        "reader": "a@clinicq.example",
+        "paths": lambda site, _row: (f"/api/v1/sites/{site}/payment-profile",),
+    },
+    "sitepaymentmedicalaid": {
+        "resource": "sites.profile",
+        "reader": "a@clinicq.example",
+        "paths": lambda site, _row: (f"/api/v1/sites/{site}/payment-profile",),
+    },
     "siteopeninghours": {
         # A clinic's ordinary week (Issue 24). The same grant as the profile: the front desk reads
         # the hours, the manager changes them.

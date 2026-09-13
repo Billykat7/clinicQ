@@ -236,3 +236,30 @@
 @media (max-width: 22rem) {
   .clinic-facts { grid-template-columns: 1fr; }
 }
+
+
+/* ── Payment and medical aid (Issue 37) ─────────────────────── */
+
+.payment-filter { margin: 0; padding: var(--space-3); border: 1px dashed var(--line); border-radius: var(--radius); }
+.payment-notice { display: block; margin-top: var(--space-1); font-size: var(--step--1); color: var(--muted); }
+.payment-notice-strong { margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-3); border-left: 3px solid var(--warn-ink); background: var(--warn-bg); color: var(--ink); }
+.check-row { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin-top: var(--space-2); }
+.check-option { display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--tap); cursor: pointer; }
+.check-option input { width: 1.5rem; height: 1.5rem; flex: none; accent-color: var(--brand); }
+.scheme-picker { margin-top: var(--space-2); }
+.scheme-picker summary { min-height: var(--tap); display: flex; align-items: center; cursor: pointer; font-weight: 600; }
+.scheme-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: var(--space-1) var(--space-3); }
+.payment-lines { margin: 0; padding-left: 1.1rem; display: grid; gap: var(--space-1); }
+.stale-tag {
+  display: inline-block;
+  margin-top: var(--space-2);
+  padding: 0 .45rem;
+  border: 1px solid var(--warn-ink);
+  border-radius: var(--radius-pill);
+  font-size: var(--step--2);
+  font-weight: 600;
+  color: var(--warn-ink);
+  background: var(--warn-bg);
+}
+.scheme-picker summary:focus-visible,
+.check-option input:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }

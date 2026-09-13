@@ -2137,3 +2137,10 @@ details.collapsible[open] > summary .chev { transform: rotate(180deg); }
   .detail-list { grid-template-columns: 1fr; gap: .15rem; }
   .detail-list dd { margin-bottom: .5rem; }
 }
+
+/* A group of checkboxes laid out in columns (Issue 37's payment profile). The labels keep the
+   ``.field label:has(> input[type="checkbox"])`` look above; this only arranges them, and the
+   fieldset loses the browser's default frame so the group reads like the other fields. */
+fieldset.field { margin: 0 0 1rem; padding: 0; border: 0; min-width: 0; }
+fieldset.field > legend { margin-bottom: .3rem; padding: 0; font-size: .85rem; color: var(--muted); }
+.check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: .45rem 1rem; }

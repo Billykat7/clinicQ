@@ -1,0 +1,62 @@
+{% extends "layouts/dashboard.html" %}
+
+{# A private clinic's payment methods and medical aids (Issue 37). A self-reported directory tag:
+   patients see it with "reported by the clinic, please confirm", and nothing checks anyone's cover.
+   Whether this clinic may hold a profile, the scheme list and the notice all come from
+   /api/v1/sites/{site_id}/payment-profile; a public clinic's save is refused by the server whatever
+   this page shows. #}
+
+{% block layout_head %}
+  {{ super() }}
+  <script src="/static/js/site-payment-profile.js" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Payment and medical aid</h1>
+  <p class="lead">What your clinic accepts, as patients will see it under Private.</p>
+  {% include "partials/breadcrumbs.html" %}
+</div>
+
+<div class="card" data-site-id="{{ site.id }}" id="payment-profile">
+  <h2>{{ site.name }}</h2>
+  <p class="card-sub" id="pp-notice"></p>
+
+  <div id="pp-loading" class="msg msg-muted"><span class="spinner" aria-hidden="true"></span> Loading…</div>
+
+  <p class="alert alert-warn" id="pp-public" hidden>Public clinics do not list payment methods or medical aids. This is decided by the clinic's sector, not by this page.</p>
+
+  <form id="pp-form" hidden>
+    <fieldset class="field">
+      <legend>Payment methods</legend>
+      <div class="check-grid">
+        <label><input type="checkbox" id="pp-cash"> Cash</label>
+        <label><input type="checkbox" id="pp-card"> Card</label>
+      </div>
+    </fieldset>
+
+    <fieldset class="field">
+      <legend>Medical aid schemes you accept</legend>
+      {# The controlled list is rendered from the API, so it cannot drift from what patients filter by. #}
+      <div id="pp-schemes" class="check-grid"></div>
+      <div class="field" id="pp-other-wrap" hidden>
+        <label for="pp-other">Name of the other scheme</label>
+        <input type="text" id="pp-other" maxlength="80">
+      </div>
+    </fieldset>
+
+    <div class="field">
+      <label for="pp-copay">Co-payment notice (optional)</label>
+      <input type="text" id="pp-copay" maxlength="300" placeholder="For example: a co-payment may apply for some plans">
+    </div>
+
+    <p class="hint" id="pp-confirmed"></p>
+
+    <div class="form-actions">
+      <button type="submit" class="btn" id="pp-save">Save and confirm</button>
+      <button type="button" class="btn btn-quiet" id="pp-confirm" hidden>Still correct: confirm</button>
+      <span class="msg" id="pp-msg" aria-live="polite"></span>
+    </div>
+  </form>
+</div>
+{% endblock %}

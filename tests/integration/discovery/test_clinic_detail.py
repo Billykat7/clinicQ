@@ -172,13 +172,23 @@ def test_wait_times_are_a_range_or_not_shown_never_a_single_number(
 def test_payment_information_is_only_for_private_clinics_and_carries_the_notice(
     directory: SimpleNamespace,
 ) -> None:
-    """A private clinic gets the section, saying nothing is listed yet; a public one has none."""
+    """With payments switched on (Issue 37): a private clinic with nothing listed says so; a public
+    one has no section; with them off, neither does. The notice is the one sentence #37's data uses.
+    """
     with directory.session() as db:
-        private = clinic_profile(db, "medicross-meldene", moment=_TUESDAY_10AM)
-        public = clinic_profile(db, "hillbrow-chc", moment=_TUESDAY_10AM)
-    assert private is not None and public is not None
+        private = clinic_profile(
+            db, "medicross-meldene", moment=_TUESDAY_10AM, payments_enabled=True
+        )
+        public = clinic_profile(
+            db, "hillbrow-chc", moment=_TUESDAY_10AM, payments_enabled=True
+        )
+        hidden = clinic_profile(
+            db, "medicross-meldene", moment=_TUESDAY_10AM, payments_enabled=False
+        )
+    assert private is not None and public is not None and hidden is not None
     assert detail_view(private, join_enabled=False).payment_note == PAYMENT_NOT_LISTED
     assert detail_view(public, join_enabled=False).payment_note is None
+    assert detail_view(hidden, join_enabled=False).payment_note is None
     assert (
         detail_view(private, join_enabled=False).reported_notice
         == CLINIC_REPORTED_NOTICE

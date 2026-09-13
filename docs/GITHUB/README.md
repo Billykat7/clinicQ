@@ -35,7 +35,7 @@ docs/
 | **[M2: CI/CD, Environments & Team Workflow](MILESTONES/M2_cicd_environments.md)** | Actions CI, GHCR, deploy on tag, CODEOWNERS, labels | 9–14 | DevOps/QA | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** ✅ done |
 | **[M3: Identity, Auth, RBAC & Consent](MILESTONES/M3_identity_auth_rbac.md)** | Staff auth, patient OTP identity, RBAC, site scoping, audit, consent | 15–22 | Backend Lead | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** ✅ done |
 | **[M4: Clinics, Queues & Configuration](MILESTONES/M4_clinics_queues_config.md)** | `sites` + PostGIS, hours, multi-room `queues`, services, display settings, onboarding | 23–30 | Backend Lead | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** ✅ done |
-| **[M5: Discovery & Geolocation](MILESTONES/M5_discovery_geolocation.md)** | Nearby search, sector toggle, map, area fallback, snapshot cache, payment filter | 31–38 | Frontend (Patient) | 🟩🟩🟩🟩🟩🟩⬜⬜⬜⬜ **62%** 🚧 in progress |
+| **[M5: Discovery & Geolocation](MILESTONES/M5_discovery_geolocation.md)** | Nearby search, sector toggle, map, area fallback, snapshot cache, payment filter | 31–38 | Frontend (Patient) | 🟩🟩🟩🟩🟩🟩🟩🟩⬜⬜ **75%** 🚧 in progress |
 | **[M6: Queue Engine Core](MILESTONES/M6_queue_engine_core.md)** ⚠️ | Tickets, join, lifecycle, wait estimates, recall/no-show, transfer, priority | 39–47 | Backend Lead | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** 📋 planned |
 | **[M7: Clinic Dashboard](MILESTONES/M7_clinic_dashboard.md)** | Front-desk board, call next, walk-in intake, reorder, room view, settings | 48–55 | Frontend (Clinic) | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** 📋 planned |
 | **[M8: Waiting-room Display Monitor](MILESTONES/M8_display_monitor.md)** | Kiosk board, SSE, privacy modes, accessibility, audio call-out, device registry | 56–62 | Frontend (Clinic) | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** 📋 planned |
@@ -49,7 +49,7 @@ docs/
 **Total: 109 tracked issues across M1–M14**, plus 6 parked
 [backlog items](ISSUES/BACKLOG/).
 
-**Progress:** 🟩🟩🟩⬜⬜⬜⬜⬜⬜⬜ **32%** (35/109 issues) closed · **4 of 14 milestones done**
+**Progress:** 🟩🟩🟩⬜⬜⬜⬜⬜⬜⬜ **33%** (36/109 issues) closed · **4 of 14 milestones done**
 
 > ⚠️ **M6 is the critical path.** Six of the seven milestones after it are consumers of the queue
 > engine. Anything that delays M6 delays the whole second half of the project, see the

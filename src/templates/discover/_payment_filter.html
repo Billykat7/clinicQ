@@ -1,0 +1,30 @@
+{#- The payment and medical-aid filter (Issue 37), inside the filter form.
+
+    Rendered only when page.payment_filter is set: the feature is switched on and Private is
+    selected. Under Public or All the slot is empty, so the filter's controls are not in the page at
+    all, not merely hidden. The results fragment sends this slot out of band (oob), which is how
+    moving the toggle adds or removes it without a reload.
+
+    The notice comes first, so it is read before a scheme is ticked: this is what clinics report,
+    not a check of anyone's cover. -#}
+<div class="payment-filter-slot" id="payment-filter-slot"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {%- if page.payment_filter %}
+  {%- set filter = page.payment_filter %}
+  <fieldset class="payment-filter">
+    <legend class="segmented-legend">Payment and medical aid</legend>
+    <p class="payment-notice">{{ filter.notice }}</p>
+    <div class="check-row">
+      <label class="check-option"><input type="checkbox" name="accepts_cash" value="{{ filter.cash.value }}"{% if filter.cash.selected %} checked{% endif %}> {{ filter.cash.label }}</label>
+      <label class="check-option"><input type="checkbox" name="accepts_card" value="{{ filter.card.value }}"{% if filter.card.selected %} checked{% endif %}> {{ filter.card.label }}</label>
+    </div>
+    <details class="scheme-picker"{% if filter.schemes | selectattr("selected") | list %} open{% endif %}>
+      <summary>Medical aid schemes</summary>
+      <div class="scheme-options">
+        {%- for scheme in filter.schemes %}
+        <label class="check-option"><input type="checkbox" name="medical_aid" value="{{ scheme.value }}"{% if scheme.selected %} checked{% endif %}> {{ scheme.label }}</label>
+        {%- endfor %}
+      </div>
+    </details>
+  </fieldset>
+  {%- endif %}
+</div>
