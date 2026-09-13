@@ -1,0 +1,10 @@
+{% extends "layouts/patient.html" %}
+{#- A clinic that is not listed (Issue 35). The same page for a clinic that never existed and for one
+    that is not verified, so the address cannot be used to learn about an unchecked clinic. -#}
+{% from "components/empty_state.html" import empty_state %}
+
+{% block title %}Clinic not found · {{ app_name }}{% endblock %}
+
+{% block content %}
+{{ empty_state("This clinic is not listed", body="It may have moved, or the link may be out of date.", action_label="Find a clinic", action_href="/discover") }}
+{% endblock %}

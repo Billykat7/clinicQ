@@ -1101,6 +1101,18 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Discovery (M5). The clinic detail page (Issue 35) shows a "Join the queue" action that is
+    # enabled only when joining is possible. Joining itself is Issue 40's (M6), so until that route
+    # exists the flag stays off and the button says why it is disabled, instead of leading nowhere.
+    patient_join_enabled: bool = Field(
+        default=False,
+        description=(
+            "Offer 'Join the queue' on the clinic detail page when a clinic is open and has a queue "
+            "that takes remote joins (env: PATIENT_JOIN_ENABLED). Off until the join flow (Issue "
+            "40) ships; while off, the button is shown disabled with the reason."
+        ),
+    )
+
     @property
     def database_url_async(self) -> str:
         """The request-path async DSN: ``database_url`` with an async driver (Issue #81).

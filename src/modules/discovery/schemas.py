@@ -16,11 +16,14 @@ from src.commons.enums import (
     QueueKind,
     SaProvince,
     SectorFilter,
+    ServiceCategory,
     SiteSector,
 )
 from src.modules.discovery.areas import AreaSummary
+from src.modules.discovery.profile import ClinicProfile
 from src.modules.discovery.service import NearbyClinic, NearbyResult, OpenStatus
 from src.modules.queues.live import LiveQueue, WaitRange
+from src.modules.sites.hours import TimeSpan
 from src.modules.sites.schemas import SiteLocationOut
 
 
@@ -230,4 +233,112 @@ class NearbyPageOut(BaseModel):
             offset=result.offset,
             evaluated_at=result.evaluated_at,
             items=[NearbyClinicOut.of(clinic) for clinic in result.clinics],
+        )
+
+
+class SpanOut(BaseModel):
+    """A stretch of wall-clock time in Africa/Johannesburg; ``closes_at`` at or before
+    ``opens_at`` crosses midnight."""
+
+    opens_at: str = Field(examples=["07:00"])
+    closes_at: str = Field(examples=["16:00"])
+
+
+class DayHoursOut(BaseModel):
+    """One weekday's regular hours. An empty list is a day the clinic does not open."""
+
+    weekday: int = Field(ge=0, le=6, description="Monday is 0.")
+    name: str
+    spans: list[SpanOut]
+
+
+class ServiceOfferedOut(BaseModel):
+    """One thing the clinic offers."""
+
+    name: str
+    category: ServiceCategory
+    description: str | None
+    requires_appointment: bool
+
+
+class JoinAvailabilityOut(BaseModel):
+    """Whether a patient may join a queue here now; ``reason`` is set exactly when they may not."""
+
+    allowed: bool
+    reason: str | None
+    next_open_at: datetime | None
+    remote_queue_count: int
+
+
+class ClinicProfileOut(BaseModel):
+    """Everything a patient needs to decide on one clinic (Issue 35)."""
+
+    id: str
+    slug: str
+    name: str
+    sector: SiteSector
+    location: SiteLocationOut
+    address_line: str
+    suburb: str | None
+    city: str
+    province: SaProvince
+    phone_e164: str | None
+    open_status: OpenStatusOut
+    today: list[SpanOut]
+    week: list[DayHoursOut]
+    total_waiting: int | None = Field(
+        description="Everyone waiting across the clinic's queues; `null` when not measured."
+    )
+    queues: list[LiveQueueOut]
+    services: list[ServiceOfferedOut]
+    join: JoinAvailabilityOut
+    evaluated_at: datetime
+
+    @classmethod
+    def of(cls, profile: ClinicProfile) -> ClinicProfileOut:
+        """The API shape of a clinic profile."""
+
+        def spans(items: tuple[TimeSpan, ...]) -> list[SpanOut]:
+            return [
+                SpanOut(
+                    opens_at=f"{s.opens_at:%H:%M}", closes_at=f"{s.closes_at:%H:%M}"
+                )
+                for s in items
+            ]
+
+        return cls(
+            id=profile.site_id,
+            slug=profile.slug,
+            name=profile.name,
+            sector=profile.sector,
+            location=SiteLocationOut.of(profile.location),
+            address_line=profile.address_line,
+            suburb=profile.suburb,
+            city=profile.city,
+            province=profile.province,
+            phone_e164=profile.phone_e164,
+            open_status=OpenStatusOut.of(profile.open_status),
+            today=spans(profile.today),
+            week=[
+                DayHoursOut(weekday=day.weekday, name=day.name, spans=spans(day.spans))
+                for day in profile.week
+            ],
+            total_waiting=profile.total_waiting,
+            queues=[LiveQueueOut.of(queue) for queue in profile.queues],
+            services=[
+                ServiceOfferedOut(
+                    name=service.name,
+                    category=service.category,
+                    description=service.description,
+                    requires_appointment=service.requires_appointment,
+                )
+                for service in profile.services
+            ],
+            join=JoinAvailabilityOut(
+                allowed=profile.join.allowed,
+                reason=profile.join.reason,
+                next_open_at=profile.join.next_open_at,
+                remote_queue_count=profile.join.remote_queue_count,
+            ),
+            evaluated_at=profile.evaluated_at,
         )

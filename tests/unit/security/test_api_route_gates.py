@@ -64,6 +64,11 @@ PUBLIC: dict[str, str] = {
         "lengths), never a ticket, a patient or anything about an unverified clinic. The radius is "
         "capped on the server, and Issue 38 adds the rate limit against scraping"
     ),
+    "GET /api/v1/clinics/{slug}": (
+        "one verified clinic's public profile (Issue 35): what the clinic publishes about itself "
+        "(hours, queue names and lengths, services, its own switchboard number); an unverified "
+        "clinic answers the same 404 as a missing one"
+    ),
     "GET /api/v1/clinics/areas": (
         "the place-name typeahead (Issue 34) a patient without GPS types a suburb into: it reads "
         "only the public OpenStreetMap place dataset, and nothing about any person"

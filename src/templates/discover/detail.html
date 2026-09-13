@@ -1,0 +1,82 @@
+{% extends "layouts/patient.html" %}
+{#- One clinic (Issue 35): everything a patient needs before deciding to go.
+
+    Rendered by src.web.discover.clinic_detail from the discovery service's clinic_profile, the same
+    data the JSON API and the channel menus read. Four questions in order: is it open (and can I
+    join), how long are the queues, what does it treat, and how do I get there. The live half is
+    discover/_queue_summary.html, which htmx refreshes every 30 seconds.
+
+    Built to work at 320 px wide: one column, buttons that stack, long names and municipality names
+    allowed to wrap anywhere rather than scroll sideways. -#}
+{% from "discover/_sector_badge.html" import sector_badge %}
+
+{% block title %}{{ view.name }} · {{ app_name }}{% endblock %}
+
+{% block styles %}
+  {{ super() }}
+  <link rel="stylesheet" href="/static/css/discover.css">
+{% endblock %}
+
+{% block content %}
+<div class="stack discover clinic-detail">
+  <p class="clinic-back"><a href="/discover">Find another clinic</a></p>
+
+  <header class="clinic-head">
+    <h1 class="clinic-name">{{ view.name }}</h1>
+    {{ sector_badge(view.badge) }}
+    <p class="clinic-address">{{ view.address }}<br>{{ view.area_line }}</p>
+  </header>
+
+  {% with live = view.live %}{% include "discover/_queue_summary.html" %}{% endwith %}
+
+  <section class="card clinic-contact" aria-labelledby="contact-heading">
+    <h2 id="contact-heading">Getting there</h2>
+    <div class="clinic-actions">
+      <a class="btn btn-quiet" href="{{ view.directions_href }}" rel="noopener">Directions</a>
+      {% if view.tel_href %}
+      <a class="btn btn-quiet" href="{{ view.tel_href }}">Call {{ view.phone_label }}</a>
+      {% endif %}
+    </div>
+    {% if not view.tel_href %}
+    <p class="msg msg-muted">No phone number listed.</p>
+    {% endif %}
+    <p class="clinic-hint">Directions open in your phone's own maps app.</p>
+  </section>
+
+  <section class="card" aria-labelledby="hours-heading">
+    <h2 id="hours-heading">Opening hours</h2>
+    <dl class="hours-list">
+      {% for row in view.week %}
+      <div class="hours-row{% if row.is_today %} is-today{% endif %}">
+        <dt>{{ row.day }}{% if row.is_today %} <span class="hours-today">(today)</span>{% endif %}</dt>
+        <dd>{{ row.hours }}</dd>
+      </div>
+      {% endfor %}
+    </dl>
+    <p class="clinic-hint">Public holidays and closures announced by the clinic change these hours; the status at the top already includes them.</p>
+  </section>
+
+  <section class="card" aria-labelledby="services-heading">
+    <h2 id="services-heading">Services</h2>
+    {% if view.services %}
+    <ul class="service-list">
+      {% for service in view.services %}
+      <li>
+        <p class="service-name">{{ service.name }}{% if service.requires_appointment %} <span class="queue-row-tag">Appointment needed</span>{% endif %}</p>
+        {% if service.description %}<p class="service-description">{{ service.description }}</p>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="msg msg-muted">This clinic has not listed its services yet.</p>
+    {% endif %}
+  </section>
+
+  {% if view.payment_note is not none %}
+  <section class="card" aria-labelledby="payment-heading">
+    <h2 id="payment-heading">Payment and medical aid</h2>
+    <p>{{ view.payment_note }}</p>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

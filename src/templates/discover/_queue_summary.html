@@ -1,0 +1,45 @@
+{#- The live half of the clinic detail page (Issue 35): open or closed, today's hours, the join action
+    and each queue's length and wait. htmx asks /discover/clinics/{slug}/live for this every 30
+    seconds and swaps it in place, so the figures stay current without a reload.
+
+    live is a src.web.discover.LiveView. The join action is always here: enabled when joining works,
+    and otherwise disabled with the reason beside it, never hidden. A wait is a range or "not
+    available yet", never one number. -#}
+<div class="clinic-live" id="clinic-live"
+     hx-get="{{ live.live_href }}" hx-trigger="every {{ live.refresh_seconds }}s"
+     hx-swap="outerHTML" hx-target="this">
+  <div class="clinic-open">
+    <p class="clinic-open-state {{ 'is-open' if live.is_open else 'is-closed' }}">{{ live.open_label }}</p>
+    <p class="clinic-open-today">{{ live.today_label }}</p>
+  </div>
+
+  <div class="clinic-join">
+    {% if live.join.enabled %}
+    <a class="btn btn-block" href="{{ live.join.href }}">{{ live.join.label }}</a>
+    {% else %}
+    <button class="btn btn-block" type="button" disabled aria-describedby="join-reason">{{ live.join.label }}</button>
+    <p class="clinic-join-reason" id="join-reason">{{ live.join.reason }}</p>
+    {% endif %}
+  </div>
+
+  <section class="clinic-queues" aria-labelledby="queues-heading">
+    <h2 id="queues-heading">Queues</h2>
+    <p class="clinic-queues-total">{{ live.total_label }}</p>
+    {% if live.queues %}
+    <ul class="queue-rows">
+      {% for queue in live.queues %}
+      <li class="queue-row">
+        <p class="queue-row-name">{{ queue.name }}{% if queue.walk_in_only %} <span class="queue-row-tag">Walk-in only</span>{% endif %}</p>
+        <p class="queue-row-figure">{{ queue.waiting_label }}</p>
+        <p class="queue-row-figure queue-row-wait">{{ queue.wait_label }}</p>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="msg msg-muted">This clinic has not set up its queues on ClinicQ yet.</p>
+    {% endif %}
+    {#- Not a live region: announcing "Updated at" to a screen reader every 30 seconds would drown
+        out the page. The figures themselves are what changes. -#}
+    <p class="clinic-updated">{{ live.updated_label }}</p>
+  </section>
+</div>

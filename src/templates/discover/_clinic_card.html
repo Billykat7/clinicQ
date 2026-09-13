@@ -7,7 +7,7 @@
 <li class="clinic-card">
   <article aria-labelledby="clinic-{{ card.slug }}">
     <div class="clinic-card-head">
-      <h3 id="clinic-{{ card.slug }}" class="clinic-card-name">{{ card.name }}</h3>
+      <h3 id="clinic-{{ card.slug }}" class="clinic-card-name"><a href="/discover/clinics/{{ card.slug }}">{{ card.name }}</a></h3>
       {{ sector_badge(card.badge) }}
     </div>
     <p class="clinic-card-address">{{ card.address }}</p>

@@ -16,7 +16,9 @@ Three routes, each usable with and without JavaScript:
   and the sort swap in. Asked by htmx it answers the fragment with ``HX-Push-Url`` set to the full
   page's address, so the address bar, a refresh and a shared link all show the same list. Asked by
   a browser without htmx it redirects to that address.
-* ``GET /discover/areas`` is the suburb typeahead's suggestions, with the same fallback.
+* ``GET /discover/areas`` is the suburb typeahead's suggestions, with the same fallback;
+* ``GET /discover/clinics/{slug}`` is one clinic's detail page (Issue 35), and
+  ``/discover/clinics/{slug}/live`` the figures on it htmx refreshes every 30 seconds.
 
 **What the templates render is decided here**, as plain dataclasses (:class:`DiscoverPage`,
 :class:`ResultsView`, :class:`ClinicCard`), so the words a patient reads ("Queue length not reported
@@ -35,22 +37,26 @@ from enum import StrEnum
 from typing import Annotated, Final
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, Path, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from src.commons.enums import DiscoverySort, SectorFilter, SiteSector
 from src.commons.geo import CoordinateOutOfRangeError, Coordinates
 from src.commons.time import APP_TIMEZONE, business_date
+from src.core.config import get_settings
 from src.database.session import get_db
 from src.modules.discovery import areas, service
+from src.modules.discovery import profile as profile_service
 from src.modules.discovery.areas import AreaSummary
+from src.modules.discovery.profile import ClinicProfile, ServiceOffered
 from src.modules.discovery.service import (
     NearbyClinic,
     NearbyResult,
     OpenStatus,
 )
 from src.modules.queues.live import WaitRange
+from src.modules.sites.hours import TimeSpan
 from src.web.context import public_page_context
 from src.web.routes import templates
 
@@ -158,6 +164,17 @@ def travel_label(walking_minutes: int, driving_minutes: int) -> str:
     return f"About {walking_minutes} min on foot, {driving_minutes} min by car"
 
 
+def opens_phrase(next_open_at: datetime, moment: datetime) -> str:
+    """When a clinic opens next, relative to ``moment``: today at 14:00, tomorrow at 07:00, Mon 21 Sep at 07:30."""
+    opens = next_open_at.astimezone(APP_TIMEZONE)
+    today = business_date(moment)
+    if opens.date() == today:
+        return f"today at {opens:%H:%M}"
+    if opens.date() == today + timedelta(days=1):
+        return f"tomorrow at {opens:%H:%M}"
+    return f"{opens:%a %d %b} at {opens:%H:%M}"
+
+
 def open_label(status_: OpenStatus, moment: datetime) -> str:
     """Open or closed, and when it opens next, in Johannesburg wall-clock time.
 
@@ -165,24 +182,14 @@ def open_label(status_: OpenStatus, moment: datetime) -> str:
     """
     if status_.is_open:
         return "Open now"
-    reason = (
-        f"Closed: {status_.closure_reason.rstrip('.')}."
-        if status_.closure_reason
-        else "Closed"
-    )
+    if status_.closure_reason:
+        reason = f"Closed: {status_.closure_reason.rstrip('.')}."
+        if status_.next_open_at is None:
+            return reason
+        return f"{reason} Opens {opens_phrase(status_.next_open_at, moment)}."
     if status_.next_open_at is None:
-        return reason if status_.closure_reason else "Closed, no opening hours listed"
-    opens = status_.next_open_at.astimezone(APP_TIMEZONE)
-    today = business_date(moment)
-    if opens.date() == today:
-        when = f"today at {opens:%H:%M}"
-    elif opens.date() == today + timedelta(days=1):
-        when = f"tomorrow at {opens:%H:%M}"
-    else:
-        when = f"{opens:%a %d %b} at {opens:%H:%M}"
-    return (
-        f"{reason} Opens {when}." if status_.closure_reason else f"Closed, opens {when}"
-    )
+        return "Closed, no opening hours listed"
+    return f"Closed, opens {opens_phrase(status_.next_open_at, moment)}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -650,4 +657,248 @@ def discover_areas(
     suggestions = tuple(areas.search_areas(db, q)) if q.strip() else ()
     return _render(
         request, "discover/_area_suggestions.html", suggestions=suggestions, query=q
+    )
+
+
+# --------------------------------------------------------------------------------------
+# The clinic detail page (Issue 35)
+# --------------------------------------------------------------------------------------
+
+#: How often the live figures refresh while the page is open. Well inside the milestone's rule that
+#: a shown queue length is never more than 30 seconds stale.
+LIVE_REFRESH_SECONDS: Final = 30
+
+#: The label on the join action, enabled or not. The words never change, only whether it works.
+JOIN_LABEL: Final = "Join the queue"
+#: Why the action is disabled while joining from a phone is not switched on (Issue 40 switches it).
+JOIN_NOT_SWITCHED_ON: Final = (
+    "Joining from your phone is not switched on yet. You can join at the clinic's front desk "
+    "while it is open."
+)
+#: What a private clinic's payment section says until it has listed anything (Issue 37 fills it).
+PAYMENT_NOT_LISTED: Final = (
+    "This clinic has not listed the payment methods or medical aids it accepts. Ask the clinic "
+    "before you travel."
+)
+#: The one sentence every piece of payment or medical-aid data is shown with (Issues 35 and 37).
+CLINIC_REPORTED_NOTICE: Final = (
+    "Reported by the clinic. Please confirm with the clinic before you travel."
+)
+
+
+@dataclass(frozen=True, slots=True)
+class JoinButton:
+    """The join action: always rendered, enabled only when joining works, and never without a reason.
+
+    ``href`` is where an enabled action goes: the join flow Issue 40 serves at that address.
+    """
+
+    label: str
+    enabled: bool
+    reason: str | None
+    href: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class QueueRow:
+    """One of the clinic's queues, as the per-queue breakdown shows it."""
+
+    name: str
+    waiting_label: str
+    wait_label: str
+    walk_in_only: bool
+
+
+@dataclass(frozen=True, slots=True)
+class HoursRow:
+    """One weekday in the opening-hours list."""
+
+    day: str
+    hours: str
+    is_today: bool
+
+
+@dataclass(frozen=True, slots=True)
+class LiveView:
+    """The part of the detail page htmx refreshes: open state, the join action and the queues."""
+
+    slug: str
+    is_open: bool
+    open_label: str
+    today_label: str
+    join: JoinButton
+    total_label: str
+    queues: tuple[QueueRow, ...]
+    updated_label: str
+    refresh_seconds: int
+    live_href: str
+
+
+@dataclass(frozen=True, slots=True)
+class DetailView:
+    """Everything the clinic detail page renders."""
+
+    slug: str
+    name: str
+    badge: SectorBadge
+    address: str
+    area_line: str
+    phone_label: str | None
+    tel_href: str | None
+    directions_href: str
+    live: LiveView
+    week: tuple[HoursRow, ...]
+    services: tuple[ServiceOffered, ...]
+    #: ``None`` for a public clinic, which never carries payment information.
+    payment_note: str | None
+    reported_notice: str
+
+
+def spans_label(spans: Sequence[TimeSpan]) -> str:
+    """A day's spans in words (07:00–12:30, 13:30–16:00), or Closed when there are none."""
+    if not spans:
+        return "Closed"
+    if any(span.opens_at == span.closes_at for span in spans):
+        # Issue 24: equal times are the whole twenty-four hours, not a span of no length.
+        return "Open all day"
+    return ", ".join(f"{span.opens_at:%H:%M}–{span.closes_at:%H:%M}" for span in spans)
+
+
+def phone_label(e164: str) -> str:
+    """A South African E.164 number grouped for reading aloud: +27 10 555 0100."""
+    if e164.startswith("+27") and len(e164) == 12:
+        national = e164[3:]
+        return f"+27 {national[:2]} {national[2:5]} {national[5:]}"
+    return e164
+
+
+def directions_href(location: Coordinates) -> str:
+    """Hand-off to the phone's own maps application, with the clinic as the destination.
+
+    Google's documented cross-platform directions URL opens the Maps app on Android and iOS when it
+    is installed and the website otherwise; no route is computed by ClinicQ (Issue 33 reuses this).
+    """
+    destination = f"{location.latitude},{location.longitude}"
+    return f"https://www.google.com/maps/dir/?api=1&{urlencode({'destination': destination})}"
+
+
+def join_button(profile: ClinicProfile, *, join_enabled: bool) -> JoinButton:
+    """The join action for this clinic now: disabled with the service's reason, or the flag's."""
+    availability = profile.join
+    if not availability.allowed:
+        reason = (availability.reason or "Joining is not possible right now.").rstrip(
+            "."
+        ) + "."
+        if availability.next_open_at is not None:
+            reason = f"{reason} Opens {opens_phrase(availability.next_open_at, profile.evaluated_at)}."
+        return JoinButton(JOIN_LABEL, enabled=False, reason=reason, href=None)
+    if not join_enabled:
+        return JoinButton(
+            JOIN_LABEL, enabled=False, reason=JOIN_NOT_SWITCHED_ON, href=None
+        )
+    return JoinButton(
+        JOIN_LABEL,
+        enabled=True,
+        reason=None,
+        href=f"/discover/clinics/{profile.slug}/join",
+    )
+
+
+def live_view(profile: ClinicProfile, *, join_enabled: bool) -> LiveView:
+    """The refreshable half of the page."""
+    rows = tuple(
+        QueueRow(
+            name=queue.name,
+            waiting_label=queue_label(queue.waiting),
+            wait_label=wait_label([queue.wait_range]),
+            walk_in_only=not queue.allows_remote_join,
+        )
+        for queue in profile.queues
+    )
+    today = spans_label(profile.today)
+    return LiveView(
+        slug=profile.slug,
+        is_open=profile.open_status.is_open,
+        open_label=open_label(profile.open_status, profile.evaluated_at),
+        today_label=f"Today: {today[0].lower()}{today[1:]}"
+        if not today[0].isdigit()
+        else f"Today: {today}",
+        join=join_button(profile, join_enabled=join_enabled),
+        total_label=queue_label(profile.total_waiting),
+        queues=rows,
+        updated_label=f"Updated at {profile.evaluated_at.astimezone(APP_TIMEZONE):%H:%M:%S}",
+        refresh_seconds=LIVE_REFRESH_SECONDS,
+        live_href=f"/discover/clinics/{profile.slug}/live",
+    )
+
+
+def detail_view(profile: ClinicProfile, *, join_enabled: bool) -> DetailView:
+    """The whole detail page for one clinic profile."""
+    today = business_date(profile.evaluated_at).weekday()
+    area = ", ".join(part for part in (profile.suburb, profile.city) if part)
+    return DetailView(
+        slug=profile.slug,
+        name=profile.name,
+        badge=SECTOR_BADGES[profile.sector],
+        address=profile.address_line,
+        area_line=f"{area}, {profile.province.value}",
+        phone_label=phone_label(profile.phone_e164) if profile.phone_e164 else None,
+        tel_href=f"tel:{profile.phone_e164}" if profile.phone_e164 else None,
+        directions_href=directions_href(profile.location),
+        live=live_view(profile, join_enabled=join_enabled),
+        week=tuple(
+            HoursRow(
+                day=day.name,
+                hours=spans_label(day.spans),
+                is_today=day.weekday == today,
+            )
+            for day in profile.week
+        ),
+        services=profile.services,
+        payment_note=PAYMENT_NOT_LISTED
+        if profile.sector is SiteSector.PRIVATE
+        else None,
+        reported_notice=CLINIC_REPORTED_NOTICE,
+    )
+
+
+Slug = Annotated[str, Path(max_length=80, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")]
+
+
+def _join_enabled() -> bool:
+    """The feature flag, read per request so a test's settings override applies."""
+    return get_settings().patient_join_enabled
+
+
+@router.get("/clinics/{slug}", response_class=HTMLResponse)
+def clinic_detail(request: Request, slug: Slug, db: DbSession) -> HTMLResponse:
+    """One clinic's detail page. A clinic a patient may not see is the same 404 as a missing one."""
+    found = profile_service.clinic_profile(db, slug)
+    if found is None:
+        response = _render(request, "discover/not_found.html")
+        response.status_code = status.HTTP_404_NOT_FOUND
+        return response
+    view = detail_view(found, join_enabled=_join_enabled())
+    return templates.TemplateResponse(
+        request,
+        "discover/detail.html",
+        public_page_context(request, page_title=found.name, view=view),
+    )
+
+
+@router.get("/clinics/{slug}/live", response_class=HTMLResponse)
+def clinic_live(request: Request, slug: Slug, db: DbSession) -> Response:
+    """The live figures htmx polls every :data:`LIVE_REFRESH_SECONDS`; a plain browser gets the page."""
+    if not _is_htmx(request):
+        return RedirectResponse(
+            f"/discover/clinics/{slug}", status_code=status.HTTP_303_SEE_OTHER
+        )
+    found = profile_service.clinic_profile(db, slug)
+    if found is None:
+        # htmx does not swap a 404, so the last figures stay rather than the section vanishing.
+        return Response(status_code=status.HTTP_404_NOT_FOUND)
+    return _render(
+        request,
+        "discover/_queue_summary.html",
+        live=live_view(found, join_enabled=_join_enabled()),
     )
