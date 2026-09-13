@@ -1125,6 +1125,40 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Discovery analytics and scraping protection (Issue 38). Events carry no identifier beyond a
+    # daily-rotating session reference, and a clinic can opt out of them (site.analytics_enabled).
+    discovery_analytics_enabled: bool = Field(
+        default=True,
+        description=(
+            "Record anonymous discovery events (searches, clinic views, joins) for view-to-join "
+            "reports (env: DISCOVERY_ANALYTICS_ENABLED). A clinic can also opt out on its own."
+        ),
+    )
+    # The address budget is deliberately the looser one: South African mobile networks put many
+    # phones behind one carrier-grade NAT address, so a tight per-IP limit would refuse a whole
+    # township's patients for one scraper. The session budget is the one a single browser meets.
+    discovery_search_rate_limit_per_ip: int = Field(
+        default=300,
+        ge=1,
+        description=(
+            "Max discovery searches per client IP per window, to stop copying the directory "
+            "(env: DISCOVERY_SEARCH_RATE_LIMIT_PER_IP). Loose, because mobile carriers share addresses."
+        ),
+    )
+    discovery_search_rate_limit_per_session: int = Field(
+        default=60,
+        ge=1,
+        description=(
+            "Max discovery searches per discovery session per window "
+            "(env: DISCOVERY_SEARCH_RATE_LIMIT_PER_SESSION)."
+        ),
+    )
+    discovery_search_rate_limit_window_seconds: int = Field(
+        default=60,
+        ge=1,
+        description="Discovery search rate-limit window in seconds (env: DISCOVERY_SEARCH_RATE_LIMIT_WINDOW_SECONDS).",
+    )
+
     # The queue snapshot (Issue 36): one cached length per queue, so a list of twenty clinics is one
     # read rather than twenty counts. A snapshot older than the bound is never served, and a cold or
     # unreachable cache falls back to the database and then to a fresh count: slower, never wrong.

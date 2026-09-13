@@ -14,21 +14,38 @@ plain data it gets back. Nothing about which clinics or which places match is de
 The search routes are public: a patient looking for a clinic has no account, and what they are shown
 is what verified clinics publish about themselves and a public place-name dataset. Served under
 ``/api/v1/`` like every other kernel route (open decision 8). Rate limiting against directory
-scraping arrives with Issue 38.
+scraping is the kernel's sliding-window limiter, per IP and per discovery session (Issue 38), and
+each search and clinic view is recorded as an anonymous event.
 """
 
-from typing import Annotated
+from typing import Annotated, Final
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Path,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from src.api.rbac_deps import require_patient
-from src.commons.enums import DiscoverySort, MedicalAidScheme, SaProvince, SectorFilter
+from src.commons.enums import (
+    DiscoveryChannel,
+    DiscoverySort,
+    MedicalAidScheme,
+    SaProvince,
+    SectorFilter,
+)
 from src.commons.geo import CoordinateOutOfRangeError, Coordinates
 from src.core.config import Settings, get_settings
+from src.core.rate_limit_deps import DISCOVERY_SESSION_COOKIE, DiscoverySearchLimit
 from src.database.models import Patient
 from src.database.session import get_db
-from src.modules.discovery import areas, profile, service
+from src.modules.discovery import analytics, areas, profile, service
 from src.modules.discovery.schemas import (
     AreaListOut,
     AreaOut,
@@ -45,6 +62,11 @@ OwnRecordRead = Annotated[Patient, Depends(require_patient("patients.self", "rea
 OwnRecordUpdate = Annotated[
     Patient, Depends(require_patient("patients.self", "update"))
 ]
+
+#: The refusal every rate-limited search route documents (Issue 38).
+_SEARCH_LIMITED: Final = {
+    "description": "Too many searches from this address or session; retry after `Retry-After`."
+}
 
 #: Said when a search names no origin, or two.
 ONE_ORIGIN = "Search from a position (lat and lon) or from an area (area_id), not both."
@@ -64,11 +86,17 @@ def discovery_info() -> dict[str, str]:
     summary="Verified clinics near a position or an area, nearest first",
     responses={
         status.HTTP_404_NOT_FOUND: {"description": "No area has that id."},
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {
+            "description": "No origin or two, or a payment filter where it may not apply."
+        },
+        status.HTTP_429_TOO_MANY_REQUESTS: _SEARCH_LIMITED,
     },
 )
 def clinics_nearby(
+    request: Request,
     db: DbSession,
     settings: SettingsDep,
+    _limit: DiscoverySearchLimit,
     lat: Annotated[
         float | None, Query(ge=-90, le=90, description="Latitude, WGS 84.")
     ] = None,
@@ -159,6 +187,16 @@ def clinics_nearby(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except areas.AreaNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No such area.") from exc
+    analytics.record_search(
+        db,
+        channel=DiscoveryChannel.API,
+        session_token=request.cookies.get(DISCOVERY_SESSION_COOKIE),
+        sector=result.sector,
+        origin_basis=result.distance_basis,
+        radius_m=result.radius.applied_m,
+        result_count=result.total,
+        settings=settings,
+    )
     return NearbyPageOut.of(result)
 
 
@@ -167,9 +205,11 @@ def clinics_nearby(
     response_model=AreaListOut,
     operation_id="discoveryAreaSearch",
     summary="Suggest the places a typed suburb, township or town name means",
+    responses={status.HTTP_429_TOO_MANY_REQUESTS: _SEARCH_LIMITED},
 )
 def area_search(
     db: DbSession,
+    _limit: DiscoverySearchLimit,
     q: Annotated[
         str,
         Query(
@@ -233,6 +273,7 @@ def remember_my_area(area_id: str, patient: OwnRecordUpdate, db: DbSession) -> R
 )
 def clinic_profile(
     slug: Annotated[str, Path(max_length=80, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")],
+    request: Request,
     db: DbSession,
     settings: SettingsDep,
 ) -> ClinicProfileOut:
@@ -242,4 +283,11 @@ def clinic_profile(
     )
     if found is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No such clinic.")
+    analytics.record_clinic_viewed(
+        db,
+        found.site_id,
+        channel=DiscoveryChannel.API,
+        session_token=request.cookies.get(DISCOVERY_SESSION_COOKIE),
+        settings=settings,
+    )
     return ClinicProfileOut.of(found)
