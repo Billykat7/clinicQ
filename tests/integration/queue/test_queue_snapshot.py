@@ -1,8 +1,8 @@
 """The queue snapshot against a real PostgreSQL + PostGIS and a real Redis (Issue 36).
 
-There is no ticket table until Issue 39, so the source of truth here is :class:`TrueCounts`: a
-reader with the same signature as :func:`~src.modules.queues.live.read_waiting_counts`, whose numbers
-a test changes the way a join or a call-next would. Everything between it and the search result is
+The source of truth here is :class:`TrueCounts`: a reader with the same signature as
+:func:`~src.modules.queues.live.read_waiting_counts` (which counts real tickets since Issue 39), whose
+numbers a test changes directly, so each criterion is about the snapshot and not about joining. Everything between it and the search result is
 the real code: the Redis cache (one ``MGET``), the ``site_queue_snapshot`` table, the write-through
 hook, the reconciliation sweep and its scheduler entry point.
 
@@ -401,9 +401,9 @@ def test_the_scheduled_sweep_runs_under_the_advisory_lock_and_repairs(
 ) -> None:
     """``run_queue_snapshot_reconciliation``, as the scheduler calls it, repairs a corrupted row.
 
-    It reads the default source, the direct read, which says "not measured" until Issue 39, so a
-    row corrupted to 999 is repaired to ``None``. While another connection holds the lock, it does
-    nothing.
+    It reads the default source, the direct read, which counts today's waiting tickets (Issue 39):
+    there are none, so a row corrupted to 999 is repaired to ``0``. While another connection holds
+    the lock, it does nothing.
     """
     queue = world.queues[0]
     with world.session() as db:
@@ -431,7 +431,7 @@ def test_the_scheduled_sweep_runs_under_the_advisory_lock_and_repairs(
     assert scheduler.run_queue_snapshot_reconciliation(world.settings) >= 1
     with world.session() as db:
         repaired = db.get(SiteQueueSnapshot, queue.id)
-    assert repaired is not None and repaired.waiting is None
+    assert repaired is not None and repaired.waiting == 0
 
 
 def test_the_sweep_is_registered_with_the_scheduler() -> None:

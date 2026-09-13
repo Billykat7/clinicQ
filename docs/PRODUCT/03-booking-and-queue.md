@@ -82,7 +82,8 @@ screen if the clinic only has one monitor.
 | Table | Key fields |
 |-------|-----------|
 | `queues` | id, site_id, name (e.g. "Triage", "Doctor Room 2", "Pharmacy"), is_active |
-| `tickets` | id, queue_id, sequence_no, source (app/ussd/whatsapp/web/walkin), patient_display_name, reason_text (optional, short), status (waiting/called/in_progress/done/no_show/cancelled), joined_at, called_at |
+| `ticket` | id, site_id, queue_id, patient_id (empty for a walk-in with no phone: no placeholder patient), service_day (the Johannesburg date), sequence (unique per queue and service day, allocated by the database), number (`A043`), reference_code (six characters with no 0/O or 1/I/L), source (web/ussd/whatsapp/walk_in), display_name, reason_text (optional, short), comment_consent, status (waiting/called/recalled/in_progress/done/no_show/cancelled/transferred), joined_at, called_at, started_at, completed_at |
+| `ticket_sequence` | queue_id, service_day, last_value: the counter a ticket number comes from, one row per queue per day, so numbering restarts at Johannesburg midnight with nothing to reset |
 | `patients` (optional link, if patient has an account) | id, phone/whatsapp_id, name, consent_flags |
 | `wait_time_samples` | queue_id, ticket_id, actual_wait_minutes, recorded_at (feeds the rolling estimate) |
 

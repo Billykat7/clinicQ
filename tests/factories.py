@@ -5,14 +5,12 @@
     patient = PatientFactory.create(db)                      # +27 10 555 0001, persisted
     site = SiteFactory.create(db, sector=SiteSector.PRIVATE)   # a clinic, persisted
     queue = QueueFactory.create(db, site_id=site.id)           # a queue at that clinic
-    tickets = TicketFactory.build_batch(5, queue=queue)
+    ticket = TicketFactory.create(db, queue=queue)             # a real walk-in, numbered by the DB
 
-**Real or stub.** :class:`StaffFactory`, :class:`PatientFactory` and :class:`SiteFactory`
-persist real models (Issues 15, 17, 23 and 25): ``create(session)`` writes a row.
-:class:`TicketFactory` still builds the agreed stub in ``scripts/db/demo_dataset.py``
-(``TicketStub``), because its table arrives with Issue 39. When it lands, its author changes the
-factory's ``model`` to the new class and adds ``create``; the field names already match the spec, so
-callers do not change.
+**Every factory is real.** :class:`StaffFactory`, :class:`PatientFactory`, :class:`SiteFactory`,
+:class:`QueueFactory` and :class:`TicketFactory` persist real models (Issues 15, 17, 23, 25 and
+39): ``create(session)`` writes a row. The demo dataset's ``TicketStub`` stays what the seed and
+the estimator's fixture data are generated as.
 
 **Why not factory_boy.** A dozen lines of typed Python give the three things tests need (defaults,
 per-factory sequences for unique fields, keyword overrides) with nothing global: the session is
@@ -22,24 +20,28 @@ passed in, so a factory works with the SQLite ``session_factory`` fixture and th
 
 import itertools
 from collections.abc import Iterator
-from datetime import timedelta
+from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any, ClassVar
 
 from sqlalchemy.orm import Session
 
-from scripts.db.demo_dataset import CLINICS, TicketStub, queues_for
+from scripts.db.demo_dataset import CLINICS, queues_for
 from src.commons.enums import (
     AssignmentScopeType,
     QueueKind,
     TicketSource,
-    TicketStatus,
     UserRole,
 )
 from src.commons.geo import Coordinates
-from src.commons.time import now_sast
+from src.commons.time import business_date, now_sast
 from src.core.security import hash_password
-from src.database.models import Patient, Queue, Site, User, UserRoleAssignment
+from src.database.models import Patient, Queue, Site, Ticket, User, UserRoleAssignment
+from src.modules.queue.sequence import (
+    format_ticket_number,
+    issue_ticket,
+    new_reference_code,
+)
 
 #: The password every factory-made staff account has, for tests that sign in. Development only.
 FACTORY_STAFF_PASSWORD = "clinicq-factory-password"
@@ -240,47 +242,81 @@ class QueueFactory(Factory[Queue]):
         return queue
 
 
-class TicketFactory(Factory[TicketStub]):
-    """A waiting walk-in ticket that joined a few minutes ago (a stub until Issue 39)."""
+class TicketFactory(Factory[Ticket]):
+    """A waiting walk-in ticket in a queue: Issue 39's ``Ticket`` model.
 
-    model = TicketStub
+    Issue 39 swapped the stub for the model. ``queue`` has no default, for the reason
+    :class:`QueueFactory` has no default site: a ticket does not exist outside a queue.
+
+    * :meth:`build` makes an **unsaved** ticket with the ``n``-th sequence, for a test that only
+      needs the shape. It does not touch the day's counter, so never flush two built tickets into
+      one queue and day.
+    * :meth:`create` issues a **real** one through :func:`src.modules.queue.sequence.issue_ticket`,
+      so its number comes from the database counter exactly as a join's does and a batch of them
+      reads 1, 2, 3 in its queue and day.
+
+    Neither sets ``status``: a ticket starts ``waiting``, and only ``transition_ticket()`` moves it
+    (non-negotiable 2).
+    """
+
+    model = Ticket
 
     @classmethod
     def defaults(cls, n: int) -> dict[str, Any]:
-        """Sequence ``n`` in the default queue, joined ``n`` minutes ago, still waiting."""
+        """A walk-in with sequence ``n``, joined ``n`` minutes ago, with a fresh reference code."""
+        joined_at = now_sast() - timedelta(minutes=n)
         return {
-            "queue_slug": "general-1",
-            "site_slug": CLINICS[0].slug,
             "sequence": n,
             "number": f"A{n:03d}",
-            "source": TicketSource.WALK_IN,
-            "status": TicketStatus.WAITING,
-            "joined_at": now_sast() - timedelta(minutes=n),
+            "reference_code": new_reference_code(),
+            "source": TicketSource.WALK_IN.value,
+            "joined_at": joined_at,
+            "service_day": business_date(joined_at),
         }
 
     @classmethod
-    def build(cls, *, queue: Queue | None = None, **overrides: Any) -> TicketStub:
-        """As :meth:`Factory.build`; with ``queue``, the ticket belongs to it and takes its prefix.
-
-        ``queue`` is Issue 25's model now, and the ticket is still a stub until Issue 39 — so this
-        is where the two meet, and the field names the specs agreed on are what make it work.
-        """
+    def build(cls, *, queue: Queue | None = None, **overrides: Any) -> Ticket:
+        """One unsaved ticket; with ``queue``, it belongs to that queue and takes its prefix."""
+        if isinstance(overrides.get("source"), StrEnum):
+            overrides["source"] = overrides["source"].value
         ticket = super().build(**overrides)
-        if queue is None:
-            return ticket
-        fields = {name: getattr(ticket, name) for name in ticket.__dataclass_fields__}
-        fields |= {
-            "queue_slug": queue.slug,
-            "site_slug": queue.site_id,
-            "number": overrides.get(
-                "number", f"{queue.ticket_prefix}{ticket.sequence:03d}"
-            ),
-        }
-        return TicketStub(**fields)
+        if queue is not None:
+            ticket.queue_id = queue.id
+            ticket.site_id = queue.site_id
+            if "number" not in overrides:
+                ticket.number = format_ticket_number(
+                    queue.ticket_prefix, ticket.sequence
+                )
+        return ticket
 
     @classmethod
     def build_batch(
         cls, size: int, *, queue: Queue | None = None, **overrides: Any
-    ) -> list[TicketStub]:
-        """``size`` tickets in one queue, in sequence."""
+    ) -> list[Ticket]:
+        """``size`` unsaved tickets in one queue, in sequence."""
         return [cls.build(queue=queue, **overrides) for _ in range(size)]
+
+    @classmethod
+    def create(
+        cls,
+        session: Session,
+        *,
+        queue: Queue,
+        source: TicketSource = TicketSource.WALK_IN,
+        patient_id: str | None = None,
+        moment: datetime | None = None,
+        **fields: Any,
+    ) -> Ticket:
+        """Issue a real ticket in ``queue``: the database allocates its number. Flushed, not committed.
+
+        ``fields`` sets what a join records (``display_name``, ``reason_text``,
+        ``comment_consent``); ``moment`` backdates the issue, and with it the service day.
+        """
+        return issue_ticket(
+            session,
+            queue=queue,
+            source=source,
+            patient_id=patient_id,
+            moment=moment,
+            **fields,
+        )

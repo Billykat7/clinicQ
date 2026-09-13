@@ -8,7 +8,7 @@ test checks what the next issue's author will rely on.
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from scripts.db.demo_dataset import CLINICS, TicketStub
+from scripts.db.demo_dataset import CLINICS
 from src.commons.enums import (
     SITE_DEFAULT_STATUS,
     AssignmentScopeType,
@@ -20,7 +20,7 @@ from src.commons.enums import (
 from src.commons.geo import Coordinates
 from src.commons.phone import normalize_phone
 from src.core.security import verify_password
-from src.database.models import Patient, Queue, Site, User, UserRoleAssignment
+from src.database.models import Patient, Queue, Site, Ticket, User, UserRoleAssignment
 from tests.factories import (
     FACTORY_STAFF_PASSWORD,
     PatientFactory,
@@ -150,22 +150,27 @@ def test_a_site_persists_with_its_coordinate_and_the_default_status(
 def test_tickets_join_a_queue_in_sequence(
     session_factory: sessionmaker[Session],
 ) -> None:
-    """A batch in one queue takes its prefix and its clinic, waits, and joined in order.
+    """Created tickets take their queue's prefix and clinic, wait, and are numbered 1, 2, 3.
 
-    The queue is Issue 25's model; the ticket is still Issue 39's stub. That the two fit together
-    without either side changing is the point of the agreed field names.
+    Issue 39 made the ticket real: the numbers come from the database counter, as a join's do, so a
+    factory-made queue day looks exactly like a real one.
     """
     with session_factory() as db:
         site = SiteFactory.create(db)
         queue = QueueFactory.create(db, site_id=site.id)
-        tickets = TicketFactory.build_batch(3, queue=queue)
+        tickets = [TicketFactory.create(db, queue=queue) for _ in range(3)]
+        db.commit()
 
-    assert all(isinstance(t, TicketStub) for t in tickets)
-    assert {t.queue_slug for t in tickets} == {queue.slug}
-    assert {t.site_slug for t in tickets} == {site.id}
-    assert all(t.number.startswith(queue.ticket_prefix) for t in tickets)
-    assert {t.status for t in tickets} == {TicketStatus.WAITING}
-    assert [t.sequence for t in tickets] == sorted(t.sequence for t in tickets)
+        assert all(isinstance(t, Ticket) for t in tickets)
+        assert {t.queue_id for t in tickets} == {queue.id}
+        assert {t.site_id for t in tickets} == {site.id}
+        assert [t.number for t in tickets] == [
+            f"{queue.ticket_prefix}001",
+            f"{queue.ticket_prefix}002",
+            f"{queue.ticket_prefix}003",
+        ]
+        assert {t.status for t in tickets} == {TicketStatus.WAITING.value}
+        assert [t.sequence for t in tickets] == [1, 2, 3]
 
 
 def test_a_queue_is_persisted_at_the_clinic_it_was_asked_for(

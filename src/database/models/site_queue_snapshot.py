@@ -6,9 +6,9 @@ call-next, cancel, no-show) and by the reconciliation sweep. The fast half is Re
 (:mod:`src.modules.queue.snapshot`), which serves most reads; this table is what a cold or flushed
 cache falls back to, and what the sweep repairs.
 
-``waiting`` and ``average_wait_minutes`` are nullable on purpose. Until tickets exist (Issue 39)
-nobody can be counted, and until the estimator exists (Issue 42) there is no average: ``None`` is
-stored as "not measured", which a surface shows as such, never as zero.
+``waiting`` and ``average_wait_minutes`` are nullable on purpose: ``None`` is stored as "not
+measured", which a surface shows as such, never as zero. Since Issue 39 ``waiting`` is a real count
+of today's waiting tickets; until the estimator exists (Issue 42) there is no average.
 """
 
 from datetime import datetime

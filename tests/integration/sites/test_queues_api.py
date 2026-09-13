@@ -12,6 +12,7 @@ Every acceptance criterion over real HTTP, plus the two that outlive this issue:
 
 from __future__ import annotations
 
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -23,9 +24,9 @@ from src.commons.enums import (
     AuditEntityType,
     QueueKind,
     TicketSource,
-    TicketStatus,
 )
-from src.database.models import AuditEvent, Queue
+from src.commons.time import now_sast
+from src.database.models import AuditEvent, Queue, Ticket
 from src.modules.queues import service
 from src.modules.queues.service import (
     DEFAULT_QUEUES,
@@ -168,10 +169,8 @@ def test_deactivating_a_queue_hides_it_from_joins_and_keeps_its_history(
 ) -> None:
     """The criterion, both halves.
 
-    Yesterday's tickets are read through the agreed ticket fixture rather than the ``tickets``
-    table, which arrives with Issue 39: what is being asserted is that the **queue row survives**
-    and can still be resolved, which is what makes the history readable at all. When Issue 39
-    lands, this becomes a query against the real table and the assertion does not change.
+    Yesterday's tickets are real rows since Issue 39: they are issued the day before, the queue is
+    deactivated, and every one of them still resolves to the queue it was issued in.
     """
     manager = _manager(clinics)
     queue_id = _add(clinics).json()["id"]
@@ -179,8 +178,11 @@ def test_deactivating_a_queue_hides_it_from_joins_and_keeps_its_history(
     with clinics.session() as db:
         queue = db.get(Queue, queue_id)
         assert queue is not None
-        yesterdays = TicketFactory.build_batch(3, queue=queue)
-    assert {ticket.queue_slug for ticket in yesterdays} == {"triage"}
+        yesterday = now_sast() - timedelta(days=1)
+        yesterdays = [
+            TicketFactory.create(db, queue=queue, moment=yesterday).id for _ in range(3)
+        ]
+        db.commit()
 
     deactivated = manager.delete(f"/api/v1/sites/{clinics.site_a}/queues/{queue_id}")
 
@@ -199,9 +201,12 @@ def test_deactivating_a_queue_hides_it_from_joins_and_keeps_its_history(
     with clinics.session() as db:
         kept = db.get(Queue, queue_id)
         assert kept is not None and kept.is_deleted is False
-        assert [
-            ticket.status for ticket in TicketFactory.build_batch(1, queue=kept)
-        ] == [TicketStatus.WAITING]
+        history = db.execute(
+            select(Ticket.queue_id, Queue.slug)
+            .join(Queue, Queue.id == Ticket.queue_id)
+            .where(Ticket.id.in_(yesterdays))
+        ).all()
+        assert sorted(history) == [(queue_id, "triage")] * 3
 
 
 def test_a_deactivated_queue_refuses_every_source(clinics: SimpleNamespace) -> None:

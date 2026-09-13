@@ -4,15 +4,14 @@ Discovery (Issue 31), the clinic detail page (Issue 35) and the channel menus (M
 queue length, and they must all show the **same** one. This module is the single read they go
 through, so there is one answer to "how many people are waiting in the pharmacy queue at Zola".
 
-**There is no ticket table yet, and this module says so rather than inventing a number.** Tickets
-arrive with Issue 39 and joining with Issue 40 (M6). Until then nobody can be waiting, and the
-honest answer to "how many are waiting" is *not measured*, not ``0``: a clinic showing "0 waiting"
-at 07:30 on a Monday sends a patient on a trip on the strength of a figure nobody counted. So
-:func:`read_waiting_counts` returns ``None`` for every queue, and every surface renders ``None`` as
-"not reported yet". Issue 39 replaces that one function's body with a count of ``waiting`` tickets
-per queue for the service day, and nothing above it changes.
+**The count is of tickets, for the Johannesburg service day** (Issue 39). :func:`read_waiting_counts`
+answers, in one grouped query, how many tickets in each queue are ``waiting`` today. A queue with no
+ticket today is a measured ``0``, not "not measured": the ticket table is the queue, so an empty
+result is a fact. ``None`` is still what a surface shows when a reader could not count at all (a
+reader that failed, or a queue a reader was not asked about), and it still renders as "not
+reported yet", never as zero.
 
-**Nor is there a wait estimate, and the same rule holds.** The estimator is Issue 42's. Until it
+**There is no wait estimate yet, and the same rule holds.** The estimator is Issue 42's. Until it
 exists :attr:`LiveQueue.wait_range` is ``None`` and a surface shows the length alone; when it does
 arrive it is a :class:`WaitRange`, which cannot hold a single number, because a wait promised as
 "12 minutes" is a promise nobody can keep.
@@ -29,11 +28,14 @@ from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from src.commons.enums import QueueKind
+from src.commons.enums import QueueKind, TicketStatus
+from src.commons.time import business_date, now_sast
 from src.core.site_scope import published_select
 from src.database.models.queue import Queue
+from src.database.models.ticket import Ticket
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,22 +106,41 @@ class LiveQueue:
 def read_waiting_counts(
     db: Session, queues: Collection[Queue]
 ) -> Mapping[str, QueueReading]:
-    """The direct read of each queue's length: ``None`` for every queue until Issue 39 lands.
+    """The direct read of each queue's length: its ``waiting`` tickets on today's service day.
 
-    Issue 39 creates the ticket table and replaces this body with one grouped ``COUNT`` of
-    ``waiting`` tickets per queue for today's service day. The signature is the contract: it takes
-    the queues rather than their ids so the count can stay a single query however many clinics a
-    page shows.
+    One grouped ``COUNT`` whatever the number of queues, on the board index
+    (``ix_clinicq_ticket_board`` leads with ``queue_id, service_day, status``). The signature is the
+    contract every reader keeps: it takes the queues rather than their ids, so a page of twenty
+    clinics is still one query. Only ``waiting`` counts: a called or recalled patient has left the
+    line for a room, and counting them would tell the next patient the wait is longer than it is.
 
     Args:
-        db: The session. Unused until tickets exist; part of the contract every reader keeps.
-        queues: The queues to count.
+        db: The session.
+        queues: The queues to count, already narrowed by the caller (the published directory or
+            the reconciliation sweep).
 
     Returns:
-        ``{queue id: NOT_MEASURED}`` for each queue.
+        ``{queue id: reading}`` for each queue, ``0`` for a queue with nobody waiting, each dated
+        with the moment of the count.
     """
-    del db  # read by Issue 39's implementation
-    return dict.fromkeys((queue.id for queue in queues), NOT_MEASURED)
+    ids = [queue.id for queue in queues]
+    if not ids:
+        return {}
+    counted_at = now_sast()
+    rows = db.execute(
+        select(Ticket.queue_id, func.count())
+        .where(
+            Ticket.queue_id.in_(ids),
+            Ticket.service_day == business_date(counted_at),
+            Ticket.status == TicketStatus.WAITING.value,
+        )
+        .group_by(Ticket.queue_id)
+    ).all()
+    counts = {queue_id: int(count) for queue_id, count in rows}
+    return {
+        queue_id: QueueReading(waiting=counts.get(queue_id, 0), as_of=counted_at)
+        for queue_id in ids
+    }
 
 
 def published_live_queues(

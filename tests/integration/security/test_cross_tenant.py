@@ -188,7 +188,11 @@ PENDING: dict[str, str] = {
         "a case here"
     ),
     "queues.call": "call-next lands with Issue 42",
-    "queues.tickets": "tickets land with Issue 39",
+    "ticket": (
+        "the ticket table lands with Issue 39 with no route of its own: the join service and its "
+        "routes (Issue 40) are the first to read and write a clinic's tickets, and must add a case"
+    ),
+    "queues.tickets": "the ticket routes land with Issue 40",
     "queues.tickets.priority": "the priority override lands with Issue 46",
 }
 

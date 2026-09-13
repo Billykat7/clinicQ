@@ -23,7 +23,7 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import Engine, text
+from sqlalchemy import Engine, select, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 from starlette import status
@@ -39,8 +39,8 @@ from src.modules.discovery.service import (
     nearby_statement,
 )
 from src.modules.queue.snapshot import NoSnapshotCache, set_snapshot_cache
-from src.modules.queues.live import LiveQueue, QueueReading
-from tests.factories import QueueFactory
+from src.modules.queues.live import NOT_MEASURED, LiveQueue, QueueReading
+from tests.factories import QueueFactory, TicketFactory
 from tests.integration.discovery.conftest import JOHANNESBURG, add_verified_clinic
 
 pytestmark = pytest.mark.postgres
@@ -285,15 +285,41 @@ def test_the_service_returns_data_structures_never_rendered_html(
     assert ussd_menu.startswith("1. Hillbrow Community Health Centre 1.4km")
 
 
-def test_queue_length_is_not_measured_until_tickets_exist_and_is_never_shown_as_zero(
+def test_queue_length_is_todays_waiting_tickets_and_null_only_when_nobody_counted(
     directory: SimpleNamespace,
 ) -> None:
-    """No ticket table yet (Issue 39): every length is ``null`` over the API, not ``0``."""
+    """Since Issue 39 the length is a count of today's waiting tickets, over the API.
+
+    Two walk-ins in Hillbrow's first queue read as ``2`` there and ``0`` in its other queues, which
+    were counted and are empty. A reader that could not count still gives ``null``, never ``0``.
+    """
+    with directory.session() as db:
+        first = db.scalars(
+            select(Queue)
+            .join(Site, Site.id == Queue.site_id)
+            .where(Site.slug == "hillbrow-chc")
+            .order_by(Queue.display_order)
+        ).first()
+        assert first is not None
+        for _ in range(2):
+            TicketFactory.create(db, queue=first)
+        db.commit()
+
     page = directory.client.get(_NEARBY, params=_params(radius_m=2_000)).json()
     hillbrow = page["items"][0]
-    assert hillbrow["total_waiting"] is None
-    assert hillbrow["queues"] and all(q["waiting"] is None for q in hillbrow["queues"])
+    assert hillbrow["slug"] == "hillbrow-chc"
+    assert [q["waiting"] for q in hillbrow["queues"]] == [2] + [0] * (
+        len(hillbrow["queues"]) - 1
+    )
+    assert hillbrow["total_waiting"] == 2
     assert all(q["wait_range"] is None for q in hillbrow["queues"])
+
+    def uncounted(db: Session, queues: Collection[Queue]) -> Mapping[str, QueueReading]:
+        return dict.fromkeys((queue.id for queue in queues), NOT_MEASURED)
+
+    with directory.session() as db:
+        result = find_nearby_sites(db, JOHANNESBURG, radius_m=2_000, reader=uncounted)
+    assert result.clinics[0].total_waiting is None
 
 
 def test_a_measured_queue_length_travels_intact_to_the_result(

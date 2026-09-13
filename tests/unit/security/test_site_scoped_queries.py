@@ -77,6 +77,18 @@ _UNSCOPED_BY_DESIGN: dict[str, str] = {
         "against its own queue, so a site filter would be the wrong narrowing. It reads only "
         "queue ids and snapshot figures and writes only snapshot rows"
     ),
+    "modules/queues/live.py::read_waiting_counts": (
+        "counts ``waiting`` tickets per queue for queues the caller has **already** narrowed: the "
+        "published directory (published_select, so only clinics a patient may see) or the "
+        "reconciliation sweep. It filters by those queue ids and returns one number per queue, "
+        "never a ticket row, so there is nothing a site filter would add (Issue 39)"
+    ),
+    "modules/queue/tickets.py::patient_tickets_select": (
+        "a patient's **own** tickets, at whichever clinics they joined: a patient holds no role at "
+        "a clinic, so there is no SiteAccess to scope by, and the narrowing is the patient id a "
+        "route has authenticated (the same shape as reading one's own consent). It never lists "
+        "another patient's tickets (Issue 39)"
+    ),
     "modules/staff/invitations.py::usable_invitation": (
         "an invitation link is opened by someone who has no account and therefore no clinic to be "
         "scoped by; the id comes from the signed token, and the row's own site_id is what "

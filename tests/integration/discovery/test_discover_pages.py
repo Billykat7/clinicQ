@@ -25,7 +25,6 @@ from src.modules.discovery.service import MAX_RADIUS_M, find_nearby_sites
 from src.modules.queues.live import QueueReading
 from src.web.discover import (
     HX_PUSH_URL,
-    QUEUE_NOT_REPORTED,
     SECTOR_BADGES,
     Origin,
     discover_page,
@@ -252,7 +251,7 @@ def test_a_swap_with_nowhere_to_search_from_is_refused_so_htmx_keeps_the_old_lis
 def test_each_card_leads_with_distance_queue_and_open_state(
     directory: SimpleNamespace,
 ) -> None:
-    """Hillbrow on a Tuesday morning: open, distance exact from a position, queue not reported."""
+    """Hillbrow on a Tuesday morning: open, distance exact from a position, queue counted (empty)."""
     with directory.session() as db:
         page = discover_page(db, lat=-26.205, lon=28.04, moment=_TUESDAY_10AM)
     assert page.results is not None
@@ -261,7 +260,8 @@ def test_each_card_leads_with_distance_queue_and_open_state(
     assert card.badge == SECTOR_BADGES[SiteSector.PUBLIC]
     assert card.distance_label == "1.4 km" and card.distance_is_approximate is False
     assert card.is_open is True and card.open_label == "Open now"
-    assert card.queue_label == QUEUE_NOT_REPORTED
+    # A real count since Issue 39: nobody has a ticket, so nobody is waiting, with the count's age.
+    assert card.queue_label.startswith("No one waiting, counted ")
     assert card.travel_label.startswith("About ")
     assert (
         page.results.summary == "5 clinics within 10 km"

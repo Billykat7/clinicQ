@@ -577,6 +577,13 @@ TICKET_TERMINAL_STATUSES: frozenset[TicketStatus] = frozenset(
     }
 )
 
+#: Statuses a ticket is still in the queue's day with: the board's rows, and what a patient can
+#: hold only one of per queue (Issue 40). Everything that is not terminal, derived rather than
+#: listed so the two sets cannot disagree.
+TICKET_ACTIVE_STATUSES: frozenset[TicketStatus] = frozenset(
+    set(TicketStatus) - TICKET_TERMINAL_STATUSES
+)
+
 
 class TicketSource(StrEnum):
     """How a ticket was created. Stored in ``tickets.source``.
