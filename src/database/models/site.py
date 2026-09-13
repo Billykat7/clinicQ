@@ -162,6 +162,14 @@ class Site(Base, TimestampMixin, ActiveMixin, SoftDeleteMixin):
     Validated against :data:`~src.modules.sites.settings.REASON_RETENTION_CEILING_DAYS`, the
     interim policy ceiling this issue chose until the M13 data map sets the real one."""
 
+    analytics_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    """Whether anonymous discovery events about this clinic are recorded (Issue 38).
+
+    On by default; a clinic that objects switches it off and no view or join of it is recorded from
+    then on. The events never identify a patient either way."""
+
     @property
     def sector_enum(self) -> SiteSector:
         """``sector`` as its enum member, for code that compares rather than renders."""
