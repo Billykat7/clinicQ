@@ -29,6 +29,7 @@ from __future__ import annotations
 from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
+from typing import Protocol
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -220,7 +221,10 @@ def is_open_now(schedule: OpeningSchedule, moment: datetime | None = None) -> bo
     clock zone or the caller's session.
     """
     moment = moment or now_sast()
-    return any(start <= moment < end for start, end in open_periods(schedule, moment))
+    # Only today's spans and yesterday's (one that crosses midnight) can cover ``moment``, so the
+    # horizon is zero days: discovery asks this of every candidate in the radius (Issue 31).
+    periods = open_periods(schedule, moment, horizon_days=0)
+    return any(start <= moment < end for start, end in periods)
 
 
 def next_open_at(
@@ -269,7 +273,18 @@ def open_state(
 # --------------------------------------------------------------------------------------
 
 
-def _weekly(rows: Sequence[SiteOpeningHours]) -> dict[int, tuple[TimeSpan, ...]]:
+class _WeeklyRow(Protocol):
+    """What :func:`_weekly` reads from a row: a stored model or a plain column tuple."""
+
+    @property
+    def weekday(self) -> int: ...
+    @property
+    def opens_at(self) -> time: ...
+    @property
+    def closes_at(self) -> time: ...
+
+
+def _weekly(rows: Sequence[_WeeklyRow]) -> dict[int, tuple[TimeSpan, ...]]:
     """Group opening-hours rows into ``{weekday: spans}``, each day's spans in clock order."""
     by_day: dict[int, list[TimeSpan]] = {}
     for row in rows:
@@ -429,8 +444,18 @@ def published_schedules(
             )
         ).scalars()
     )
-    weekly: dict[str, list[SiteOpeningHours]] = {}
-    for row in db.execute(published_select(SiteOpeningHours, visible)).scalars():
+    # Plain column rows, not ORM instances: with ``open_now`` this reads every candidate's week
+    # (about 2,500 rows for 500 clinics), and building an identity-mapped object per row was most
+    # of the search's time (Issue 37's CI run measured a 200 ms median).
+    weekly: dict[str, list[_WeeklyRow]] = {}
+    for row in db.execute(
+        published_select(SiteOpeningHours, visible).with_only_columns(
+            SiteOpeningHours.site_id,
+            SiteOpeningHours.weekday,
+            SiteOpeningHours.opens_at,
+            SiteOpeningHours.closes_at,
+        )
+    ):
         weekly.setdefault(row.site_id, []).append(row)
     rules: dict[str, dict[date, SiteHolidayRule]] = {}
     for rule in db.execute(
