@@ -17,8 +17,16 @@ Run it in the pull request that closes an issue (``make milestone-progress``, CO
 the milestone's state is never staler than the work. ``--check`` fails when the docs disagree with
 GitHub, and ``--close-completed`` also closes the GitHub milestone once its last issue is closed.
 
+**A pull request writes the bars as they will be once it merges.** Its own issue is still open
+while it is in review, so ``--assume-closed 32`` counts issue 32 as closed. A stacked pull request
+names every issue its branch closes, including the ones in the branches below it
+(``--assume-closed 32,35,36``), because merging it means they have all merged. Every other number
+is still GitHub's. An assumed issue that is in no milestone is an error, so a typo cannot quietly
+change nothing. The same flag works with ``--check``.
+
 Usage:
-    python scripts/update_milestone_progress.py [--check] [--close-completed] [--repo owner/name]
+    python scripts/update_milestone_progress.py [--check] [--close-completed]
+        [--assume-closed N[,N...]] [--repo owner/name]
 """
 
 from __future__ import annotations
@@ -115,13 +123,42 @@ def _repo_path(repo: str | None, suffix: str = "") -> str:
     return base + suffix
 
 
-def read_milestones(repo: str | None) -> list[Milestone]:
-    """Every milestone with its issue counts. Pull requests are not issues and are not counted."""
+def count_closed(issues: list[dict[str, object]], assume_closed: frozenset[int]) -> int:
+    """Issues closed on GitHub, plus the open ones this pull request will close when it merges."""
+    return sum(
+        1
+        for issue in issues
+        if issue["state"] == "CLOSED" or issue["number"] in assume_closed
+    )
+
+
+def parse_issue_numbers(value: str) -> frozenset[int]:
+    """``"32,35 36"`` → ``{32, 35, 36}``; ``#`` prefixes are allowed. Anything else is an error."""
+    numbers: set[int] = set()
+    for part in re.split(r"[,\s]+", value.strip()):
+        if not part:
+            continue
+        digits = part.removeprefix("#")
+        if not digits.isdigit():
+            raise argparse.ArgumentTypeError(f"not an issue number: {part!r}")
+        numbers.add(int(digits))
+    return frozenset(numbers)
+
+
+def read_milestones(
+    repo: str | None, assume_closed: frozenset[int] = frozenset()
+) -> tuple[list[Milestone], frozenset[int]]:
+    """Every milestone with its issue counts, and which assumed issues were found in one.
+
+    Pull requests are not issues and are not counted. An issue in ``assume_closed`` counts as closed
+    whatever GitHub says (see the module docstring).
+    """
     scope = ["--repo", repo] if repo else []
     listed = json.loads(
         _gh("api", _repo_path(repo, "/milestones?state=all&per_page=100"))
     )
     milestones: list[Milestone] = []
+    found: set[int] = set()
     for entry in listed:
         title = str(entry["title"])
         issues = json.loads(
@@ -136,12 +173,13 @@ def read_milestones(repo: str | None) -> list[Milestone]:
                 "--limit",
                 "200",
                 "--json",
-                "state",
+                "number,state",
             )
         )
-        closed = sum(1 for issue in issues if issue["state"] == "CLOSED")
+        found.update(i["number"] for i in issues if i["number"] in assume_closed)
+        closed = count_closed(issues, assume_closed)
         milestones.append(Milestone(int(entry["number"]), title, closed, len(issues)))
-    return sorted(milestones, key=lambda m: m.number)
+    return sorted(milestones, key=lambda m: m.number), frozenset(found)
 
 
 def milestone_doc(number: int) -> Path | None:
@@ -273,10 +311,30 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="also close the GitHub milestone once its last issue is closed",
     )
+    parser.add_argument(
+        "--assume-closed",
+        type=parse_issue_numbers,
+        default=frozenset(),
+        metavar="N[,N...]",
+        help=(
+            "count these open issues as closed: the issues this pull request (and any branch it is "
+            "stacked on) closes, so the bars are right the moment it merges"
+        ),
+    )
     parser.add_argument("--repo", help="owner/name (default: the current repository)")
     args = parser.parse_args(argv)
 
-    milestones = read_milestones(args.repo)
+    milestones, found = read_milestones(args.repo, args.assume_closed)
+    missing = sorted(args.assume_closed - found)
+    if missing:
+        raise SystemExit(
+            f"--assume-closed names issues in no milestone: {', '.join(map(str, missing))}"
+        )
+    if args.assume_closed:
+        print(
+            "  assuming closed on merge: "
+            + ", ".join(f"#{n}" for n in sorted(args.assume_closed))
+        )
     by_number = {m.number: m for m in milestones}
     stale: list[str] = []
 
@@ -313,7 +371,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.check and stale:
         print("\n::error title=Milestone progress::out of date: " + ", ".join(stale))
-        print("run `make milestone-progress` and commit the result")
+        print(
+            "run `make milestone-progress` (with the same --assume-closed) and commit the result"
+        )
         return 1
     print(
         f"\n{len(milestones)} milestone(s): "
