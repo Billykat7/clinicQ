@@ -13,6 +13,9 @@ jobs in the application timezone. The kernel registers only the sweeps it owns:
 * the **queue snapshot reconciliation** (Issue 36), which recounts every active queue and repairs
   any cached or stored snapshot that has drifted from the count (see
   :func:`src.modules.queue.snapshot.reconcile_snapshots`); and
+* the **display device watch** (Issue 61), which alerts the team once about each waiting-room board
+  silent for ``DISPLAY_DEVICE_SILENT_MINUTES`` and once when it is back (see
+  :func:`src.modules.display.devices.watch_devices`); and
 * the **recall timers** (Issue 43), which recall a called patient who has not arrived, once, and
   then mark them a no-show (see :func:`src.modules.queue.timers.run_recall_timers`). Open decision 1
   was settled for this sweep: an APScheduler job under the advisory lock, not an ``arq`` worker,
@@ -52,6 +55,7 @@ from src.core import permission_usage
 from src.core.config import Settings, get_settings
 from src.core.s3_logging import APP_TIMEZONE
 from src.database.session import get_db_context
+from src.modules.display import devices as display_devices
 from src.modules.documents import service as documents_service
 from src.modules.documents.storage import LocalObjectStorage
 from src.modules.notifications import service as notifications_service
@@ -92,6 +96,10 @@ _RECALL_TIMERS_LOCK_KEY: int = 443
 _VISIT_NOTE_RETENTION_LOCK_KEY: int = 553
 _QUEUE_REQUEST_KEY_LOCK_KEY: int = 554
 
+# Stable 64-bit key for the display device watch (Issue 61). The lock is what keeps a silent board to
+# one alert when several instances run the watch in the same minute.
+_DISPLAY_DEVICE_WATCH_LOCK_KEY: int = 661
+
 # ── job identifiers ──────────────────────────────────────────────────────────
 # So a restart replaces rather than duplicates each job.
 
@@ -102,6 +110,7 @@ _QUEUE_SNAPSHOT_JOB_ID = "queue_snapshot_reconciliation"
 _RECALL_TIMERS_JOB_ID = "queue_recall_timers"
 _VISIT_NOTE_RETENTION_JOB_ID = "visit_note_retention_sweep"
 _QUEUE_REQUEST_KEY_JOB_ID = "queue_request_key_sweep"
+_DISPLAY_DEVICE_WATCH_JOB_ID = "display_device_watch"
 
 # Process-wide scheduler; created by :func:`start_scheduler`, stopped by :func:`shutdown_scheduler`.
 _scheduler: BackgroundScheduler | None = None
@@ -314,6 +323,31 @@ def run_queue_request_key_sweep(*, moment: datetime | None = None) -> int:
         return purged
 
 
+def run_display_device_watch(
+    *, moment: datetime | None = None, settings: Settings | None = None
+) -> display_devices.WatchResult:
+    """Alert about silent waiting-room boards and boards back online, once each; tidy unpaired boxes (Issue 61).
+
+    Elects a single runner across instances via the advisory lock, then delegates to
+    :func:`src.modules.display.devices.watch_devices` (one alert per silence, naming the board and its
+    clinic) and :func:`~src.modules.display.devices.purge_unpaired`. Safe to call directly.
+    """
+    with (
+        get_db_context() as db,
+        _advisory_lock(db, _DISPLAY_DEVICE_WATCH_LOCK_KEY) as acquired,
+    ):
+        if not acquired:
+            logger.debug(
+                "Display device watch skipped: another instance holds the lock."
+            )
+            return display_devices.WatchResult(silent=(), back=())
+        result = display_devices.watch_devices(db, moment=moment, settings=settings)
+        purged = display_devices.purge_unpaired(db, moment=moment)
+        if purged:
+            logger.info("Display device watch removed %d unpaired box(es).", purged)
+        return result
+
+
 def start_scheduler(settings: Settings | None = None) -> BackgroundScheduler | None:
     """Start the process-wide scheduler and register every enabled job.
 
@@ -415,6 +449,17 @@ def start_scheduler(settings: Settings | None = None) -> BackgroundScheduler | N
         name="Queue request key sweep",
         # Keys older than a day are deleted whenever the job runs, so a late run loses nothing.
         misfire_grace_time=3600,
+        coalesce=True,
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        run_display_device_watch,
+        trigger=IntervalTrigger(minutes=1, timezone=APP_TIMEZONE),
+        id=_DISPLAY_DEVICE_WATCH_JOB_ID,
+        name="Display device watch",
+        # A missed minute is coalesced: the watch compares heartbeats with the time it runs, so one late
+        # run alerts about everything several missed runs would have, and each silence once.
+        misfire_grace_time=60,
         coalesce=True,
         replace_existing=True,
     )

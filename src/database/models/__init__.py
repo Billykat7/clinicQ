@@ -15,6 +15,7 @@ from src.database.models.audit_event import AuditEvent
 from src.database.models.base import Base, metadata
 from src.database.models.clinic_service import ClinicService, queue_clinic_service
 from src.database.models.discovery_event import DiscoveryEvent
+from src.database.models.display_device import DisplayDevice
 from src.database.models.document import Document
 from src.database.models.effective_role_permission import EffectiveRolePermission
 from src.database.models.esign_envelope import EsignEnvelope
@@ -89,6 +90,7 @@ __all__ = [
     "Base",
     "ClinicService",
     "DiscoveryEvent",
+    "DisplayDevice",
     "Document",
     "EffectiveRolePermission",
     "EsignEnvelope",

@@ -191,7 +191,10 @@ def test_connections_stay_flat_over_a_simulated_day_of_boards_that_vanish_withou
     counts = []
 
     def open_stream() -> tuple[httpx.Client, httpx.Response, Iterator[str]]:
-        client = httpx.Client(timeout=httpx.Timeout(10, read=None))
+        client = httpx.Client(
+            timeout=httpx.Timeout(10, read=None),
+            cookies={board_day.clinic.settings.display_device_cookie_name: secret},
+        )
         response = client.send(client.build_request("GET", url), stream=True)
         assert response.status_code == 200
         lines = response.iter_lines()
@@ -207,6 +210,9 @@ def test_connections_stay_flat_over_a_simulated_day_of_boards_that_vanish_withou
             time.sleep(0.05)
         return live_events.broker.subscriber_count(site)
 
+    secret = (
+        board_day.paired_secret()
+    )  # every stream is this clinic's screen, as a box's would be
     baseline = live_events.broker.subscriber_count(site)
     try:
         for _ in range(48):

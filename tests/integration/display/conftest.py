@@ -1,9 +1,11 @@
-"""The waiting-room board's fixture: the dashboard's two clinics, plus patients the board could name (M8).
+"""The waiting-room board's fixture: the dashboard's two clinics, patients the board could name, and kiosk boxes (M8).
 
 Built on :func:`tests.integration.dashboard.conftest.dashboard` (clinic A with Triage in Room 2 and the
 Pharmacy, clinic B, and one person per job), because a board is the same clinic seen from the waiting
 room. What this adds is what a privacy test needs: patients with real-looking names, a way to answer
-their consent, and a way to change the clinic's display settings the way a manager's save does.
+their consent, a way to change the clinic's display settings the way a manager's save does, and a kiosk box
+paired with a clinic (``board.device()``), because since Issue 61 only a paired box or the clinic's own staff
+may see a board.
 
 The patients' names are deliberately unusual, so searching a response for one cannot match anything
 else by accident.
@@ -15,6 +17,7 @@ from collections.abc import Callable
 from types import SimpleNamespace
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from src.commons.enums import (
@@ -24,7 +27,9 @@ from src.commons.enums import (
     PatientChannel,
     TicketSource,
 )
+from src.commons.time import now_sast
 from src.database.models import Patient, Queue, Site
+from src.modules.display import devices
 from src.modules.patients.consent import record_consent
 from src.modules.queue.sequence import issue_ticket
 from src.modules.sites.settings import DisplaySettingsChange, apply_display_settings
@@ -106,6 +111,24 @@ def board(dashboard: SimpleNamespace) -> SimpleNamespace:
         """A session on the board's database."""
         return dashboard.session()
 
+    def device(
+        site_id: str | None = None, queue_ids: list[str] | None = None
+    ) -> TestClient:
+        """A client that is a kiosk box paired with clinic A (or ``site_id``), as a manager's pairing leaves it."""
+        with dashboard.session() as db:
+            started = devices.start_device(db, user_agent="test kiosk")
+            started.device.site_id = site_id or dashboard.site_a
+            started.device.paired_at = now_sast()
+            started.device.last_seen_at = now_sast()
+            started.device.pairing_code_hash = None
+            started.device.queue_ids = queue_ids
+            db.commit()
+        client = TestClient(dashboard.app, follow_redirects=False)
+        client.cookies.set(
+            dashboard.settings.display_device_cookie_name, started.secret
+        )
+        return client
+
     state: Callable[[str], str] = lambda site_id: f"/display/{site_id}/state"  # noqa: E731
     return SimpleNamespace(
         world=dashboard,
@@ -115,4 +138,5 @@ def board(dashboard: SimpleNamespace) -> SimpleNamespace:
         display=display,
         session=session,
         state=state,
+        device=device,
     )

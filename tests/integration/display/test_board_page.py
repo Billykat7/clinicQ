@@ -25,7 +25,7 @@ def test_the_page_carries_exactly_what_the_json_answers_and_the_timings_it_runs_
 ) -> None:
     """One payload for both: the page's first draw and the poll's answers cannot disagree."""
     board.ticket(board.world.triage)
-    client = board.world.anonymous()
+    client = board.device()
     page = client.get(f"/display/{board.world.site_a}")
     state = client.get(board.state(board.world.site_a)).json()
 
@@ -57,22 +57,30 @@ def test_the_health_notices_can_be_switched_off_for_the_platform(
     """``BOARD_HEALTH_TICKER=false``: the page gets no notices to show."""
     settings = board.world.settings.model_copy(update={"board_health_ticker": False})
     monkeypatch.setattr(display_routes, "get_settings", lambda: settings)
-    page = board.world.anonymous().get(f"/display/{board.world.site_a}")
+    page = board.device().get(f"/display/{board.world.site_a}")
     assert page.status_code == status.HTTP_200_OK
     assert page.context["messages"] == ()  # type: ignore[attr-defined]
 
 
-def test_a_board_that_cannot_be_shown_says_so_with_the_same_404_as_an_unknown_id(
+def test_a_board_that_cannot_be_shown_says_so_to_its_own_screen_and_everyone_else_is_sent_to_pair(
     board: SimpleNamespace,
 ) -> None:
-    """A draft clinic and a made-up id get the same page and status, so neither confirms the other."""
+    """A screen whose clinic is not verified gets the plain 404 page; a browser that is no clinic's screen is sent to /display."""
     with board.session() as db:
         draft = SiteFactory.create(db, name="Draft Clinic", status=SiteStatus.DRAFT)
         db.commit()
         draft_id = draft.id
+    page = board.device(site_id=draft_id).get(f"/display/{draft_id}")
+    assert page.status_code == status.HTTP_404_NOT_FOUND
+    assert page.template.name == "display/unavailable.html"  # type: ignore[attr-defined]
+    assert "board" not in page.context  # type: ignore[attr-defined]
+
     anyone = board.world.anonymous()
-    for site_id in (draft_id, "0199b0c0-0000-7000-8000-00000000dead"):
-        page = anyone.get(f"/display/{site_id}")
-        assert page.status_code == status.HTTP_404_NOT_FOUND
-        assert page.template.name == "display/unavailable.html"  # type: ignore[attr-defined]
-        assert "board" not in page.context  # type: ignore[attr-defined]
+    for site_id in (
+        board.world.site_a,
+        draft_id,
+        "0199b0c0-0000-7000-8000-00000000dead",
+    ):
+        sent = anyone.get(f"/display/{site_id}")
+        assert sent.status_code == status.HTTP_302_FOUND
+        assert sent.headers["location"] == "/display"

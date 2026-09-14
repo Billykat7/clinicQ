@@ -50,10 +50,14 @@ from src.modules.display.projection import (
 #: A board's stream beats every 15 seconds (the issue's figure): a screen that hears nothing for two beats
 #: (30 seconds) knows its connection is dead and says so.
 BOARD_HEARTBEAT_SECONDS: Final = 15.0
-#: How often a board's stream checks that its clinic still has a public board.
-BOARD_ACCESS_CHECK_SECONDS: Final = 60.0
+#: How often a board's stream checks that its box is still paired and its clinic still has a board.
+BOARD_ACCESS_CHECK_SECONDS: Final = 30.0
 #: The payload key a board event carries the projection under.
 BOARD_FIELD: Final = "board"
+
+
+#: A memo key: the clinic, who is looking, and the queues their screen shows.
+_Key = tuple[str, BoardViewer, frozenset[str] | None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,8 +74,8 @@ class BoardProjections:
     def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
         """An empty memo; ``clock`` is the monotonic clock events are stamped with."""
         self._clock = clock
-        self._latest: dict[tuple[str, BoardViewer], _Projected] = {}
-        self._locks: dict[tuple[str, BoardViewer], threading.Lock] = {}
+        self._latest: dict[_Key, _Projected] = {}
+        self._locks: dict[_Key, threading.Lock] = {}
         self._guard = threading.Lock()
 
     def payload(
@@ -80,6 +84,7 @@ class BoardProjections:
         site_id: str,
         viewer: BoardViewer,
         *,
+        queue_ids: frozenset[str] | None = None,
         newer_than: float,
     ) -> dict[str, Any] | None:
         """The board for ``site_id`` as ``viewer`` sees it, projected after ``newer_than``.
@@ -91,10 +96,11 @@ class BoardProjections:
             db_factory: A context manager factory yielding a short session.
             site_id: The clinic.
             viewer: Who the stream is for.
+            queue_ids: The queues the screen shows (a kiosk box's choice); ``None`` for all.
             newer_than: The monotonic stamp of the event being answered; a board projected after it
                 already includes the change.
         """
-        key = (site_id, viewer)
+        key = (site_id, viewer, queue_ids)
         with self._guard:
             lock = self._locks.setdefault(key, threading.Lock())
         with lock:  # one projection at a time per clinic and viewer; the others wait and reuse it
@@ -103,7 +109,7 @@ class BoardProjections:
                 return latest.payload
             started = self._clock()
             with db_factory() as db:
-                payload = project_payload(db, site_id, viewer)
+                payload = project_payload(db, site_id, viewer, queue_ids)
             if payload is None:
                 self._latest.pop(key, None)
                 return None
@@ -112,13 +118,16 @@ class BoardProjections:
 
 
 def project_payload(
-    db: Session, site_id: str, viewer: BoardViewer
+    db: Session,
+    site_id: str,
+    viewer: BoardViewer,
+    queue_ids: frozenset[str] | None = None,
 ) -> dict[str, Any] | None:
     """The projected board payload for ``site_id``, or ``None`` when it has no public board."""
     site = displayed_site(db, site_id)
     if site is None:
         return None
-    return project_board(db, site, viewer=viewer).payload()
+    return project_board(db, site, viewer=viewer, queue_ids=queue_ids).payload()
 
 
 def board_event(event: LiveEvent, payload: dict[str, Any]) -> LiveEvent:

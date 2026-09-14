@@ -35,7 +35,7 @@ from src.modules.queue.snapshot import NoSnapshotCache, set_snapshot_cache
 from src.modules.staff.assignments import set_room_assignments
 from src.web.dashboard import routes as dashboard_routes
 from tests.conftest import _TEST_DB_PREFIX, run_alembic
-from tests.e2e.conftest import serve
+from tests.e2e.conftest import empty_tables, serve
 from tests.factories import (
     FACTORY_STAFF_PASSWORD,
     QueueFactory,
@@ -159,10 +159,7 @@ def clinic(e2e_database: URL, browser: Any) -> Iterator[SimpleNamespace]:
 @pytest.fixture
 def fresh_day(clinic: SimpleNamespace) -> SimpleNamespace:
     """Clinic with an empty day: no tickets, keys or overrides from an earlier test."""
-    with clinic.session() as db:
-        tables = ", ".join(f"clinicq.{name}" for name in _DAY_TABLES)
-        db.execute(text(f"TRUNCATE {tables} CASCADE"))
-        db.commit()
+    empty_tables(clinic.session, _DAY_TABLES)
     return clinic
 
 

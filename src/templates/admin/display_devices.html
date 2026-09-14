@@ -1,0 +1,124 @@
+{% extends "layouts/dashboard.html" %}
+
+{#
+  The operator's waiting-room screen console (Issue 61): every paired screen on the platform, with its
+  clinic and whether it is alive.
+
+  An admin console, so it follows docs/IDE/RULES/list-view-ui-pattern.mdc:
+
+  * every tab is its own URL (`/admin/display-devices/{all|silent|removed}`), and the bare URL redirects
+    to the default;
+  * a collapsible filter bar with its own remembered state (`data-filter-key`);
+  * click-to-sort columns (`data-sort-key`);
+  * clicking a row opens a slideover beside the list.
+
+  A fully server-rendered list, so the sort and the quick view work on the rows already in the page
+  (the second of the two wiring styles). Nothing here changes a screen: a clinic's manager pairs and
+  removes its own screens; this is where the team sees which have gone quiet.
+#}
+
+{% block layout_head %}
+  {{ super() }}
+  <script src="/static/js/admin-crud.js" defer></script>
+  <script src="/static/js/admin-display-devices.js" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Waiting-room screens</h1>
+  <p class="lead">Every screen paired with a clinic. A screen not heard from for {{ silent_minutes }} minutes is
+  shown as not heard from, and the team channel is told once, naming the screen and its clinic.</p>
+  {% include "partials/breadcrumbs.html" %}
+</div>
+
+<div class="tabs-branch">
+  <div class="tabs-scroll">
+    <div class="tabs tabs-sub" role="tablist">
+      <a class="tab{% if section == 'all' %} active{% endif %}" href="/admin/display-devices/all"
+         role="tab"{% if section == 'all' %} aria-current="page"{% endif %}>In use</a>
+      <a class="tab{% if section == 'silent' %} active{% endif %}" href="/admin/display-devices/silent"
+         role="tab"{% if section == 'silent' %} aria-current="page"{% endif %}>Not heard from</a>
+      <a class="tab{% if section == 'removed' %} active{% endif %}" href="/admin/display-devices/removed"
+         role="tab"{% if section == 'removed' %} aria-current="page"{% endif %}>Removed</a>
+    </div>
+  </div>
+</div>
+
+<form class="filter-bar" data-filter-key="display-devices" method="get">
+  <div class="field">
+    <label for="dd-q">Clinic or screen name</label>
+    <input type="search" id="dd-q" name="q" value="{{ query or '' }}" maxlength="120">
+  </div>
+  <div class="form-actions">
+    <button type="submit" class="btn btn-sm">Filter</button>
+    <a class="btn btn-quiet btn-sm" href="/admin/display-devices/{{ section }}">Clear</a>
+  </div>
+</form>
+
+<div class="split split-full" id="dd-split">
+  <div class="card">
+    <div class="table-wrap table-scroll">
+      <table class="data" id="dd-table">
+        <thead>
+          <tr>
+            <th data-sort-key="clinic">Clinic</th>
+            <th data-sort-key="label">Screen</th>
+            <th data-sort-key="status">Status</th>
+            <th data-sort-key="seen">Last heard from</th>
+            <th data-sort-key="version">Version</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for device, site in rows %}
+          <tr tabindex="0"
+              data-clinic="{{ site.name }}"
+              data-site-id="{{ site.id }}"
+              data-label="{{ device.label or 'Unnamed screen' }}"
+              data-status="{{ device.status.value }}"
+              data-seen="{{ device.last_seen_at.isoformat() if device.last_seen_at else '' }}"
+              data-paired="{{ device.paired_at.isoformat() if device.paired_at else '' }}"
+              data-version="{{ device.app_version or '' }}"
+              data-agent="{{ device.user_agent or '' }}">
+            <td>{{ site.name }}</td>
+            <td>{{ device.label or 'Unnamed screen' }}</td>
+            <td>
+              {% if device.status.value == 'silent' %}<span class="badge badge-warn">Not heard from</span>
+              {% elif device.status.value == 'revoked' %}<span class="badge badge-muted">Removed</span>
+              {% else %}<span class="badge badge-ok">Showing the board</span>{% endif %}
+            </td>
+            <td>{{ device.last_seen_at.strftime('%d %b %H:%M') if device.last_seen_at else '—' }}</td>
+            <td>{{ device.app_version or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if not rows %}
+    <p class="empty">No screens here.</p>
+    {% endif %}
+    <p class="card-sub">{{ rows | length }} screen{{ '' if rows | length == 1 else 's' }}.</p>
+  </div>
+</div>
+
+<div class="slideover slideover-inset" id="dd-detail" data-anchor="#dd-split">
+  <div class="slideover-panel" role="dialog" aria-modal="false" aria-labelledby="ddd-title" tabindex="-1">
+    <div class="slideover-head">
+      <div class="slideover-titles">
+        <p class="detail-eyebrow">Screen</p>
+        <h2 id="ddd-title"></h2>
+        <p class="hint" id="ddd-clinic"></p>
+      </div>
+      <button type="button" class="btn btn-quiet btn-sm slideover-close" data-slideover-close aria-label="Close screen">Close</button>
+    </div>
+    <div class="slideover-body">
+      <dl class="detail-list">
+        <dt>Status</dt><dd id="ddd-status"></dd>
+        <dt>Last heard from</dt><dd id="ddd-seen"></dd>
+        <dt>Paired</dt><dd id="ddd-paired"></dd>
+        <dt>Version</dt><dd id="ddd-version"></dd>
+        <dt>Browser</dt><dd id="ddd-agent"></dd>
+      </dl>
+    </div>
+  </div>
+</div>
+{% endblock %}

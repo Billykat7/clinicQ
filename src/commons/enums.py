@@ -926,6 +926,28 @@ class BoardTheme(StrEnum):
 SITE_DEFAULT_BOARD_THEME: BoardTheme = BoardTheme.DIM
 
 
+class DisplayDeviceStatus(StrEnum):
+    """Where a kiosk box is, as a manager and an operator see it (Issue 61). Derived, never stored.
+
+    - ``PAIRING``: showing a code, waiting for a manager to type it in.
+    - ``ONLINE``: paired, and heard from within ``DISPLAY_DEVICE_SILENT_MINUTES``.
+    - ``SILENT``: paired, and not heard from for longer: the screen may be dark. The team is alerted.
+    - ``REVOKED``: removed by a manager; refused everywhere.
+    """
+
+    PAIRING = "pairing"
+    ONLINE = "online"
+    SILENT = "silent"
+    REVOKED = "revoked"
+
+
+class TeamWebhookKind(StrEnum):
+    """The chat service the team channel's incoming webhook belongs to (Issues 14 and 61)."""
+
+    SLACK = "slack"
+    DISCORD = "discord"
+
+
 class TokenType(StrEnum):
     """Typed JWT ``type`` claim, plus the bearer scheme label.
 
@@ -1646,6 +1668,7 @@ class AuditEntityType(StrEnum):
     DATA_SUBJECT = "data_subject"
     DOCUMENT = "document"
     WIDGET = "widget"
+    DISPLAY_DEVICE = "display_device"
 
 
 # Field names whose values must never be written into an audit diff in the clear: encrypted or

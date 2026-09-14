@@ -286,6 +286,7 @@ def project_board(
     site: Site,
     *,
     viewer: BoardViewer,
+    queue_ids: frozenset[str] | None = None,
     moment: datetime | None = None,
 ) -> BoardState:
     """The clinic's board today, as ``viewer`` may see it. The only reader of tickets for a board.
@@ -299,6 +300,7 @@ def project_board(
         db: The session.
         site: The clinic, from :func:`displayed_site`.
         viewer: Who the response is for; an anonymous viewer gets numbers only.
+        queue_ids: The queues this screen shows (a kiosk box's choice, Issue 61); ``None`` for all.
         moment: The time to project at (aware); ``None`` means now in Johannesburg.
     """
     now = moment or now_sast()
@@ -312,6 +314,8 @@ def project_board(
         .scalars()
         .all()
     )
+    if queue_ids is not None:
+        queues = [queue for queue in queues if queue.id in queue_ids]
     by_queue: dict[str, list[Ticket]] = defaultdict(list)
     for ticket in db.execute(
         displayed_select(Ticket, site.id)

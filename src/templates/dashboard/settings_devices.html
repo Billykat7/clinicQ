@@ -1,0 +1,144 @@
+{% extends "dashboard/settings_base.html" %}
+{#- The clinic's waiting-room screens (Issue 61), as a server-rendered list.
+
+    A new screen shows a code when it is switched on; a manager pairs it here by typing that code, and
+    can name it, choose which queues it shows, and remove it. Every change is a request to the clinic's
+    display-devices API, which checks the manager's grant and records it. Removing a screen asks first:
+    it stops showing the board within half a minute. The front desk sees the list and changes nothing. -#}
+
+{% set can_change = can('sites.display', 'update') %}
+
+{% block settings_content %}
+<div class="settings-devices">
+  {% if can_change %}
+  <section class="card" aria-labelledby="pair-title">
+    <h2 id="pair-title">Pair a screen</h2>
+    <p class="card-sub">Switch the screen on. It shows a six-character code; type it here. The screen shows the waiting-room board by itself within a few seconds.</p>
+    <form class="pair-form" data-api="/api/v1/sites/{{ site.id }}/display-devices" data-method="POST">
+      <div class="field-row cols-2">
+        <div class="field">
+          <label for="pair-code">Code on the screen</label>
+          <input type="text" id="pair-code" name="pairing_code" required minlength="6" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text">
+        </div>
+        <div class="field">
+          <label for="pair-label">Name for this screen (optional)</label>
+          <input type="text" id="pair-label" name="label" maxlength="80" data-empty="null" placeholder="For example: TV by reception">
+        </div>
+      </div>
+      <fieldset class="field">
+        <legend>Queues it shows</legend>
+        <p class="hint">Leave them all unticked to show every open queue.</p>
+        {% for queue in queues %}
+        <label class="check"><input type="checkbox" name="queue_ids" value="{{ queue.id }}" data-type="list"> {{ queue.name }}{% if queue.room_label %} ({{ queue.room_label }}){% endif %}</label>
+        {% endfor %}
+      </fieldset>
+      <div class="form-actions">
+        <button type="submit" class="btn">Pair</button>
+        <span class="msg" data-api-msg aria-live="polite"></span>
+      </div>
+    </form>
+  </section>
+  {% endif %}
+
+  <form class="filter-bar" data-filter-key="settings-devices" method="get">
+    <div class="filter-bar-head">
+      <button type="button" class="filter-bar-toggle" aria-expanded="true" aria-controls="dv-filter-body">Filters</button>
+      <span class="filter-bar-summary" hidden></span>
+      <div class="filter-bar-actions">
+        <a class="btn btn-quiet btn-sm filter-clear" href="{{ request.url.path }}" hidden>Clear filters</a>
+      </div>
+    </div>
+    <div class="filter-bar-body form-grid" id="dv-filter-body">
+      <div class="field" data-filter data-filter-label="Status">
+        <label for="dv-status">Status</label>
+        <select id="dv-status" name="status">
+          <option value="">Every screen</option>
+          {% for value, words in status_words.items() %}
+          {% if value != 'pairing' %}<option value="{{ value }}"{% if status_filter == value %} selected{% endif %}>{{ words[0] }}</option>{% endif %}
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-actions"><button type="submit" class="btn btn-sm">Show</button></div>
+    </div>
+  </form>
+
+  <div class="split split-full" id="dv-split">
+    <div class="card">
+      <div class="table-wrap table-scroll">
+        <table class="data" id="dv-table" data-settings-list="dv-detail" data-keep-within="#dv-split">
+          <thead>
+            <tr>
+              <th data-sort-key="label">Screen</th>
+              <th data-sort-key="queues">Shows</th>
+              <th data-sort-key="status">Status</th>
+              <th data-sort-key="seen">Last heard from</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in device_rows %}
+            {% set words = status_words[row.status.value] %}
+            <tr tabindex="0" data-record="{{ row.record | tojson | forceescape }}"
+                data-sort-label="{{ row.label }}" data-sort-queues="{{ row.queue_names | join(', ') }}"
+                data-sort-status="{{ row.status.value }}" data-sort-seen="{{ row.last_seen_at.isoformat() if row.last_seen_at else '' }}">
+              <td>{{ row.label }}</td>
+              <td>{{ row.queue_names | join(', ') or 'Every open queue' }}</td>
+              <td><span class="badge {{ words[1] }}">{{ words[0] }}</span></td>
+              <td>{{ row.last_seen_at.strftime('%d %b %H:%M') if row.last_seen_at else '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if not device_rows %}
+      <p class="empty">{% if status_filter %}No screen matches this filter.{% else %}No screens yet. Switch one on and pair it with its code.{% endif %}</p>
+      {% endif %}
+      <p class="card-sub">{{ device_rows | length }} screen{{ '' if device_rows | length == 1 else 's' }}. A screen not heard from for {{ silent_minutes }} minutes is reported to the ClinicQ team.</p>
+    </div>
+  </div>
+
+  <div class="slideover slideover-inset" id="dv-detail" data-anchor="#dv-split">
+    <div class="slideover-panel" role="dialog" aria-modal="false" aria-labelledby="dvd-title" tabindex="-1">
+      <div class="slideover-head">
+        <div class="slideover-titles">
+          <p class="detail-eyebrow">Screen</p>
+          <h2 id="dvd-title" data-fill-text="label" data-fill-empty="Unnamed screen"></h2>
+          <p class="hint">Browser: <span data-fill-text="user_agent" data-fill-empty="not reported yet"></span></p>
+        </div>
+        <button type="button" class="btn btn-quiet btn-sm slideover-close" data-slideover-close aria-label="Close screen">Close</button>
+      </div>
+      <div class="slideover-body">
+        {% if can_change %}
+        <form class="settings-form" data-show-when="active" data-api-template="/api/v1/sites/{{ site.id }}/display-devices/{id}" data-method="PATCH">
+          <div class="field">
+            <label for="dvd-label">Name</label>
+            <input type="text" id="dvd-label" name="label" maxlength="80" data-empty="null">
+          </div>
+          <fieldset class="field">
+            <legend>Queues it shows</legend>
+            <p class="hint">None ticked shows every open queue.</p>
+            {% for queue in queues %}
+            <label class="check"><input type="checkbox" name="queue_ids" value="{{ queue.id }}" data-type="list"> {{ queue.name }}</label>
+            {% endfor %}
+          </fieldset>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-sm">Save</button>
+            <span class="msg" data-api-msg aria-live="polite"></span>
+          </div>
+        </form>
+        {% endif %}
+        <p class="hint" data-show-when="inactive">This screen was removed. To use it again, pair it with the new code it shows.</p>
+      </div>
+      {% if can_change %}
+      {#- In the panel's foot, which stays in view while the body scrolls: on a short list the panel is
+          short, and the button must not hide below the name and queues. -#}
+      <div class="slideover-foot form-actions">
+        <div class="danger-zone" data-api-scope data-show-when="active">
+          <button type="button" class="btn btn-danger btn-sm" data-api-template="/api/v1/sites/{{ site.id }}/display-devices/{id}/revoke" data-method="POST" data-confirm-template="Remove this screen from the clinic? Within about half a minute it stops showing the board and shows a new pairing code.">Remove this screen</button>
+          <span class="msg" data-api-msg aria-live="polite"></span>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

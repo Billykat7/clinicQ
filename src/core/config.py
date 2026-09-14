@@ -23,6 +23,7 @@ from src.commons.enums import (
     RateLimitBackendKind,
     S3LogPath,
     SmsProviderKind,
+    TeamWebhookKind,
 )
 
 # Default JWT secret shipped for local development only. The production guard
@@ -1160,6 +1161,40 @@ class Settings(BaseSettings):
             "through Redis pub/sub, so a call made on one worker reaches screens connected to another "
             "(env: LIVE_EVENTS_FANOUT)."
         ),
+    )
+    display_device_silent_minutes: int = Field(
+        default=10,
+        ge=2,
+        le=120,
+        description=(
+            "Minutes a paired waiting-room board may go without a heartbeat before the team is alerted "
+            "that its screen may be dark (env: DISPLAY_DEVICE_SILENT_MINUTES)."
+        ),
+    )
+    display_pairing_code_minutes: int = Field(
+        default=10,
+        ge=2,
+        le=60,
+        description=(
+            "Minutes the code on an unpaired board's screen stays valid before the box shows a new "
+            "one (env: DISPLAY_PAIRING_CODE_MINUTES)."
+        ),
+    )
+    display_device_cookie_name: str = Field(
+        default="clinicq_display",
+        description="The httpOnly cookie a kiosk box keeps its device secret in (env: DISPLAY_DEVICE_COOKIE_NAME).",
+    )
+    team_webhook_url: str = Field(
+        default="",
+        description=(
+            "Incoming webhook of the team channel (Slack or Discord) the application posts operational "
+            "alerts to, such as a silent waiting-room board; the same channel Issue 14's monitoring "
+            "uses. Empty: alerts are logged only (env: TEAM_WEBHOOK_URL)."
+        ),
+    )
+    team_webhook_kind: TeamWebhookKind = Field(
+        default=TeamWebhookKind.SLACK,
+        description="Which service TEAM_WEBHOOK_URL belongs to: slack or discord (env: TEAM_WEBHOOK_KIND).",
     )
     board_health_ticker: bool = Field(
         default=True,

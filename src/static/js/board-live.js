@@ -16,6 +16,8 @@
  *   - After three failed attempts the board also asks data-state-url every data-poll-seconds, so a
  *     network that blocks streams still gets updates; the stream keeps being retried on the backoff.
  *   - A board whose clinic changed its language reloads, so the page's own words follow.
+ *   - When a stream ends, the board asks /state once. A 401 (its kiosk box was removed, Issue 61) sends
+ *     it back to the start page, which pairs it again.
  *
  * The connection line (data-board-connection) is hidden while live and shows its words otherwise.
  * Every change of state is announced as a `board:connection` event on the document, and
@@ -127,6 +129,7 @@
     source.onerror = function () {
       // The browser would retry on its own schedule; the board keeps its own, with backoff and jitter.
       closeSource();
+      checkAccess();
       reconnectLater();
     };
   }
@@ -141,11 +144,32 @@
     retryTimer = setTimeout(connect, wait);
   }
 
+  /* A stream that ended may mean this screen was removed from its clinic: ask once, and leave if so. */
+  function checkAccess() {
+    fetch(STATE_URL, { cache: 'no-store', credentials: 'same-origin', headers: { Accept: 'application/json' } })
+      .then(function (response) {
+        if (response.status === 401) leave();
+      })
+      .catch(function () {
+        // No answer: the network is down, which the reconnection handles.
+      });
+  }
+
+  function leave() {
+    closeSource();
+    window.location.assign(root.getAttribute('data-start-url') || '/display');
+  }
+
   function poll() {
     if (polling) return;
     polling = true;
     fetch(STATE_URL, { cache: 'no-store', credentials: 'same-origin', headers: { Accept: 'application/json' } })
       .then(function (response) {
+        if (response.status === 401) {
+          // This screen may no longer show the board (its box was removed): back to pairing (Issue 61).
+          leave();
+          return null;
+        }
         return response.ok ? response.json() : null;
       })
       .then(function (board) {

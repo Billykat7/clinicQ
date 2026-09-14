@@ -228,6 +228,13 @@ CASES: dict[str, dict[str, object]] = {
             f"/api/v1/sites/{site}/tickets/{_TICKET_AT.get(site, _NOWHERE)}/notes",
         ),
     },
+    "displaydevice": {
+        # A clinic's waiting-room screens (Issue 61): the front desk reads which screens there are and
+        # whether they are alive, and the manager pairs and removes them, under the display grant.
+        "resource": "sites.display",
+        "reader": "a@clinicq.example",
+        "paths": lambda site, _row: (f"/api/v1/sites/{site}/display-devices",),
+    },
     "staffinvitation": {
         # Who has been invited to a clinic (Issue 22): the same grant as the staff list, so a
         # receptionist reads it, and another clinic's list is a 404 like everything else.

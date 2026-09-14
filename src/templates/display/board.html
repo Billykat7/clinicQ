@@ -34,6 +34,10 @@
       data-panels-per-page="{{ panels_per_page }}"
       data-page-seconds="{{ page_seconds }}"
       data-message-seconds="{{ message_seconds }}"
+      data-device-heartbeat-url="{{ device_heartbeat_url }}"
+      data-device-heartbeat-seconds="{{ device_heartbeat_seconds }}"
+      data-start-url="{{ start_url }}"
+      data-app-version="{{ app_version }}"
       data-initial="{{ payload | tojson | forceescape }}">
   <header class="kiosk-header">
     {# The branding slot: the clinic's initials and its name. A logo, when clinics can upload one, goes here. #}
@@ -100,4 +104,5 @@
   <script src="/static/js/board-clock.js" defer></script>
   <script src="/static/js/board.js" defer></script>
   <script src="/static/js/board-live.js" defer></script>
+  <script src="/static/js/board-device.js" defer></script>
 {% endblock %}

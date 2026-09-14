@@ -36,6 +36,7 @@ from sqlalchemy.orm import Session
 from starlette.templating import Jinja2Templates
 
 from src.commons.enums import (
+    DisplayDeviceStatus,
     GrantScope,
     PermissionVerb,
     S3LogListingLevel,
@@ -438,6 +439,67 @@ async def admin_verification_section(
         total=len(rows), status=wanted, items=[_queue_item(row) for row in rows]
     )
     return templates.TemplateResponse(request, "admin/verification.html", ctx)
+
+
+#: The operator's screen console tabs (Issue 61): each its own URL and its own set of statuses.
+_DISPLAY_DEVICE_SECTIONS: dict[str, frozenset[DisplayDeviceStatus]] = {
+    "all": frozenset({DisplayDeviceStatus.ONLINE, DisplayDeviceStatus.SILENT}),
+    "silent": frozenset({DisplayDeviceStatus.SILENT}),
+    "removed": frozenset({DisplayDeviceStatus.REVOKED}),
+}
+
+
+@router.get("/admin/display-devices", response_class=HTMLResponse)
+async def admin_display_devices(request: Request) -> RedirectResponse:
+    """Redirect the bare console URL to its default tab."""
+    return RedirectResponse(
+        url="/admin/display-devices/all", status_code=status.HTTP_302_FOUND
+    )
+
+
+@router.get("/admin/display-devices/{section}", response_class=HTMLResponse)
+async def admin_display_devices_section(
+    section: str, request: Request, q: str = "", db: Session = Depends(get_db)
+) -> HTMLResponse:
+    """The operator's view of every waiting-room screen on the platform, and which have gone quiet (Issue 61).
+
+    Gated on the ``business``-tier grant on ``sites``, like the verification console, because it reads
+    across clinics. A server-rendered list (``docs/IDE/RULES/list-view-ui-pattern.mdc``, second wiring
+    style): the tabs are URLs, the filter is a GET form, the columns sort in place and a row opens in
+    the slideover. It changes nothing: a clinic's manager pairs and removes its screens.
+    """
+    if not require_authenticated_html(request, db):
+        return _redirect_to_sign_in(request)  # type: ignore[return-value]
+    if section not in _DISPLAY_DEVICE_SECTIONS:
+        return RedirectResponse(  # type: ignore[return-value]
+            url="/admin/display-devices/all", status_code=status.HTTP_302_FOUND
+        )
+    ctx = page_context(
+        request, db, active_nav="verification", page_title="Waiting-room screens"
+    )
+    if not ctx["nav"].can_surface(
+        SITES_RESOURCE, PermissionVerb.READ, GrantScope.BUSINESS
+    ):
+        return _forbidden_html(request, db)
+
+    from src.modules.display import devices as display_devices
+    from src.modules.display.router import device_out
+
+    wanted = _DISPLAY_DEVICE_SECTIONS[section]
+    needle = q.strip().lower()
+    rows = [
+        (device_out(device), site)
+        for device, site in display_devices.platform_devices(db)
+        if display_devices.status_of(device) in wanted
+        and (not needle or needle in f"{site.name} {device.label or ''}".lower())
+    ]
+    ctx.update(
+        section=section,
+        query=q,
+        rows=rows,
+        silent_minutes=get_settings().display_device_silent_minutes,
+    )
+    return templates.TemplateResponse(request, "admin/display_devices.html", ctx)
 
 
 @router.get("/me/consent", response_class=HTMLResponse)

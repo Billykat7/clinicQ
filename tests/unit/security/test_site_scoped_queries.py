@@ -48,6 +48,24 @@ _ASSIGNMENT_SCOPED: dict[str, frozenset[str]] = {
 #: in the same module is still a finding. An entry here is a decision someone can read, not a way
 #: around the rule.
 _UNSCOPED_BY_DESIGN: dict[str, str] = {
+    "modules/display/devices.py::device_for_secret": (
+        "a kiosk box authenticating: the box presents its secret and holds no role anywhere, so there is "
+        "no SiteAccess; the row is found by the SHA-256 of that secret (unique) and the clinic it may "
+        "show is read **from the row**, never from the request (Issue 61), as a refresh token is"
+    ),
+    "modules/display/devices.py::_pending_by_code": (
+        "a box waiting to be paired belongs to **no clinic yet** (site_id is NULL, and the query requires "
+        "it): the code's digest finds the one row, and pair_device then writes the manager's clinic from "
+        "the SiteAccess the site guard resolved (Issue 61)"
+    ),
+    "modules/display/devices.py::_watched": (
+        "the display device watch (Issue 61) is a scheduled system job with no caller and no clinic: it "
+        "reads every paired box on the platform to find the silent ones, like the recall timer sweep"
+    ),
+    "modules/display/devices.py::purge_unpaired": (
+        "the same system job deletes boxes that were never paired, which belong to no clinic (site_id "
+        "is NULL, and the query requires it)"
+    ),
     "modules/staff/assignments.py::_assignments_at": (
         "``user_roles`` has no ``site_id`` column: the clinic **is** its ``scope_id``, so the "
         "filter this applies (``scope_type='site' AND scope_id = access.site_id``) is the site "
