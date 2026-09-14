@@ -5,7 +5,7 @@ What only a browser can show lives here: that a button press changes the page at
 goes offline and back without a reload, that a keyboard alone can do a job. These fixtures are shared
 with every browser suite (the waiting-room board's, Issue 62, reuses them):
 
-* :func:`browser` is one headless Chromium for the worker. Without Playwright or its Chromium the
+* :func:`browser` is one headless Chromium per test module. Without Playwright or its Chromium the
   tests skip with the command that installs them, unless ``REQUIRE_BROWSER_TESTS=1`` (the CI
   ``browser`` shard sets it) turns the skip into a failure, so a missing browser cannot pass as green;
 * :func:`serve` runs an application in a background thread on a free local port for as long as a
@@ -39,9 +39,16 @@ def _browsers_unavailable(reason: str) -> None:
     pytest.skip(f"{reason}. Install it with: python -m playwright install chromium")
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def browser() -> Iterator[Any]:
-    """One headless Chromium for this worker, closed at the end of the session."""
+    """One headless Chromium for a test module, closed when the module ends.
+
+    Module-scoped, not session-scoped, on purpose. Playwright's synchronous API keeps an asyncio loop
+    running for as long as it is open, and ``pytest -n auto`` hands the same worker other folders'
+    tests after a browser module. A test there that calls ``asyncio.run()`` would then fail with "cannot
+    be called from a running event loop". Closing Playwright with its module costs about a second per
+    module.
+    """
     try:
         from playwright.sync_api import Error, sync_playwright
     except ImportError:  # pragma: no cover - playwright is in requirements.txt
