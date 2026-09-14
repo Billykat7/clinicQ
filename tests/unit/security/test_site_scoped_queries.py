@@ -95,6 +95,22 @@ _UNSCOPED_BY_DESIGN: dict[str, str] = {
         "(published_select for a patient, get_queue for the desk) and by the joining patient's "
         "own id, and returns only that patient's ticket"
     ),
+    "modules/queue/lifecycle.py::_locked": (
+        "the lifecycle's row lock re-reads **one ticket by id** for update (Issue 41). Its callers "
+        "have already scoped that id: a route through get_in_site_or_404, call_next through a "
+        "queue from get_queue, and the recall timer (Issue 43) as a system job with no clinic. "
+        "Filtering again here would not narrow anything, and the lock must see the row whatever "
+        "site a job runs for"
+    ),
+    "modules/queue/lifecycle.py::transition_ticket": (
+        "reads the moved ticket's own queue by id to write its snapshot through (Issue 36's hook); "
+        "the queue is the ticket's, which the caller already scoped"
+    ),
+    "modules/queue/lifecycle.py::call_next": (
+        "picks the next waiting ticket **in a queue the caller resolved through the site guard** "
+        "(get_queue), filtered by that queue's id, with FOR UPDATE SKIP LOCKED; it returns one "
+        "ticket id from that queue and nothing else (Issue 41)"
+    ),
     "modules/staff/invitations.py::usable_invitation": (
         "an invitation link is opened by someone who has no account and therefore no clinic to be "
         "scoped by; the id comes from the signed token, and the row's own site_id is what "

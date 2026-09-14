@@ -598,6 +598,23 @@ class TicketSource(StrEnum):
     WALK_IN = "walk_in"
 
 
+class ActorKind(StrEnum):
+    """Who moved a ticket (Issue 41). Recorded as the audit row's ``actor_role`` for a transition.
+
+    The trail has to answer "did a person do this, or did the system?" without reading a free-text
+    actor name: a no-show marked by the recall timer (Issue 43) and one marked by a receptionist
+    are different facts, and a report on overrides (Issue 90) must count only the second.
+
+    - ``STAFF``: a signed-in staff member at the clinic.
+    - ``PATIENT``: the patient, acting on their own ticket (a cancellation, Issue 44).
+    - ``SYSTEM``: a scheduled job, never a person.
+    """
+
+    STAFF = "staff"
+    PATIENT = "patient"
+    SYSTEM = "system"
+
+
 class JoinRefusal(StrEnum):
     """Why a join was refused (Issue 40). The ``code`` suffix on the wire: ``queue.join.<value>``.
 

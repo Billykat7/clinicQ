@@ -69,6 +69,37 @@ flowchart LR
 Each queue has its own display feed ([04](04-display-monitor.md)) or they can share one multi-panel
 screen if the clinic only has one monitor.
 
+## Ticket lifecycle
+
+A ticket's status changes in exactly one place, `transition_ticket()` in
+`src/modules/queue/lifecycle.py`, and only along these arrows. Any other move is refused with `409`
+and changes nothing. The four statuses with an arrow to the end never change again: a mistake is
+corrected with a new ticket, not by reopening an old one. This diagram is checked against the
+transition table by `tests/unit/queue/test_ticket_state_machine.py`, so it cannot drift from the code.
+
+<!-- ticket-lifecycle:start -->
+```mermaid
+stateDiagram-v2
+    [*] --> waiting
+    waiting --> called
+    waiting --> cancelled
+    waiting --> transferred
+    called --> in_progress
+    called --> recalled
+    called --> no_show
+    called --> cancelled
+    recalled --> in_progress
+    recalled --> no_show
+    recalled --> cancelled
+    in_progress --> done
+    in_progress --> transferred
+    done --> [*]
+    no_show --> [*]
+    cancelled --> [*]
+    transferred --> [*]
+```
+<!-- ticket-lifecycle:end -->
+
 ## No-show & recall handling
 
 | Situation | Behaviour |

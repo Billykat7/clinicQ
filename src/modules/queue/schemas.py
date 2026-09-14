@@ -49,6 +49,14 @@ class WalkInIn(BaseModel):
     _trim = field_validator("reason_text", "name", "phone")(_blank_to_none)
 
 
+class TransitionIn(BaseModel):
+    """A request to move a ticket: where to, and what the caller saw it as."""
+
+    to: TicketStatus
+    expected_status: TicketStatus | None = None
+    """The status on the caller's screen. When the ticket has moved on since, the move is a 409."""
+
+
 class TicketOut(BaseModel):
     """One ticket as the API returns it."""
 

@@ -12,6 +12,9 @@ here.
 * **The front desk issues a walk-in** at ``POST /sites/{site_id}/queues/{queue_id}/tickets``,
   through the site guard with the ``queues.tickets`` grant, so another clinic's queue is a 404.
 * **Reading:** the desk reads the clinic's tickets still in the day; a patient reads their own.
+* **Moving a ticket** (Issue 41): ``POST /sites/{site_id}/tickets/{ticket_id}/transitions`` and
+  *Call next* both go through :func:`src.modules.queue.lifecycle.transition_ticket`, the only writer
+  of a ticket's status. An illegal or stale move is a ``409`` and changes nothing.
 
 A join that finds the patient's existing ticket answers ``200`` with ``created: false``; a new ticket
 answers ``201``. A refusal is the error envelope with ``code`` ``queue.join.<reason>`` and a
@@ -27,7 +30,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.api.rbac_deps import require_patient
-from src.commons.enums import JoinRefusal, PatientChannel, TicketSource
+from src.commons.enums import (
+    ActorKind,
+    JoinRefusal,
+    PatientChannel,
+    TicketSource,
+    TicketStatus,
+)
 from src.commons.phone import normalize_phone
 from src.commons.time import business_date
 from src.core.client_ip import resolve_client_ip
@@ -35,24 +44,31 @@ from src.core.config import Settings, get_settings
 from src.core.rate_limit_deps import DISCOVERY_SESSION_COOKIE
 from src.core.site_scope import (
     SiteAccess,
+    get_in_site_or_404,
     publicly_visible_site_clauses,
     published_select,
     require_site_access,
     site_not_found,
 )
-from src.database.models import Patient, Queue, Site
+from src.database.models import Patient, Queue, Site, Ticket
 from src.database.session import get_db
 from src.modules.patients.service import get_or_create_patient
 from src.modules.queue import service
+from src.modules.queue.lifecycle import Actor, call_next, transition_ticket
 from src.modules.queue.schemas import (
     JoinIn,
     JoinOut,
     TicketListOut,
     TicketOut,
+    TransitionIn,
     WalkInIn,
 )
 from src.modules.queue.service import JoinRefusedError, JoinResult
-from src.modules.queue.tickets import patient_tickets_select, site_day_select
+from src.modules.queue.tickets import (
+    CALL_ORDER,
+    patient_tickets_select,
+    site_day_select,
+)
 from src.modules.queues.service import get_queue
 from src.modules.sites.hours import published_schedules, schedule_for
 
@@ -65,6 +81,10 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 TicketsIssue = Annotated[
     SiteAccess, Depends(require_site_access("queues.tickets", "update"))
 ]
+#: Calling the next patient: the front desk on any queue here, a nurse on their own (Issue 18).
+CallNext = Annotated[SiteAccess, Depends(require_site_access("queues.call", "update"))]
+#: Seeing who would be called next.
+CallPeek = Annotated[SiteAccess, Depends(require_site_access("queues.call", "read"))]
 #: Reading the clinic's tickets: everyone who works the queues.
 TicketsRead = Annotated[
     SiteAccess, Depends(require_site_access("queues.tickets", "read"))
@@ -235,3 +255,77 @@ def my_tickets(patient: PatientReading, db: DbSession) -> list[TicketOut]:
         db.execute(patient_tickets_select(patient.id, business_date())).scalars().all()
     )
     return [TicketOut.of(row) for row in rows]
+
+
+def _staff(access: SiteAccess) -> Actor:
+    """The signed-in staff member, as the lifecycle's actor."""
+    return Actor(
+        kind=ActorKind.STAFF, label=access.user.email, user_id=str(access.user.id)
+    )
+
+
+@router.post(
+    "/sites/{site_id}/tickets/{ticket_id}/transitions",
+    response_model=TicketOut,
+    operation_id="queueTransitionTicket",
+    summary="Move a ticket to another status",
+)
+def move_ticket(
+    ticket_id: str, payload: TransitionIn, access: TicketsIssue, db: DbSession
+) -> TicketOut:
+    """Apply one legal move. An illegal move, or one decided on a stale screen, is a 409."""
+    ticket = get_in_site_or_404(db, Ticket, ticket_id, access)
+    moved = transition_ticket(
+        db,
+        ticket.id,
+        payload.to,
+        actor=_staff(access),
+        expected_status=payload.expected_status,
+    )
+    db.commit()
+    return TicketOut.of(moved)
+
+
+@router.post(
+    "/sites/{site_id}/queues/{queue_id}/tickets/call-next",
+    response_model=TicketOut,
+    operation_id="queueCallNext",
+    summary="Call the next waiting ticket in a queue",
+)
+def call_next_ticket(queue_id: str, access: CallNext, db: DbSession) -> TicketOut:
+    """Call the next patient. Two staff pressing it at once call two different patients."""
+    queue = get_queue(db, access, queue_id)
+    if queue is None:
+        raise site_not_found()
+    called = call_next(db, queue, actor=_staff(access))
+    db.commit()
+    return TicketOut.of(called)
+
+
+@router.get(
+    "/sites/{site_id}/queues/{queue_id}/tickets/next",
+    response_model=TicketOut | None,
+    operation_id="queueNextTicket",
+    summary="Who would be called next in a queue",
+)
+def next_ticket(queue_id: str, access: CallPeek, db: DbSession) -> TicketOut | None:
+    """The waiting ticket *Call next* would call now, or ``null``. Reads only; moves nothing."""
+    queue = get_queue(db, access, queue_id)
+    if queue is None:
+        raise site_not_found()
+    upcoming = (
+        db.execute(
+            site_day_select(
+                access,
+                business_date(),
+                queue_id=queue.id,
+                statuses=(TicketStatus.WAITING,),
+            )
+            .order_by(None)
+            .order_by(*CALL_ORDER)
+            .limit(1)
+        )
+        .scalars()
+        .first()
+    )
+    return TicketOut.of(upcoming) if upcoming is not None else None

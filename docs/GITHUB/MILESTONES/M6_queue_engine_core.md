@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Status** | 🚧 In progress · **critical path**: issues 39 (tickets and their numbering) and 40 (the one join service) delivered |
-| **Progress** | 🟩🟩⬜⬜⬜⬜⬜⬜⬜⬜ **22%** (2/9 issues) |
+| **Status** | 🚧 In progress · **critical path**: issues 39 (tickets and their numbering), 40 (the one join service) and 41 (the lifecycle) delivered |
+| **Progress** | 🟩🟩🟩⬜⬜⬜⬜⬜⬜⬜ **33%** (3/9 issues) |
 | **Sprints** | 6–7 (weeks 11–14), semester 2 |
 | **Release tag** | `v0.6.0` |
 | **Primary owner** | A, Backend Lead |

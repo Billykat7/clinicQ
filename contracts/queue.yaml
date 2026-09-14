@@ -246,6 +246,145 @@ paths:
         "404": { $ref: "#/components/responses/SiteNotFound" }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
+  # ── Moving a ticket (Issue 41) ──────────────────────────────────────────────────────────
+  /sites/{site_id}/tickets/{ticket_id}/transitions:
+    post:
+      tags: [queue]
+      operationId: queueTransitionTicket
+      summary: Move a ticket to another status
+      description: |
+        The only way a ticket's status changes (non-negotiable 2). The legal moves are:
+        `waiting → called | cancelled | transferred`; `called → in_progress | recalled | no_show |
+        cancelled`; `recalled → in_progress | no_show | cancelled`; `in_progress → done |
+        transferred`. `done`, `no_show`, `cancelled` and `transferred` never change again: a
+        correction is a new ticket. Every move is audited with the actor. Concurrent moves on one
+        ticket are serialised; the second is judged against the status the first left. Requires
+        `queues.tickets` `update` at this clinic.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/SiteId" }
+        - name: ticket_id
+          in: path
+          required: true
+          description: A ticket at this clinic.
+          schema: { type: string }
+          example: 01a09cf1-951b-7278-a2be-5fe7590abe56
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TransitionIn" }
+            example: { to: in_progress, expected_status: called }
+      responses:
+        "200":
+          description: The moved ticket.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TicketOut" }
+              example:
+                id: 01a09cf1-951b-7278-a2be-5fe7590abe56
+                site_id: 01a09c0b-ce1c-743e-b8ff-544bb4ac8774
+                queue_id: 01a09c0b-ce5e-7037-8071-cd12f438bd3d
+                number: T005
+                reference_code: K7M-4QP
+                source: web
+                status: in_progress
+                service_day: "2026-09-14"
+                joined_at: "2026-09-14T07:31:12+02:00"
+                walk_in_name: null
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/SiteNotFound" }
+        "409":
+          description: |
+            The move was refused and nothing changed. `code` is `ticket.transition.illegal` when the
+            table does not allow it from the ticket's current status, or `ticket.transition.stale`
+            when `expected_status` no longer matches because someone else moved the ticket first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                illegal:
+                  value: { detail: "A done ticket cannot change any more.", code: "ticket.transition.illegal" }
+                stale:
+                  value: { detail: "This ticket is now called, not waiting. Refresh and try again.", code: "ticket.transition.stale" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/queues/{queue_id}/tickets/call-next:
+    post:
+      tags: [queue]
+      operationId: queueCallNext
+      summary: Call the next waiting ticket in a queue
+      description: |
+        Calls the first waiting ticket today in call order (arrival order, whatever the channel).
+        Two staff pressing it at the same instant call two different tickets. Requires
+        `queues.call` `update`: any queue here for the front desk, their own queues for a nurse.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/SiteId" }
+        - { $ref: "#/components/parameters/QueueId" }
+      responses:
+        "200":
+          description: The ticket now called.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TicketOut" }
+              example:
+                id: 01a09cf1-951b-7278-a2be-5fe7590abe56
+                site_id: 01a09c0b-ce1c-743e-b8ff-544bb4ac8774
+                queue_id: 01a09c0b-ce5e-7037-8071-cd12f438bd3d
+                number: T005
+                reference_code: K7M-4QP
+                source: web
+                status: called
+                service_day: "2026-09-14"
+                joined_at: "2026-09-14T07:31:12+02:00"
+                walk_in_name: null
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/SiteNotFound" }
+        "409":
+          description: Nobody is waiting in this queue today.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "Nobody is waiting in this queue.", code: "ticket.call_next.empty" }
+
+  /sites/{site_id}/queues/{queue_id}/tickets/next:
+    get:
+      tags: [queue]
+      operationId: queueNextTicket
+      summary: Who would be called next in a queue
+      description: The waiting ticket *Call next* would call now, or `null`. Moves nothing. Requires `queues.call` `read`.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/SiteId" }
+        - { $ref: "#/components/parameters/QueueId" }
+      responses:
+        "200":
+          description: The next ticket, or null when nobody is waiting.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/TicketOut" }
+                  - { type: "null" }
+              example:
+                id: 01a09cf1-951b-7278-a2be-5fe7590abe56
+                site_id: 01a09c0b-ce1c-743e-b8ff-544bb4ac8774
+                queue_id: 01a09c0b-ce5e-7037-8071-cd12f438bd3d
+                number: T005
+                reference_code: K7M-4QP
+                source: web
+                status: waiting
+                service_day: "2026-09-14"
+                joined_at: "2026-09-14T07:31:12+02:00"
+                walk_in_name: null
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/SiteNotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
   /patients/me/tickets:
     get:
       tags: [queue]
@@ -417,6 +556,18 @@ components:
           maxLength: 20
           description: Optional. Any South African form (`082 123 4567`, `+27821234567`); links the walk-in to that patient.
       example: { name: null, reason_text: "Chest pain", comment_consent: true, phone: "082 123 4567" }
+
+    TransitionIn:
+      type: object
+      required: [to]
+      properties:
+        to: { $ref: "#/components/schemas/TicketStatus" }
+        expected_status:
+          description: The status on the caller's screen; a move is refused as stale when the ticket has moved on.
+          oneOf:
+            - { $ref: "#/components/schemas/TicketStatus" }
+            - { type: "null" }
+      example: { to: called, expected_status: waiting }
 
     # ── Responses ────────────────────────────────────────────────────────────────────────
     TicketOut:

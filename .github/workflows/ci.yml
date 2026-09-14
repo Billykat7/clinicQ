@@ -71,7 +71,7 @@ jobs:
           # starts reading one of them.
           PROSE_PATHS: >-
             docs/GITHUB/ISSUES/ docs/GITHUB/MILESTONES/ docs/GITHUB/RELEASES/ docs/GITHUB/RUNNER/
-            docs/GITHUB/README.md docs/PLAN/ docs/PRODUCT/ docs/PROJECTS/ docs/DEMO/ docs/IDE/
+            docs/GITHUB/README.md docs/PLAN/ docs/PROJECTS/ docs/DEMO/ docs/IDE/
             README.md CONTRIBUTING.md
           # The docker job's inputs: the Dockerfile, what it installs and the build-context filter.
           IMAGE_INPUTS: infra/docker/Dockerfile requirements.txt .dockerignore
