@@ -42,7 +42,7 @@ from typing import Any, Final
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.commons.enums import BoardLanguage, DisplayMode, TicketStatus
+from src.commons.enums import BoardLanguage, BoardTheme, DisplayMode, TicketStatus
 from src.commons.time import business_date, now_sast, stored_sast
 from src.core.site_scope import displayed_select, publicly_visible_site_clauses
 from src.database.models import Patient, Queue, Site, Ticket
@@ -149,6 +149,8 @@ class BoardState:
     #: viewer. Never wider than the site's.
     display_mode: DisplayMode
     language: BoardLanguage
+    #: How the board is coloured for its room (Issue 59). Not about anyone, so every viewer gets it.
+    theme: BoardTheme
     announce_audio: bool
     as_of: datetime
     queues: tuple[BoardQueue, ...]
@@ -164,6 +166,7 @@ class BoardState:
             "clinic_name": self.clinic_name,
             "display_mode": self.display_mode.value,
             "language": self.language.value,
+            "theme": self.theme.value,
             "announce_audio": self.announce_audio,
             "as_of": self.as_of.isoformat(),
             "queues": [queue.payload() for queue in self.queues],
@@ -375,6 +378,7 @@ def project_board(
         clinic_name=site.name,
         display_mode=mode,
         language=site.board_language_enum,
+        theme=site.board_theme_enum,
         announce_audio=site.announce_audio,
         as_of=now,
         queues=tuple(

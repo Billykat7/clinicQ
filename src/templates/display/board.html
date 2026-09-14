@@ -25,7 +25,7 @@
 
 {% block body %}
 {% set initials = board.clinic_name.split()[:2] | map('first') | join | upper %}
-<main id="main" class="kiosk" lang="{{ board.language.value }}"
+<main id="main" class="kiosk" lang="{{ board.language.value }}" data-board-theme="{{ board.theme.value }}"
       data-state-url="{{ state_url }}"
       data-stream-url="{{ stream_url }}"
       data-heartbeat-seconds="{{ heartbeat_seconds }}"

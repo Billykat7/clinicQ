@@ -16,11 +16,24 @@
  *
  * Nothing moves except the newly called highlight, which pulses a few times. Under
  * prefers-reduced-motion it does not pulse at all, and it stays just as visible: the colours are
- * inverted, the border is heavy and the words "Called now" say it. */
+ * inverted, the border is heavy, an inner ring holds the pulse's emphasis still, and the words
+ * "Called now" say it.
+ *
+ * Themes (Issue 59), one per clinic (sites.board_theme): dim, bright and high_contrast. Each is the same
+ * set of --kb-* tokens, and every text pair on every board state passes WCAG 2.2 AA (4.5:1, although
+ * nearly all of the board's text is large enough to need only 3:1). tests/a11y/display/test_board_contrast.py
+ * reads the tokens from this file and checks every pair; tests/e2e/display/test_board_accessibility.py
+ * checks the colours the browser actually draws. A status is never colour alone: a shape (● called,
+ * ◆ called again, ■ being seen, ▶ called now, ⟳ reconnecting) and its words go with it, so the board
+ * reads the same in greyscale. */
 
 .kiosk-page {
-  /* The board's own palette: light text on a deep background, easy on the eyes in a dim room and
-     without glare on a TV. Contrast of each pair is checked in Issue 59. */
+  --u: min(1vh, 0.5625vw);
+  background: #000000;
+}
+
+/* Dim room, the default: light text on a deep navy ground, easy on the eyes and without glare. */
+.kiosk {
   --kb-bg: #0b1320;
   --kb-panel: #15233a;
   --kb-line: #2a3b57;
@@ -29,13 +42,41 @@
   --kb-accent: #7fe3c7;
   --kb-new-bg: #ffd84d;
   --kb-new-ink: #0b1320;
+  --kb-new-border: #ffffff;
+  --kb-alert: #ffd84d;
+}
 
-  --u: min(1vh, 0.5625vw);
-  background: var(--kb-bg);
-  color: var(--kb-ink);
+/* Bright room: dark text on a light ground, for a screen in daylight. */
+.kiosk[data-board-theme="bright"] {
+  --kb-bg: #eef1f5;
+  --kb-panel: #ffffff;
+  --kb-line: #aab5c4;
+  --kb-ink: #0b1320;
+  --kb-muted: #3b4757;
+  --kb-accent: #0b5d49;
+  --kb-new-bg: #0b1320;
+  --kb-new-ink: #ffffff;
+  --kb-new-border: #0b1320;
+  --kb-alert: #8a4b00;
+}
+
+/* High contrast: white and yellow on black, with white borders, for low vision. */
+.kiosk[data-board-theme="high_contrast"] {
+  --kb-bg: #000000;
+  --kb-panel: #000000;
+  --kb-line: #ffffff;
+  --kb-ink: #ffffff;
+  --kb-muted: #ffffff;
+  --kb-accent: #ffff00;
+  --kb-new-bg: #ffff00;
+  --kb-new-ink: #000000;
+  --kb-new-border: #ffffff;
+  --kb-alert: #ffff00;
 }
 
 .kiosk {
+  background: var(--kb-bg);
+  color: var(--kb-ink);
   box-sizing: border-box;
   height: 100dvh;
   overflow: hidden;
@@ -187,7 +228,7 @@
 .serving-name:empty,
 .serving-comment:empty { display: none; }
 
-.panel-none { font-size: var(--num); color: var(--kb-line); }
+.panel-none { font-size: var(--num); color: var(--kb-muted); }
 .panel-also { font-size: var(--also); font-weight: 600; color: var(--kb-muted); font-variant-numeric: tabular-nums; }
 .panel-also:empty { display: none; }
 
@@ -208,15 +249,21 @@
 
 /* ── A ticket just called: unmistakable, with or without motion ────── */
 
+/* Every status has a shape as well as words, so none depends on colour (Issue 59). The shapes are
+   decoration for sighted readers and are not read out: the words already say it. */
+.serving-state::before { content: "● " / ""; }
+.serving[data-status="recalled"] .serving-state::before { content: "◆ " / ""; }
+.serving[data-status="in_progress"] .serving-state::before { content: "■ " / ""; }
+
 .serving.is-new {
   background: var(--kb-new-bg);
-  border-color: var(--kb-ink);
+  border-color: var(--kb-new-border);
   color: var(--kb-new-ink);
   animation: kiosk-called 1.2s ease-in-out 0s 5;
 }
 .serving.is-new .serving-state,
 .serving.is-new .serving-comment { color: var(--kb-new-ink); }
-.serving.is-new .serving-state::before { content: "▶ "; }
+.serving.is-new .serving-state::before { content: "▶ " / ""; }
 
 @keyframes kiosk-called {
   0%, 100% { box-shadow: 0 0 0 0 var(--kb-new-bg); }
@@ -228,6 +275,8 @@
   .kiosk *,
   .kiosk *::before,
   .kiosk *::after { animation: none !important; transition: none !important; }
+  /* The pulse's emphasis, held still: an inner ring in the highlight's ink. */
+  .serving.is-new { box-shadow: inset 0 0 0 calc(var(--u) * 0.6) var(--kb-new-ink); }
 }
 
 /* ── The footer: one health notice at a time, and which page is showing ── */
@@ -254,9 +303,9 @@
   flex: none;
   font-size: calc(var(--u) * 3.4);
   font-weight: 700;
-  color: var(--kb-new-bg);
+  color: var(--kb-alert);
 }
-.kiosk-connection::before { content: "⟳ "; }
+.kiosk-connection::before { content: "⟳ " / ""; }
 .kiosk-pages { flex: none; margin-left: auto; font-size: calc(var(--u) * 3.4); font-weight: 600; color: var(--kb-muted); font-variant-numeric: tabular-nums; }
 
 .kiosk-empty {

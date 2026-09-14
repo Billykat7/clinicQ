@@ -77,5 +77,11 @@ Do this once per screen model, and again whenever the board's stylesheet changes
      they spotted the new call;
    - who ran the check, and the date.
 
-A number misread by any reader is a finding: raise it on Issue 59 with the layout, the number and the
-distance.
+   Record the result in [`docs/COMPLIANCE/ACCESSIBILITY_BOARD_EVIDENCE.md`](../COMPLIANCE/ACCESSIBILITY_BOARD_EVIDENCE.md),
+   which the accessibility audit (Issue 101) reads.
+7. **Repeat for the clinic's theme** (display settings, *Colours of the screen*). Check the bright theme
+   with daylight on the screen and the dim theme with the lights low, because a screen's brightness changes
+   what contrast a reader sees.
+
+A number misread by any reader is a finding: raise it on Issue 59 or Issue 101 with the layout, the theme,
+the number and the distance.

@@ -56,6 +56,14 @@
       </div>
     </div>
 
+    {# The board's colours for its room (Issue 59). Every theme passes the same contrast checks; the
+       description of the one selected is shown under it, from the API. #}
+    <div class="field">
+      <label for="ds-theme">Colours of the screen</label>
+      <select id="ds-theme"></select>
+      <p class="hint" id="ds-theme-hint"></p>
+    </div>
+
     <div class="field">
       <label class="check">
         <input type="checkbox" id="ds-announce-audio">

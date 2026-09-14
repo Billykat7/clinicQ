@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Status** | 🚧 In progress: issues 58 (the server-side privacy projection every board response passes through), 56 (the kiosk board page) and 57 (the live stream, with reconnection and heartbeat) delivered |
-| **Progress** | 🟩🟩🟩🟩⬜⬜⬜⬜⬜⬜ **43%** (3/7 issues) |
+| **Status** | 🚧 In progress: issues 58 (the server-side privacy projection every board response passes through), 56 (the kiosk board page), 57 (the live stream, with reconnection and heartbeat) and 59 (accessibility: AA contrast in three themes, shapes for every status, reduced motion) delivered |
+| **Progress** | 🟩🟩🟩🟩🟩🟩⬜⬜⬜⬜ **57%** (4/7 issues) |
 | **Sprints** | 9 (weeks 17–18), semester 2. The sprint plan spreads its issues over sprints 5–11: some start early against stubs and some are scheduled after this window, which moves the milestone's close (and its tag) to sprint 11 (see the table) |
 | **Release tag** | `v0.8.0` |
 | **Primary owner** | D, Frontend/Clinic · E, DevOps/QA (device provisioning) |
@@ -94,7 +94,7 @@ flowchart LR
 - [x] The board updates within 2 seconds of Call Next, and recovers on its own after a 10-minute outage (42–55 ms from the commit, and live again after ten minutes of refused connections on the page's clock, in browser tests, Issue 57)
 - [ ] With `number_only` set, no request to the board endpoint returns a patient name in the payload at all
 - [ ] A comment never renders alongside a full name unless per-visit consent is recorded
-- [ ] Ticket numbers are legible at 5 metres on a 32-inch screen and pass AA contrast in a bright room
+- [ ] Ticket numbers are legible at 5 metres on a 32-inch screen and pass AA contrast in a bright room. **Partly (Issues 56, 59):** AA contrast passes in the bright theme, as in every theme, on every board state (tests), and every number's size meets its 5-metre threshold as measured in a browser. The physical check of a person reading from 5 m has not been done (`docs/COMPLIANCE/ACCESSIBILITY_BOARD_EVIDENCE.md`)
 - [ ] A called ticket triggers a chime and a spoken announcement in the site's configured language
 - [ ] An offline kiosk shows a stale banner with the timestamp of the last good update
 
