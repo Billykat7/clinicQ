@@ -71,13 +71,14 @@ def _free_port() -> int:
 
 
 @contextmanager
-def serve(app: Any) -> Iterator[str]:
+def serve(app: Any, port: int | None = None) -> Iterator[str]:
     """Run ``app`` on ``127.0.0.1`` in a background thread; yield its base URL; stop it afterwards.
 
     Server-sent event streams stay open until the browser goes, so shutdown waits at most a second for
-    them rather than for the client.
+    them rather than for the client. ``port`` reopens a server where an earlier one was, which is how a
+    test restarts the server under a page that is still open (Issue 57).
     """
-    port = _free_port()
+    port = port or _free_port()
     server = uvicorn.Server(
         uvicorn.Config(
             app,

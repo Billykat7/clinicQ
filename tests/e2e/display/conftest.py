@@ -30,6 +30,7 @@ from src.modules.queue.lifecycle import Actor, call_next, transition_ticket
 from src.modules.queue.sequence import issue_ticket
 from src.modules.queue.snapshot import NoSnapshotCache, set_snapshot_cache
 from src.web import display as display_routes
+from src.web import display_stream
 from tests.e2e.conftest import serve
 from tests.e2e.dashboard.conftest import e2e_database
 from tests.factories import QueueFactory, SiteFactory
@@ -41,6 +42,8 @@ __all__ = ["board_clinic", "board_day", "e2e_database"]
 pytestmark = pytest.mark.postgres
 
 SITE = "0199b0c0-0000-7000-8000-0000000e2e56"
+#: How often the test server's board streams beat (production: 15 seconds).
+SERVER_HEARTBEAT_SECONDS = 0.5
 DESK = Actor(kind=ActorKind.STAFF, label="desk@clinicq.example")
 #: The clinic's queues: name, ticket prefix, room.
 QUEUES = (
@@ -95,11 +98,17 @@ def board_clinic(e2e_database: URL, browser: Any) -> Iterator[SimpleNamespace]:
 
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(display_routes, "get_settings", lambda: settings)
+        # The server beats every half second rather than every 15, so a test that moves the page's clock
+        # on has real beats to hear. The page still expects one every 15 seconds (data-heartbeat-seconds).
+        patch.setattr(
+            display_stream, "BOARD_HEARTBEAT_SECONDS", SERVER_HEARTBEAT_SECONDS
+        )
         app = create_app(settings)
         app.dependency_overrides[get_db] = _db
         app.dependency_overrides[get_settings] = lambda: settings
         with serve(app) as base_url:
             yield SimpleNamespace(
+                app=app,
                 base_url=base_url,
                 browser=browser,
                 session=factory,
@@ -165,10 +174,9 @@ def board_day(board_clinic: SimpleNamespace) -> Iterator[SimpleNamespace]:
 
     def new_page(width: int = 1920, height: int = 1080, **options: Any) -> Any:
         """A fresh browser page at ``width`` x ``height``, closed with its context after the test."""
+        options.setdefault("base_url", board_clinic.base_url)
         context = board_clinic.browser.new_context(
-            base_url=board_clinic.base_url,
-            viewport={"width": width, "height": height},
-            **options,
+            viewport={"width": width, "height": height}, **options
         )
         contexts.append(context)
         return context.new_page()

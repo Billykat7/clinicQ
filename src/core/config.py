@@ -1153,6 +1153,14 @@ class Settings(BaseSettings):
             "someone stuck (env: DASHBOARD_STUCK_WAIT_MINUTES)"
         ),
     )
+    live_events_fanout: bool = Field(
+        default=True,
+        description=(
+            "With REDIS_URL set, fan live events (dashboards, waiting-room boards) out to every instance "
+            "through Redis pub/sub, so a call made on one worker reaches screens connected to another "
+            "(env: LIVE_EVENTS_FANOUT)."
+        ),
+    )
     board_health_ticker: bool = Field(
         default=True,
         description=(

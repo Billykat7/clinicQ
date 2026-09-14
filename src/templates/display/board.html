@@ -6,9 +6,10 @@
     rendered through board_template_response, which refuses raw ticket data, and the payload carried
     in data-initial has no name or reason the clinic's display mode or the patient's consent forbids.
 
-    board.js draws the panels from that payload at once and again from /state every few seconds, so
-    the markup for a panel lives in the <template> elements below rather than in the script. The words
-    a panel needs (its captions and statuses) are data attributes on those templates.
+    board.js draws the panels from that payload at once, and board-live.js hands it every later board
+    from the live stream (Issue 57), or from /state while the stream is down. The markup for a panel
+    lives in the <template> elements below rather than in the script, and the words a panel needs (its
+    captions and statuses) are data attributes on those templates.
 
     Layout (board.css): one panel fills the screen, two and three stand side by side, four make a
     grid of two by two, and more than four show four at a time, a page after the next. -#}
@@ -26,6 +27,8 @@
 {% set initials = board.clinic_name.split()[:2] | map('first') | join | upper %}
 <main id="main" class="kiosk" lang="{{ board.language.value }}"
       data-state-url="{{ state_url }}"
+      data-stream-url="{{ stream_url }}"
+      data-heartbeat-seconds="{{ heartbeat_seconds }}"
       data-poll-seconds="{{ poll_seconds }}"
       data-highlight-seconds="{{ highlight_seconds }}"
       data-panels-per-page="{{ panels_per_page }}"
@@ -48,6 +51,7 @@
     {% if messages %}
     <p class="kiosk-ticker" lang="{{ message_language.value }}" data-board-ticker data-messages="{{ messages | list | tojson | forceescape }}">{{ messages[0] }}</p>
     {% endif %}
+    <p class="kiosk-connection" data-board-connection data-connecting="" data-reconnecting="Reconnecting to the clinic…" hidden></p>
     <p class="kiosk-pages" data-board-pages data-template="Page {page} of {pages}" hidden></p>
   </footer>
 
@@ -95,4 +99,5 @@
 {% block scripts %}
   <script src="/static/js/board-clock.js" defer></script>
   <script src="/static/js/board.js" defer></script>
+  <script src="/static/js/board-live.js" defer></script>
 {% endblock %}

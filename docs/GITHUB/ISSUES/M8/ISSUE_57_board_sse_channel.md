@@ -13,7 +13,7 @@
 | **Depends on** | [Issue 41](../M6/ISSUE_41_ticket_lifecycle_state_machine.md): Ticket lifecycle state machine and illegal-transition rejection<br>[Issue 56](../M8/ISSUE_56_board_page_kiosk.md): Waiting-room board page (kiosk) with now-serving and up-next panels |
 | **Unblocks** | [Issue 60](../M8/ISSUE_60_board_audio_tts.md): Audio chime and multi-language text-to-speech call announcements<br>[Issue 62](../M8/ISSUE_62_board_resilience_tests.md): Board resilience: cached last-known state, stale banner, recovery tests |
 
-> **Note:** The spec names A as owner; the sprint plan puts the board SSE in D's lane (sprint 9). Agree before sprint 9 whether A builds the stream and D the client, or D owns both.
+> **Note:** The spec names A as owner; the sprint plan puts the board SSE in D's lane (sprint 9). **Settled by the pull request for this issue:** A builds the stream (`src/web/display_stream.py`, `src/modules/display/board_state.py`), which carries the guard-tested privacy projection, as A owns Issue 58. D builds the client (`src/static/js/board-live.js`), which only draws what the stream brings.
 
 ## Context
 

@@ -59,7 +59,9 @@ migrated for it, and drives it with one headless Chromium per worker. `tests/e2e
 the two fixtures (`browser`, `serve`). The waiting-room board's suite (`tests/e2e/display`, Issue 56
 onwards) reuses them: its layouts at 1080p and 720p, the cap height of every number in millimetres on a
 32-inch screen, the new-call highlight with and without reduced motion, and an eight-hour day on the
-page's own clock.
+page's own clock. From Issue 57 it also covers a call reaching the board within 2 seconds, a server
+restarted under an open board, a silent stream noticed within 30 seconds, a ten-minute outage, and
+streams that vanish without closing.
 
 - **Locally:** `pip install -r requirements.txt`, then `python -m playwright install chromium` once, then
   `pytest tests/e2e/dashboard` (with `TEST_DATABASE_URL`, like every PostgreSQL test). Without Chromium
@@ -69,7 +71,7 @@ page's own clock.
   `REQUIRE_BROWSER_TESTS=1` turns "no browser" into a failure, as `REQUIRE_POSTGRES_TESTS` does for the
   database.
 - **Time budget:** the eight dashboard tests take about 30 seconds under `-n auto` (22 seconds in one
-  process), and the eight board tests about 50 seconds, most of it the eight-hour day. Installing Chromium with its system libraries about a minute, so the shard stays well
+  process), and the thirteen board tests about 40 seconds under `-n auto`. Installing Chromium with its system libraries about a minute, so the shard stays well
   inside its 15-minute timeout and adds one to two billable minutes to a run. A browser test that needs
   to wait uses Playwright's `expect` with a timeout, never a fixed sleep, except where waiting *is*
   the test (an action held longer than the outbox allows, set to 8 seconds for the suite).

@@ -18,8 +18,7 @@ governs what is done.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, replace
 from datetime import date
 from typing import Annotated
@@ -56,7 +55,7 @@ from src.database.models.queue_reorder import MAX_REORDER_NOTE_LENGTH
 from src.database.models.visit_note import MAX_VISIT_NOTE_LENGTH
 from src.database.session import get_db
 from src.modules.queues.service import list_queues
-from src.web.context import page_context, require_authenticated_html
+from src.web.context import page_context, require_authenticated_html, short_session
 from src.web.dashboard.board import read_board
 from src.web.dashboard.reorder import (
     PRIORITY_RESOURCE,
@@ -293,25 +292,9 @@ async def clinic_board_cards(site_id: str, request: Request, db: DbSession) -> R
     return response
 
 
-@contextmanager
-def _short_session(request: Request) -> Iterator[Session]:
-    """A session that lives only as long as the ``with`` block, from the app's own ``get_db``.
-
-    For a stream, which must not hold a request-scoped session (and so a pooled connection) open for
-    a whole shift. Uses the application's ``get_db`` override when one is installed, so a test's
-    database is the one checked.
-    """
-    provider = request.app.dependency_overrides.get(get_db, get_db)
-    sessions = provider()
-    try:
-        yield next(sessions)
-    finally:
-        sessions.close()
-
-
 def _stream_refusal(request: Request, site_id: str, key: str) -> Response | str:
     """A stream's gate: the caller's user id, or the response that refuses them."""
-    with _short_session(request) as db:
+    with short_session(request) as db:
         if not require_authenticated_html(request, db):
             return Response(status_code=status.HTTP_401_UNAUTHORIZED)
         user = peek_user_from_refresh_cookie(db, request)
@@ -352,7 +335,7 @@ async def _live_stream(
 
     def check_access() -> bool:
         """Whether the caller still works here and still has this screen (a fresh read)."""
-        with _short_session(request) as db:
+        with short_session(request) as db:
             current = db.get(User, user_id)
             allowed = bool(
                 current is not None
