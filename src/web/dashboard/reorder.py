@@ -27,8 +27,8 @@ from typing import Final
 
 from sqlalchemy.orm import Session
 
-from src.commons.enums import PriorityReason, TicketSource, TicketStatus
-from src.commons.time import business_date, stored_sast
+from src.commons.enums import PriorityReason, TicketStatus
+from src.commons.time import business_date, now_sast, stored_sast
 from src.core.site_scope import SiteAccess, scoped_select
 from src.database.models import QueueReorder, Ticket
 from src.modules.queue.priority import (
@@ -38,20 +38,13 @@ from src.modules.queue.priority import (
     reorder_trail,
 )
 from src.modules.queue.tickets import board_select
+from src.web.components import TICKET_SOURCE_LABELS
 
 #: The resource whose grants decide whether a caller may see (``read``) and make (``update``) an
 #: override. The same key the priority routes check, so the page and the API cannot disagree.
 PRIORITY_RESOURCE: Final = "queues.tickets.priority"
 #: How many of a queue's latest overrides its card shows; the manager's view has the rest.
 TRAIL_ON_CARD: Final = 3
-
-#: How each channel reads beside a ticket in the waiting line.
-SOURCE_LABELS: Final[dict[TicketSource, str]] = {
-    TicketSource.WEB: "Web",
-    TicketSource.USSD: "USSD",
-    TicketSource.WHATSAPP: "WhatsApp",
-    TicketSource.WALK_IN: "Walk-in",
-}
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +74,8 @@ class LineTicket:
     name: str | None
     source_label: str
     joined_at: datetime
+    #: Whole minutes since the ticket joined, as of the read.
+    waited_minutes: int
     priority: PriorityMark | None
 
 
@@ -215,7 +210,8 @@ def queue_lines(
     Returns:
         ``{queue id: QueueLine}`` for every id in ``queue_ids``.
     """
-    today = business_date()
+    now = now_sast()
+    today = business_date(now)
     trail_rows = reorder_trail(db, access, today) if include_priority else ()
     entries = _entries(db, access, trail_rows)
     # The trail is newest first, so the first entry seen for a ticket is its latest override.
@@ -240,8 +236,14 @@ def queue_lines(
                     number=ticket.number,
                     place=place,
                     name=ticket.walk_in_name,
-                    source_label=SOURCE_LABELS[ticket.source_enum],
+                    source_label=TICKET_SOURCE_LABELS[ticket.source_enum],
                     joined_at=stored_sast(ticket.joined_at),
+                    waited_minutes=max(
+                        0,
+                        int(
+                            (now - stored_sast(ticket.joined_at)).total_seconds() // 60
+                        ),
+                    ),
                     priority=marks.get(ticket.id),
                 )
                 for place, ticket in enumerate(waiting, start=1)

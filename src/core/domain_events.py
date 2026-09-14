@@ -180,3 +180,26 @@ class SiteStatusChanged(DomainEvent):
     #: typed in, which nobody is waiting to hear about.
     contact_email: str | None
     contact_phone: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class QueueChanged(DomainEvent):
+    """Something changed in a queue's day: a join, a call, a finish, a transfer (Issue 49).
+
+    Published after the commit by the one hook every queue write already calls
+    (:func:`src.modules.queue.snapshot.on_queue_changed`), so a live screen hears about exactly the
+    changes that happened and never one that rolled back. It names the queue and nothing about any
+    patient: a screen that hears it reads the queue again through its own gate.
+    """
+
+    site_id: str
+    queue_id: str
+    #: Set when the change was a call: the number now called, which a public board shows anyway.
+    called_number: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class BoardSettingsChanged(DomainEvent):
+    """What a clinic's waiting-room screen may show changed (Issues 27 and 49)."""
+
+    site_id: str

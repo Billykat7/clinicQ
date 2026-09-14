@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Status** | 🚧 In progress: issues 48 (the dashboard shell, role-aware navigation and the site switcher), 52 (reordering with reason codes and the override trail) and 54 (the clinic manager's settings screens) delivered |
-| **Progress** | 🟩🟩🟩🟩⬜⬜⬜⬜⬜⬜ **38%** (3/8 issues) |
+| **Status** | 🚧 In progress: issues 48 (the dashboard shell, role-aware navigation and the site switcher), 49 (the live front-desk board), 52 (reordering with reason codes and the override trail) and 54 (the clinic manager's settings screens) delivered |
+| **Progress** | 🟩🟩🟩🟩🟩⬜⬜⬜⬜⬜ **50%** (4/8 issues) |
 | **Sprints** | 8–9 (weeks 15–18), semester 2. The sprint plan spreads its issues over sprints 3–11: some start early against stubs and some are scheduled after this window, which moves the milestone's close (and its tag) to sprint 11 (see the table) |
 | **Release tag** | `v0.7.0` |
 | **Primary owner** | D, Frontend/Clinic |

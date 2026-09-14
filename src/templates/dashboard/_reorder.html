@@ -27,6 +27,7 @@
       <span class="line-place">{{ ticket.place }}</span>
       <span class="line-number">{{ ticket.number }}</span>
       <span class="line-name">{{ ticket.name or ticket.source_label }}</span>
+      <span class="line-waited" title="Waiting for {{ ticket.waited_minutes }} minutes">{{ ticket.waited_minutes }} min</span>
       {% if ticket.priority %}
       <span class="badge badge-warn line-priority" title="Moved forward at {{ ticket.priority.at.strftime('%H:%M') }} by {{ ticket.priority.staff }}: {{ ticket.priority.reason_label }}">Priority</span>
       {% endif %}

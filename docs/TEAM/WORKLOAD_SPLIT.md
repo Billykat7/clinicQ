@@ -95,7 +95,7 @@ ever empty: that is the whole design goal. Issue numbers in brackets.
 | **3** | 5–6 | M3 | ✅ done |
 | **4** | 7–8 | M3 · M4 | ✅ done — M3 closed, tag `v0.3.0` to cut |
 | **5** | 9–10 | M4 · M5 | ✅ done — M4 closed, tag `v0.4.0` to follow; M5 delivered with it |
-| **6** | 11–12 | M5 · M6 | 🚧 in progress — M5 delivered (issues 31–38, tag `v0.5.0` to follow); M6: tickets [39], join [40] and lifecycle [41] delivered; preferences [67] and the front-desk board [49] not started |
+| **6** | 11–12 | M5 · M6 | 🚧 in progress — M5 delivered (issues 31–38, tag `v0.5.0` to follow); M6: tickets [39], join [40] and lifecycle [41] delivered; the front-desk board [49] delivered with M7; preferences [67] not started |
 | **7** | 13–14 | M6 ⚠️ | 🚧 in progress — M6 closed (issues 39–47, tag `v0.6.0` to follow); adapter framework [72], simulators [78], ticket page [68], PWA shell [69], call-next actions [50] and walk-in intake [51] not started |
 | **8** | 15–16 | M7 | 🚧 in progress — reorder UI [52] delivered; appointment slots [80], USSD menu tree [73], QR ticket [70], room view [53], security hardening [97] and i18n [77] not started |
 | **9** | 17–18 | M7 · M8 · M9 | 🚧 in progress — manager settings [54] delivered; booking [81], USSD sessions [74], kiosk check-in [83], board SSE [57] and privacy [58], encryption [98] and the stats worker [88] not started |
@@ -108,7 +108,7 @@ ever empty: that is the whole design goal. Issue numbers in brackets.
 **5 of 14 sprints done** 🟩🟩🟩🟩⬜⬜⬜⬜⬜⬜ **36%**, carrying milestones M1–M5 (issues 1–38) and
 release notes `v0.1.0`–`v0.5.0`. Only `v0.2.0` is tagged so far; the others are still to cut. **M6 is
 closed** (issues 39–47, release note `v0.6.0`), but **sprints 6 and 7 are under way, not done:** the
-queue engine is delivered, while preferences (67), the front-desk board (49) and sprint 7's other lanes
+queue engine and the front-desk board (49) are delivered, while preferences (67) and sprint 7's other lanes
 (72, 78, 68, 69, 50, 51) have not started — and by the rule below a sprint is ticked only when *every*
 issue its lanes deliver is closed.
 

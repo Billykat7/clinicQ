@@ -24,8 +24,10 @@
   'use strict';
 
   var dialog = document.getElementById('move-dialog');
-  var lists = document.querySelectorAll('[data-reorder-list]:not([data-reorder-disabled])');
-  if (!dialog || !lists.length) return;
+  if (!dialog) return;
+  // The lines are replaced whenever the live board refreshes (Issue 49), so every listener is on the
+  // document and finds its line when the event happens, never on a line that may be gone.
+  var ENABLED = '[data-reorder-list]:not([data-reorder-disabled])';
 
   var OPEN_KEY = 'clinicq.board.openLine';
   var form = document.getElementById('move-form');
@@ -114,6 +116,12 @@
       })
       .then(function (result) {
         if (result.ok) {
+          if (document.getElementById('board-connection')) {
+            // The live board (Issue 49) reads the cards again, keeping this line open.
+            closeMove();
+            document.dispatchEvent(new CustomEvent('board:refresh'));
+            return;
+          }
           try { window.sessionStorage.setItem(OPEN_KEY, queueId); } catch (e) { /* private mode */ }
           window.location.reload();
           return;
@@ -134,53 +142,53 @@
   });
   dialog.addEventListener('close', function () { moving = null; });
 
-  lists.forEach(function (list) {
-    var dragged = null;
+  var dragged = null;
 
-    function clearMarks() {
-      list.querySelectorAll('.is-drop-target, .is-dragging').forEach(function (node) {
-        node.classList.remove('is-drop-target', 'is-dragging');
-      });
-    }
-
-    list.addEventListener('click', function (event) {
-      var button = event.target.closest('[data-move-ticket]');
-      if (!button || button.disabled) return;
-      var item = button.closest('.line-ticket');
-      // Tapping moves one place forward by default; the prompt lets the person pick any earlier ticket.
-      openMove(item, item.previousElementSibling);
+  function clearMarks() {
+    document.querySelectorAll('.is-drop-target, .is-dragging').forEach(function (node) {
+      node.classList.remove('is-drop-target', 'is-dragging');
     });
+  }
 
-    list.addEventListener('dragstart', function (event) {
-      dragged = event.target.closest('.line-ticket');
-      if (!dragged) return;
-      dragged.classList.add('is-dragging');
-      event.dataTransfer.effectAllowed = 'move';
-      event.dataTransfer.setData('text/plain', dragged.getAttribute('data-ticket-id'));
-    });
+  document.addEventListener('click', function (event) {
+    var button = event.target.closest(ENABLED + ' [data-move-ticket]');
+    if (!button || button.disabled) return;
+    var item = button.closest('.line-ticket');
+    // Tapping moves one place forward by default; the prompt lets the person pick any earlier ticket.
+    openMove(item, item.previousElementSibling);
+  });
 
-    list.addEventListener('dragover', function (event) {
-      var over = event.target.closest('.line-ticket');
-      // A drop target is a ticket above the dragged one: this control moves a patient forward.
-      if (!dragged || !over || over === dragged || ticketsBefore(dragged).indexOf(over) < 0) return;
-      event.preventDefault();
-      list.querySelectorAll('.is-drop-target').forEach(function (node) { node.classList.remove('is-drop-target'); });
-      over.classList.add('is-drop-target');
-    });
+  document.addEventListener('dragstart', function (event) {
+    var item = event.target.closest && event.target.closest(ENABLED + ' .line-ticket');
+    if (!item) return;
+    dragged = item;
+    dragged.classList.add('is-dragging');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', dragged.getAttribute('data-ticket-id'));
+  });
 
-    list.addEventListener('drop', function (event) {
-      var over = event.target.closest('.line-ticket');
-      var item = dragged;
-      event.preventDefault();
-      clearMarks();
-      dragged = null;
-      if (item && over && ticketsBefore(item).indexOf(over) >= 0) openMove(item, over);
-    });
+  document.addEventListener('dragover', function (event) {
+    var over = event.target.closest && event.target.closest(ENABLED + ' .line-ticket');
+    // A drop target is a ticket above the dragged one in the same line: this control moves forward.
+    if (!dragged || !over || over === dragged || ticketsBefore(dragged).indexOf(over) < 0) return;
+    event.preventDefault();
+    document.querySelectorAll('.is-drop-target').forEach(function (node) { node.classList.remove('is-drop-target'); });
+    over.classList.add('is-drop-target');
+  });
 
-    list.addEventListener('dragend', function () {
-      clearMarks();
-      dragged = null;
-    });
+  document.addEventListener('drop', function (event) {
+    var over = event.target.closest && event.target.closest(ENABLED + ' .line-ticket');
+    var item = dragged;
+    if (!item) return;
+    event.preventDefault();
+    clearMarks();
+    dragged = null;
+    if (over && ticketsBefore(item).indexOf(over) >= 0) openMove(item, over);
+  });
+
+  document.addEventListener('dragend', function () {
+    clearMarks();
+    dragged = null;
   });
 
   // After a saved move the board reloads; reopen the line the person was working in.
