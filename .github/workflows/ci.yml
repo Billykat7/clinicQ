@@ -320,6 +320,14 @@ jobs:
           pytest $PYTEST_PATHS -q -n auto --dist loadscope
           --cov --cov-report= --cov-fail-under=0 --junitxml="junit-$SHARD.xml"
 
+      # The 07:30 rush (Issue 47) measures latency, so it runs alone after the parallel run, which
+      # skips it: a budget judged while every CPU is busy with other tests measures the runner.
+      - name: 07:30 rush, alone
+        if: matrix.name == 'integration'
+        run: >-
+          pytest tests/integration/queue/test_queue_concurrency.py::test_the_0730_rush_meets_the_budget
+          -q --log-cli-level=INFO
+
       - name: Keep this shard's coverage data
         if: ${{ !cancelled() }}
         env:

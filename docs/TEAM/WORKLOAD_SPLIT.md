@@ -96,7 +96,7 @@ ever empty: that is the whole design goal. Issue numbers in brackets.
 | **4** | 7–8 | M3 · M4 | ✅ done — M3 closed, tag `v0.3.0` to cut |
 | **5** | 9–10 | M4 · M5 | ✅ done — M4 closed, tag `v0.4.0` to follow; M5 delivered with it |
 | **6** | 11–12 | M5 · M6 | 🚧 in progress — M5 delivered (issues 31–38, tag `v0.5.0` to follow); M6: tickets [39], join [40] and lifecycle [41] delivered; preferences [67] and the front-desk board [49] not started |
-| **7** | 13–14 | M6 ⚠️ | 🚧 in progress — estimates [42], timers [43], cancel [44], transfer [45] and priority [46] delivered; contract [47] not yet |
+| **7** | 13–14 | M6 ⚠️ | 🚧 in progress — M6 closed (issues 39–47, tag `v0.6.0` to follow); adapter framework [72], simulators [78], ticket page [68], PWA shell [69], call-next actions [50] and walk-in intake [51] not started |
 | **8** | 15–16 | M7 | 📋 planned |
 | **9** | 17–18 | M7 · M8 · M9 | 📋 planned |
 | **10** | 19–20 | M9 · M10 | 📋 planned |
@@ -106,9 +106,11 @@ ever empty: that is the whole design goal. Issue numbers in brackets.
 | **14** | 27–28 | M14 | 📋 planned |
 
 **5 of 14 sprints done** 🟩🟩🟩🟩⬜⬜⬜⬜⬜⬜ **36%**, carrying milestones M1–M5 (issues 1–38) and
-release notes `v0.1.0`–`v0.5.0`. Only `v0.2.0` is tagged so far; the others are still to cut. **Sprint 6 is under way, not
-done:** its M5 half is delivered (issues 31–38), its M6 half has A's issues 39–41 delivered while preferences (67) and the front-desk board (49) have not started — and by the rule below a
-sprint is ticked only when *every* issue its lanes deliver is closed.
+release notes `v0.1.0`–`v0.5.0`. Only `v0.2.0` is tagged so far; the others are still to cut. **M6 is
+closed** (issues 39–47, release note `v0.6.0`), but **sprints 6 and 7 are under way, not done:** the
+queue engine is delivered, while preferences (67), the front-desk board (49) and sprint 7's other lanes
+(72, 78, 68, 69, 50, 51) have not started — and by the rule below a sprint is ticked only when *every*
+issue its lanes deliver is closed.
 
 A sprint is **done** when every issue its lanes *deliver* is closed. That is marked by hand, not
 generated, because a lane also names issues it works **against** — a contract stub, a fixture, a

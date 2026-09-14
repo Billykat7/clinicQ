@@ -87,6 +87,7 @@ def test_a_search_a_view_and_a_join_store_nothing_that_identifies_the_patient(
             channel=DiscoveryChannel.WEB,
             session_token=token,
         )
+        db.commit()  # the join flow's own commit: a join's events are part of the join
 
     events = _events(directory)
     assert [event["kind"] for event in events] == [

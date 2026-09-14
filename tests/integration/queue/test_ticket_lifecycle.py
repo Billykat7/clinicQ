@@ -4,7 +4,9 @@
 service. This file drives them through the route a dashboard will call, and covers what only a real
 request or a real database shows:
 
-* every illegal pair answers **409** with ``ticket.transition.illegal`` and leaves the row as it was;
+* every illegal pair answers **409** with ``ticket.transition.illegal`` and leaves the row as it was,
+  and a cancellation or transfer asked for as a bare status change answers **409** with
+  ``ticket.transition.dedicated_route`` (Issue 47): each has its own route;
 * each move writes an **audit row** with the actor, what they were acting as, and the time;
 * a move decided on a **stale** screen is refused, and another clinic's ticket is a **404**;
 * a **terminal** ticket cannot be reopened, and a correction is a **new** ticket;
@@ -38,6 +40,8 @@ from src.commons.time import stored_sast
 from src.database.models import AuditEvent, Queue, SiteQueueSnapshot, Ticket
 from src.database.schema import apply_postgres_search_path
 from src.modules.queue.lifecycle import (
+    DEDICATED_MOVE_CODE,
+    DEDICATED_MOVES,
     ILLEGAL_TRANSITION_CODE,
     STALE_TRANSITION_CODE,
     Actor,
@@ -74,9 +78,13 @@ def _walk_in_at(desk: SimpleNamespace, current: TicketStatus) -> str:
 def test_every_illegal_pair_is_a_409_over_http_and_changes_nothing(
     desk: SimpleNamespace,
 ) -> None:
-    """All 64 pairs through the route: 200 and moved, or 409 with the row read back unchanged."""
+    """All 64 pairs through the route: 200 and moved, or 409 with the row read back unchanged.
+
+    ``cancelled`` and ``transferred`` are refused from every status here, legal or not: the cancel
+    and transfer routes make them, with the channel and the next queue's ticket (Issue 47).
+    """
     front = desk.staff("desk.a")
-    refused = 0
+    refused = dedicated = 0
     for current, requested in itertools.product(TicketStatus, TicketStatus):
         ticket_id = _walk_in_at(desk, current)
         with desk.session() as db:
@@ -94,7 +102,15 @@ def test_every_illegal_pair_is_a_409_over_http_and_changes_nothing(
         with desk.session() as db:
             after = db.get(Ticket, ticket_id)
             now = (after.status, after.called_at, after.started_at, after.completed_at)
-        if is_legal(current, requested):
+        if requested in DEDICATED_MOVES:
+            dedicated += 1
+            assert response.status_code == status.HTTP_409_CONFLICT, (
+                current,
+                requested,
+            )
+            assert response.json()["code"] == DEDICATED_MOVE_CODE
+            assert now == snapshot, (current, requested)
+        elif is_legal(current, requested):
             assert response.status_code == status.HTTP_200_OK, (current, requested)
             assert response.json()["status"] == requested.value
         else:
@@ -105,7 +121,7 @@ def test_every_illegal_pair_is_a_409_over_http_and_changes_nothing(
             )
             assert response.json()["code"] == ILLEGAL_TRANSITION_CODE
             assert now == snapshot, (current, requested)
-    assert refused == 52
+    assert (refused, dedicated) == (41, 16)
 
 
 def test_each_move_writes_an_audit_row_with_actor_role_and_time(

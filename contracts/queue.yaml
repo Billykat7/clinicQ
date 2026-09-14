@@ -259,7 +259,8 @@ paths:
         The only way a ticket's status changes (non-negotiable 2). The legal moves are:
         `waiting → called | cancelled | transferred`; `called → in_progress | recalled | no_show |
         cancelled`; `recalled → in_progress | no_show | cancelled`; `in_progress → done |
-        transferred`. `done`, `no_show`, `cancelled` and `transferred` never change again: a
+        transferred`, where `cancelled` and `transferred` are made only by the cancel and transfer
+        routes. `done`, `no_show`, `cancelled` and `transferred` never change again: a
         correction is a new ticket. Every move is audited with the actor. Concurrent moves on one
         ticket are serialised; the second is judged against the status the first left. Requires
         `queues.tickets` `update` at this clinic.
@@ -301,8 +302,11 @@ paths:
         "409":
           description: |
             The move was refused and nothing changed. `code` is `ticket.transition.illegal` when the
-            table does not allow it from the ticket's current status, or `ticket.transition.stale`
-            when `expected_status` no longer matches because someone else moved the ticket first.
+            table does not allow it from the ticket's current status, `ticket.transition.stale`
+            when `expected_status` no longer matches because someone else moved the ticket first, or
+            `ticket.transition.dedicated_route` when `to` is `cancelled` or `transferred`: those are
+            made by the cancel and transfer routes, which record the channel and issue the ticket in
+            the next queue.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -431,7 +435,10 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
               example: { detail: "A patient cannot be moved ahead of someone who has already been called or is being seen.", code: "ticket.priority.ahead_of_called" }
         "422":
-          description: No reason code (or one outside the list), or another field failed validation. Nothing is saved.
+          description: |
+            No reason code (or one outside the list), or another field failed validation. Nothing is
+            saved. Over HTTP the request validation answers first; a caller of the service itself is
+            refused with `ticket.priority.reason_required`.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ValidationError" }
@@ -823,11 +830,14 @@ components:
         The join was refused. `code` is `queue.join.` followed by a `JoinRefusal`, and `detail` is a
         sentence a patient can be shown as it stands:
 
-        - `clinic_closed`: the clinic is closed now, closed for an announced reason, or not taking patients through ClinicQ;
-        - `queue_closed`: the queue is not taking patients at the moment;
-        - `walk_in_only`: the queue takes walk-ins only, and the join came from a phone;
-        - `queue_full`: the queue has issued its capacity for today;
-        - `site_daily_cap`: the clinic is taking no more joins by phone today.
+        - `queue.join.clinic_closed`: the clinic is closed now, closed for an announced reason, or not taking patients through ClinicQ;
+        - `queue.join.queue_closed`: the queue is not taking patients at the moment;
+        - `queue.join.walk_in_only`: the queue takes walk-ins only, and the join came from a phone;
+        - `queue.join.queue_full`: the queue has issued its capacity for today;
+        - `queue.join.site_daily_cap`: the clinic is taking no more joins by phone today.
+
+        Rate limiting is not a 409: over HTTP it is `429` with `Retry-After` and `http.too_many_requests`.
+        A channel adapter calling the join service directly receives it as `queue.join.rate_limited`.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
