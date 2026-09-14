@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Status** | 🚧 In progress · **critical path**: issues 39 (tickets and their numbering), 40 (the one join service), 41 (the lifecycle) and 42 (wait ranges) delivered |
-| **Progress** | 🟩🟩🟩🟩⬜⬜⬜⬜⬜⬜ **44%** (4/9 issues) |
+| **Status** | 🚧 In progress · **critical path**: issues 39 (tickets and their numbering), 40 (the one join service), 41 (the lifecycle), 42 (wait ranges) and 43 (recall and no-show timers) delivered |
+| **Progress** | 🟩🟩🟩🟩🟩🟩⬜⬜⬜⬜ **56%** (5/9 issues) |
 | **Sprints** | 6–7 (weeks 11–14), semester 2 |
 | **Release tag** | `v0.6.0` |
 | **Primary owner** | A, Backend Lead |
@@ -38,7 +38,7 @@ false-precision estimate that slips is worse for trust than an honest band.
 - Join API used by every channel, with an abuse guard against duplicate and bulk joins
 - Explicit lifecycle state machine: `waiting → called → in_progress → done | no_show | cancelled`
 - Wait estimation from `wait_time_samples`, published as a range with a confidence signal
-- Recall timers and automatic no-show transitions driven by `arq` scheduled jobs
+- Recall timers and automatic no-show transitions driven by a scheduled sweep (open decision 1: the kernel's APScheduler under an advisory lock, not `arq`)
 - Patient-initiated cancellation with position recalculation for everyone behind
 - Transfer between queues (triage → doctor → pharmacy) that preserves the visit
 - Clinical priority override with a mandatory reason code, staff id and audit row

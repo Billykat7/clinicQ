@@ -10,7 +10,8 @@ Both clinics are **verified** (publicly listed) and **open around the clock** (e
 about a closed clinic announces a closure, which does not depend on the time of day either.
 
 Clinic A runs Triage (``T``, remote joins allowed) and the Pharmacy (``P``, walk-ins only); clinic B
-runs its own Triage. ``desk.a`` and ``desk.b`` are receptionists at each. The snapshot cache is off,
+runs its own Triage. ``desk.a`` and ``desk.b`` are receptionists at each, and ``manager.a`` manages
+clinic A. The snapshot cache is off,
 so a join's write-through lands in the table only and nothing reaches a Redis.
 
 What concurrency needs PostgreSQL for lives in the PostgreSQL-marked tests, which build their own.
@@ -104,12 +105,13 @@ def desk(monkeypatch: pytest.MonkeyPatch) -> Iterator[SimpleNamespace]:
         other_triage = QueueFactory.create(
             db, site_id=SITE_B, name="Triage", slug="triage", ticket_prefix="T"
         )
-        for name, site_id in (("desk.a", SITE_A), ("desk.b", SITE_B)):
+        for name, role, site_id in (
+            ("desk.a", UserRole.RECEPTIONIST, SITE_A),
+            ("desk.b", UserRole.RECEPTIONIST, SITE_B),
+            ("manager.a", UserRole.CLINIC_MANAGER, SITE_A),
+        ):
             StaffFactory.create(
-                db,
-                email=f"{name}@clinicq.example",
-                role=UserRole.RECEPTIONIST,
-                site_id=site_id,
+                db, email=f"{name}@clinicq.example", role=role, site_id=site_id
             )
         db.commit()
 

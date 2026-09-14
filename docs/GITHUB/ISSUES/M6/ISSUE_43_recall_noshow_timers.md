@@ -26,7 +26,7 @@ what happened and how to rejoin.
 
 ## Scope
 
-- `arq` scheduled job checking called tickets against a per-site recall timeout
+- A scheduled sweep (open decision 1, settled in this issue: an APScheduler job under the advisory lock, not `arq`) checking called tickets against a per-site recall timeout
 - First timeout moves the ticket to a recall state at the front of the active window; second marks it `no_show`
 - Configurable timeout per site and per queue, with sensible defaults
 - Patient notified on both recall and no-show, with rejoin instructions

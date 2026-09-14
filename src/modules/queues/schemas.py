@@ -13,7 +13,11 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.commons.enums import QueueKind, TicketSource
-from src.database.models.queue import MAX_DAILY_CAPACITY, MAX_EXPECTED_SERVICE_MINUTES
+from src.database.models.queue import (
+    MAX_DAILY_CAPACITY,
+    MAX_EXPECTED_SERVICE_MINUTES,
+    RECALL_TIMEOUT_RANGE,
+)
 
 #: A slug is lowercase letters, digits and single hyphens: it appears in URLs and USSD menus.
 SLUG_PATTERN = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
@@ -36,6 +40,11 @@ class QueueIn(BaseModel):
     """Validated to a sensible range: zero would make the estimator divide by nothing, and a value
     above four hours is somebody typing hours into a minutes field."""
     max_daily_capacity: int | None = Field(default=None, ge=1, le=MAX_DAILY_CAPACITY)
+    recall_timeout_minutes: int | None = Field(
+        default=None, ge=RECALL_TIMEOUT_RANGE[0], le=RECALL_TIMEOUT_RANGE[1]
+    )
+    """Minutes a called patient has to arrive before a recall, then a no-show (Issue 43). ``None``
+    uses the clinic's timeout, then the platform default."""
     allows_remote_join: bool = True
     is_active: bool = True
 
@@ -55,6 +64,7 @@ class QueueOut(BaseModel):
     display_order: int
     expected_service_minutes: int
     max_daily_capacity: int | None
+    recall_timeout_minutes: int | None
     allows_remote_join: bool
     is_active: bool
     created_at: datetime

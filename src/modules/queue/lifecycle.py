@@ -156,11 +156,8 @@ class Actor:
     user_id: str | None = None
 
     @classmethod
-    def system(cls, job: str) -> Actor:
-        """A scheduled job. ``job`` names it in the audit context, never in ``actor``."""
-        del (
-            job
-        )  # named in the context by the caller; the actor stays the one system identity
+    def system(cls) -> Actor:
+        """A scheduled job. Which job is said in the move's ``note``; the actor is the system."""
         return cls(kind=ActorKind.SYSTEM, label=SYSTEM_ACTOR)
 
 
@@ -190,6 +187,8 @@ def _stamp(ticket: Ticket, requested: TicketStatus, moment: datetime) -> None:
     """Record when the move happened on the column that moment belongs to."""
     if requested is TicketStatus.CALLED and ticket.called_at is None:
         ticket.called_at = moment
+    elif requested is TicketStatus.RECALLED:
+        ticket.recalled_at = moment
     elif requested is TicketStatus.IN_PROGRESS:
         ticket.started_at = moment
     if requested in TICKET_TERMINAL_STATUSES:

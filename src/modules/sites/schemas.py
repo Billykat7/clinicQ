@@ -45,6 +45,7 @@ from src.database.models.clinic_service import (
     MAX_EXPECTED_MINUTES,
     MIN_EXPECTED_MINUTES,
 )
+from src.database.models.queue import RECALL_TIMEOUT_RANGE
 from src.modules.sites.settings import (
     REASON_RETENTION_CEILING_DAYS,
     REASON_RETENTION_DEFAULT_DAYS,
@@ -623,6 +624,30 @@ class PaymentProfileOut(BaseModel):
 # --------------------------------------------------------------------------------------
 # Discovery analytics (Issue 38): the opt-out and the view-to-join report
 # --------------------------------------------------------------------------------------
+
+
+class RecallSettingsIn(BaseModel):
+    """How long a called patient has to arrive at this clinic before a recall, then a no-show."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    recall_timeout_minutes: int | None = Field(
+        default=None, ge=RECALL_TIMEOUT_RANGE[0], le=RECALL_TIMEOUT_RANGE[1]
+    )
+    """``None`` returns the clinic to the platform default."""
+
+
+class RecallSettingsOut(BaseModel):
+    """A clinic's recall timeout, and the one that actually applies (Issue 43)."""
+
+    site_id: str
+    recall_timeout_minutes: int | None = Field(
+        description="The clinic's own setting; `null` when it uses the platform default."
+    )
+    effective_minutes: int = Field(
+        description="What applies to a queue here that sets none of its own."
+    )
+    explanation: str = Field(description="What the timeout does, in plain words.")
 
 
 class AnalyticsSettingsIn(BaseModel):

@@ -69,7 +69,7 @@ Places where the specs and the repository disagree. None blocks sprint 1, but ea
 
 | # | Decision | The specs say | The repository has | Affects |
 |---|----------|---------------|--------------------|---------|
-| 1 | Background jobs | `arq` workers | APScheduler with a PostgreSQL advisory lock (`src/core/scheduler.py`), already running the notification retry and retention sweeps, and since Issue 36 the queue snapshot reconciliation (`run_queue_snapshot_reconciliation`) | 36, 43, 63, 81, 82, 85, 88, 91, 95, 99 |
+| 1 | Background jobs (**decided in Issue 43**) | `arq` workers | APScheduler with a PostgreSQL advisory lock (`src/core/scheduler.py`), already running the notification retry and retention sweeps, the queue snapshot reconciliation (Issue 36) and the recall timers (Issue 43). **Kept, no `arq`**: see the note below the table | 36, 43, 63, 81, 82, 85, 88, 91, 95, 99 |
 | 2 | Styling (**decided in Issue 5**) | Tailwind, compiled; Alpine.js for local state | Hand-written CSS design tokens (`site.css`, `admin.css`, `landing.css`) with light and dark themes. **Kept, with htmx and no Alpine**: see the note below the table | 5 and every UI issue |
 | 3 | Packaging and layout (**decided in Issue 1**) | `uv` and `uv sync`; an `app/` package | `requirements.txt` with setuptools (`pyproject.toml`); a `src/` package. **Kept as is**: see the note below the table | 1, 7, 9 |
 | 4 | PostgreSQL version (**decided in Issue 2**) | 18 | `postgis/postgis:16-3.4` in `infra/docker/docker-compose.db.yml`. **Now `postgis/postgis:18-3.6`**: see the note below the table | 2, 3, 9, 102 |
@@ -78,6 +78,21 @@ Places where the specs and the repository disagree. None blocks sprint 1, but ea
 | 7 | Database topology | A production database of its own | A schema (`clinicq`) in a shared platform database, which `scripts/db/backup.sh` assumes | 102, 103 |
 | 8 | API paths (**decided in Issue 31**) | `/api/...` (for example `/api/clinics/nearby`) | Everything under `/api/v1/`. **Kept**: see the note below the table | 31 and every API issue |
 | 9 | USSD and WhatsApp identity (**decided in Issue 17**) | "A USSD session is trusted via the gateway MSISDN without a second OTP" | `patient_for_gateway()` in `src/modules/patients/service.py`. **Trusted, with conditions**: see the note below the table | 17, 73, 75 |
+
+**Decision 1, recorded in Issue 43:** scheduled work stays on the kernel's APScheduler sweeps under
+a PostgreSQL advisory lock (`src/core/scheduler.py`); the project does not add `arq` or a second job
+runner. The case for `arq` was "survives a restart, never double-fires", and for the jobs the specs
+describe the sweeps already give both, for a reason worth stating: **the state of a timed job lives
+in the database, not in the worker.** The recall timers (Issue 43) keep no timer in memory; a deadline
+is `called_at` (or `recalled_at`) plus a timeout, so a process that started a second ago sees exactly
+what the last one saw, and `tests/integration/queue/test_recall_timers.py` proves it by running the
+sweep in fresh interpreter processes around a restart. Double-firing is refused three times over:
+the advisory lock elects one runner, each row is locked (`FOR UPDATE SKIP LOCKED`), and the lifecycle
+refuses a move whose `expected_status` has gone. `arq` would have added Redis as a hard dependency of
+correctness, a second process type to deploy, monitor and restart, and a second place a job's state
+could disagree with the database, for no property the sweeps lack. What `arq` does better, many
+short independent tasks fanned out fast, is not a shape any current spec has; an issue that needs it
+revisits this with the job named. Specs that say `arq` mean a `run_*` sweep in `src/core/scheduler.py`.
 
 **Decision 8, recorded in Issue 31:** every route stays under `/api/v1/`, the discovery search
 included: it is served at `GET /api/v1/clinics/nearby`, not `/api/clinics/nearby`. The version

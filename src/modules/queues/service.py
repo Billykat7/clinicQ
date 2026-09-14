@@ -145,6 +145,7 @@ def create_queue(db: Session, access: SiteAccess, payload: QueueIn) -> Queue:
         display_order=payload.display_order,
         expected_service_minutes=payload.expected_service_minutes,
         max_daily_capacity=payload.max_daily_capacity,
+        recall_timeout_minutes=payload.recall_timeout_minutes,
         allows_remote_join=payload.allows_remote_join,
         is_active=payload.is_active,
     )
@@ -173,6 +174,7 @@ def update_queue(
     queue.display_order = payload.display_order
     queue.expected_service_minutes = payload.expected_service_minutes
     queue.max_daily_capacity = payload.max_daily_capacity
+    queue.recall_timeout_minutes = payload.recall_timeout_minutes
     queue.allows_remote_join = payload.allows_remote_join
     queue.is_active = payload.is_active
     db.flush()

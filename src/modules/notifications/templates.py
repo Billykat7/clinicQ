@@ -73,6 +73,36 @@ def _render_staff_invitation_sms(context: dict[str, Any]) -> RenderedMessage:
     )
 
 
+def _render_ticket_recalled_sms(context: dict[str, Any]) -> RenderedMessage:
+    """A called patient has not arrived and has been called once more (Issue 43).
+
+    Says what happened, where to go and what happens next, in one SMS. Expects ``number``,
+    ``clinic``, ``queue`` and ``minutes``; ``room`` when the queue has one.
+    """
+    app_name = get_settings().app_name
+    where = context.get("room") or context["queue"]
+    return RenderedMessage(
+        text=(
+            f"{app_name}: ticket {context['number']} at {context['clinic']} was called and you "
+            f"have not arrived. We have called you once more: please come to {where} now. "
+            f"If you are not there within {context['minutes']} minutes the ticket will be marked "
+            "missed."
+        )
+    )
+
+
+def _render_ticket_no_show_sms(context: dict[str, Any]) -> RenderedMessage:
+    """A recalled patient still did not arrive: the ticket is closed, and how to join again (Issue 43)."""
+    app_name = get_settings().app_name
+    return RenderedMessage(
+        text=(
+            f"{app_name}: ticket {context['number']} at {context['clinic']} was marked missed "
+            "because you did not arrive after being called twice. To join the queue again, use "
+            f"{app_name} on your phone, dial the {app_name} USSD code, or ask at the front desk."
+        )
+    )
+
+
 # Context renderers, keyed by (channel, template). New SMS templates (and any future
 # context-rendered email) are registered here — the single registry the issue calls for.
 _RENDERERS: dict[tuple[NotificationChannel, NotificationTemplate], Renderer] = {
@@ -82,6 +112,14 @@ _RENDERERS: dict[tuple[NotificationChannel, NotificationTemplate], Renderer] = {
         NotificationChannel.SMS,
         NotificationTemplate.STAFF_INVITATION,
     ): _render_staff_invitation_sms,
+    (
+        NotificationChannel.SMS,
+        NotificationTemplate.TICKET_RECALLED,
+    ): _render_ticket_recalled_sms,
+    (
+        NotificationChannel.SMS,
+        NotificationTemplate.TICKET_NO_SHOW,
+    ): _render_ticket_no_show_sms,
 }
 
 

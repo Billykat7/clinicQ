@@ -117,6 +117,16 @@ _UNSCOPED_BY_DESIGN: dict[str, str] = {
         "queue ids. It returns interval minutes and call hours, never a ticket or a patient "
         "(Issue 42)"
     ),
+    "modules/queue/timers.py::_due": (
+        "the recall timer sweep (Issue 43) is a scheduled system job with no caller and no clinic: "
+        "it reads **every** called or recalled ticket on the platform, with its own queue's and "
+        "clinic's timeout, to find the deadlines that have passed. A site filter would be the wrong "
+        "narrowing, like the snapshot reconciliation's"
+    ),
+    "modules/queue/timers.py::_notify": (
+        "reads the moved ticket's own patient, queue and clinic by id to word its message; the "
+        "ticket came from the sweep above and nothing else is reachable from here (Issue 43)"
+    ),
     "modules/staff/invitations.py::usable_invitation": (
         "an invitation link is opened by someone who has no account and therefore no clinic to be "
         "scoped by; the id comes from the signed token, and the row's own site_id is what "

@@ -162,6 +162,9 @@ class Site(Base, TimestampMixin, ActiveMixin, SoftDeleteMixin):
     Validated against :data:`~src.modules.sites.settings.REASON_RETENTION_CEILING_DAYS`, the
     interim policy ceiling this issue chose until the M13 data map sets the real one."""
 
+    recall_timeout_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    """The clinic's recall timeout in minutes for queues that set none (Issue 43). ``None`` uses the
+    platform default (``QUEUE_RECALL_TIMEOUT_MINUTES``)."""
     analytics_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true"
     )
