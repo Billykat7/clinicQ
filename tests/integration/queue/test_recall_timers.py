@@ -307,12 +307,14 @@ def test_a_clinic_manager_sets_the_clinics_timeout_and_a_queues_is_validated(
             "is_active",
         )
     }
-    assert (
-        manager.put(
-            queue_path, json={**editable, "recall_timeout_minutes": 0}
-        ).status_code
-        == 422
-    )
+    # The factory numbers display_order by creation, which passes the API's 0–999 once enough
+    # queues exist in one test process (CI found it): set a valid one so only the timeout is judged.
+    editable["display_order"] = 0
+    zero = manager.put(queue_path, json={**editable, "recall_timeout_minutes": 0})
+    assert zero.status_code == 422
+    assert [error["loc"][-1] for error in zero.json()["detail"]] == [
+        "recall_timeout_minutes"
+    ]
     updated = manager.put(queue_path, json={**editable, "recall_timeout_minutes": 2})
     assert updated.status_code == status.HTTP_200_OK
     assert updated.json()["recall_timeout_minutes"] == 2
