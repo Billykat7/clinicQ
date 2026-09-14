@@ -1,0 +1,96 @@
+{% extends "dashboard/base.html" %}
+{#- Walk-in intake at the front desk (Issue 51).
+
+    Built to beat a paper list: the name field has focus, the queue this desk used last is already
+    chosen, and Enter issues the ticket, so a walk-in is a name and one key. Tab reaches everything else
+    in order (the queue, as one group moved with the arrow keys; an optional phone number, with the
+    patient's answer to being messaged; an optional private reason), and nothing needs a mouse.
+
+    The form is sent by dashboard-walkin.js to the queue API with an Idempotency-Key, so pressing Enter
+    twice issues one ticket. The ticket just issued fills the panel beside the form with its number in
+    large type (the number to show the patient when there is no printer), where it stands, and Print
+    stub (Alt+P) and Undo (Alt+U). The recent list is dashboard/_walkin_recent.html, which the page
+    fetches again after every issue and undo: the server says which walk-in can still be undone.
+
+    Nothing here decides a rule: the join service refuses a closed queue or clinic, and the undo route
+    decides what can be undone. -#}
+
+{% block layout_head %}
+  {{ super() }}
+  <script src="/static/js/dashboard-walkin.js" defer></script>
+{% endblock %}
+
+{% block clinic_content %}
+{% set view = walk_in %}
+{% if view.queues %}
+<div class="walkin-grid">
+  <section class="card walkin-intake" aria-labelledby="walkin-title">
+    <h2 id="walkin-title">New walk-in</h2>
+    <form id="walkin-form" class="walkin-form" autocomplete="off"
+          data-site-id="{{ site.id }}"
+          data-api-template="/api/v1/sites/{{ site.id }}/queues/{queue}/tickets"
+          data-stub-template="/dashboard/sites/{{ site.id }}/walk-in/tickets/{ticket}/stub"
+          data-recent-url="/dashboard/sites/{{ site.id }}/walk-in/recent">
+      <div class="field">
+        <label for="walkin-name">Name or initials</label>
+        <input id="walkin-name" name="name" type="text" required maxlength="80" autofocus spellcheck="false" aria-describedby="walkin-name-hint">
+        <p class="hint" id="walkin-name-hint">Staff only. Never shown on the waiting-room screen.</p>
+      </div>
+
+      <fieldset class="field walkin-queues">
+        <legend>Queue</legend>
+        {% for queue in view.queues %}
+        <label class="walkin-queue">
+          <input type="radio" name="queue_id" value="{{ queue.id }}"{% if loop.first %} checked{% endif %}>
+          <span class="walkin-queue-name">{{ queue.name }}{% if queue.room_label %} <span class="hint">{{ queue.room_label }}</span>{% endif %}</span>
+          <span class="walkin-queue-waiting">{{ queue.waiting }} waiting</span>
+        </label>
+        {% endfor %}
+      </fieldset>
+
+      <div class="field">
+        <label for="walkin-phone">Phone <span class="hint">optional</span></label>
+        <input id="walkin-phone" name="phone" type="tel" inputmode="tel" maxlength="20" aria-describedby="walkin-phone-hint">
+        <p class="hint" id="walkin-phone-hint">So the clinic can message them about their turn, if they agree below.</p>
+      </div>
+
+      <div class="field walkin-consent">
+        <label class="check" for="walkin-consent">
+          <input id="walkin-consent" name="notifications_consent" type="checkbox" disabled aria-describedby="walkin-consent-wording">
+          They agree to messages about their turn
+        </label>
+        <p class="hint" id="walkin-consent-wording">Read this out first: “{{ view.notifications_wording }}”</p>
+      </div>
+
+      <div class="field">
+        <label for="walkin-reason">Reason <span class="hint">optional, staff only</span></label>
+        <input id="walkin-reason" name="reason_text" type="text" maxlength="{{ view.reason_max_length }}">
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn walkin-issue">Issue ticket <kbd>Enter</kbd></button>
+        <p class="msg" data-walkin-msg role="status" aria-live="polite"></p>
+      </div>
+    </form>
+  </section>
+
+  <div class="walkin-side">
+  <section class="card walkin-result" id="walkin-result" aria-labelledby="walkin-result-title" hidden>
+    <h2 id="walkin-result-title" class="sr-only">Ticket issued</h2>
+    <p class="walkin-result-queue" data-result-queue></p>
+    <p class="walkin-result-number" data-result-number aria-live="assertive"></p>
+    <p class="walkin-result-standing" data-result-standing></p>
+    <p class="walkin-result-ref">Reference <strong data-result-ref></strong></p>
+    <div class="form-actions">
+      <a class="btn btn-quiet" data-result-print target="_blank" rel="noopener" href="#" aria-keyshortcuts="Alt+P">Print stub <kbd>Alt P</kbd></a>
+    </div>
+  </section>
+
+  {% include "dashboard/_walkin_recent.html" %}
+  </div>
+</div>
+{% else %}
+{% from "components/empty_state.html" import empty_state %}
+{{ empty_state("No queue is taking patients", body="A clinic manager opens queues in the clinic settings.") }}
+{% endif %}
+{% endblock %}

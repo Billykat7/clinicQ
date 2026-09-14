@@ -619,3 +619,74 @@ li.with-staff-ticket[data-pending-call] { font-weight: 600; color: var(--muted);
   color: var(--ink);
 }
 .room-empty { margin: 0; }
+
+/* ── Walk-in intake (Issue 51) ─────────────────────────────────── */
+
+.walkin-grid {
+  display: grid;
+  gap: 1rem;
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 64rem) {
+  .walkin-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+}
+.walkin-side { display: grid; gap: 1rem; align-content: start; }
+.walkin-grid .card { margin: 0; }
+.walkin-intake h2,
+.walkin-recent h2 { font-size: var(--step-1); margin: 0 0 .75rem; }
+.walkin-form { display: grid; gap: .9rem; }
+.walkin-form input[type="text"],
+.walkin-form input[type="tel"] { min-height: 2.75rem; font-size: var(--step-0); }
+.walkin-queues { border: 0; margin: 0; padding: 0; display: grid; gap: .4rem; }
+.walkin-queues legend { font-weight: 600; margin-bottom: .35rem; }
+.walkin-queue {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  min-height: 2.75rem;
+  padding: .35rem .75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+}
+.walkin-queue:has(input:checked) { border-color: var(--brand); background: var(--brand-tint); }
+.walkin-queue:has(input:focus-visible) { outline: 2px solid var(--brand); outline-offset: 2px; }
+.walkin-queue-name { flex: 1; font-weight: 600; }
+.walkin-queue-waiting { color: var(--muted); font-size: var(--step--1); font-variant-numeric: tabular-nums; }
+.walkin-consent .hint { margin: .25rem 0 0; }
+.walkin-issue { min-height: 3rem; font-size: var(--step-1); padding-inline: 1.5rem; }
+.walkin-issue kbd,
+.walkin-result kbd,
+.walkin-undo kbd { font-size: var(--step--2); opacity: .75; margin-left: .35rem; }
+/* The number to turn towards the patient: readable across the counter. */
+.walkin-result { display: grid; gap: .35rem; text-align: center; }
+.walkin-result-queue { margin: 0; font-weight: 600; color: var(--muted); }
+.walkin-result-number {
+  margin: 0;
+  font-size: clamp(4rem, 12vw, 7rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: .02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--brand-deep);
+}
+.walkin-result-number,
+.queue-call-next-number { font-variant-numeric: tabular-nums slashed-zero; }
+.walkin-result-standing,
+.walkin-result-ref { margin: 0; }
+.walkin-result .form-actions { justify-content: center; }
+.walkin-recent-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .4rem; }
+.walkin-recent-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .35rem .6rem;
+  padding: .45rem .6rem;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+}
+.walkin-recent-name { flex: 1; min-width: 6rem; overflow-wrap: anywhere; }
+.walkin-recent-actions { display: flex; gap: .4rem; margin-left: auto; }
+.walkin-recent-actions .btn { min-height: 2.5rem; }

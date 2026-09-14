@@ -1,0 +1,50 @@
+/* The ticket stub (Issue 51): a 58 mm thermal roll on paper, a large number on screen.
+ *
+ * On screen the page is the number to show the patient when no printer is attached: centred, as large as
+ * the screen allows, in the theme's colours. On paper it is sized for a 58 mm roll with a printable width
+ * of about 48 mm: black on white, no background, the number filling the width, and the page as long as
+ * the content (thermal printers cut where the content ends). */
+
+.stub-page .board {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  min-height: 100vh;
+  overflow: auto;
+}
+.stub { display: grid; gap: .5rem; justify-items: center; text-align: center; max-width: 36rem; }
+.stub p { margin: 0; }
+.stub-clinic { font-size: var(--step-1); font-weight: 700; }
+.stub-queue { font-size: var(--step-0); color: var(--muted); }
+.stub-label { margin-top: .75rem; text-transform: uppercase; letter-spacing: .08em; font-size: var(--step--1); color: var(--muted); }
+/* The number and code in the UI face, whose narrow zero is not a letter O: on paper and across a counter,
+   A034 must never read as AO34 (the display face draws both alike). */
+.stub-number,
+.stub-ref strong { font-family: var(--font-ui); font-variant-numeric: tabular-nums slashed-zero; }
+.stub-number { font-size: clamp(6rem, 24vw, 14rem); font-weight: 800; line-height: .95; }
+.stub-standing { font-size: var(--step-1); }
+.stub-ref strong { letter-spacing: .06em; }
+.stub-time,
+.stub-note { color: var(--muted); }
+.stub-actions { display: flex; gap: .75rem; }
+
+@media print {
+  @page { size: 58mm auto; margin: 3mm 5mm; }
+  :root { color-scheme: light; }
+  html, body { background: #fff !important; color: #000 !important; }
+  .stub-page .board { display: block; min-height: 0; padding: 0; }
+  .stub { width: 48mm; max-width: none; gap: 1.2mm; }
+  .stub-clinic { font-size: 11pt; line-height: 1.15; }
+  .stub-queue { font-size: 9pt; color: #000; }
+  .stub-label { margin-top: 2mm; font-size: 7pt; color: #000; }
+  .stub-number { font-size: 34pt; line-height: 1; }
+  .stub-standing { font-size: 9pt; }
+  .stub-ref { font-size: 10pt; }
+  .stub-time,
+  .stub-note { font-size: 7pt; color: #000; }
+  .stub-note { margin-top: 1.5mm; border-top: .3mm dashed #000; padding-top: 1.5mm; }
+  .stub-actions { display: none; }
+}

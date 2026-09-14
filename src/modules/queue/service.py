@@ -143,6 +143,17 @@ def _result(
     return JoinResult(ticket, created=created, waiting_ahead=ahead, wait=estimate)
 
 
+def describe_ticket(
+    db: Session, queue: Queue, ticket: Ticket, *, moment: datetime | None = None
+) -> JoinResult:
+    """Where a ticket issued earlier stands now, as a join would have answered (``created=False``).
+
+    For the front desk's repeated request (Issue 51): a double-pressed *Issue ticket* is answered with
+    the ticket the first press issued, and where it stands now.
+    """
+    return _result(db, queue, ticket, created=False, moment=moment or now_sast())
+
+
 def _existing_ticket(
     db: Session, queue: Queue, patient_id: str, service_day: date
 ) -> Ticket | None:

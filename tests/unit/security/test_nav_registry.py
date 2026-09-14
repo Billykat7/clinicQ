@@ -138,6 +138,7 @@ def test_every_clinic_destination_names_its_site_and_has_its_own_shortcut() -> N
     clinic = site_destinations()
     assert [dest.key for dest in clinic] == [
         "board",
+        "walk_in",
         "room",
         "overrides",
         "clinic_settings",

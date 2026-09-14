@@ -1,0 +1,41 @@
+{% extends "layouts/board.html" %}
+{#- A ticket stub (Issue 51): one ticket, for the patient to keep.
+
+    A plain page. On paper, ticket-stub.css lays it out for a 58 mm thermal roll (the clinic name, the
+    queue, the number as large as the paper allows, where the patient stands and the reference code);
+    on screen, the same page is the large number to turn towards the patient when no printer is attached.
+    Opened with ?print=1, ticket-stub.js asks the browser to print it at once.
+
+    No name, phone number or reason is on it: a stub is left on chairs. -#}
+
+{% block title %}{{ stub.number }} · {{ stub.clinic }}{% endblock %}
+
+{% block styles %}
+  {{ super() }}
+  <link rel="stylesheet" href="/static/css/ticket-stub.css">
+{% endblock %}
+
+{% block layout_head %}
+  <script src="/static/js/ticket-stub.js" defer></script>
+{% endblock %}
+
+{% block body_class %}{{ super() }} stub-page{% endblock %}
+
+{% block content %}
+<article class="stub" aria-label="Ticket {{ stub.number }}">
+  <p class="stub-clinic">{{ stub.clinic }}</p>
+  <p class="stub-queue">{{ stub.queue }}{% if stub.room_label %} · {{ stub.room_label }}{% endif %}</p>
+  <p class="stub-label">Your number</p>
+  <p class="stub-number">{{ stub.number }}</p>
+  <p class="stub-standing">
+    {{ stub.standing }}<br>{{ stub.wait.label }}
+  </p>
+  <p class="stub-ref">Reference <strong>{{ stub.reference_code }}</strong></p>
+  <p class="stub-time">Issued {{ stub.issued_at.strftime('%d %b %Y, %H:%M') }}</p>
+  <p class="stub-note">Keep this ticket. Listen and watch the screen for your number.</p>
+</article>
+<nav class="stub-actions" aria-label="Ticket stub">
+  <button type="button" class="btn" data-stub-print>Print</button>
+  <a class="btn btn-quiet" href="{{ back_href }}">Back to walk-ins</a>
+</nav>
+{% endblock %}

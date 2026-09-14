@@ -157,6 +157,18 @@ NAV_DESTINATIONS: tuple[NavDestination, ...] = (
         scope=GrantScope.ASSIGNED,
         shortcut="b",
     ),
+    # Walk-in intake (Issue 51): issuing a ticket at the desk is ``queues.tickets:update`` at
+    # ``assigned``, the grant the walk-in API checks, so a clinician (``own``) and a read-only trainee
+    # never see it.
+    NavDestination(
+        key="walk_in",
+        label="Walk-in",
+        href="/dashboard/sites/{site_id}/walk-in",
+        resource="queues.tickets",
+        verb=PermissionVerb.UPDATE,
+        scope=GrantScope.ASSIGNED,
+        shortcut="w",
+    ),
     NavDestination(
         key="room",
         label="My room",

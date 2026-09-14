@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.commons.enums import (
     CancellationReason,
@@ -54,8 +54,18 @@ class WalkInIn(BaseModel):
     comment_consent: bool = False
     phone: str | None = Field(default=None, max_length=20)
     """When given, the walk-in is linked to that patient (and cannot hold two tickets in a queue)."""
+    notifications_consent: bool = False
+    """The patient's answer, asked at the desk, to being messaged about their turn (Issue 51). Recorded
+    as their ``notifications`` consent, so the notifications of M9 can reach them; only with a phone."""
 
     _trim = field_validator("reason_text", "name", "phone")(_blank_to_none)
+
+    @model_validator(mode="after")
+    def _consent_needs_a_number(self) -> WalkInIn:
+        """Agreeing to messages means nothing without a number to message."""
+        if self.notifications_consent and self.phone is None:
+            raise ValueError("notifications_consent needs a phone number to message.")
+        return self
 
 
 class TransitionIn(BaseModel):

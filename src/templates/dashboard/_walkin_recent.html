@@ -1,0 +1,36 @@
+{#- The walk-ins this person issued today, newest first (Issue 51): rendered into the intake page, and
+    again on its own after every issue and undo, so what can be undone is always the server's answer.
+
+    Only the newest can be undone, only while it is still waiting and within the clinic's undo window;
+    the server decides and sends the deadline, which dashboard-walkin.js counts down for display. -#}
+<section class="card walkin-recent" id="walkin-recent" aria-labelledby="walkin-recent-title" data-as-of="{{ walk_in.as_of.isoformat() }}">
+  <h2 id="walkin-recent-title">Your walk-ins today</h2>
+  {% if walk_in.recent %}
+  <ol class="walkin-recent-list">
+    {% for item in walk_in.recent %}
+    {% set ticket = item.ticket %}
+    {% set badge = TICKET_STATUS_BADGES[ticket.status_enum] %}
+    <li class="walkin-recent-item" data-ticket-id="{{ ticket.id }}" data-number="{{ ticket.number }}">
+      <span class="line-number">{{ ticket.number }}</span>
+      <span class="walkin-recent-name">{{ ticket.walk_in_name or "No name" }}</span>
+      <span class="badge badge-{{ badge.tone.value }}">{{ badge.label }}</span>
+      {% if ticket.patient_id %}<span class="hint" title="A phone number was taken">Phone</span>{% endif %}
+      <time class="hint" datetime="{{ item.issued_at.isoformat() }}">{{ item.issued_at.strftime('%H:%M') }}</time>
+      <span class="walkin-recent-actions">
+        {% if item.still_in_the_day %}
+        <a class="btn btn-quiet walkin-recent-stub" href="/dashboard/sites/{{ site.id }}/walk-in/tickets/{{ ticket.id }}/stub" target="_blank" rel="noopener">Stub</a>
+        {% endif %}
+        {% if item.undo_until %}
+        <button type="button" class="btn btn-quiet walkin-undo"
+                data-undo-url="/api/v1/sites/{{ site.id }}/tickets/{{ ticket.id }}/undo-walk-in"
+                data-undo-until="{{ item.undo_until.isoformat() }}"
+                aria-keyshortcuts="Alt+U">Undo <kbd>Alt U</kbd></button>
+        {% endif %}
+      </span>
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="hint">Walk-ins you issue today appear here. The last one can be undone for {{ walk_in.undo_window }} while the patient is still waiting.</p>
+  {% endif %}
+</section>
