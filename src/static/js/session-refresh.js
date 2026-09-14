@@ -154,6 +154,12 @@
     return refreshInFlight;
   }
 
+  // After the person signs in again in place (login-modal.js, Issue 55), the session is alive once more.
+  window.BKP = window.BKP || {};
+  window.BKP.reviveSession = function () {
+    sessionDead = false;
+  };
+
   window.fetch = function (input, init) {
     var url = requestUrl(input);
     if (!url || !isGuarded(url) || (init && init[RETRY_FLAG])) {

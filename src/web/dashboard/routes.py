@@ -35,8 +35,10 @@ from sqlalchemy.orm import Session
 
 from src.commons.enums import PermissionVerb, PriorityReason
 from src.commons.time import business_date
+from src.core.config import get_settings
 from src.core.live_events import (
     EVENT_STREAM_MEDIA_TYPE,
+    STAFF_HEARTBEAT_SECONDS,
     STREAM_HEADERS,
     LiveEvent,
     TooManySubscribersError,
@@ -210,11 +212,13 @@ async def clinic_home(
     return RedirectResponse(first.href_at(site_id), status_code=302)
 
 
-def _action_grants(nav: NavVisibility) -> dict[str, bool]:
-    """Whether the caller may press the patient buttons here: offered to all, enabled per grant."""
+def _action_grants(nav: NavVisibility) -> dict[str, object]:
+    """Whether the caller may press the patient buttons here (offered to all, enabled per grant), and
+    how long a press the clinic could not receive is held before it is reported as not sent."""
     return {
         "can_call": nav.can(CALL_RESOURCE, PermissionVerb.UPDATE),
         "can_move": nav.can(MOVE_RESOURCE, PermissionVerb.UPDATE),
+        "outbox_expiry_seconds": get_settings().dashboard_outbox_expiry_seconds,
     }
 
 
@@ -330,7 +334,8 @@ async def _live_stream(
 
     Gated like the page ``key`` opens: signed out ``401``, another clinic ``404``, no such screen here
     ``403``, and the check runs again at every heartbeat, so a removed assignment or a switched-off
-    account ends the stream within :data:`~src.core.live_events.HEARTBEAT_SECONDS`. The events name
+    account ends the stream within :data:`~src.core.live_events.ACCESS_CHECK_SECONDS`. It beats every
+    :data:`~src.core.live_events.STAFF_HEARTBEAT_SECONDS`, so the page can tell a dead connection within 10 seconds. The events name
     what changed and carry no patient data; the page reads its cards again through its own gate.
 
     With ``rooms_only`` (the room, Issue 50), only events about the caller's own queues are sent, and
@@ -377,6 +382,7 @@ async def _live_stream(
             is_disconnected=request.is_disconnected,
             still_allowed=still_allowed,
             accept=accept if rooms_only else None,
+            heartbeat_seconds=STAFF_HEARTBEAT_SECONDS,
         )
         first = await anext(events)
     except TooManySubscribersError:

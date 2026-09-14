@@ -69,6 +69,14 @@
 </ul>
 {% endmacro %}
 
+{% macro outbox(expiry_seconds) %}
+{#- Presses held while the clinic cannot be reached, and what became of each (Issue 55,
+    dashboard-outbox.js). Hidden while empty. -#}
+<section class="action-outbox" id="action-outbox" data-expiry-seconds="{{ expiry_seconds }}" aria-label="Actions waiting for the connection" aria-live="polite" hidden>
+  <ol class="outbox-list"></ol>
+</section>
+{% endmacro %}
+
 {% macro confirm_dialog() %}
 <dialog class="move-dialog confirm-dialog" id="action-confirm" aria-labelledby="action-confirm-title">
   <form method="dialog">

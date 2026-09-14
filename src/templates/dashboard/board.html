@@ -7,11 +7,12 @@
     the stream is unavailable. The line above the board says which of those is happening, and how old
     the cards are whenever they might not be current. -#}
 {% from "dashboard/_reorder.html" import move_dialog %}
-{% from "dashboard/_queue_card.html" import confirm_dialog %}
+{% from "dashboard/_queue_card.html" import confirm_dialog, outbox %}
 
 {% block layout_head %}
   {{ super() }}
   <script src="/static/js/dashboard-live.js" defer></script>
+  <script src="/static/js/dashboard-outbox.js" defer></script>
   <script src="/static/js/dashboard-reorder.js" defer></script>
   <script src="/static/js/dashboard-actions.js" defer></script>
 {% endblock %}
@@ -25,6 +26,7 @@
 {% endblock %}
 
 {% block clinic_content %}
+{{ outbox(outbox_expiry_seconds) }}
 {% include "dashboard/_board_cards.html" %}
 {% if can_reorder and queues %}{{ move_dialog(site, reasons, note_max_length) }}{% endif %}
 {% if queues %}{{ confirm_dialog() }}{% endif %}

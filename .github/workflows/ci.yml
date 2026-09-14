@@ -5,7 +5,7 @@
 #   ci-local.sh stage  →  job here          what runs
 #   quality            →  quality           ruff check, ruff format --check, mypy src/, ruff pin
 #   secrets            →  quality           gitleaks over the whole history, the same command
-#   tests              →  test (3 shards)   pytest with coverage; the deploy sequence first
+#   tests              →  test (4 shards)   pytest with coverage; the deploy sequence first
 #   coverage           →  report            the fail_under floor, over the combined shards
 #   docker             →  docker            the image builds, when one of its inputs changed
 #   pip-audit, Trivy and the --compose smoke stay local-only by design (scripts/README.md).
@@ -254,7 +254,11 @@ jobs:
           # The cross-domain flow files at the top of tests/, and any added later: the whole tree
           # with both layer folders ignored. The guard test fails if this shard disappears.
           - name: flows
-            paths: tests --ignore=tests/unit --ignore=tests/integration
+            paths: tests --ignore=tests/unit --ignore=tests/integration --ignore=tests/e2e
+          # The browser tests (Issue 55): a real server and Chromium, driven by Playwright. Their own
+          # shard, because they need the browser installed and they measure the page, not the CPU.
+          - name: browser
+            paths: tests/e2e
     services:
       # The images the dev stack pins (decision 4; infra/docker/docker-compose.db.yml), with its
       # default credentials. test_dev_stack_compose.py fails if the PostgreSQL image differs, and
@@ -292,6 +296,8 @@ jobs:
       TEST_REDIS_URL: redis://localhost:6379/15
       REQUIRE_POSTGRES_TESTS: "1"
       REQUIRE_REDIS_TESTS: "1"
+      # The browser shard fails, rather than skips, when Chromium is missing (tests/e2e/conftest.py).
+      REQUIRE_BROWSER_TESTS: ${{ matrix.name == 'browser' && '1' || '0' }}
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -309,6 +315,18 @@ jobs:
         env:
           DATABASE_URL: postgresql://btk_user:change-me@localhost:5432/btk
         run: ./scripts/db/deploy-sequence.sh
+
+      # Chromium for the browser shard, at the version requirements.txt pins Playwright to, with the
+      # system libraries it needs. The download is cached; the libraries come from apt each run.
+      - name: Cache Playwright's Chromium
+        if: matrix.name == 'browser'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+      - name: Install Chromium for Playwright
+        if: matrix.name == 'browser'
+        run: python -m playwright install --with-deps chromium
 
       - name: pytest ${{ matrix.paths }}
         env:

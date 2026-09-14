@@ -31,7 +31,12 @@
     wireSignout();
     setupHeader(controller);
     enhancePasswordFields(backdrop);
-    if (controller) maybeAutoOpen(controller);
+    if (controller) {
+      maybeAutoOpen(controller);
+      // A page that must not be left (the dashboard's queued actions, Issue 55) asks for a fresh
+      // sign-in in place: the promise resolves once signed in, and the page carries on.
+      window.BKPAuth = { reauthenticate: controller.reauthenticate };
+    }
   }
 
   var EYE =
@@ -375,9 +380,43 @@
       });
     }
 
-    function succeed() { window.location.assign(nextUrl()); }
+    // A sign-in asked for by the page itself (reauthenticate below) stays on the page.
+    var reauth = null;
 
-    return { open: open, close: close };
+    function succeed() {
+      if (reauth) {
+        var pendingSignIn = reauth;
+        reauth = null;
+        busy(signinLoading, false); disableForm(signinForm, false);
+        busy(otpLoading, false); disableForm(otpForm, false);
+        close();
+        if (window.BKP && typeof window.BKP.reviveSession === "function") window.BKP.reviveSession();
+        document.dispatchEvent(new CustomEvent("session:renewed"));
+        pendingSignIn.resolve(true);
+        return;
+      }
+      window.location.assign(nextUrl());
+    }
+
+    /**
+     * Ask the person to sign in again without leaving the page, saying why. Resolves once they have;
+     * a second call while the first is open shares it.
+     */
+    function reauthenticate(message) {
+      if (!reauth) {
+        var resolveSignIn;
+        var promise = new Promise(function (resolve) { resolveSignIn = resolve; });
+        reauth = { promise: promise, resolve: resolveSignIn };
+      }
+      open("signin");
+      if (signinError && message) {
+        signinError.textContent = message;
+        signinError.classList.add("success");
+      }
+      return reauth.promise;
+    }
+
+    return { open: open, close: close, reauthenticate: reauthenticate };
   }
 
   // ── Openers & header ─────────────────────────────────────────────────────

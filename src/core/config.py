@@ -1135,6 +1135,15 @@ class Settings(BaseSettings):
     # declares, never a claims check. Off by default so it can ship after the MVP without a code
     # change: while off, no patient-facing surface shows or filters by it, and the clinic editor page
     # is not served (the API still accepts a profile, so clinics can fill theirs in beforehand).
+    dashboard_outbox_expiry_seconds: int = Field(
+        default=120,
+        ge=1,
+        le=900,
+        description=(
+            "Seconds a dashboard action pressed while the clinic could not be reached is held before "
+            "it is reported as not sent rather than sent late (env: DASHBOARD_OUTBOX_EXPIRY_SECONDS)."
+        ),
+    )
     dashboard_stuck_wait_minutes: int = Field(
         default=45,
         ge=5,

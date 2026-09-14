@@ -690,3 +690,24 @@ li.with-staff-ticket[data-pending-call] { font-weight: 600; color: var(--muted);
 .walkin-recent-name { flex: 1; min-width: 6rem; overflow-wrap: anywhere; }
 .walkin-recent-actions { display: flex; gap: .4rem; margin-left: auto; }
 .walkin-recent-actions .btn { min-height: 2.5rem; }
+
+/* ── Actions waiting for the connection (Issue 55) ────────────── */
+
+.action-outbox {
+  margin: 0 0 .75rem;
+  padding: .6rem .8rem;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--warn-ink);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.outbox-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .35rem; }
+.outbox-item { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .5rem; font-size: var(--step--1); }
+.outbox-item > span { flex: 1; min-width: 12rem; }
+.outbox-item.is-done strong { color: var(--brand-deep); }
+.outbox-item.is-failed strong,
+.outbox-item.is-expired strong { color: var(--danger-ink); }
+.outbox-item .btn { min-height: 2.25rem; }
+/* Offline is louder than reconnecting: nothing new can arrive at all. */
+.board-connection[data-state="offline"] { border-color: var(--danger-ink); background: var(--danger-soft); color: var(--danger-ink); }
+.board-connection[data-state="offline"] .board-connection-dot { background: var(--danger-ink); }
