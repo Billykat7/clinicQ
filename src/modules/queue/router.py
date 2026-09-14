@@ -26,7 +26,16 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -61,12 +70,17 @@ from src.modules.queue.cancellation import (
     cancel_own_ticket,
     cancel_ticket,
 )
-from src.modules.queue.lifecycle import Actor, call_next, staff_move
+from src.modules.queue.lifecycle import Actor, call_next, staff_move, undo_call
 from src.modules.queue.priority import (
     COUNTS_ARE_NOT_RANKINGS,
     override_counts,
     override_priority,
     reorder_trail,
+)
+from src.modules.queue.request_keys import (
+    REQUEST_KEY_HEADER,
+    REQUEST_KEY_PATTERN,
+    run_once,
 )
 from src.modules.queue.schemas import (
     CancelIn,
@@ -119,6 +133,18 @@ CallPeek = Annotated[SiteAccess, Depends(require_site_access("queues.call", "rea
 #: Reading the clinic's tickets: everyone who works the queues.
 TicketsRead = Annotated[
     SiteAccess, Depends(require_site_access("queues.tickets", "read"))
+]
+#: The dashboard's ``Idempotency-Key`` (Issue 50): the same key twice does the action once.
+RequestKey = Annotated[
+    str | None,
+    Header(
+        alias=REQUEST_KEY_HEADER,
+        pattern=REQUEST_KEY_PATTERN,
+        description=(
+            "A fresh random value per intended action, repeated when the same action is retried. "
+            "A repeat answers with the first request's ticket and moves nothing."
+        ),
+    ),
 ]
 #: A patient acting for themselves: joining a queue and reading their own tickets.
 PatientJoining = Annotated[Patient, Depends(require_patient("patients.self", "update"))]
@@ -373,19 +399,29 @@ def _staff(access: SiteAccess) -> Actor:
     summary="Move a ticket to another status",
 )
 def move_ticket(
-    ticket_id: str, payload: TransitionIn, access: TicketsIssue, db: DbSession
+    ticket_id: str,
+    payload: TransitionIn,
+    access: TicketsIssue,
+    db: DbSession,
+    request_key: RequestKey = None,
 ) -> TicketOut:
-    """Apply one legal move. An illegal move, one decided on a stale screen, or a cancellation or
-    transfer (which have their own routes) is a 409."""
+    """Apply one legal move. An illegal move, one decided on a stale screen, or a cancellation,
+    transfer or undone call (which have their own routes) is a 409."""
     ticket = get_in_site_or_404(db, Ticket, ticket_id, access)
-    moved = staff_move(
+    moved = run_once(
         db,
-        ticket.id,
-        payload.to,
-        actor=_staff(access),
-        expected_status=payload.expected_status,
+        access,
+        request_key,
+        operation="transition",
+        target=f"{ticket.id}:{payload.to.value}",
+        act=lambda: staff_move(
+            db,
+            ticket.id,
+            payload.to,
+            actor=_staff(access),
+            expected_status=payload.expected_status,
+        ),
     )
-    db.commit()
     return TicketOut.of(moved)
 
 
@@ -395,14 +431,46 @@ def move_ticket(
     operation_id="queueCallNext",
     summary="Call the next waiting ticket in a queue",
 )
-def call_next_ticket(queue_id: str, access: CallNext, db: DbSession) -> TicketOut:
-    """Call the next patient. Two staff pressing it at once call two different patients."""
+def call_next_ticket(
+    queue_id: str, access: CallNext, db: DbSession, request_key: RequestKey = None
+) -> TicketOut:
+    """Call the next patient. Two staff pressing it at once call two different patients; one person
+    pressing it twice with the same ``Idempotency-Key`` calls one."""
     queue = get_queue(db, access, queue_id)
     if queue is None:
         raise site_not_found()
-    called = call_next(db, queue, actor=_staff(access))
-    db.commit()
+    called = run_once(
+        db,
+        access,
+        request_key,
+        operation="call_next",
+        target=queue.id,
+        act=lambda: call_next(db, queue, actor=_staff(access)),
+    )
     return TicketOut.of(called)
+
+
+@router.post(
+    "/sites/{site_id}/tickets/{ticket_id}/undo-call",
+    response_model=TicketOut,
+    operation_id="queueUndoCall",
+    summary="Undo a call made by mistake, within the undo window",
+)
+def undo_ticket_call(
+    ticket_id: str, access: CallNext, db: DbSession, request_key: RequestKey = None
+) -> TicketOut:
+    """Put a patient called by mistake back in their place. Only a ``called`` ticket, and only within
+    ``QUEUE_CALL_UNDO_SECONDS`` of the call; the audit trail keeps the call and its undoing."""
+    ticket = get_in_site_or_404(db, Ticket, ticket_id, access)
+    undone = run_once(
+        db,
+        access,
+        request_key,
+        operation="undo_call",
+        target=ticket.id,
+        act=lambda: undo_call(db, ticket.id, actor=_staff(access)),
+    )
+    return TicketOut.of(undone)
 
 
 @router.get(

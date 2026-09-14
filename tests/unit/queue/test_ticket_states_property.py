@@ -9,7 +9,8 @@ shortest sequence that breaks one.
 
 The operations are the ones a caller can reach, each called the way its route calls it:
 
-* a join from any channel (``join_queue``), *Call next* (``call_next``);
+* a join from any channel (``join_queue``), *Call next* (``call_next``), and undoing a call
+  (``undo_call``, Issue 50) inside its window and after it;
 * a staff move through the transitions route (``staff_move``), with any target status, and a
   clinician's start and finish on it;
 * a patient's cancel (``cancel_own_ticket``) and a receptionist's (``cancel_ticket``);
@@ -66,7 +67,7 @@ from src.database.models import AuditEvent, Base, Patient, Queue, Site, Ticket
 from src.database.schema import sqlite_schema_translate_map
 from src.modules.notifications.sms import FakeSmsProvider
 from src.modules.queue.cancellation import cancel_own_ticket, cancel_ticket
-from src.modules.queue.lifecycle import Actor, call_next, staff_move
+from src.modules.queue.lifecycle import Actor, call_next, staff_move, undo_call
 from src.modules.queue.priority import override_priority
 from src.modules.queue.service import join_queue
 from src.modules.queue.snapshot import NoSnapshotCache, set_snapshot_cache
@@ -83,7 +84,7 @@ D, N, X, T = "done", "no_show", "cancelled", "transferred"
 #: The lifecycle as ``docs/PRODUCT/03-booking-and-queue.md`` and Issues 41, 43–45 describe it.
 SPEC: dict[str, set[str]] = {
     W: {C, X, T},
-    C: {P, R, N, X},
+    C: {P, R, N, X, W},  # back to waiting only by undoing the call (Issue 50)
     R: {P, N, X},
     P: {D, T},
     D: set(),
@@ -234,6 +235,19 @@ class QueueEngine(RuleBasedStateMachine):
                 self.db, self.db.get(Queue, self.queue_ids[queue]), actor=_STAFF
             )
         )
+
+    @rule(data=st.data(), seconds_later=st.sampled_from([0, 3600]))
+    def staff_undoes_a_call(self, data: st.DataObject, seconds_later: int) -> None:
+        """Undo a call on any ticket: inside the window it goes back to waiting, after it is refused."""
+        if (ticket_id := self._pick(data, "ticket")) is not None:
+            self._apply(
+                lambda: undo_call(
+                    self.db,
+                    ticket_id,
+                    actor=_STAFF,
+                    moment=now_sast() + timedelta(seconds=seconds_later),
+                )
+            )
 
     @rule(data=st.data())
     def staff_moves_a_ticket(self, data: st.DataObject) -> None:

@@ -92,9 +92,11 @@ and changes nothing. The four statuses with an arrow to the end never change aga
 corrected with a new ticket, not by reopening an old one. This diagram is checked against the
 transition table by `tests/unit/queue/test_ticket_state_machine.py`, so it cannot drift from the code.
 
-Two arrows are more than a status change. `transferred` is only made by a transfer, which issues the
+Three arrows are more than a status change. `transferred` is only made by a transfer, which issues the
 patient's ticket in the next queue, and `cancelled` only by a cancellation, which records the channel.
-Staff changing a ticket's status directly cannot choose either (`409`,
+`called → waiting` is only an **undone call**: staff who called a patient by mistake can put them back
+in the same place within 30 seconds (`QUEUE_CALL_UNDO_SECONDS`), and the audit trail keeps both the call
+and its undoing. Staff changing a ticket's status directly cannot choose any of these (`409`,
 `ticket.transition.dedicated_route`). Property tests (`tests/unit/queue/test_ticket_states_property.py`)
 run long random sequences of every queue operation and check, after each step, that no ticket reaches
 a state these rules forbid.
@@ -106,6 +108,7 @@ stateDiagram-v2
     waiting --> called
     waiting --> cancelled
     waiting --> transferred
+    called --> waiting
     called --> in_progress
     called --> recalled
     called --> no_show

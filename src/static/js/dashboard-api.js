@@ -14,7 +14,8 @@
  * true or false, and data-empty="null" sends an empty text as null. Anything else is its string.
  *
  * A success reloads the page, so what is on screen afterwards is the server's state and not a
- * guess at it. A refusal is shown beside the control that asked, in the server's words.
+ * guess at it; on a live page (the room) it asks for fresh cards instead of reloading. A refusal is
+ * shown beside the control that asked, in the server's words.
  *
  * Lists on these screens are server-rendered (docs/IDE/RULES/list-view-ui-pattern.mdc): the filter
  * bar is a GET form, headers marked data-sort-key sort the rows in place, and a row click opens the
@@ -148,6 +149,13 @@
           return response.json().catch(function () { return {}; }).then(function (data) {
             if (response.ok) {
               say(slot, 'Saved.', 'ok');
+              if (control.closest('#board-cards') && document.getElementById('board-connection')) {
+                // A live page (the room, Issue 50): clear what was sent and let the cards refresh.
+                var form = control.closest('form');
+                if (form) form.reset();
+                document.dispatchEvent(new CustomEvent('board:refresh'));
+                return;
+              }
               window.location.reload();
               return;
             }

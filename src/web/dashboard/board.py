@@ -7,7 +7,9 @@ so each card carries, for today:
 * the **average wait today**, from the tickets already called (joined to called);
 * the **longest current wait**, and whether it has passed the clinic's stuck threshold
   (``DASHBOARD_STUCK_WAIT_MINUTES``), which is what turns a card red without anyone reading a number;
-* the tickets with staff, each with its status and how long since it was called.
+* the tickets with staff, each with its status, how long it has been at that step (called, called
+  again, being seen) and the buttons it offers (:mod:`src.web.dashboard.actions`, Issue 50);
+* the number *Call next* would call now, so the card can show it at once while the server answers.
 
 Everything is read in **one query** for the clinic's day, through the site guard, and folded per queue
 here, so ten queues and two hundred tickets cost one round trip however often the board refreshes.
@@ -28,9 +30,11 @@ from src.commons.time import business_date, now_sast, stored_sast
 from src.core.config import get_settings
 from src.core.site_scope import SiteAccess, scoped_select
 from src.database.models import Ticket
+from src.modules.queue.lifecycle import undo_window_ends
 from src.modules.queue.tickets import CALL_ORDER
 from src.modules.queues.service import list_queues
 from src.web.components import TICKET_STATUS_BADGES, StatusBadge
+from src.web.dashboard.actions import Elapsed, TicketAction, elapsed, ticket_actions
 
 #: Statuses that mean "with a member of staff now": called to the room, called again, or being seen.
 WITH_STAFF: Final[frozenset[TicketStatus]] = frozenset(
@@ -41,11 +45,20 @@ _SECONDS_PER_MINUTE: Final = 60
 
 @dataclass(frozen=True, slots=True)
 class WithStaffTicket:
-    """A ticket called to a room or being seen, and how long ago it was called."""
+    """A ticket called to a room or being seen: how long ago, for how long, and what can happen next."""
 
+    id: str
     number: str
+    #: The name the desk typed for a walk-in; ``None`` for a remote join (shown only in the room).
+    name: str | None
+    status: TicketStatus
     badge: StatusBadge
     minutes_since_called: int | None
+    #: How long the patient has been at this step (being seen: since started; else since called).
+    elapsed: Elapsed | None
+    actions: tuple[TicketAction, ...]
+    #: Until when *Undo call* can succeed, for the button's countdown; ``None`` when it cannot.
+    undo_until: datetime | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +78,8 @@ class BoardCard:
     #: Whether the longest wait has passed the stuck threshold.
     stuck: bool
     with_staff_tickets: tuple[WithStaffTicket, ...]
+    #: The number *Call next* would call now; ``None`` when nobody is waiting.
+    next_number: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,17 +162,33 @@ def read_board(
                 longest_wait_minutes=longest,
                 stuck=longest is not None and longest >= threshold,
                 with_staff_tickets=tuple(
-                    WithStaffTicket(
-                        number=t.number,
-                        badge=TICKET_STATUS_BADGES[t.status_enum],
-                        minutes_since_called=(
-                            _minutes(now, stored_sast(t.called_at))
-                            if t.called_at
-                            else None
-                        ),
-                    )
-                    for t in with_staff
+                    _with_staff_ticket(t, now) for t in with_staff
                 ),
+                next_number=waiting[0].number if waiting else None,
             )
         )
     return Board(cards=tuple(cards), as_of=now, stuck_after_minutes=threshold)
+
+
+def _with_staff_ticket(ticket: Ticket, now: datetime) -> WithStaffTicket:
+    """One ticket with staff, with its step's start in Johannesburg time and its buttons at ``now``."""
+    called = stored_sast(ticket.called_at) if ticket.called_at else None
+    step_start = (
+        stored_sast(ticket.started_at)
+        if ticket.status_enum is TicketStatus.IN_PROGRESS and ticket.started_at
+        else stored_sast(ticket.recalled_at)
+        if ticket.status_enum is TicketStatus.RECALLED and ticket.recalled_at
+        else called
+    )
+    undo_until = undo_window_ends(ticket)
+    return WithStaffTicket(
+        id=ticket.id,
+        number=ticket.number,
+        name=ticket.walk_in_name,
+        status=ticket.status_enum,
+        badge=TICKET_STATUS_BADGES[ticket.status_enum],
+        minutes_since_called=_minutes(now, called) if called else None,
+        elapsed=elapsed(ticket, step_start, moment=now),
+        actions=ticket_actions(ticket, moment=now),
+        undo_until=undo_until if undo_until is not None and now < undo_until else None,
+    )

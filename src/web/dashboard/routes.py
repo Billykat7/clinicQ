@@ -38,6 +38,7 @@ from src.commons.time import business_date
 from src.core.live_events import (
     EVENT_STREAM_MEDIA_TYPE,
     STREAM_HEADERS,
+    LiveEvent,
     TooManySubscribersError,
     broker,
 )
@@ -82,6 +83,9 @@ router = APIRouter(tags=["web"])
 
 #: The resource the room view is gated on and narrowed by: a clinician's own queues (Issue 53).
 NOTES_RESOURCE = "visits.notes"
+#: The grants behind the patient buttons (Issue 50): calling and undoing a call, and moving a ticket.
+CALL_RESOURCE = "queues.call"
+MOVE_RESOURCE = "queues.tickets"
 
 DbSession = Annotated[Session, Depends(get_db)]
 
@@ -206,6 +210,14 @@ async def clinic_home(
     return RedirectResponse(first.href_at(site_id), status_code=302)
 
 
+def _action_grants(nav: NavVisibility) -> dict[str, bool]:
+    """Whether the caller may press the patient buttons here: offered to all, enabled per grant."""
+    return {
+        "can_call": nav.can(CALL_RESOURCE, PermissionVerb.UPDATE),
+        "can_move": nav.can(MOVE_RESOURCE, PermissionVerb.UPDATE),
+    }
+
+
 def _fill_board(db: Session, page: ClinicPage) -> None:
     """Put the front desk's cards, lines and controls into an opened page's context.
 
@@ -229,6 +241,7 @@ def _fill_board(db: Session, page: ClinicPage) -> None:
         can_reorder=nav.can(PRIORITY_RESOURCE, PermissionVerb.UPDATE),
         reasons=reason_choices(),
         note_max_length=MAX_REORDER_NOTE_LENGTH,
+        **_action_grants(nav),
     )
 
 
@@ -292,57 +305,78 @@ def _short_session(request: Request) -> Iterator[Session]:
         sessions.close()
 
 
-def _board_stream_refusal(request: Request, site_id: str) -> Response | str:
-    """The stream's gate: the caller's user id, or the response that refuses them."""
+def _stream_refusal(request: Request, site_id: str, key: str) -> Response | str:
+    """A stream's gate: the caller's user id, or the response that refuses them."""
     with _short_session(request) as db:
         if not require_authenticated_html(request, db):
             return Response(status_code=status.HTTP_401_UNAUTHORIZED)
         user = peek_user_from_refresh_cookie(db, request)
         if user is None or site_id not in {site.id for site in staff_sites(db, user)}:
             return Response(status_code=status.HTTP_404_NOT_FOUND)
-        if not nav_visibility_at_site(db, user, site_id).visible("board"):
+        if not nav_visibility_at_site(db, user, site_id).visible(key):
             return Response(status_code=status.HTTP_403_FORBIDDEN)
         return str(user.id)
 
 
-@router.get("/dashboard/sites/{site_id}/board/stream")
-async def clinic_board_stream(site_id: str, request: Request) -> Response:
-    """The clinic's live events as server-sent events (Issue 49, the format Issue 57 shares).
+def _room_queue_ids(db: Session, user: User, site_id: str) -> frozenset[str] | None:
+    """The queues a clinician's room shows at ``site_id``: their own, or ``None`` for every queue."""
+    return own_queue_scope(db, user, NOTES_RESOURCE, site_id)
 
-    Gated like the board: signed out ``401``, another clinic ``404``, no front desk here ``403``, and
-    the check runs again at every heartbeat, so a removed assignment or a switched-off account ends
-    the stream within :data:`~src.core.live_events.HEARTBEAT_SECONDS`. The events name what changed and
-    carry no patient data; the page reads the cards again through its own gate.
+
+async def _live_stream(
+    request: Request, site_id: str, *, key: str, rooms_only: bool
+) -> Response:
+    """A page's live events as server-sent events (Issue 49, the format Issue 57 shares).
+
+    Gated like the page ``key`` opens: signed out ``401``, another clinic ``404``, no such screen here
+    ``403``, and the check runs again at every heartbeat, so a removed assignment or a switched-off
+    account ends the stream within :data:`~src.core.live_events.HEARTBEAT_SECONDS`. The events name
+    what changed and carry no patient data; the page reads its cards again through its own gate.
+
+    With ``rooms_only`` (the room, Issue 50), only events about the caller's own queues are sent, and
+    the rooms are read again at every heartbeat, so a room assigned or taken away mid-shift is followed.
 
     No request-scoped session: a stream can stay open all day, and each check opens a short session
     of its own, off the event loop, and closes it before anything more is sent.
     """
-    gate = await asyncio.to_thread(_board_stream_refusal, request, site_id)
+    gate = await asyncio.to_thread(_stream_refusal, request, site_id, key)
     if isinstance(gate, Response):
         return gate
     user_id = gate
+    rooms: dict[str, frozenset[str] | None] = {"ids": None}
 
     def check_access() -> bool:
-        """Whether the caller still works here and still has the front desk (a fresh read)."""
+        """Whether the caller still works here and still has this screen (a fresh read)."""
         with _short_session(request) as db:
             current = db.get(User, user_id)
-            return bool(
+            allowed = bool(
                 current is not None
                 and current.is_active
                 and not current.is_deleted
                 and site_id in {site.id for site in staff_sites(db, current)}
-                and nav_visibility_at_site(db, current, site_id).visible("board")
+                and nav_visibility_at_site(db, current, site_id).visible(key)
             )
+            if allowed and rooms_only and current is not None:
+                rooms["ids"] = _room_queue_ids(db, current, site_id)
+            return allowed
 
     async def still_allowed() -> bool:
         """:func:`check_access`, in a worker thread so the event loop never waits on the database."""
         return await asyncio.to_thread(check_access)
 
+    def accept(event: LiveEvent) -> bool:
+        """For a room: an event about the clinic as a whole, or about one of the caller's queues."""
+        own = rooms["ids"]
+        return own is None or event.queue_id is None or event.queue_id in own
+
+    if rooms_only and not await still_allowed():
+        return Response(status_code=status.HTTP_403_FORBIDDEN)
     try:
         events = broker.stream(
             site_id,
             is_disconnected=request.is_disconnected,
             still_allowed=still_allowed,
+            accept=accept if rooms_only else None,
         )
         first = await anext(events)
     except TooManySubscribersError:
@@ -362,12 +396,23 @@ async def clinic_board_stream(site_id: str, request: Request) -> Response:
     )
 
 
-@router.get("/dashboard/sites/{site_id}/room", response_class=HTMLResponse)
-async def clinic_room(site_id: str, request: Request, db: DbSession) -> Response:
-    """A clinician's room: only the queues they are assigned to at this clinic (Issue 28).
+@router.get("/dashboard/sites/{site_id}/board/stream")
+async def clinic_board_stream(site_id: str, request: Request) -> Response:
+    """The clinic's live events for the front desk: every queue's (Issue 49)."""
+    return await _live_stream(request, site_id, key="board", rooms_only=False)
 
-    The frame for Issue 53's room view. Another room's queues are not read at all, not read and
-    hidden.
+
+@router.get("/dashboard/sites/{site_id}/room/stream")
+async def clinic_room_stream(site_id: str, request: Request) -> Response:
+    """The live events for a clinician's room: only their own queues' (Issue 50)."""
+    return await _live_stream(request, site_id, key="room", rooms_only=True)
+
+
+def _open_room(request: Request, db: Session, site_id: str) -> ClinicPage | Response:
+    """Open a clinician's room at ``site_id``, with its view in the context.
+
+    Only the queues they are assigned to at this clinic (Issue 28): another room's queues are not read
+    at all, not read and hidden.
     """
     key = "room"
     opened = open_clinic_page(
@@ -381,15 +426,40 @@ async def clinic_room(site_id: str, request: Request, db: DbSession) -> Response
     if not isinstance(opened, ClinicPage):
         return opened
     user = opened.access.user
-    rooms = own_queue_scope(db, user, NOTES_RESOURCE, site_id)
-    access = replace(opened.access, queue_ids=rooms)
+    access = replace(opened.access, queue_ids=_room_queue_ids(db, user, site_id))
     view = read_room(db, access)
     opened.context.update(
         room=view,
+        board=view,
         queues=[room.card for room in view.rooms],
         note_max_length=MAX_VISIT_NOTE_LENGTH,
+        **_action_grants(opened.shell.nav),
     )
+    return opened
+
+
+@router.get("/dashboard/sites/{site_id}/room", response_class=HTMLResponse)
+async def clinic_room(site_id: str, request: Request, db: DbSession) -> Response:
+    """A clinician's room (Issue 53's view), live like the front desk (Issue 50)."""
+    opened = _open_room(request, db, site_id)
+    if not isinstance(opened, ClinicPage):
+        return opened
     return render_clinic_page(request, opened, "dashboard/room.html")
+
+
+@router.get("/dashboard/sites/{site_id}/room/cards", response_class=HTMLResponse)
+async def clinic_room_cards(site_id: str, request: Request, db: DbSession) -> Response:
+    """Just the room's cards, for the page to swap in when one of its queues changed (Issue 50)."""
+    if not require_authenticated_html(request, db):
+        return Response(status_code=status.HTTP_401_UNAUTHORIZED)
+    opened = _open_room(request, db, site_id)
+    if not isinstance(opened, ClinicPage):
+        return opened
+    response = templates.TemplateResponse(
+        request, "dashboard/_room_cards.html", opened.context
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @router.get("/dashboard/sites/{site_id}/overrides", response_class=HTMLResponse)
