@@ -18,7 +18,8 @@
  * a request that reached the clinic just before the network went is not done again on replay. Pressing
  * the same button again while its action is held adds nothing.
  *
- * Held actions are kept in this tab's session storage, so a reload while offline does not lose them.
+ * Held actions are kept in this tab's session storage, so a reload while offline does not lose them,
+ * and closing the tab while one still waits asks first.
  * The connection state comes from dashboard-live.js (`board:connection`, `window.ClinicQLive`), the
  * in-place sign-in from login-modal.js (`window.BKPAuth`). Each outcome is also announced to the card it
  * belongs to (`outbox:settled`), whose status line says it again.
@@ -230,6 +231,16 @@
   });
   document.addEventListener('session:expired', askToSignIn);
   document.addEventListener('session:renewed', function () { if (signingIn) return; renewed(); });
+
+  // A held action lives in this tab: closing it while something waits asks first. (A reload keeps them.)
+  window.addEventListener('beforeunload', function (event) {
+    var waiting = items.some(function (item) {
+      return item.state === 'queued' || item.state === 'sending' || item.state === 'sign-in';
+    });
+    if (!waiting) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
 
   // ── What the patient buttons call ────────────────────────────────────────────────────────────────
 
