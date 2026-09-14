@@ -25,13 +25,14 @@ from src.commons.enums import (
     NotificationCategory,
     NotificationChannel,
     NotificationStatus,
+    PermissionVerb,
 )
 from src.commons.exceptions import InAppNotificationNotFoundError
 from src.core.config import Settings, get_settings
 from src.core.security import get_current_user, resolve_active_user
 from src.database.models.user import User
 from src.database.session import get_db
-from src.modules.notifications import center, preferences, service
+from src.modules.notifications import CENTRE_RESOURCE_KEY, center, preferences, service
 from src.modules.notifications.center import CenterItem
 from src.modules.notifications.preferences import InvalidTimezoneError
 from src.modules.notifications.schemas import (
@@ -66,7 +67,7 @@ CurrentUser = Annotated[dict, Depends(get_current_user)]
 # manifest-registered ``communications.notifications`` resource, rather than the hand-written named
 # function the earlier ``communications`` work left behind (see Issue #149's Applications pilot).
 CommunicationsNotificationsReadDep = Annotated[
-    None, Depends(require("communications.notifications", "read"))
+    None, Depends(require(CENTRE_RESOURCE_KEY, PermissionVerb.READ.value))
 ]
 
 
@@ -151,8 +152,8 @@ def list_notifications(
 # captured as a notification id. Every route is session-scoped to the signed-in user's own feed
 # **and** gated on ``communications.notifications`` READ (Issue #125): a user only ever sees,
 # counts and marks their own notifications, and must hold the centre grant to reach it at all.
-# The base ``user`` role holds that grant (migration ``0044``), so a standard signed-in user keeps
-# their bell; a custom role can be scoped out of the centre.
+# The grants ship in ``src/modules/communications/rbac_manifest.py`` (``admin``, and ``platform_admin``
+# at ``own``), and the dashboard layout offers the bell only to a caller who holds one (Refs #48).
 # --------------------------------------------------------------------------------------
 
 

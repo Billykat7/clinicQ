@@ -756,7 +756,7 @@ resource | role=platform_admin | key=communications.messages.sent | verb=read | 
 resource | role=platform_admin | key=communications.messages.sent | verb=update | deny | tier=own
 resource | role=platform_admin | key=communications.notifications | verb=create | deny | tier=own
 resource | role=platform_admin | key=communications.notifications | verb=delete | deny | tier=own
-resource | role=platform_admin | key=communications.notifications | verb=read | deny | tier=own
+resource | role=platform_admin | key=communications.notifications | verb=read | allow | tier=own
 resource | role=platform_admin | key=communications.notifications | verb=update | deny | tier=own
 resource | role=platform_admin | key=dashboard | verb=create | deny | tier=business
 resource | role=platform_admin | key=dashboard | verb=delete | deny | tier=business
