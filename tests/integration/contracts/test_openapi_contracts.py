@@ -25,6 +25,7 @@ issue). That asymmetry is deliberate and named here so nobody "fixes" it.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -59,6 +60,22 @@ class Contract:
     prefix: str
     #: ``{path: reason}`` for routes under the prefix this contract does not own.
     excluded: dict[str, str] = field(default_factory=dict)
+    #: A regular expression a route must also match, for a contract that owns a **resource** found
+    #: under several prefixes rather than one prefix. The queue contract owns every ``/tickets``
+    #: route, whether it hangs off ``/sites``, ``/clinics`` or ``/patients`` (Issue 40). A contract
+    #: without one never claims a route that a patterned contract owns, so each route has exactly one
+    #: contract and nobody has to keep an exclusion list in step with another file.
+    pattern: str = ""
+
+    def owns(self, path: str) -> bool:
+        """Whether this contract is the one responsible for documenting ``path``."""
+        if not path.startswith(self.prefix) or path in self.excluded:
+            return False
+        if self.pattern:
+            return re.search(self.pattern, path) is not None
+        return not any(
+            other.pattern and re.search(other.pattern, path) for other in CONTRACTS
+        )
 
     @property
     def path(self) -> Path:
@@ -85,6 +102,10 @@ CONTRACTS: tuple[Contract, ...] = (
         },
     ),
     Contract(name="discovery", filename="discovery.yaml", prefix="/api/v1/clinics"),
+    # Every ticket route, wherever it hangs (Issue 40 starts it; Issue 47 completes it).
+    Contract(
+        name="queue", filename="queue.yaml", prefix="/api/v1", pattern=r"/tickets(/|$)"
+    ),
 )
 
 _IDS = [contract.name for contract in CONTRACTS]
@@ -123,7 +144,7 @@ def _application_operations(
     """``{(METHOD, path): {status codes}}`` for the routes ``contract`` is responsible for."""
     out: dict[tuple[str, str], set[str]] = {}
     for path, operations in document.get("paths", {}).items():
-        if not path.startswith(contract.prefix) or path in contract.excluded:
+        if not contract.owns(path):
             continue
         for method, operation in operations.items():
             if method not in METHODS:
@@ -364,6 +385,25 @@ def test_the_drift_check_finds_a_documented_route_with_no_handler() -> None:
     served = set(_application_operations({"paths": {}}, contract))
     documented = set(_contract_operations(_A_CONTRACT_MISSING_A_ROUTE))
     assert documented - served == {("GET", "/api/v1/things")}
+
+
+def test_a_ticket_route_belongs_to_the_queue_contract_wherever_it_hangs() -> None:
+    """A patterned contract owns its resource across prefixes, and the prefix contract cedes it.
+
+    ``/sites/{site_id}/tickets`` sits under the sites prefix but is the queue contract's, so neither
+    contract can quietly skip it and neither can claim it twice.
+    """
+    by_name = {contract.name: contract for contract in CONTRACTS}
+    for path in (
+        "/api/v1/sites/{site_id}/tickets",
+        "/api/v1/sites/{site_id}/queues/{queue_id}/tickets",
+        "/api/v1/clinics/{site_id}/queues/{queue_id}/tickets",
+        "/api/v1/patients/me/tickets",
+    ):
+        owners = [contract.name for contract in CONTRACTS if contract.owns(path)]
+        assert owners == ["queue"], (path, owners)
+    assert by_name["sites"].owns("/api/v1/sites/{site_id}/queues")
+    assert not by_name["queue"].owns("/api/v1/sites/{site_id}/queues")
 
 
 def test_the_example_check_fails_on_an_example_its_schema_refuses() -> None:

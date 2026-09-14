@@ -1190,6 +1190,40 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Joining a queue (Issue 40). The abuse guards on the one join service every channel calls. A
+    # walk-in issued at the desk is exempt from all three: reception is authenticated staff, and a
+    # cap there would turn away a patient standing at the counter.
+    queue_join_rate_limit_per_phone: int = Field(
+        default=6,
+        ge=1,
+        description=(
+            "Max remote joins per phone number per window, across every queue and clinic (env: "
+            "QUEUE_JOIN_RATE_LIMIT_PER_PHONE). A patient joins one or two queues; a script joins many."
+        ),
+    )
+    queue_join_rate_limit_per_ip: int = Field(
+        default=30,
+        ge=1,
+        description=(
+            "Max web joins per client IP per window (env: QUEUE_JOIN_RATE_LIMIT_PER_IP). Loose, "
+            "because a mobile carrier puts a whole township behind a few addresses."
+        ),
+    )
+    queue_join_rate_limit_window_seconds: int = Field(
+        default=3600,
+        ge=1,
+        description="Queue join rate-limit window in seconds (env: QUEUE_JOIN_RATE_LIMIT_WINDOW_SECONDS).",
+    )
+    queue_join_site_daily_cap: int = Field(
+        default=1500,
+        ge=1,
+        description=(
+            "Max remote joins (web, USSD, WhatsApp) one clinic accepts in a service day, whatever "
+            "its queues' own capacities (env: QUEUE_JOIN_SITE_DAILY_CAP). Bounds a bulk attack on "
+            "one clinic; walk-ins are not counted."
+        ),
+    )
+
     @property
     def database_url_async(self) -> str:
         """The request-path async DSN: ``database_url`` with an async driver (Issue #81).

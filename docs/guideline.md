@@ -12,7 +12,8 @@ order. No channel gets a systematically better position.
 **Why:** a separate "online" line that quietly jumps the physical line is the single fastest way to lose
 a clinic's trust. Patients notice within a day and staff stop using the system.
 
-*Enforced by:* Issue 40 (single join service), Issue 79 (cross-channel parity suite).
+*Enforced by:* Issue 40 (single join service; `tests/unit/queue/test_one_join_door.py` fails if
+anything but `join_queue()` issues a ticket), Issue 79 (cross-channel parity suite).
 
 ## 2. Ticket status is written only by `transition_ticket()`
 

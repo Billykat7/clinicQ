@@ -164,6 +164,14 @@ CASES: dict[str, dict[str, object]] = {
         "reader": "a@clinicq.example",
         "paths": lambda site, row: (f"/api/v1/sites/{site}/staff/{row}/queues",),
     },
+    "ticket": {
+        # A clinic's tickets (Issues 39, 40). The front desk reads the day's tickets across the
+        # clinic's queues; naming ``queues.tickets`` here covers the resource as well as the model.
+        # The walk-in route is a POST and is probed in tests/integration/queue/test_join_queue.py.
+        "resource": "queues.tickets",
+        "reader": "a@clinicq.example",
+        "paths": lambda site, _row: (f"/api/v1/sites/{site}/tickets",),
+    },
     "staffinvitation": {
         # Who has been invited to a clinic (Issue 22): the same grant as the staff list, so a
         # receptionist reads it, and another clinic's list is a 404 like everything else.
@@ -188,11 +196,6 @@ PENDING: dict[str, str] = {
         "a case here"
     ),
     "queues.call": "call-next lands with Issue 42",
-    "ticket": (
-        "the ticket table lands with Issue 39 with no route of its own: the join service and its "
-        "routes (Issue 40) are the first to read and write a clinic's tickets, and must add a case"
-    ),
-    "queues.tickets": "the ticket routes land with Issue 40",
     "queues.tickets.priority": "the priority override lands with Issue 46",
 }
 

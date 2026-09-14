@@ -309,7 +309,7 @@ class TicketFactory(Factory[Ticket]):
     ) -> Ticket:
         """Issue a real ticket in ``queue``: the database allocates its number. Flushed, not committed.
 
-        ``fields`` sets what a join records (``display_name``, ``reason_text``,
+        ``fields`` sets what a join records (``walk_in_name``, ``reason_text``,
         ``comment_consent``); ``moment`` backdates the issue, and with it the service day.
         """
         return issue_ticket(

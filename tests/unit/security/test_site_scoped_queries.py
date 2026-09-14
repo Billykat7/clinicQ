@@ -89,6 +89,12 @@ _UNSCOPED_BY_DESIGN: dict[str, str] = {
         "route has authenticated (the same shape as reading one's own consent). It never lists "
         "another patient's tickets (Issue 39)"
     ),
+    "modules/queue/service.py::_existing_ticket": (
+        "the join service's duplicate check (Issue 40) runs for a patient, who holds no role at a "
+        "clinic and so has no SiteAccess. It is narrowed by the queue the caller already resolved "
+        "(published_select for a patient, get_queue for the desk) and by the joining patient's "
+        "own id, and returns only that patient's ticket"
+    ),
     "modules/staff/invitations.py::usable_invitation": (
         "an invitation link is opened by someone who has no account and therefore no clinic to be "
         "scoped by; the id comes from the signed token, and the row's own site_id is what "

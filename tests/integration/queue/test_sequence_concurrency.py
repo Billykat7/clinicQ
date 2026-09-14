@@ -390,7 +390,7 @@ def test_a_walk_in_needs_no_patient_and_a_remote_join_cannot_lack_one(
     """Criterion 5, both halves, at the database: no placeholder patient is ever needed or allowed."""
     with world.session() as db:
         walk_in = issue_ticket(
-            db, queue=world.queue, source=TicketSource.WALK_IN, display_name="Gogo M."
+            db, queue=world.queue, source=TicketSource.WALK_IN, walk_in_name="Gogo M."
         )
         remote = issue_ticket(
             db, queue=world.queue, source=TicketSource.USSD, patient_id=world.patient.id

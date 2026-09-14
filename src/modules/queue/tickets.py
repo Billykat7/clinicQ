@@ -19,7 +19,8 @@ order a queue is *called* in, and they change it in one ordering function, not h
 from collections.abc import Collection
 from datetime import date
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select
+from sqlalchemy.orm import Session
 
 from src.commons.enums import TICKET_ACTIVE_STATUSES, TicketStatus
 from src.core.site_scope import SiteAccess, scoped_select
@@ -54,6 +55,26 @@ def board_select(
     )
 
 
+def site_day_select(
+    access: SiteAccess,
+    service_day: date,
+    *,
+    queue_id: str | None = None,
+    statuses: Collection[TicketStatus] = TICKET_ACTIVE_STATUSES,
+) -> Select[tuple[Ticket]]:
+    """A clinic's tickets on a service day across its queues (or one), queue by queue in sequence.
+
+    The front desk's read: every line at once. Through the site guard, like :func:`board_select`.
+    """
+    statement = scoped_select(Ticket, access).where(
+        Ticket.service_day == service_day,
+        Ticket.status.in_(sorted(status.value for status in statuses)),
+    )
+    if queue_id is not None:
+        statement = statement.where(Ticket.queue_id == queue_id)
+    return statement.order_by(Ticket.queue_id, Ticket.sequence)
+
+
 def patient_tickets_select(patient_id: str, service_day: date) -> Select[tuple[Ticket]]:
     """A patient's own tickets on a service day, at any clinic, earliest first.
 
@@ -64,4 +85,22 @@ def patient_tickets_select(patient_id: str, service_day: date) -> Select[tuple[T
         select(Ticket)
         .where(Ticket.patient_id == patient_id, Ticket.service_day == service_day)
         .order_by(Ticket.joined_at)
+    )
+
+
+def waiting_ahead(db: Session, ticket: Ticket) -> int:
+    """How many ``waiting`` tickets are ahead of ``ticket`` in its queue and service day.
+
+    Derived from the order every time it is asked, never stored on a ticket, so a cancellation or a
+    call ahead is reflected on the next read without rewriting anyone else's row.
+    """
+    return int(
+        db.execute(
+            select(func.count(Ticket.id)).where(
+                Ticket.queue_id == ticket.queue_id,
+                Ticket.service_day == ticket.service_day,
+                Ticket.status == TicketStatus.WAITING.value,
+                Ticket.sequence < ticket.sequence,
+            )
+        ).scalar_one()
     )

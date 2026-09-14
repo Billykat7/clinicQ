@@ -170,7 +170,7 @@ def issue_ticket(
     queue: Queue,
     source: TicketSource,
     patient_id: str | None = None,
-    display_name: str | None = None,
+    walk_in_name: str | None = None,
     reason_text: str | None = None,
     comment_consent: bool = False,
     moment: datetime | None = None,
@@ -187,7 +187,7 @@ def issue_ticket(
         queue: The queue the ticket is issued in; its prefix starts the number.
         source: The channel the ticket came through. Recorded, never used for ordering.
         patient_id: The patient, or ``None`` for a walk-in the desk issued without a number.
-        display_name: What the patient or the desk gave as a name.
+        walk_in_name: What the desk wrote down to call a walk-in by; walk-ins only.
         reason_text: The optional short reason for the visit.
         comment_consent: Per-visit consent to show the reason on the board.
         moment: When the ticket is issued (aware). ``None`` means now in Johannesburg; the service
@@ -201,6 +201,10 @@ def issue_ticket(
             it too, but this message says why.
         ReferenceCodeExhaustedError: No free reference code after :data:`MAX_REFERENCE_ATTEMPTS`.
     """
+    if walk_in_name is not None and source is not TicketSource.WALK_IN:
+        raise ValueError(
+            "Only a walk-in is named on the ticket; a phone join is named by its patient."
+        )
     if patient_id is None and source is not TicketSource.WALK_IN:
         raise ValueError(
             f"A {source.value} ticket belongs to the patient who joined; only a walk-in may have none."
@@ -218,7 +222,7 @@ def issue_ticket(
             number=format_ticket_number(queue.ticket_prefix, sequence),
             reference_code=new_reference_code(),
             source=source.value,
-            display_name=display_name,
+            walk_in_name=walk_in_name,
             reason_text=reason_text,
             comment_consent=comment_consent,
             joined_at=moment,

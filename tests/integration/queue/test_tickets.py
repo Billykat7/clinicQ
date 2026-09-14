@@ -85,7 +85,7 @@ def test_a_walk_in_is_issued_without_a_patient_and_a_remote_join_is_not(
     with session_factory() as db:
         triage, _ = _queues(db)
         walk_in = issue_ticket(
-            db, queue=triage, source=TicketSource.WALK_IN, display_name="Gogo M."
+            db, queue=triage, source=TicketSource.WALK_IN, walk_in_name="Gogo M."
         )
         with pytest.raises(ValueError, match="only a walk-in may have none"):
             issue_ticket(db, queue=triage, source=TicketSource.WHATSAPP)
@@ -94,7 +94,7 @@ def test_a_walk_in_is_issued_without_a_patient_and_a_remote_join_is_not(
             db, queue=triage, source=TicketSource.WEB, patient_id=patient.id
         )
         db.commit()
-        assert walk_in.patient_id is None and walk_in.display_name == "Gogo M."
+        assert walk_in.patient_id is None and walk_in.walk_in_name == "Gogo M."
         assert remote.patient_id == patient.id
         assert walk_in.status == remote.status == TicketStatus.WAITING.value
         # The refused WhatsApp join allocated nothing: the next number is still 2.

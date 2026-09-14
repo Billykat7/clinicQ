@@ -22,7 +22,15 @@ from pathlib import Path
 
 _SRC = Path(__file__).resolve().parents[3] / "src"
 #: The modules this rule covers: ClinicQ's own.
-CLINICQ_MODULES = ("patients", "staff", "sites", "queues", "tickets", "consent")
+CLINICQ_MODULES = (
+    "patients",
+    "staff",
+    "sites",
+    "queues",
+    "queue",
+    "tickets",
+    "consent",
+)
 _MUTATING = frozenset({"post", "put", "patch", "delete"})
 #: The call that records an audit row, wherever it is made.
 _AUDIT_CALL = "record_audit_event"
