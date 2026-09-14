@@ -12,7 +12,12 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-from src.commons.enums import EstimateConfidence, TicketSource, TicketStatus
+from src.commons.enums import (
+    CancellationReason,
+    EstimateConfidence,
+    TicketSource,
+    TicketStatus,
+)
 from src.commons.time import stored_sast
 from src.database.models.ticket import MAX_REASON_LENGTH, Ticket
 from src.modules.queue.estimate import WaitEstimate
@@ -126,6 +131,30 @@ class JoinOut(BaseModel):
     """The expected wait from now, for this ticket."""
     message: str
     """A sentence for the patient: "You are A043." or "You already hold A041."."""
+
+
+class CancelIn(BaseModel):
+    """A cancellation. The reason is optional, and one of a closed list when given."""
+
+    reason: CancellationReason | None = None
+
+
+class CancelOut(BaseModel):
+    """The cancelled ticket, and what it did for the people behind."""
+
+    ticket: TicketOut
+    moved_up: int = Field(ge=0)
+    """How many patients still waiting behind this ticket each moved one place forward."""
+    message: str
+
+
+class MyTicketOut(TicketOut):
+    """A patient's own ticket, with where it stands: derived on every read, never stored (Issue 44)."""
+
+    waiting_ahead: int | None = Field(default=None, ge=0)
+    """Waiting tickets ahead in call order; ``None`` once the ticket is no longer waiting."""
+    wait: WaitOut | None = None
+    """The expected wait from now; ``None`` once the ticket is no longer waiting."""
 
 
 class TicketListOut(BaseModel):

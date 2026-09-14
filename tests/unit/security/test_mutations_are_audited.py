@@ -74,17 +74,22 @@ def _calls(node: ast.AST) -> set[str]:
     return names
 
 
-def _auditing_functions(module: Path) -> set[str]:
-    """Functions in ``module`` that record an audit row (directly or through a local helper)."""
-    tree = ast.parse(module.read_text(encoding="utf-8"))
-    functions = {
-        node.name: _calls(node)
-        for node in ast.walk(tree)
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
+def _auditing_functions(*modules: Path) -> set[str]:
+    """Functions in ``modules`` that record an audit row, directly or through each other.
+
+    The files are read together, so a service in one file that calls an auditing function in
+    another file of the same module counts: the queue's cancellation service moves a ticket through
+    the lifecycle, and the lifecycle is what records (Issue 44).
+    """
+    functions: dict[str, set[str]] = {}
+    for module in modules:
+        tree = ast.parse(module.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                functions.setdefault(node.name, set()).update(_calls(node))
     auditing = {name for name, calls in functions.items() if _AUDIT_CALL in calls}
-    # One more hop: a function that calls a local function that audits.
-    for _ in range(3):
+    # More hops: a function that calls a function that audits, a few levels deep.
+    for _ in range(4):
         grown = {
             name for name, calls in functions.items() if calls & auditing
         } | auditing
@@ -118,10 +123,9 @@ def unaudited_mutations() -> list[str]:
             continue
         # Any file of the module may hold the function that records: patients keep theirs in
         # service.py and consent.py.
-        auditing_in_service: set[str] = set()
-        for module_file in sorted(router.parent.glob("*.py")):
-            if module_file != router:
-                auditing_in_service |= _auditing_functions(module_file)
+        auditing_in_service = _auditing_functions(
+            *(path for path in sorted(router.parent.glob("*.py")) if path != router)
+        )
         auditing_in_router = _auditing_functions(router)
         for method, handler in _routes(router):
             key = f"{_module_name(router)}:{handler.name}"

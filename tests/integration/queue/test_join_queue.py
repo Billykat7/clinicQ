@@ -533,10 +533,11 @@ def test_a_phone_and_the_desk_racing_twenty_times_always_get_adjacent_numbers(
             db.commit()
             return result.ticket.sequence
 
-    pairs = [
-        sorted(_at_once(lambda n=n: remote(f"+2710555{1000 + n:04d}"), walk_in))
-        for n in range(20)
-    ]
+    pairs = []
+    for n in range(20):
+        answers = _at_once(lambda n=n: remote(f"+2710555{1000 + n:04d}"), walk_in)
+        assert all(isinstance(answer, int) for answer in answers), answers
+        pairs.append(sorted(answers))
     assert all(high == low + 1 for low, high in pairs), pairs
     assert [low for low, _ in pairs] == list(range(1, 40, 2))
 

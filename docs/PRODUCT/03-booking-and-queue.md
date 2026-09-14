@@ -107,9 +107,9 @@ stateDiagram-v2
 
 | Situation | Behaviour |
 |-----------|-----------|
-| Called, doesn't respond in X minutes | Ticket auto-moves to "recall" state, drops to end of active window (not deleted); staff can re-call once |
-| Recalled twice, still absent | Ticket marked `no_show`, freeing the slot; patient (if remote) gets a notification explaining this and how to rejoin |
-| Patient explicitly cancels remotely | Ticket marked `cancelled`, position recalculates for everyone behind them |
+| Called, doesn't arrive within the timeout (5 minutes unless the clinic or queue sets 1–60) | Ticket moves to `recalled` automatically, exactly once, and the patient is texted that they have been called again and how long they have; staff can also recall at once |
+| Recalled, still absent after the same timeout | Ticket marked `no_show`, freeing the room; the patient gets a message explaining this and how to rejoin; staff can mark a no-show at once |
+| Patient cancels (web, USSD, WhatsApp, or at reception) | Ticket marked `cancelled` with the channel and an optional reason; everyone behind moves up one place, because positions are counted from the order of waiting tickets rather than stored. A patient who has already been called is asked to speak to reception, who can cancel it |
 
 ## Data captured (queue side)
 

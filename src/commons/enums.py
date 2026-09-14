@@ -640,6 +640,29 @@ class ActorKind(StrEnum):
     SYSTEM = "system"
 
 
+class CancellationReason(StrEnum):
+    """Why a patient gave their place back, when they chose to say (Issue 44). Optional.
+
+    A closed list, never free text, because the no-show analysis (Issue 93) groups by it: a clinic
+    whose patients cancel because the wait is too long has a different problem from one whose
+    patients got better.
+
+    - ``FEELING_BETTER``: they no longer need to be seen today.
+    - ``WAIT_TOO_LONG``: the wait was longer than they could stay.
+    - ``CANNOT_GET_THERE``: transport, work or family kept them away.
+    - ``WENT_ELSEWHERE``: they were seen at another clinic.
+    - ``JOINED_BY_MISTAKE``: the wrong queue, clinic or day.
+    - ``OTHER``: none of these.
+    """
+
+    FEELING_BETTER = "feeling_better"
+    WAIT_TOO_LONG = "wait_too_long"
+    CANNOT_GET_THERE = "cannot_get_there"
+    WENT_ELSEWHERE = "went_elsewhere"
+    JOINED_BY_MISTAKE = "joined_by_mistake"
+    OTHER = "other"
+
+
 class JoinRefusal(StrEnum):
     """Why a join was refused (Issue 40). The ``code`` suffix on the wire: ``queue.join.<value>``.
 
