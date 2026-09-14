@@ -35,8 +35,8 @@ repairs any snapshot, in either store, that disagrees.
 and recounts, and ``clinicq_queue_snapshot_repairs_total`` counts what the sweep fixed; both are on
 ``/metrics`` with the request metrics (Issue 14). :func:`cache_stats` reads them in-process.
 
-Until tickets exist every count is "not measured" (``None``); the snapshot stores and serves that
-faithfully, so the machinery is exercised end to end and Issue 39 changes only the source.
+Since Issue 39 the source counts real tickets (today's ``waiting`` ones); the snapshot machinery did
+not change for it, which was the point of building it against the reader contract first.
 """
 
 import json

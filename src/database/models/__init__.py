@@ -66,6 +66,7 @@ from src.database.models.site_queue_snapshot import SiteQueueSnapshot
 from src.database.models.staff_invitation import StaffInvitation
 from src.database.models.staff_queue_assignment import StaffQueueAssignment
 from src.database.models.stripe_event import StripeEvent
+from src.database.models.ticket import Ticket, TicketSequence
 from src.database.models.user import User
 from src.database.models.user_role_assignment import UserRoleAssignment
 from src.database.models.widget import Widget
@@ -124,6 +125,8 @@ __all__ = [
     "StaffInvitation",
     "StaffQueueAssignment",
     "StripeEvent",
+    "Ticket",
+    "TicketSequence",
     "TimestampMixin",
     "User",
     "UserRoleAssignment",

@@ -159,14 +159,15 @@ def test_the_page_answers_open_hours_queues_services_and_contact(
 def test_wait_times_are_a_range_or_not_shown_never_a_single_number(
     directory: SimpleNamespace,
 ) -> None:
-    """No estimator yet (Issue 42): every queue says so, and the queue length is not invented either."""
+    """No estimator yet (Issue 42): every queue says so, and no label passes a length off as a wait."""
     with directory.session() as db:
         profile = clinic_profile(db, "hillbrow-chc", moment=_TUESDAY_10AM)
     assert profile is not None and profile.queues
     rows = live_view(profile, join_enabled=False).queues
     assert all(row.wait_label == WAIT_NOT_AVAILABLE for row in rows)
     assert all(queue.wait_range is None for queue in profile.queues)
-    assert all(not any(ch.isdigit() for ch in row.waiting_label) for row in rows)
+    # The length is a real count since Issue 39; nothing about it may read as minutes.
+    assert all("min" not in row.waiting_label for row in rows)
 
 
 def test_payment_information_is_only_for_private_clinics_and_carries_the_notice(
