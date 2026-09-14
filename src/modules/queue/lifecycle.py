@@ -38,6 +38,12 @@ finds ``called → called`` illegal and gets a 409. A caller that knows what it 
 ``expected_status``, so a move decided on a stale screen is refused as :class:`StaleTransitionError`
 (also 409) even when the new move would be legal from the current status.
 
+**Two moves are more than a status change**, and the transitions route refuses them
+(:func:`staff_move`, :data:`DEDICATED_MOVES`). A ``transferred`` ticket must have its ticket in the
+next queue (Issue 45), and a ``cancelled`` one records the channel it was cancelled through
+(Issue 44), so each is made by its own operation, which calls :func:`transition_ticket` itself. The
+property tests of Issue 47 found both reachable as bare status changes before this rule.
+
 The diagram in ``docs/PRODUCT/03-booking-and-queue.md`` is checked against :data:`TRANSITIONS` by
 ``tests/unit/queue/test_ticket_state_machine.py``, so the documentation cannot drift from the code.
 """
@@ -101,6 +107,7 @@ TRANSITIONS: Final[Mapping[TicketStatus, frozenset[TicketStatus]]] = MappingProx
 #: The code on the wire for a move the table refuses, and for one decided on a stale screen.
 ILLEGAL_TRANSITION_CODE: Final = "ticket.transition.illegal"
 STALE_TRANSITION_CODE: Final = "ticket.transition.stale"
+DEDICATED_MOVE_CODE: Final = "ticket.transition.dedicated_route"
 NOBODY_WAITING_CODE: Final = "ticket.call_next.empty"
 
 
@@ -133,6 +140,25 @@ class StaleTransitionError(ConflictError):
         )
         self.current = current
         self.expected = expected
+
+
+#: Moves the transitions route refuses, and the operation that makes each one whole: a transfer
+#: issues the ticket in the next queue, a cancellation records its channel.
+DEDICATED_MOVES: Final[Mapping[TicketStatus, str]] = MappingProxyType(
+    {TicketStatus.CANCELLED: "Cancel", TicketStatus.TRANSFERRED: "Transfer"}
+)
+
+
+class DedicatedMoveError(ConflictError):
+    """A status change asked for on the transitions route that has its own operation: HTTP 409."""
+
+    def __init__(self, requested: TicketStatus) -> None:
+        super().__init__(
+            f"A ticket is {requested.value} with {DEDICATED_MOVES[requested]}, "
+            "not by changing its status.",
+            code=DEDICATED_MOVE_CODE,
+        )
+        self.requested = requested
 
 
 class NobodyWaitingError(ConflictError):
@@ -270,6 +296,37 @@ def transition_ticket(
     if queue is not None:
         on_queue_changed(db, queue)
     return ticket
+
+
+def staff_move(
+    db: Session,
+    ticket_id: str,
+    requested: TicketStatus,
+    *,
+    actor: Actor,
+    expected_status: TicketStatus | None = None,
+    moment: datetime | None = None,
+) -> Ticket:
+    """A status change a staff member asks for on the transitions route. The caller commits.
+
+    :func:`transition_ticket`, except for the moves in :data:`DEDICATED_MOVES`, which are refused
+    before the ticket is read: they are made by :func:`~src.modules.queue.transfer.transfer_ticket`
+    and :func:`~src.modules.queue.cancellation.cancel_ticket`.
+
+    Raises:
+        DedicatedMoveError: ``requested`` is ``cancelled`` or ``transferred``.
+        NotFoundError, StaleTransitionError, IllegalTransitionError: As :func:`transition_ticket`.
+    """
+    if requested in DEDICATED_MOVES:
+        raise DedicatedMoveError(requested)
+    return transition_ticket(
+        db,
+        ticket_id,
+        requested,
+        actor=actor,
+        expected_status=expected_status,
+        moment=moment,
+    )
 
 
 def call_next(

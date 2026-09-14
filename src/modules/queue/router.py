@@ -61,7 +61,7 @@ from src.modules.queue.cancellation import (
     cancel_own_ticket,
     cancel_ticket,
 )
-from src.modules.queue.lifecycle import Actor, call_next, transition_ticket
+from src.modules.queue.lifecycle import Actor, call_next, staff_move
 from src.modules.queue.priority import (
     COUNTS_ARE_NOT_RANKINGS,
     override_counts,
@@ -375,9 +375,10 @@ def _staff(access: SiteAccess) -> Actor:
 def move_ticket(
     ticket_id: str, payload: TransitionIn, access: TicketsIssue, db: DbSession
 ) -> TicketOut:
-    """Apply one legal move. An illegal move, or one decided on a stale screen, is a 409."""
+    """Apply one legal move. An illegal move, one decided on a stale screen, or a cancellation or
+    transfer (which have their own routes) is a 409."""
     ticket = get_in_site_or_404(db, Ticket, ticket_id, access)
-    moved = transition_ticket(
+    moved = staff_move(
         db,
         ticket.id,
         payload.to,
