@@ -151,7 +151,10 @@ class BoardState:
     language: BoardLanguage
     #: How the board is coloured for its room (Issue 59). Not about anyone, so every viewer gets it.
     theme: BoardTheme
+    #: Whether a call is also announced aloud, and how loud, in percent (Issue 60). Muting leaves the
+    #: screen's highlight as it is.
     announce_audio: bool
+    announce_volume: int
     as_of: datetime
     queues: tuple[BoardQueue, ...]
 
@@ -168,6 +171,7 @@ class BoardState:
             "language": self.language.value,
             "theme": self.theme.value,
             "announce_audio": self.announce_audio,
+            "announce_volume": self.announce_volume,
             "as_of": self.as_of.isoformat(),
             "queues": [queue.payload() for queue in self.queues],
         }
@@ -384,6 +388,7 @@ def project_board(
         language=site.board_language_enum,
         theme=site.board_theme_enum,
         announce_audio=site.announce_audio,
+        announce_volume=site.announce_volume,
         as_of=now,
         queues=tuple(
             BoardQueue(

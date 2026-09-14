@@ -23,6 +23,10 @@ from sqlalchemy.engine import URL
 from sqlalchemy.orm import sessionmaker
 
 from src.commons.enums import (
+    SITE_DEFAULT_ANNOUNCE_VOLUME,
+    SITE_DEFAULT_BOARD_LANGUAGE,
+    SITE_DEFAULT_BOARD_THEME,
+    SITE_DEFAULT_DISPLAY_MODE,
     ActorKind,
     SiteStatus,
     TicketSource,
@@ -33,7 +37,7 @@ from src.commons.time import now_sast
 from src.core import refresh_token_policy, security
 from src.core.config import get_settings
 from src.core.rbac_manifest_sync import sync_rbac_catalog
-from src.database.models import Queue, Ticket
+from src.database.models import Queue, Site, Ticket
 from src.database.schema import apply_postgres_search_path
 from src.database.session import get_db
 from src.main import create_app
@@ -166,6 +170,19 @@ def board_day(board_clinic: SimpleNamespace) -> Iterator[SimpleNamespace]:
     empty_tables(board_clinic.session, _DAY_TABLES)
     with board_clinic.session() as db:
         db.execute(update(Queue).where(Queue.site_id == SITE).values(is_active=True))
+        # A test that changed what the board shows or says leaves the next one the clinic's defaults.
+        db.execute(
+            update(Site)
+            .where(Site.id == SITE)
+            .values(
+                display_mode=SITE_DEFAULT_DISPLAY_MODE.value,
+                display_show_comment=False,
+                board_language=SITE_DEFAULT_BOARD_LANGUAGE.value,
+                board_theme=SITE_DEFAULT_BOARD_THEME.value,
+                announce_audio=True,
+                announce_volume=SITE_DEFAULT_ANNOUNCE_VOLUME,
+            )
+        )
         db.execute(text("DELETE FROM clinicq.display_device"))
         db.commit()
     contexts: list[Any] = []

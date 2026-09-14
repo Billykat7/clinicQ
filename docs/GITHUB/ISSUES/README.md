@@ -171,10 +171,10 @@ affected spec carries a **Note** saying the same thing.
   34 (F), 57 and 58 (D) and 70 (C). Section 9 of the workload split also leaves 3, 4, 30, 31, 34, 36, 38
   and 70 unassigned, gives 17 to F (for the consent wording), puts 57 and 58 under D, and lists 61
   under both D and E.
-- **Suspected dependency errors.** Issue 60 depends on Issue 26 (the services catalogue); Issue 27
-  (display settings, including `board_language` and `announce_audio`) looks intended. Issues 56 and 60
-  read the privacy projection from Issue 58 but do not list it. *Issue 56's is corrected: it now depends on
-  Issue 58, which merged first.*
+- **Suspected dependency errors.** Issue 60 depended on Issue 26 (the services catalogue); Issue 27
+  (display settings, including `board_language` and `announce_audio`) was intended. Issues 56 and 60
+  read the privacy projection from Issue 58 but did not list it. *Both are corrected: Issue 56 depends on
+  Issue 58, and Issue 60 on Issues 27, 57 and 58.*
 - **A dependency on a later milestone.** Issue 66 (M9, sprint 4) needs Issue 77 (M10, sprint 8) for
   translations.
 - **Milestones that cannot close in their stated window.** The sprint plan schedules issues of M2, M7,
@@ -268,7 +268,7 @@ affected spec carries a **Note** saying the same thing.
 | [57](M8/ISSUE_57_board_sse_channel.md) | SSE live update channel with reconnect, backoff and heartbeat | [M8](../MILESTONES/M8_display_monitor.md) | A | 9 | 2 days | [41](M6/ISSUE_41_ticket_lifecycle_state_machine.md), [56](M8/ISSUE_56_board_page_kiosk.md) |
 | [58](M8/ISSUE_58_board_privacy_rendering.md) | Server-side privacy-mode rendering and consent gating | [M8](../MILESTONES/M8_display_monitor.md) | A | 9 | 2 days | [21](M3/ISSUE_21_consent_capture_withdrawal.md), [27](M4/ISSUE_27_display_privacy_settings.md) |
 | [59](M8/ISSUE_59_board_accessibility.md) | Accessibility pass: contrast, type scale, 5-metre legibility, reduced motion | [M8](../MILESTONES/M8_display_monitor.md) | D | 10 | 2 days | [56](M8/ISSUE_56_board_page_kiosk.md) |
-| [60](M8/ISSUE_60_board_audio_tts.md) | Audio chime and multi-language text-to-speech call announcements | [M8](../MILESTONES/M8_display_monitor.md) | D | 10 | 2 days | [26](M4/ISSUE_26_services_catalogue_service_times.md), [57](M8/ISSUE_57_board_sse_channel.md) |
+| [60](M8/ISSUE_60_board_audio_tts.md) | Audio chime and multi-language text-to-speech call announcements | [M8](../MILESTONES/M8_display_monitor.md) | D | 10 | 2 days | [27](M4/ISSUE_27_display_privacy_settings.md), [57](M8/ISSUE_57_board_sse_channel.md), [58](M8/ISSUE_58_board_privacy_rendering.md) |
 | [61](M8/ISSUE_61_kiosk_device_registry.md) | Kiosk device registry, pairing codes and heartbeat monitoring | [M8](../MILESTONES/M8_display_monitor.md) | E | 10 | 2 days | [23](M4/ISSUE_23_sites_model_profile_crud.md), [56](M8/ISSUE_56_board_page_kiosk.md) |
 | [62](M8/ISSUE_62_board_resilience_tests.md) | Board resilience: cached last-known state, stale banner, recovery tests | [M8](../MILESTONES/M8_display_monitor.md) | D | 10–11 | 2 days | [57](M8/ISSUE_57_board_sse_channel.md), [61](M8/ISSUE_61_kiosk_device_registry.md) |
 | [63](M9/ISSUE_63_notification_service_adapters.md) | Notification service, transport adapters and delivery log | [M9](../MILESTONES/M9_notifications_patient_pwa.md) | B | 3 | 3 days | [21](M3/ISSUE_21_consent_capture_withdrawal.md), [41](M6/ISSUE_41_ticket_lifecycle_state_machine.md) |

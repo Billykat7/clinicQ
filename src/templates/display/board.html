@@ -7,9 +7,11 @@
     in data-initial has no name or reason the clinic's display mode or the patient's consent forbids.
 
     board.js draws the panels from that payload at once, and board-live.js hands it every later board
-    from the live stream (Issue 57), or from /state while the stream is down. The markup for a panel
-    lives in the <template> elements below rather than in the script, and the words a panel needs (its
-    captions and statuses) are data attributes on those templates.
+    from the live stream (Issue 57), or from /state while the stream is down. board-announce.js says each
+    new call aloud (Issue 60) from the data-announce-* sentences, which have blanks for the number and
+    the room only. The markup for a panel lives in the <template> elements below rather than in the
+    script, and the words a panel needs (its captions and statuses) are data attributes on those
+    templates.
 
     Layout (board.css): one panel fills the screen, two and three stand side by side, four make a
     grid of two by two, and more than four show four at a time, a page after the next. -#}
@@ -38,6 +40,13 @@
       data-device-heartbeat-seconds="{{ device_heartbeat_seconds }}"
       data-start-url="{{ start_url }}"
       data-app-version="{{ app_version }}"
+      data-announce-call="{{ announce_call }}"
+      data-announce-voice="{{ announce_voice }}"
+      data-announce-language="{{ announce_language.value }}"
+      data-announce-fallback-call="{{ announce_fallback_call }}"
+      data-announce-fallback-voice="{{ announce_fallback_voice }}"
+      data-announce-clips="{{ announce_clips | tojson | forceescape }}"
+      data-announce-chime="{{ announce_chime }}"
       data-initial="{{ payload | tojson | forceescape }}">
   <header class="kiosk-header">
     {# The branding slot: the clinic's initials and its name. A logo, when clinics can upload one, goes here. #}
@@ -105,4 +114,5 @@
   <script src="/static/js/board.js" defer></script>
   <script src="/static/js/board-live.js" defer></script>
   <script src="/static/js/board-device.js" defer></script>
+  <script src="/static/js/board-announce.js" defer></script>
 {% endblock %}

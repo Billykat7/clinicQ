@@ -10,10 +10,10 @@
 | **Area** | Frontend / Display |
 | **Estimate** | 2 days |
 | **Status** | Planned |
-| **Depends on** | [Issue 26](../M4/ISSUE_26_services_catalogue_service_times.md): Services catalogue with expected service times<br>[Issue 57](../M8/ISSUE_57_board_sse_channel.md): SSE live update channel with reconnect, backoff and heartbeat |
+| **Depends on** | [Issue 27](../M4/ISSUE_27_display_privacy_settings.md): Display and privacy settings per site<br>[Issue 57](../M8/ISSUE_57_board_sse_channel.md): SSE live update channel with reconnect, backoff and heartbeat<br>[Issue 58](../M8/ISSUE_58_board_privacy_rendering.md): Server-side privacy-mode rendering and consent gating |
 | **Unblocks** | No other issue waits on this one. |
 
-> **Note:** This issue depends on Issue 26 (the services catalogue), which looks like a typo for Issue 27 (display settings, which holds `board_language` and `announce_audio`). It also reads the projection from Issue 58, which is not listed. Confirm and correct the dependency list.
+> **Note:** The dependency list originally named Issue 26 (the services catalogue), a typo for Issue 27 (display settings, which holds `board_language` and `announce_audio`), and left out Issue 58, whose projection the announcements read. Both are corrected above.
 
 ## Context
 

@@ -490,6 +490,13 @@ a.stat:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
   cursor: pointer;
   vertical-align: -.14em;
 }
+/* A slider is a control too: the brand accent, no text-field box around it. */
+.field input[type="range"] {
+  min-height: 0; padding: 0; border: 0; background: none; box-shadow: none;
+  accent-color: var(--brand);
+  cursor: pointer;
+}
+.field input[type="range"]:disabled { cursor: not-allowed; opacity: .55; }
 .field label:has(> input[type="checkbox"]),
 .field label:has(> input[type="radio"]) {
   display: inline-flex;

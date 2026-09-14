@@ -11,7 +11,7 @@
 | **Estimate** | 1 day |
 | **Status** | Planned |
 | **Depends on** | [Issue 25](../M4/ISSUE_25_queues_model_multiroom.md): `queues` model: multi-room, multi-service queues per site |
-| **Unblocks** | [Issue 30](../M4/ISSUE_30_sites_openapi_contract_tests.md): `sites` OpenAPI contract and module tests<br>[Issue 42](../M6/ISSUE_42_wait_time_estimation.md): Wait-time estimation service and `wait_time_samples`<br>[Issue 60](../M8/ISSUE_60_board_audio_tts.md): Audio chime and multi-language text-to-speech call announcements<br>[Issue 80](../M11/ISSUE_80_appointment_slots_capacity.md): Appointment slots and capacity model |
+| **Unblocks** | [Issue 30](../M4/ISSUE_30_sites_openapi_contract_tests.md): `sites` OpenAPI contract and module tests<br>[Issue 42](../M6/ISSUE_42_wait_time_estimation.md): Wait-time estimation service and `wait_time_samples`<br>[Issue 80](../M11/ISSUE_80_appointment_slots_capacity.md): Appointment slots and capacity model |
 
 ## Context
 

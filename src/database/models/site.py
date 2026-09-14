@@ -32,6 +32,7 @@ from sqlalchemy import Boolean, CheckConstraint, DateTime, Index, Integer, Strin
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.commons.enums import (
+    SITE_DEFAULT_ANNOUNCE_VOLUME,
     SITE_DEFAULT_BOARD_LANGUAGE,
     SITE_DEFAULT_BOARD_THEME,
     SITE_DEFAULT_DISPLAY_MODE,
@@ -78,6 +79,8 @@ class Site(Base, TimestampMixin, ActiveMixin, SoftDeleteMixin):
             + ")",
             name="transfer_placement",
         ),
+        # A percentage of the screen's own volume (Issue 60).
+        CheckConstraint("announce_volume BETWEEN 0 AND 100", name="announce_volume"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -173,7 +176,17 @@ class Site(Base, TimestampMixin, ActiveMixin, SoftDeleteMixin):
     """Whether a call is announced aloud as well as shown (Issue 60).
 
     On by default, and deliberately: a patient who cannot read the board is the one the chime is
-    for. What the announcement *says* is still governed by ``display_mode``."""
+    for. An announcement says the ticket number and the room and nothing else, whatever ``display_mode``
+    allows on the screen."""
+    announce_volume: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=SITE_DEFAULT_ANNOUNCE_VOLUME,
+        server_default=str(SITE_DEFAULT_ANNOUNCE_VOLUME),
+    )
+    """How loud the chime and the spoken call are, 0 to 100 percent of the screen's volume (Issue 60).
+
+    Muting is ``announce_audio``, not a volume of 0, so "off" stays one clear choice."""
     reason_retention_days: Mapped[int] = mapped_column(
         Integer, nullable=False, default=30, server_default="30"
     )

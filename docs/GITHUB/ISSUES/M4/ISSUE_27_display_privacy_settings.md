@@ -11,7 +11,7 @@
 | **Estimate** | 1 day |
 | **Status** | Planned |
 | **Depends on** | [Issue 21](../M3/ISSUE_21_consent_capture_withdrawal.md): Consent capture and withdrawal (display, notifications, board comment)<br>[Issue 23](../M4/ISSUE_23_sites_model_profile_crud.md): `sites` model with PostGIS location and clinic profile CRUD |
-| **Unblocks** | [Issue 30](../M4/ISSUE_30_sites_openapi_contract_tests.md): `sites` OpenAPI contract and module tests<br>[Issue 54](../M7/ISSUE_54_manager_settings_ui.md): Clinic manager settings UI (profile, hours, display mode, staff, services)<br>[Issue 56](../M8/ISSUE_56_board_page_kiosk.md): Waiting-room board page (kiosk) with now-serving and up-next panels<br>[Issue 58](../M8/ISSUE_58_board_privacy_rendering.md): Server-side privacy-mode rendering and consent gating |
+| **Unblocks** | [Issue 30](../M4/ISSUE_30_sites_openapi_contract_tests.md): `sites` OpenAPI contract and module tests<br>[Issue 54](../M7/ISSUE_54_manager_settings_ui.md): Clinic manager settings UI (profile, hours, display mode, staff, services)<br>[Issue 56](../M8/ISSUE_56_board_page_kiosk.md): Waiting-room board page (kiosk) with now-serving and up-next panels<br>[Issue 58](../M8/ISSUE_58_board_privacy_rendering.md): Server-side privacy-mode rendering and consent gating<br>[Issue 60](../M8/ISSUE_60_board_audio_tts.md): Audio chime and multi-language text-to-speech call announcements |
 
 ## Context
 

@@ -1949,6 +1949,7 @@ components:
         board_language: { $ref: "#/components/schemas/BoardLanguage" }
         board_theme: { type: string, enum: [dim, bright, high_contrast], default: dim, description: How the board is coloured for its room (Issue 59). }
         announce_audio: { type: boolean, default: true }
+        announce_volume: { type: integer, minimum: 0, maximum: 100, default: 80, description: How loud the chime and the spoken call are, in percent of the screen's volume (Issue 60). }
         reason_retention_days: { type: integer, minimum: 1, maximum: 90 }
         confirm_public_display: { type: boolean, default: false, description: '"I understand what will appear on the screen."' }
         confirm_comment_with_full_name: { type: boolean, default: false, description: A second, separate agreement for a reason beside a full name. }
@@ -1961,7 +1962,7 @@ components:
         confirm_public_display: true
     DisplaySettingsOut:
       type: object
-      required: [site_id, display_mode, display_show_comment, board_language, board_theme, announce_audio, reason_retention_days, reason_retention_ceiling_days, warning_lines]
+      required: [site_id, display_mode, display_show_comment, board_language, board_theme, announce_audio, announce_volume, reason_retention_days, reason_retention_ceiling_days, warning_lines]
       properties:
         site_id: { type: string, format: uuid }
         display_mode: { $ref: "#/components/schemas/DisplayMode" }
@@ -1969,6 +1970,7 @@ components:
         board_language: { $ref: "#/components/schemas/BoardLanguage" }
         board_theme: { type: string, enum: [dim, bright, high_contrast] }
         announce_audio: { type: boolean }
+        announce_volume: { type: integer, minimum: 0, maximum: 100 }
         reason_retention_days: { type: integer }
         reason_retention_ceiling_days: { type: integer, description: The platform ceiling a clinic cannot raise. }
         warning_lines: { type: array, items: { type: string }, description: What these settings put on the screen, in plain language. }

@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Status** | 🚧 In progress: issues 58 (the server-side privacy projection every board response passes through), 56 (the kiosk board page), 57 (the live stream, with reconnection and heartbeat), 59 (accessibility: AA contrast in three themes, shapes for every status, reduced motion) and 61 (kiosk screens paired with a code, removed at once, watched for silence) delivered |
-| **Progress** | 🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜ **71%** (5/7 issues) |
+| **Status** | 🚧 In progress: issues 58 (the server-side privacy projection every board response passes through), 56 (the kiosk board page), 57 (the live stream, with reconnection and heartbeat), 59 (accessibility: AA contrast in three themes, shapes for every status, reduced motion) 61 (kiosk screens paired with a code, removed at once, watched for silence) and 60 (a chime and the number and room said aloud, one call at a time, never a name) delivered |
+| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ **86%** (6/7 issues) |
 | **Sprints** | 9 (weeks 17–18), semester 2. The sprint plan spreads its issues over sprints 5–11: some start early against stubs and some are scheduled after this window, which moves the milestone's close (and its tag) to sprint 11 (see the table) |
 | **Release tag** | `v0.8.0` |
 | **Primary owner** | D, Frontend/Clinic · E, DevOps/QA (device provisioning) |
@@ -53,7 +53,7 @@ and audio-announcement requirements.
 | [57](../ISSUES/M8/ISSUE_57_board_sse_channel.md) | SSE live update channel with reconnect, backoff and heartbeat | A | 2 days | 9 | [56](../ISSUES/M8/ISSUE_56_board_page_kiosk.md) |
 | [58](../ISSUES/M8/ISSUE_58_board_privacy_rendering.md) | Server-side privacy-mode rendering and consent gating | A | 2 days | 9 | nothing |
 | [59](../ISSUES/M8/ISSUE_59_board_accessibility.md) | Accessibility pass: contrast, type scale, 5-metre legibility, reduced motion | D | 2 days | 10 | [56](../ISSUES/M8/ISSUE_56_board_page_kiosk.md) |
-| [60](../ISSUES/M8/ISSUE_60_board_audio_tts.md) | Audio chime and multi-language text-to-speech call announcements | D | 2 days | 10 | [57](../ISSUES/M8/ISSUE_57_board_sse_channel.md) |
+| [60](../ISSUES/M8/ISSUE_60_board_audio_tts.md) | Audio chime and multi-language text-to-speech call announcements | D | 2 days | 10 | [57](../ISSUES/M8/ISSUE_57_board_sse_channel.md), [58](../ISSUES/M8/ISSUE_58_board_privacy_rendering.md) |
 | [61](../ISSUES/M8/ISSUE_61_kiosk_device_registry.md) | Kiosk device registry, pairing codes and heartbeat monitoring | E | 2 days | 10 | [56](../ISSUES/M8/ISSUE_56_board_page_kiosk.md) |
 | [62](../ISSUES/M8/ISSUE_62_board_resilience_tests.md) | Board resilience: cached last-known state, stale banner, recovery tests | D | 2 days | 10–11 | [57](../ISSUES/M8/ISSUE_57_board_sse_channel.md), [61](../ISSUES/M8/ISSUE_61_kiosk_device_registry.md) |
 
@@ -74,6 +74,7 @@ flowchart LR
     I56 --> I57
     I56 --> I59
     I57 --> I60
+    I58 --> I60
     I56 --> I61
     I57 --> I62
     I61 --> I62
@@ -85,8 +86,7 @@ flowchart LR
 
 - [Issue 21](../ISSUES/M3/ISSUE_21_consent_capture_withdrawal.md) (M3): Consent capture and withdrawal (display, notifications, board comment); needed by 58
 - [Issue 23](../ISSUES/M4/ISSUE_23_sites_model_profile_crud.md) (M4): `sites` model with PostGIS location and clinic profile CRUD; needed by 61
-- [Issue 26](../ISSUES/M4/ISSUE_26_services_catalogue_service_times.md) (M4): Services catalogue with expected service times; needed by 60
-- [Issue 27](../ISSUES/M4/ISSUE_27_display_privacy_settings.md) (M4): Display and privacy settings per site; needed by 56, 58
+- [Issue 27](../ISSUES/M4/ISSUE_27_display_privacy_settings.md) (M4): Display and privacy settings per site; needed by 56, 58, 60
 - [Issue 41](../ISSUES/M6/ISSUE_41_ticket_lifecycle_state_machine.md) (M6): Ticket lifecycle state machine and illegal-transition rejection; needed by 56, 57
 
 ## Exit criteria
@@ -95,7 +95,7 @@ flowchart LR
 - [ ] With `number_only` set, no request to the board endpoint returns a patient name in the payload at all
 - [ ] A comment never renders alongside a full name unless per-visit consent is recorded
 - [ ] Ticket numbers are legible at 5 metres on a 32-inch screen and pass AA contrast in a bright room. **Partly (Issues 56, 59):** AA contrast passes in the bright theme, as in every theme, on every board state (tests), and every number's size meets its 5-metre threshold as measured in a browser. The physical check of a person reading from 5 m has not been done (`docs/COMPLIANCE/ACCESSIBILITY_BOARD_EVIDENCE.md`)
-- [ ] A called ticket triggers a chime and a spoken announcement in the site's configured language
+- [ ] A called ticket triggers a chime and a spoken announcement in the site's configured language. **Partly (Issue 60):** in Chromium, a call plays the chime and then asks the speech engine for the number and room in the clinic's language (English and isiZulu tested, with a stand-in engine that records what it is asked to say), one call at a time, never a name. No real box has been heard, and no sentence has been checked by a fluent speaker (`docs/OPS/BOARD_AUDIO.md`)
 - [ ] An offline kiosk shows a stale banner with the timestamp of the last good update
 
 ## Demo at the end of the milestone

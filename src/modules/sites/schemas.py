@@ -27,6 +27,7 @@ from pydantic import (
 )
 
 from src.commons.enums import (
+    SITE_DEFAULT_ANNOUNCE_VOLUME,
     SITE_DEFAULT_BOARD_LANGUAGE,
     SITE_DEFAULT_BOARD_THEME,
     BoardLanguage,
@@ -373,6 +374,8 @@ class DisplaySettingsIn(BaseModel):
     board_theme: BoardTheme = SITE_DEFAULT_BOARD_THEME
     """How the board is coloured for its room (Issue 59). Never changes what the board shows."""
     announce_audio: bool = True
+    announce_volume: int = Field(default=SITE_DEFAULT_ANNOUNCE_VOLUME, ge=0, le=100)
+    """How loud the chime and the spoken call are, in percent (Issue 60). Muting is ``announce_audio``."""
     reason_retention_days: int = Field(
         default=REASON_RETENTION_DEFAULT_DAYS,
         ge=REASON_RETENTION_FLOOR_DAYS,
@@ -396,6 +399,7 @@ class DisplaySettingsOut(BaseModel):
     board_language: BoardLanguage
     board_theme: BoardTheme
     announce_audio: bool
+    announce_volume: int
     reason_retention_days: int
     #: The ceiling a clinic cannot raise, echoed so a screen can show it without hardcoding it.
     reason_retention_ceiling_days: int

@@ -34,6 +34,7 @@ from dataclasses import dataclass
 
 from src.commons.enums import (
     NAME_REVEALING_DISPLAY_MODES,
+    SITE_DEFAULT_ANNOUNCE_VOLUME,
     SITE_DEFAULT_BOARD_THEME,
     BoardLanguage,
     BoardTheme,
@@ -201,6 +202,7 @@ class DisplaySettingsChange:
     announce_audio: bool
     retention_days: int
     board_theme: BoardTheme = SITE_DEFAULT_BOARD_THEME
+    announce_volume: int = SITE_DEFAULT_ANNOUNCE_VOLUME
 
 
 def apply_display_settings(
@@ -256,6 +258,7 @@ def apply_display_settings(
         ("board_language", site.board_language, change.board_language.value),
         ("board_theme", site.board_theme, change.board_theme.value),
         ("announce_audio", site.announce_audio, change.announce_audio),
+        ("announce_volume", site.announce_volume, change.announce_volume),
         ("reason_retention_days", site.reason_retention_days, change.retention_days),
     ):
         if before != after:

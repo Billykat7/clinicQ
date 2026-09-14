@@ -11,7 +11,7 @@
 | **Estimate** | 2 days |
 | **Status** | Planned |
 | **Depends on** | [Issue 21](../M3/ISSUE_21_consent_capture_withdrawal.md): Consent capture and withdrawal (display, notifications, board comment)<br>[Issue 27](../M4/ISSUE_27_display_privacy_settings.md): Display and privacy settings per site |
-| **Unblocks** | [Issue 56](../M8/ISSUE_56_board_page_kiosk.md): Waiting-room board page (kiosk) with now-serving and up-next panels |
+| **Unblocks** | [Issue 56](../M8/ISSUE_56_board_page_kiosk.md): Waiting-room board page (kiosk) with now-serving and up-next panels<br>[Issue 60](../M8/ISSUE_60_board_audio_tts.md): Audio chime and multi-language text-to-speech call announcements |
 
 > **Note:** The spec names A as owner; the sprint plan puts board privacy in D's lane (sprint 9). **Settled by the pull request for this issue:** A owns the server rule and its guard tests (`src/modules/display/projection.py`), because a guard-tested server rule belongs with the backend lead. D builds the board against its payload (Issues 56, 57 and 60).
 

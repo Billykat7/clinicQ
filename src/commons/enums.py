@@ -925,6 +925,10 @@ class BoardTheme(StrEnum):
 #: The theme a new site is created with.
 SITE_DEFAULT_BOARD_THEME: BoardTheme = BoardTheme.DIM
 
+#: How loud a new clinic's board announces a call, as a percentage of the screen's own volume (Issue 60).
+#: Loud enough to carry across a waiting room from a TV at a normal setting, with room to go up.
+SITE_DEFAULT_ANNOUNCE_VOLUME: int = 80
+
 
 class DisplayDeviceStatus(StrEnum):
     """Where a kiosk box is, as a manager and an operator see it (Issue 61). Derived, never stored.
