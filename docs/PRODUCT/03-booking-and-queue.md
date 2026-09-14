@@ -52,8 +52,12 @@ sequenceDiagram
 
 **One queue, not two.** A common failure mode in simple queue apps is a separate "online" line that jumps
 ahead of the physical line (or vice versa). ClinicQ deliberately keeps **one sequence per
-clinic/room/service**, fair by arrival order regardless of channel, with staff able to manually reorder
-for genuine triage/priority cases (elderly, visibly unwell, emergency) at their discretion.
+clinic/room/service**, fair by arrival order regardless of channel, with staff able to move a patient forward for genuine
+clinical priority (visibly unwell, elderly, an infant, pregnancy, a clinician's referral). An override
+is never silent: it cannot be saved without a reason code, it can never put a patient ahead of someone
+already being seen, and each one is kept on a trail the clinic manager reads (who, why, the place
+before and after) and in the audit log. Nothing about priority is shown on the public board, and the
+per-staff override counts in the reports are listed by name, not ranked.
 
 ## Multi-room / multi-service queues
 
@@ -128,6 +132,7 @@ stateDiagram-v2
 | `ticket_sequence` | queue_id, service_day, last_value: the counter a ticket number comes from, one row per queue per day, so numbering restarts at Johannesburg midnight with nothing to reset |
 | `patients` (optional link, if patient has an account) | id, phone/whatsapp_id, name, consent_flags |
 | `visit` | id, site_id, patient_id (empty for a walk-in with no phone), started_at: the tickets of one patient's journey share it; `ticket.visit_id` and `ticket.transferred_from_id` link the legs |
+| `queue_reorder` | ticket_id, queue_id, staff, reason_code (a fixed list), note (optional, short), position_before, position_after, created_at: one row per priority override, beside its audit row |
 | `wait_time_sample` | queue_id, ticket_id, service_day, called_hour, wait_minutes, service_minutes, interval_minutes (the gap since the previous call while the queue was busy; what the estimate reads), recorded_at |
 
 Markdown cross-refs: display rendering of `patient_display_name`/`reason_text` and privacy controls are in

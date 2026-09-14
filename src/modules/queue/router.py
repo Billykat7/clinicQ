@@ -23,6 +23,7 @@ sentence the patient can be shown: ``409``, or ``429`` with ``Retry-After`` when
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -61,12 +62,24 @@ from src.modules.queue.cancellation import (
     cancel_ticket,
 )
 from src.modules.queue.lifecycle import Actor, call_next, transition_ticket
+from src.modules.queue.priority import (
+    COUNTS_ARE_NOT_RANKINGS,
+    override_counts,
+    override_priority,
+    reorder_trail,
+)
 from src.modules.queue.schemas import (
     CancelIn,
     CancelOut,
     JoinIn,
     JoinOut,
     MyTicketOut,
+    OverrideCountsOut,
+    PriorityIn,
+    PriorityOut,
+    ReorderOut,
+    ReorderTrailOut,
+    StaffOverrideCountOut,
     TicketListOut,
     TicketOut,
     TransferIn,
@@ -515,4 +528,95 @@ def visits(access: TicketsRead, db: DbSession) -> VisitListOut:
     items = [_visit_out(visit_summary(db, access, visit_id)) for visit_id in ids]
     return VisitListOut(
         site_id=access.site_id, service_day=today, total=len(items), items=items
+    )
+
+
+#: Moving a patient forward for clinical priority (Issue 46).
+PriorityOverride = Annotated[
+    SiteAccess, Depends(require_site_access("queues.tickets.priority", "update"))
+]
+#: Reading the override trail.
+PriorityRead = Annotated[
+    SiteAccess, Depends(require_site_access("queues.tickets.priority", "read"))
+]
+#: The clinic's reports: the override counts are one (Issue 90 builds the rest).
+ReportsRead = Annotated[
+    SiteAccess, Depends(require_site_access("sites.reports", "read"))
+]
+
+
+@router.post(
+    "/sites/{site_id}/tickets/{ticket_id}/priority",
+    response_model=PriorityOut,
+    operation_id="queuePriorityOverride",
+    summary="Move a waiting patient forward for clinical priority, with a reason",
+)
+def priority_override(
+    ticket_id: str, payload: PriorityIn, access: PriorityOverride, db: DbSession
+) -> PriorityOut:
+    """Place the patient just ahead of another waiting ticket. A reason code is required."""
+    ticket = get_in_site_or_404(db, Ticket, ticket_id, access)
+    ahead_of_ticket = get_in_site_or_404(db, Ticket, payload.ahead_of_ticket_id, access)
+    result = override_priority(
+        db,
+        ticket.id,
+        ahead_of_ticket_id=ahead_of_ticket.id,
+        reason=payload.reason,
+        note=payload.note,
+        actor=_staff(access),
+    )
+    db.commit()
+    return PriorityOut(
+        ticket=TicketOut.of(result.ticket),
+        reorder=ReorderOut.of(result.reorder),
+        waiting_ahead=result.reorder.position_after - 1,
+    )
+
+
+@router.get(
+    "/sites/{site_id}/tickets/reorders",
+    response_model=ReorderTrailOut,
+    operation_id="queueReorderTrail",
+    summary="The clinic's priority overrides today",
+)
+def reorder_trail_today(access: PriorityRead, db: DbSession) -> ReorderTrailOut:
+    """Every override made today at this clinic, newest first, with who, why and the places."""
+    today = business_date()
+    rows = reorder_trail(db, access, today)
+    return ReorderTrailOut(
+        site_id=access.site_id,
+        service_day=today,
+        total=len(rows),
+        items=[ReorderOut.of(row) for row in rows],
+    )
+
+
+@router.get(
+    "/sites/{site_id}/tickets/reorders/counts",
+    response_model=OverrideCountsOut,
+    operation_id="queueOverrideCounts",
+    summary="How often each staff member used a priority override (not a ranking)",
+)
+def override_counts_report(
+    access: ReportsRead,
+    db: DbSession,
+    start: Annotated[date | None, Query()] = None,
+    end: Annotated[date | None, Query()] = None,
+) -> OverrideCountsOut:
+    """Counts per staff member over a period (the last 30 days by default), listed by name."""
+    last = end or business_date()
+    first = start or last - timedelta(days=29)
+    if first > last:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "start is after end."
+        )
+    counts = override_counts(db, access, first, last)
+    return OverrideCountsOut(
+        site_id=access.site_id,
+        start=first,
+        end=last,
+        items=[
+            StaffOverrideCountOut(staff=c.staff, overrides=c.overrides) for c in counts
+        ],
+        note=COUNTS_ARE_NOT_RANKINGS,
     )
