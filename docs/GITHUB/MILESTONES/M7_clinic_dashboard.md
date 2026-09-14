@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Status** | 🚧 In progress: issues 48 (the dashboard shell, role-aware navigation and the site switcher), 49 (the live front-desk board), 50 (Call next, recall, done, no-show and undo that act once), 52 (reordering with reason codes and the override trail), 53 (the nurse room view and private visit notes) and 54 (the clinic manager's settings screens) delivered |
-| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩⬜⬜ **75%** (6/8 issues) |
+| **Status** | 🚧 In progress: issues 48 (the dashboard shell, role-aware navigation and the site switcher), 49 (the live front-desk board), 50 (Call next, recall, done, no-show and undo that act once), 51 (walk-in intake by keyboard with a printable stub), 52 (reordering with reason codes and the override trail), 53 (the nurse room view and private visit notes) and 54 (the clinic manager's settings screens) delivered |
+| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ **88%** (7/8 issues) |
 | **Sprints** | 8–9 (weeks 15–18), semester 2. The sprint plan spreads its issues over sprints 3–11: some start early against stubs and some are scheduled after this window, which moves the milestone's close (and its tag) to sprint 11 (see the table) |
 | **Release tag** | `v0.7.0` |
 | **Primary owner** | D, Frontend/Clinic |
