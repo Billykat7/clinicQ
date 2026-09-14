@@ -1153,6 +1153,13 @@ class Settings(BaseSettings):
             "someone stuck (env: DASHBOARD_STUCK_WAIT_MINUTES)"
         ),
     )
+    board_health_ticker: bool = Field(
+        default=True,
+        description=(
+            "Show the waiting-room board's line of general health notices, one at a time, under the "
+            "queues (env: BOARD_HEALTH_TICKER)."
+        ),
+    )
     payment_filter_enabled: bool = Field(
         default=False,
         description=(

@@ -1,0 +1,78 @@
+"""The board page's route: rendered from the projection, uncached, and honest about a missing board (Issue 56).
+
+The page is drawn by ``board.js`` in a browser (``tests/e2e/display/test_board_page.py`` measures it); here
+the route is checked through what it hands the template, never its markup
+(``docs/IDE/RULES/testing-strategy.mdc``): the same payload ``/state`` answers, the timings the script
+runs on, and the notices, which a platform setting can switch off.
+"""
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+import pytest
+from starlette import status
+
+from src.commons.enums import BoardLanguage, SiteStatus
+from src.modules.display.messages import HEALTH_MESSAGES
+from src.modules.display.projection import BoardState
+from src.web import display as display_routes
+from tests.factories import SiteFactory
+
+
+def test_the_page_carries_exactly_what_the_json_answers_and_the_timings_it_runs_on(
+    board: SimpleNamespace,
+) -> None:
+    """One payload for both: the page's first draw and the poll's answers cannot disagree."""
+    board.ticket(board.world.triage)
+    client = board.world.anonymous()
+    page = client.get(f"/display/{board.world.site_a}")
+    state = client.get(board.state(board.world.site_a)).json()
+
+    assert page.status_code == status.HTTP_200_OK
+    assert page.headers["cache-control"] == "no-store"
+    assert page.template.name == "display/board.html"  # type: ignore[attr-defined]
+    context = page.context  # type: ignore[attr-defined]
+    assert isinstance(context["board"], BoardState)
+    assert {**context["payload"], "as_of": None} == {**state, "as_of": None}
+    assert context["state_url"] == board.state(board.world.site_a)
+    assert (
+        context["poll_seconds"],
+        context["highlight_seconds"],
+        context["panels_per_page"],
+        context["page_seconds"],
+    ) == (
+        display_routes.POLL_SECONDS,
+        display_routes.HIGHLIGHT_SECONDS,
+        display_routes.PANELS_PER_PAGE,
+        display_routes.PAGE_SECONDS,
+    )
+    assert context["messages"] == HEALTH_MESSAGES[BoardLanguage.ENGLISH]
+    assert context["message_language"] is BoardLanguage.ENGLISH
+
+
+def test_the_health_notices_can_be_switched_off_for_the_platform(
+    board: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``BOARD_HEALTH_TICKER=false``: the page gets no notices to show."""
+    settings = board.world.settings.model_copy(update={"board_health_ticker": False})
+    monkeypatch.setattr(display_routes, "get_settings", lambda: settings)
+    page = board.world.anonymous().get(f"/display/{board.world.site_a}")
+    assert page.status_code == status.HTTP_200_OK
+    assert page.context["messages"] == ()  # type: ignore[attr-defined]
+
+
+def test_a_board_that_cannot_be_shown_says_so_with_the_same_404_as_an_unknown_id(
+    board: SimpleNamespace,
+) -> None:
+    """A draft clinic and a made-up id get the same page and status, so neither confirms the other."""
+    with board.session() as db:
+        draft = SiteFactory.create(db, name="Draft Clinic", status=SiteStatus.DRAFT)
+        db.commit()
+        draft_id = draft.id
+    anyone = board.world.anonymous()
+    for site_id in (draft_id, "0199b0c0-0000-7000-8000-00000000dead"):
+        page = anyone.get(f"/display/{site_id}")
+        assert page.status_code == status.HTTP_404_NOT_FOUND
+        assert page.template.name == "display/unavailable.html"  # type: ignore[attr-defined]
+        assert "board" not in page.context  # type: ignore[attr-defined]

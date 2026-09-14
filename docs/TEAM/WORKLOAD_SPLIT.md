@@ -108,7 +108,7 @@ ever empty: that is the whole design goal. Issue numbers in brackets.
 **5 of 14 sprints done** 🟩🟩🟩🟩⬜⬜⬜⬜⬜⬜ **36%**, carrying milestones M1–M5 (issues 1–38) and
 release notes `v0.1.0`–`v0.5.0`. Only `v0.2.0` is tagged so far; the others are still to cut. **M6 and M7 are
 closed** (issues 39–55, release notes `v0.6.0` and `v0.7.0`), but **sprints 6 to 9 and 11 are under way,
-not done:** the queue engine, every dashboard issue (48–55) and board privacy (58) are delivered, while those sprints' other
+not done:** the queue engine, every dashboard issue (48–55), board privacy (58) and the board page (56) are delivered, while those sprints' other
 lanes (67, 72, 78, 68, 69, 80, 73, 70, 97, 77, 81, 74, 83, 57, 98, 88 and sprint 11's) have not
 started — and by the rule below a sprint is ticked only when *every* issue its lanes deliver is closed.
 

@@ -1,0 +1,270 @@
+/* The waiting-room board (Issue 56): read from five metres on a 32-inch screen, all day.
+ *
+ * One unit drives every size: --u is 1% of the screen's height, or of a 16:9 frame's height when the
+ * screen is narrower than 16:9, so the board keeps its proportions at 1080p, 720p or any other
+ * resolution, and a size in --u is a physical size on a given screen. On a 32-inch 16:9 panel
+ * (398 mm tall) one --u is 3.98 mm. The type scale below is set so that, in the densest layout (four
+ * panels):
+ *
+ *   - a number being served has a cap height of at least 49 mm (Roboto's capitals are 0.711 em), the
+ *     ADA 2010 §703.5.5 minimum for characters read from 5 m;
+ *   - a number up next is at least 22 mm, what a 6/18 eye (the WHO's line for moderate low vision)
+ *     resolves at 5 m.
+ *
+ * tests/e2e/display/test_board_page.py measures both in a browser at 1080p and 720p for every layout.
+ * docs/OPS/BOARD_LEGIBILITY.md explains the numbers, and how to check them standing in the room.
+ *
+ * Nothing moves except the newly called highlight, which pulses a few times. Under
+ * prefers-reduced-motion it does not pulse at all, and it stays just as visible: the colours are
+ * inverted, the border is heavy and the words "Called now" say it. */
+
+.kiosk-page {
+  /* The board's own palette: light text on a deep background, easy on the eyes in a dim room and
+     without glare on a TV. Contrast of each pair is checked in Issue 59. */
+  --kb-bg: #0b1320;
+  --kb-panel: #15233a;
+  --kb-line: #2a3b57;
+  --kb-ink: #ffffff;
+  --kb-muted: #c3cfdf;
+  --kb-accent: #7fe3c7;
+  --kb-new-bg: #ffd84d;
+  --kb-new-ink: #0b1320;
+
+  --u: min(1vh, 0.5625vw);
+  background: var(--kb-bg);
+  color: var(--kb-ink);
+}
+
+.kiosk {
+  box-sizing: border-box;
+  height: 100dvh;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: calc(var(--u) * 8) minmax(0, 1fr) auto;
+  gap: calc(var(--u) * 2);
+  padding: calc(var(--u) * 2) calc(var(--u) * 2.4);
+  font-family: var(--font-display, system-ui, sans-serif);
+}
+.kiosk *,
+.kiosk *::before,
+.kiosk *::after { box-sizing: border-box; }
+.kiosk p,
+.kiosk ol,
+.kiosk h1,
+.kiosk h2 { margin: 0; padding: 0; }
+.kiosk ol { list-style: none; }
+
+/* ── The header: the clinic, and the time ───────────────────────── */
+
+.kiosk-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--u) * 3);
+  min-width: 0;
+}
+.kiosk-brand { display: flex; align-items: center; gap: calc(var(--u) * 2); min-width: 0; }
+.kiosk-monogram {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: calc(var(--u) * 7.5);
+  height: calc(var(--u) * 7.5);
+  border-radius: calc(var(--u) * 1.5);
+  background: var(--kb-accent);
+  color: var(--kb-bg);
+  font-size: calc(var(--u) * 3.6);
+  font-weight: 700;
+}
+.kiosk-clinic {
+  font-size: calc(var(--u) * 5);
+  font-weight: 600;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kiosk-clock {
+  flex: none;
+  font-family: var(--font-ui);
+  font-size: calc(var(--u) * 6.5);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── The panels ──────────────────────────────────────────────── */
+
+.kiosk-grid {
+  display: grid;
+  gap: calc(var(--u) * 1.6);
+  min-height: 0;
+  /* Sizes per layout, overridden below. */
+  --num: calc(var(--u) * 17.5);
+  --next: calc(var(--u) * 7.8);
+  --also: calc(var(--u) * 3.6);
+  --label: calc(var(--u) * 4.2);
+  --caption: calc(var(--u) * 3);
+}
+.kiosk-grid[data-layout="1"] { grid-template-columns: minmax(0, 1fr); --num: calc(var(--u) * 34); --next: calc(var(--u) * 12); --also: calc(var(--u) * 6); --label: calc(var(--u) * 6); --caption: calc(var(--u) * 4); }
+.kiosk-grid[data-layout="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); --num: calc(var(--u) * 22); --next: calc(var(--u) * 9); --also: calc(var(--u) * 4.6); --label: calc(var(--u) * 5); --caption: calc(var(--u) * 3.2); }
+.kiosk-grid[data-layout="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); --num: calc(var(--u) * 19); --next: calc(var(--u) * 8.5); --also: calc(var(--u) * 4.2); --label: calc(var(--u) * 4.4); --caption: calc(var(--u) * 3); }
+.kiosk-grid[data-layout="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
+.kiosk-grid[data-layout="4"] .panel-queue { column-gap: calc(var(--u) * 1.2); }
+/* Four panels: the up-next column is exactly two numbers wide (a number is at most 2.45 em in the UI
+   face), and now serving takes the rest, so neither wraps or spills at any resolution. */
+.kiosk .kiosk-grid[data-layout="4"] .panel { grid-template-columns: minmax(0, 1fr) calc(var(--next) * 4.9 + var(--u) * 1.2); column-gap: calc(var(--u) * 1.2); }
+.kiosk .kiosk-grid[data-layout="4"] .serving { padding: calc(var(--u) * 0.3) calc(var(--u) * 0.5); margin-inline: calc(var(--u) * -0.9) 0; border-width: calc(var(--u) * 0.4); }
+/* Four panels are the tightest fit: captions, statuses and the "also called" line sit on single lines. */
+.kiosk .kiosk-grid[data-layout="4"] .panel { row-gap: calc(var(--u) * 0.8); }
+.kiosk .kiosk-grid[data-layout="4"] :is(.panel-caption, .serving-state, .panel-also, .panel-label, .panel-room) { line-height: 1.05; }
+.kiosk .kiosk-grid[data-layout="4"] .panel-also { font-size: var(--caption); }
+
+.panel {
+  display: grid;
+  grid-template-areas: "head" "now" "next";
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: calc(var(--u) * 1.2);
+  min-height: 0;
+  padding: calc(var(--u) * 1.4) calc(var(--u) * 1.8);
+  border: calc(var(--u) * 0.3) solid var(--kb-line);
+  border-radius: calc(var(--u) * 2);
+  background: var(--kb-panel);
+  overflow: hidden;
+}
+/* One panel, and each of four, reads across: now serving on the left, up next on the right. */
+.kiosk-grid[data-layout="1"] .panel,
+.kiosk-grid[data-layout="4"] .panel {
+  grid-template-areas: "head head" "now next";
+  grid-template-columns: minmax(0, 53fr) minmax(0, 47fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  column-gap: calc(var(--u) * 2);
+}
+
+.panel-head { grid-area: head; display: flex; align-items: baseline; justify-content: space-between; gap: calc(var(--u) * 2); min-width: 0; }
+.panel-label { font-size: var(--label); font-weight: 600; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.panel-room { flex: none; font-size: var(--label); font-weight: 600; line-height: 1.15; color: var(--kb-accent); }
+.panel-room:empty { display: none; }
+
+.panel-now { grid-area: now; display: flex; flex-direction: column; gap: calc(var(--u) * 0.6); min-width: 0; }
+.panel-next { grid-area: next; display: flex; flex-direction: column; gap: calc(var(--u) * 0.6); min-width: 0; min-height: 0; }
+.panel-caption {
+  font-size: var(--caption);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--kb-muted);
+}
+
+/* A ticket number: the UI face, whose zero is not a letter O (A034 must never read as AO34). */
+.serving-number,
+.next-number,
+.panel-none {
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums slashed-zero;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -.01em;
+}
+
+.panel-serving { display: grid; gap: calc(var(--u) * 0.6); }
+.serving {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: calc(var(--u) * 2);
+  row-gap: calc(var(--u) * 0.4);
+  padding: calc(var(--u) * 0.6) calc(var(--u) * 1);
+  margin-inline: calc(var(--u) * -1);
+  border: calc(var(--u) * 0.5) solid transparent;
+  border-radius: calc(var(--u) * 1.4);
+}
+.serving-number { font-size: var(--num); }
+.serving-state { font-size: var(--caption); font-weight: 600; color: var(--kb-muted); }
+.serving-name { flex-basis: 100%; font-size: var(--label); font-weight: 600; line-height: 1.15; }
+.serving-comment { flex-basis: 100%; font-size: var(--caption); color: var(--kb-muted); }
+.serving-state:empty,
+.serving-name:empty,
+.serving-comment:empty { display: none; }
+
+.panel-none { font-size: var(--num); color: var(--kb-line); }
+.panel-also { font-size: var(--also); font-weight: 600; color: var(--kb-muted); font-variant-numeric: tabular-nums; }
+.panel-also:empty { display: none; }
+
+.panel-queue {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  column-gap: calc(var(--u) * 2.4);
+  row-gap: calc(var(--u) * 0.8);
+  min-height: 0;
+  overflow: hidden;
+}
+.next { display: flex; flex-direction: column; min-width: 0; }
+.next-number { font-size: var(--next); }
+.next-name { font-size: var(--caption); font-weight: 600; color: var(--kb-muted); }
+.next-name:empty { display: none; }
+.panel-waiting { margin-top: auto; font-size: var(--caption); font-weight: 600; color: var(--kb-muted); }
+
+/* ── A ticket just called: unmistakable, with or without motion ────── */
+
+.serving.is-new {
+  background: var(--kb-new-bg);
+  border-color: var(--kb-ink);
+  color: var(--kb-new-ink);
+  animation: kiosk-called 1.2s ease-in-out 0s 5;
+}
+.serving.is-new .serving-state,
+.serving.is-new .serving-comment { color: var(--kb-new-ink); }
+.serving.is-new .serving-state::before { content: "▶ "; }
+
+@keyframes kiosk-called {
+  0%, 100% { box-shadow: 0 0 0 0 var(--kb-new-bg); }
+  50% { box-shadow: 0 0 0 calc(var(--u) * 1.2) var(--kb-new-bg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* No pulse and no fade. The highlight itself (inverted colours, heavy border, "Called now") stays. */
+  .kiosk *,
+  .kiosk *::before,
+  .kiosk *::after { animation: none !important; transition: none !important; }
+}
+
+/* ── The footer: one health notice at a time, and which page is showing ── */
+
+.kiosk-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--u) * 3);
+  min-height: calc(var(--u) * 5.5);
+}
+.kiosk-ticker {
+  min-width: 0;
+  font-size: calc(var(--u) * 3.4);
+  font-weight: 500;
+  color: var(--kb-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity .6s ease;
+}
+.kiosk-ticker.is-changing { opacity: 0; }
+.kiosk-pages { flex: none; margin-left: auto; font-size: calc(var(--u) * 3.4); font-weight: 600; color: var(--kb-muted); font-variant-numeric: tabular-nums; }
+
+.kiosk-empty {
+  align-self: center;
+  justify-self: center;
+  font-size: calc(var(--u) * 6);
+  font-weight: 600;
+  color: var(--kb-muted);
+}
+
+.kiosk-unavailable {
+  grid-template-rows: auto auto;
+  align-content: center;
+  justify-items: center;
+  text-align: center;
+}
+.kiosk-grid[hidden] { display: none; }
+.kiosk-empty { grid-row: 2; }

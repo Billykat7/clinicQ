@@ -173,7 +173,8 @@ affected spec carries a **Note** saying the same thing.
   under both D and E.
 - **Suspected dependency errors.** Issue 60 depends on Issue 26 (the services catalogue); Issue 27
   (display settings, including `board_language` and `announce_audio`) looks intended. Issues 56 and 60
-  read the privacy projection from Issue 58 but do not list it.
+  read the privacy projection from Issue 58 but do not list it. *Issue 56's is corrected: it now depends on
+  Issue 58, which merged first.*
 - **A dependency on a later milestone.** Issue 66 (M9, sprint 4) needs Issue 77 (M10, sprint 8) for
   translations.
 - **Milestones that cannot close in their stated window.** The sprint plan schedules issues of M2, M7,
@@ -263,7 +264,7 @@ affected spec carries a **Note** saying the same thing.
 | [53](M7/ISSUE_53_nurse_room_view_visit_notes.md) | Nurse/doctor room view and private visit notes | [M7](../MILESTONES/M7_clinic_dashboard.md) | D | 8 | 2 days | [28](M4/ISSUE_28_staff_site_room_assignment.md), [48](M7/ISSUE_48_dashboard_shell_role_nav.md) |
 | [54](M7/ISSUE_54_manager_settings_ui.md) | Clinic manager settings UI (profile, hours, display mode, staff, services) | [M7](../MILESTONES/M7_clinic_dashboard.md) | D | 9 | 3 days | [24](M4/ISSUE_24_opening_hours_closures.md), [27](M4/ISSUE_27_display_privacy_settings.md), [28](M4/ISSUE_28_staff_site_room_assignment.md) |
 | [55](M7/ISSUE_55_dashboard_offline_tests.md) | Reconnect/offline states and dashboard interaction tests | [M7](../MILESTONES/M7_clinic_dashboard.md) | D | 11 | 2 days | [49](M7/ISSUE_49_front_desk_board_live.md), [50](M7/ISSUE_50_call_next_actions.md) |
-| [56](M8/ISSUE_56_board_page_kiosk.md) | Waiting-room board page (kiosk) with now-serving and up-next panels | [M8](../MILESTONES/M8_display_monitor.md) | D | 5 | 3 days | [27](M4/ISSUE_27_display_privacy_settings.md), [41](M6/ISSUE_41_ticket_lifecycle_state_machine.md) |
+| [56](M8/ISSUE_56_board_page_kiosk.md) | Waiting-room board page (kiosk) with now-serving and up-next panels | [M8](../MILESTONES/M8_display_monitor.md) | D | 5 | 3 days | [27](M4/ISSUE_27_display_privacy_settings.md), [41](M6/ISSUE_41_ticket_lifecycle_state_machine.md), [58](M8/ISSUE_58_board_privacy_rendering.md) |
 | [57](M8/ISSUE_57_board_sse_channel.md) | SSE live update channel with reconnect, backoff and heartbeat | [M8](../MILESTONES/M8_display_monitor.md) | A | 9 | 2 days | [41](M6/ISSUE_41_ticket_lifecycle_state_machine.md), [56](M8/ISSUE_56_board_page_kiosk.md) |
 | [58](M8/ISSUE_58_board_privacy_rendering.md) | Server-side privacy-mode rendering and consent gating | [M8](../MILESTONES/M8_display_monitor.md) | A | 9 | 2 days | [21](M3/ISSUE_21_consent_capture_withdrawal.md), [27](M4/ISSUE_27_display_privacy_settings.md) |
 | [59](M8/ISSUE_59_board_accessibility.md) | Accessibility pass: contrast, type scale, 5-metre legibility, reduced motion | [M8](../MILESTONES/M8_display_monitor.md) | D | 10 | 2 days | [56](M8/ISSUE_56_board_page_kiosk.md) |

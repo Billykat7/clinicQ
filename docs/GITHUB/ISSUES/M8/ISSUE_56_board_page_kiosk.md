@@ -10,10 +10,10 @@
 | **Area** | Frontend / Display |
 | **Estimate** | 3 days |
 | **Status** | Planned |
-| **Depends on** | [Issue 27](../M4/ISSUE_27_display_privacy_settings.md): Display and privacy settings per site<br>[Issue 41](../M6/ISSUE_41_ticket_lifecycle_state_machine.md): Ticket lifecycle state machine and illegal-transition rejection |
+| **Depends on** | [Issue 27](../M4/ISSUE_27_display_privacy_settings.md): Display and privacy settings per site<br>[Issue 41](../M6/ISSUE_41_ticket_lifecycle_state_machine.md): Ticket lifecycle state machine and illegal-transition rejection<br>[Issue 58](../M8/ISSUE_58_board_privacy_rendering.md): Server-side privacy-mode rendering and consent gating |
 | **Unblocks** | [Issue 57](../M8/ISSUE_57_board_sse_channel.md): SSE live update channel with reconnect, backoff and heartbeat<br>[Issue 59](../M8/ISSUE_59_board_accessibility.md): Accessibility pass: contrast, type scale, 5-metre legibility, reduced motion<br>[Issue 61](../M8/ISSUE_61_kiosk_device_registry.md): Kiosk device registry, pairing codes and heartbeat monitoring |
 
-> **Note:** The board may only ever receive the privacy projection from Issue 58, but Issue 58 is not in this issue's dependency list. Until it merges, build against a fixture of the projected shape, never raw tickets, and consider adding the dependency.
+> **Note:** The board may only ever receive the privacy projection from Issue 58. **Settled by the pull request for this issue:** Issue 58 is now a dependency and merged first, so the board renders its real payload rather than a fixture.
 
 ## Context
 

@@ -62,10 +62,24 @@ def _json(client: TestClient, path: str) -> Any:
     return response.json()
 
 
-#: How each board route is read, by path template. A route under /display with no entry fails the
-#: sweep below, so a new endpoint cannot ship without being searched.
-_READERS: dict[str, Callable[[TestClient, str], Any]] = {
-    "/display/{site_id}/state": _json,
+def _page(client: TestClient, path: str) -> tuple[Any, str]:
+    """GET the board page: the payload it was rendered with, and its whole body to search."""
+    response = client.get(path)
+    assert response.status_code == status.HTTP_200_OK, (path, response.text)
+    assert response.headers["cache-control"] == "no-store"
+    return response.context["payload"], response.text
+
+
+def _state(client: TestClient, path: str) -> tuple[Any, str]:
+    """GET the board's JSON: the payload, and the raw body to search."""
+    return _json(client, path), client.get(path).text
+
+
+#: How each board route is read, by path template: ``(its payload, every byte it sent)``. A route under
+#: /display with no entry fails the sweep below, so a new endpoint cannot ship without being searched.
+_READERS: dict[str, Callable[[TestClient, str], tuple[Any, str]]] = {
+    "/display/{site_id}": _page,
+    "/display/{site_id}/state": _state,
 }
 
 
@@ -113,8 +127,12 @@ def test_under_number_only_no_board_endpoint_carries_a_name_or_a_comment_key_for
 
     for viewer, client in _viewers(board).items():
         for route in routes:
-            body = _READERS[route](client, route.format(site_id=board.world.site_a))
-            text = json.dumps(body, ensure_ascii=False)
+            body, raw = _READERS[route](
+                client, route.format(site_id=board.world.site_a)
+            )
+            # The payload, and everything the response carried (a page's markup included): a privacy
+            # search of the bytes sent, not a test of how the page is drawn.
+            text = json.dumps(body, ensure_ascii=False) + raw
             assert NOMVULA.split()[0] not in text, (viewer, route)
             assert "Zwelithini" not in text, (viewer, route)
             assert REASON not in text, (viewer, route)

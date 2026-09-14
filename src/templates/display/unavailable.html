@@ -1,0 +1,21 @@
+{% extends "layouts/board.html" %}
+{#- A board that cannot be shown (Issue 56): the clinic is unknown, not yet verified or switched off.
+
+    Deliberately says nothing about which: the answer for a clinic that exists but has no public board
+    is the same as for an id that never existed (non-negotiable 3). -#}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block styles %}
+  {{ super() }}
+  <link rel="stylesheet" href="/static/css/board.css">
+{% endblock %}
+
+{% block body_class %}{{ super() }} kiosk-page{% endblock %}
+
+{% block body %}
+<main id="main" class="kiosk kiosk-unavailable">
+  <h1 class="kiosk-clinic">This board is not available.</h1>
+  <p class="kiosk-ticker">Ask the clinic to check the board's address.</p>
+</main>
+{% endblock %}
