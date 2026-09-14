@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Status** | 🚧 In progress: issues 58 (the server-side privacy projection every board response passes through), 56 (the kiosk board page), 57 (the live stream, with reconnection and heartbeat), 59 (accessibility: AA contrast in three themes, shapes for every status, reduced motion) 61 (kiosk screens paired with a code, removed at once, watched for silence) and 60 (a chime and the number and room said aloud, one call at a time, never a name) delivered |
-| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ **86%** (6/7 issues) |
+| **Status** | ✅ Done: issues 56–62 closed with the merge of the Issue 62 pull request, release note [`v0.8.0`](../RELEASES/RELEASE_v0_8_0.md), whose tag follows that merge. Four exit criteria are met; two are met in software and wait for people: the physical five-metre reading (Issues 56, 59) and a fluent speaker's check of each announcement language (Issue 60) |
+| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (7/7 issues) |
 | **Sprints** | 9 (weeks 17–18), semester 2. The sprint plan spreads its issues over sprints 5–11: some start early against stubs and some are scheduled after this window, which moves the milestone's close (and its tag) to sprint 11 (see the table) |
 | **Release tag** | `v0.8.0` |
 | **Primary owner** | D, Frontend/Clinic · E, DevOps/QA (device provisioning) |
@@ -92,11 +92,11 @@ flowchart LR
 ## Exit criteria
 
 - [x] The board updates within 2 seconds of Call Next, and recovers on its own after a 10-minute outage (42–55 ms from the commit, and live again after ten minutes of refused connections on the page's clock, in browser tests, Issue 57)
-- [ ] With `number_only` set, no request to the board endpoint returns a patient name in the payload at all
-- [ ] A comment never renders alongside a full name unless per-visit consent is recorded
+- [x] With `number_only` set, no request to the board endpoint returns a patient name in the payload at all (no `name` or `comment` key anywhere in any `/display` response for any viewer, found by sweeping every route the application serves, Issue 58; the sweep now covers the page, the stream, the pairing pages and the service worker)
+- [x] A comment never renders alongside a full name unless per-visit consent is recorded (a reason needs `full` mode, the clinic's switch, the patient's standing consent and this visit's consent, each proven necessary by a test, Issue 58)
 - [ ] Ticket numbers are legible at 5 metres on a 32-inch screen and pass AA contrast in a bright room. **Partly (Issues 56, 59):** AA contrast passes in the bright theme, as in every theme, on every board state (tests), and every number's size meets its 5-metre threshold as measured in a browser. The physical check of a person reading from 5 m has not been done (`docs/COMPLIANCE/ACCESSIBILITY_BOARD_EVIDENCE.md`)
 - [ ] A called ticket triggers a chime and a spoken announcement in the site's configured language. **Partly (Issue 60):** in Chromium, a call plays the chime and then asks the speech engine for the number and room in the clinic's language (English and isiZulu tested, with a stand-in engine that records what it is asked to say), one call at a time, never a name. No real box has been heard, and no sentence has been checked by a fluent speaker (`docs/OPS/BOARD_AUDIO.md`)
-- [ ] An offline kiosk shows a stale banner with the timestamp of the last good update
+- [x] An offline kiosk shows a stale banner with the timestamp of the last good update ("⚠ Not up to date. Last updated at HH:MM." with the last numbers kept, when the router dies and when the box boots with no network, and live again within 30 seconds of the network returning, in browser tests, Issue 62)
 
 ## Demo at the end of the milestone
 
