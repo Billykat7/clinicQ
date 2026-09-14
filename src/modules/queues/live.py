@@ -11,9 +11,10 @@ result is a fact. ``None`` is still what a surface shows when a reader could not
 reader that failed, or a queue a reader was not asked about), and it still renders as "not
 reported yet", never as zero.
 
-**There is no wait estimate yet, and the same rule holds.** The estimator is Issue 42's. Until it
-exists :attr:`LiveQueue.wait_range` is ``None`` and a surface shows the length alone; when it does
-arrive it is a :class:`WaitRange`, which cannot hold a single number, because a wait promised as
+**The wait is always a range** (Issue 42). The direct read estimates, for somebody joining now, how
+long they would wait (:mod:`src.modules.queue.estimate`), and :attr:`LiveQueue.wait` carries a
+:class:`~src.modules.queue.estimate.WaitEstimate`: a :class:`~src.modules.queue.estimate.WaitRange`
+that cannot hold a single number, a confidence, and whether it is approximate. A wait promised as
 "12 minutes" is a promise nobody can keep.
 
 **The reader is a parameter, not a global.** :func:`published_live_queues` takes the counting
@@ -36,6 +37,8 @@ from src.commons.time import business_date, now_sast
 from src.core.site_scope import published_select
 from src.database.models.queue import Queue
 from src.database.models.ticket import Ticket
+from src.modules.queue.estimate import WaitEstimate
+from src.modules.queue.waits import estimates_for
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +53,8 @@ class QueueReading:
 
     waiting: int | None
     as_of: datetime | None = None
+    #: The wait for somebody joining now (Issue 42). ``None`` when nothing was estimated.
+    wait: WaitEstimate | None = None
 
 
 #: The reading that means "nobody counted".
@@ -58,27 +63,6 @@ NOT_MEASURED = QueueReading(waiting=None, as_of=None)
 #: Given the queues asked about, return ``{queue id: reading}``. A reader must answer for every
 #: queue it is given; a queue missing from the answer is treated as not measured.
 WaitingCountReader = Callable[[Session, Collection[Queue]], Mapping[str, QueueReading]]
-
-
-@dataclass(frozen=True, slots=True)
-class WaitRange:
-    """An expected wait, always as a range: "15–25 min", never "20 min" (Issues 35, 42).
-
-    Built only by the estimator (Issue 42). The invariant is checked on construction, so a surface
-    handed one can render it without deciding what to do with a degenerate range.
-    """
-
-    low_minutes: int
-    high_minutes: int
-
-    def __post_init__(self) -> None:
-        """Refuse a negative bound, and a "range" that is really one number."""
-        if self.low_minutes < 0:
-            raise ValueError("A wait cannot be negative.")
-        if self.high_minutes <= self.low_minutes:
-            raise ValueError(
-                f"A wait is a range: {self.low_minutes}–{self.high_minutes} min is not one."
-            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,8 +81,9 @@ class LiveQueue:
     display_order: int
     allows_remote_join: bool
     waiting: int | None
-    #: The estimator's range (Issue 42). ``None`` until it exists: show the length, never a guess.
-    wait_range: WaitRange | None = None
+    #: The expected wait for somebody joining now, always a range (Issue 42). ``None`` when the
+    #: reader did not estimate it: show the length alone, never a guess.
+    wait: WaitEstimate | None = None
     #: When ``waiting`` was counted, so a surface can show its age in seconds (Issue 36).
     as_of: datetime | None = None
 
@@ -106,7 +91,7 @@ class LiveQueue:
 def read_waiting_counts(
     db: Session, queues: Collection[Queue]
 ) -> Mapping[str, QueueReading]:
-    """The direct read of each queue's length: its ``waiting`` tickets on today's service day.
+    """The direct read of each queue's length and wait: today's ``waiting`` tickets, and the estimate.
 
     One grouped ``COUNT`` whatever the number of queues, on the board index
     (``ix_clinicq_ticket_board`` leads with ``queue_id, service_day, status``). The signature is the
@@ -137,8 +122,15 @@ def read_waiting_counts(
         .group_by(Ticket.queue_id)
     ).all()
     counts = {queue_id: int(count) for queue_id, count in rows}
+    waiting = {queue_id: counts.get(queue_id, 0) for queue_id in ids}
+    # Somebody joining now has everyone already waiting ahead of them.
+    estimates = estimates_for(db, queues, waiting, moment=counted_at)
     return {
-        queue_id: QueueReading(waiting=counts.get(queue_id, 0), as_of=counted_at)
+        queue_id: QueueReading(
+            waiting=waiting[queue_id],
+            as_of=counted_at,
+            wait=estimates.get(queue_id),
+        )
         for queue_id in ids
     }
 
@@ -188,6 +180,7 @@ def published_live_queues(
                 allows_remote_join=queue.allows_remote_join,
                 waiting=reading.waiting,
                 as_of=reading.as_of,
+                wait=reading.wait,
             )
         )
     return {site_id: tuple(queues) for site_id, queues in by_site.items()}

@@ -13,6 +13,7 @@ from src.commons.enums import (
     AreaKind,
     DiscoverySort,
     DistanceBasis,
+    EstimateConfidence,
     QueueKind,
     SaProvince,
     SectorFilter,
@@ -22,7 +23,8 @@ from src.commons.enums import (
 from src.modules.discovery.areas import AreaSummary
 from src.modules.discovery.profile import ClinicProfile
 from src.modules.discovery.service import NearbyClinic, NearbyResult, OpenStatus
-from src.modules.queues.live import LiveQueue, WaitRange
+from src.modules.queue.estimate import WaitEstimate
+from src.modules.queues.live import LiveQueue
 from src.modules.sites.hours import TimeSpan
 from src.modules.sites.payment_profile import PaymentProfile
 from src.modules.sites.schemas import SiteLocationOut
@@ -66,17 +68,30 @@ class AreaListOut(BaseModel):
 
 
 class WaitRangeOut(BaseModel):
-    """An expected wait, always a range."""
+    """An expected wait: always a range, with how far to trust it (Issue 42)."""
 
     low_minutes: int
     high_minutes: int
+    confidence: EstimateConfidence
+    approximate: bool = Field(
+        description="True when built from the queue's expected minutes, not its recent visits."
+    )
+    label: str = Field(
+        description='The range in words, as a surface shows it: "~15–25 min".'
+    )
 
     @classmethod
-    def of(cls, wait: WaitRange | None) -> WaitRangeOut | None:
+    def of(cls, wait: WaitEstimate | None) -> WaitRangeOut | None:
         """The API shape, or ``None`` when there is no estimate."""
         if wait is None:
             return None
-        return cls(low_minutes=wait.low_minutes, high_minutes=wait.high_minutes)
+        return cls(
+            low_minutes=wait.wait.low_minutes,
+            high_minutes=wait.wait.high_minutes,
+            confidence=wait.confidence,
+            approximate=wait.approximate,
+            label=wait.label,
+        )
 
 
 class LiveQueueOut(BaseModel):
@@ -90,7 +105,7 @@ class LiveQueueOut(BaseModel):
         description="People waiting now. `null` means not measured, which is not the same as 0."
     )
     wait_range: WaitRangeOut | None = Field(
-        description="The expected wait as a range. `null` until the estimator (Issue 42) exists."
+        description="The expected wait for somebody joining now, always a range; `null` when not estimated."
     )
     as_of: datetime | None = Field(
         description="When `waiting` was counted (the queue snapshot's time); `null` when not counted."
@@ -105,7 +120,7 @@ class LiveQueueOut(BaseModel):
             kind=queue.kind,
             allows_remote_join=queue.allows_remote_join,
             waiting=queue.waiting,
-            wait_range=WaitRangeOut.of(queue.wait_range),
+            wait_range=WaitRangeOut.of(queue.wait),
             as_of=queue.as_of,
         )
 

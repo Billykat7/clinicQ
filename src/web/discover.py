@@ -63,7 +63,7 @@ from src.modules.discovery.service import (
     NearbyResult,
     OpenStatus,
 )
-from src.modules.queues.live import WaitRange
+from src.modules.queue.estimate import WaitEstimate
 from src.modules.sites.hours import TimeSpan
 from src.modules.sites.payment_profile import (
     CLINIC_REPORTED_NOTICE,
@@ -189,18 +189,20 @@ def measured_queue_label(
     return f"{label}, {age}" if age else label
 
 
-def wait_label(ranges: Sequence[WaitRange | None]) -> str:
-    """The expected wait across a clinic's queues, always a range; "not available" until Issue 42.
+def wait_label(estimates: Sequence[WaitEstimate | None]) -> str:
+    """The expected wait across a clinic's queues, always a range; "not available" without one.
 
-    With a range for every queue, the label spans the shortest low to the longest high, because a
-    patient does not yet know which queue they will join.
+    With an estimate for every queue, the label spans the shortest low to the longest high, because
+    a patient does not yet know which queue they will join. It says "approximate" when any of the
+    ranges was built from expected minutes rather than recent visits (Issue 42).
     """
-    known = [wait for wait in ranges if wait is not None]
-    if not known or len(known) != len(ranges):
+    known = [estimate for estimate in estimates if estimate is not None]
+    if not known or len(known) != len(estimates):
         return WAIT_NOT_AVAILABLE
-    low = min(wait.low_minutes for wait in known)
-    high = max(wait.high_minutes for wait in known)
-    return f"Wait about {low}–{high} min"
+    low = min(estimate.wait.low_minutes for estimate in known)
+    high = max(estimate.wait.high_minutes for estimate in known)
+    marked = " (approximate)" if any(estimate.approximate for estimate in known) else ""
+    return f"Wait about {low}–{high} min{marked}"
 
 
 def travel_label(walking_minutes: int, driving_minutes: int) -> str:
@@ -351,7 +353,7 @@ def clinic_card(clinic: NearbyClinic, moment: datetime) -> ClinicCard:
             min((q.as_of for q in clinic.queues if q.as_of is not None), default=None),
             moment,
         ),
-        wait_label=wait_label([queue.wait_range for queue in clinic.queues]),
+        wait_label=wait_label([queue.wait for queue in clinic.queues]),
         payment=payment_lines(clinic.payment),
         latitude=clinic.location.latitude,
         longitude=clinic.location.longitude,
@@ -1142,7 +1144,7 @@ def live_view(profile: ClinicProfile, *, join_enabled: bool) -> LiveView:
             waiting_label=measured_queue_label(
                 queue.waiting, queue.as_of, profile.evaluated_at
             ),
-            wait_label=wait_label([queue.wait_range]),
+            wait_label=wait_label([queue.wait]),
             walk_in_only=not queue.allows_remote_join,
         )
         for queue in profile.queues

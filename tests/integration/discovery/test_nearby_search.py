@@ -312,7 +312,12 @@ def test_queue_length_is_todays_waiting_tickets_and_null_only_when_nobody_counte
         len(hillbrow["queues"]) - 1
     )
     assert hillbrow["total_waiting"] == 2
-    assert all(q["wait_range"] is None for q in hillbrow["queues"])
+    # The wait is a range for every counted queue (Issue 42); no visits yet, so approximate.
+    assert all(
+        q["wait_range"]["low_minutes"] < q["wait_range"]["high_minutes"]
+        and q["wait_range"]["approximate"] is True
+        for q in hillbrow["queues"]
+    )
 
     def uncounted(db: Session, queues: Collection[Queue]) -> Mapping[str, QueueReading]:
         return dict.fromkeys((queue.id for queue in queues), NOT_MEASURED)

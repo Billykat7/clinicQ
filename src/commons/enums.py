@@ -598,6 +598,31 @@ class TicketSource(StrEnum):
     WALK_IN = "walk_in"
 
 
+class EstimateConfidence(StrEnum):
+    """How much a wait estimate can be trusted (Issue 42). Shown beside every range.
+
+    - ``LOW``: too few recent visits on this queue to measure; built from the queue's expected
+      minutes and labelled approximate.
+    - ``MEDIUM``: measured from enough recent visits, but few or scattered.
+    - ``HIGH``: measured from plenty of recent visits at around this hour that agree with each other.
+    """
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class EstimateBasis(StrEnum):
+    """What a wait estimate was built from (Issue 42).
+
+    - ``OBSERVED``: the queue's own recent visits.
+    - ``EXPECTED``: the queue's configured expected minutes (Issues 25, 26), until enough visits exist.
+    """
+
+    OBSERVED = "observed"
+    EXPECTED = "expected"
+
+
 class ActorKind(StrEnum):
     """Who moved a ticket (Issue 41). Recorded as the audit row's ``actor_role`` for a transition.
 

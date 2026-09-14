@@ -30,7 +30,7 @@ openapi: 3.1.0
 
 info:
   title: ClinicQ discovery
-  version: "0.5.0"
+  version: "0.6.0"
   description: |
     Finding a clinic before thinking about a queue: verified clinics near a position or a named
     place, the place-name typeahead behind that, and everything a patient needs to decide on one
@@ -50,7 +50,8 @@ info:
     words. Every surface shows the label, not a bare number.
 
     **Waits.** `waiting` is `null` when not measured, which is not the same as `0`. A wait is only
-    ever a range (`wait_range`), and `null` until the estimator (Issue 42) exists.
+    ever a range (`wait_range`) with a `confidence` and an `approximate` flag, built from the queue's
+    recent visits (Issue 42), or from its expected minutes, marked approximate, until it has enough.
 
     **Payment.** A private clinic's self-reported directory tag, never an eligibility check, and
     always shown with its `notice`. The filters are refused unless `sector=private`.
@@ -409,12 +410,18 @@ components:
     # ── A clinic's live state ────────────────────────────────────────────────────────────
     WaitRangeOut:
       type: object
-      required: [low_minutes, high_minutes]
-      description: An expected wait, only ever a range.
+      required: [low_minutes, high_minutes, confidence, approximate, label]
+      description: |
+        The expected wait for somebody joining now, only ever a range (Issue 42), with how far to
+        trust it. `approximate` is true while the queue has too few recent visits and the range is
+        built from its expected minutes; `label` then says so. Show `label`, never one bound.
       properties:
         low_minutes: { type: integer, minimum: 0 }
         high_minutes: { type: integer, minimum: 1 }
-      example: { low_minutes: 20, high_minutes: 45 }
+        confidence: { type: string, enum: [low, medium, high] }
+        approximate: { type: boolean }
+        label: { type: string, description: 'The range in words: "~15–25 min", or "~15–25 min (approximate)".' }
+      example: { low_minutes: 20, high_minutes: 45, confidence: medium, approximate: false, label: "~20–45 min" }
     LiveQueueOut:
       type: object
       required: [id, name, kind, allows_remote_join, waiting, wait_range, as_of]
@@ -432,9 +439,9 @@ components:
         name: General consultation
         kind: consultation
         allows_remote_join: true
-        waiting: null
-        wait_range: null
-        as_of: null
+        waiting: 12
+        wait_range: { low_minutes: 20, high_minutes: 45, confidence: medium, approximate: false, label: "~20–45 min" }
+        as_of: "2026-09-14T07:31:12+02:00"
     OpenStatusOut:
       type: object
       required: [is_open, next_open_at, closure_reason]

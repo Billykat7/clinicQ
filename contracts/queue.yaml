@@ -95,6 +95,7 @@ paths:
                   walk_in_name: null
                 created: true
                 waiting_ahead: 4
+                wait: { low_minutes: 10, high_minutes: 25, confidence: medium, approximate: false, label: "~10–25 min" }
                 message: "You are T005."
         "200":
           description: The patient already held a ticket in this queue today; it is returned, and nothing new is issued.
@@ -115,6 +116,7 @@ paths:
                   walk_in_name: null
                 created: false
                 waiting_ahead: 3
+                wait: { low_minutes: 10, high_minutes: 20, confidence: medium, approximate: false, label: "~10–20 min" }
                 message: "You already hold T005 in this queue."
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
@@ -179,6 +181,7 @@ paths:
                   walk_in_name: "Gogo M."
                 created: true
                 waiting_ahead: 5
+                wait: { low_minutes: 30, high_minutes: 60, confidence: low, approximate: true, label: "~30–60 min (approximate)" }
                 message: "You are T006."
         "200":
           description: The phone number given already holds a ticket in this queue today; it is returned.
@@ -595,13 +598,32 @@ components:
         service_day: "2026-09-14"
         joined_at: "2026-09-14T07:31:12+02:00"
         walk_in_name: null
+    WaitOut:
+      type: object
+      required: [low_minutes, high_minutes, confidence, approximate, label]
+      description: |
+        How long to expect to wait: always a range, never one number (Issue 42). Built from the
+        queue's recent visits, or, while it has too few, from its expected minutes, in which case
+        `approximate` is true, `confidence` is `low` and `label` says "(approximate)".
+      properties:
+        low_minutes: { type: integer, minimum: 0 }
+        high_minutes: { type: integer, minimum: 1 }
+        confidence: { $ref: "#/components/schemas/EstimateConfidence" }
+        approximate: { type: boolean }
+        label: { type: string, description: 'The range as every surface shows it: "~15–25 min".' }
+      example: { low_minutes: 15, high_minutes: 25, confidence: high, approximate: false, label: "~15–25 min" }
+    EstimateConfidence:
+      type: string
+      enum: [low, medium, high]
+      example: medium
     JoinOut:
       type: object
-      required: [ticket, created, waiting_ahead, message]
+      required: [ticket, created, waiting_ahead, wait, message]
       properties:
         ticket: { $ref: "#/components/schemas/TicketOut" }
         created: { type: boolean, description: "False when the patient already held this ticket." }
         waiting_ahead: { type: integer, minimum: 0, description: "Waiting tickets ahead of this one now." }
+        wait: { $ref: "#/components/schemas/WaitOut" }
         message: { type: string, description: "A sentence for the patient." }
     TicketListOut:
       type: object

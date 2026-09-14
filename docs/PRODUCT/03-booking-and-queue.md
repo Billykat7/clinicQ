@@ -28,9 +28,12 @@ sequenceDiagram
     API-->>D: Queue length updates (aggregate, no PII) as tickets are added
 ```
 
-**Estimated wait** starts as a simple rolling average (`average service time last N tickets x position in
-queue`), shown as a range (e.g. "~15–25 min") rather than a false-precision single number; this mirrors
-how well-run real-world queue systems (bank branches, DMV-style services) set expectations honestly.
+**Estimated wait** is always shown as a range with a confidence (e.g. "~15–25 min") rather than a
+false-precision single number; this mirrors how well-run real-world queue systems (bank branches,
+DMV-style services) set expectations honestly. It is built from how fast this queue has actually been
+calling patients recently, weighted towards the same time of day, with long outlier visits trimmed,
+and falls back to the queue's expected minutes, labelled approximate, until enough visits exist. The
+method and its measured accuracy are in [the wait-estimate methodology](wait-estimate-methodology.md).
 
 ## Walk-in intake (reception side)
 
@@ -116,7 +119,7 @@ stateDiagram-v2
 | `ticket` | id, site_id, queue_id, patient_id (empty for a walk-in with no phone: no placeholder patient), service_day (the Johannesburg date), sequence (unique per queue and service day, allocated by the database), number (`A043`), reference_code (six characters with no 0/O or 1/I/L), source (web/ussd/whatsapp/walk_in), walk_in_name (the desk's name for a walk-in; a phone join is named by its patient record, behind consent), reason_text (optional, short), comment_consent, status (waiting/called/recalled/in_progress/done/no_show/cancelled/transferred), joined_at, called_at, started_at, completed_at |
 | `ticket_sequence` | queue_id, service_day, last_value: the counter a ticket number comes from, one row per queue per day, so numbering restarts at Johannesburg midnight with nothing to reset |
 | `patients` (optional link, if patient has an account) | id, phone/whatsapp_id, name, consent_flags |
-| `wait_time_samples` | queue_id, ticket_id, actual_wait_minutes, recorded_at (feeds the rolling estimate) |
+| `wait_time_sample` | queue_id, ticket_id, service_day, called_hour, wait_minutes, service_minutes, interval_minutes (the gap since the previous call while the queue was busy; what the estimate reads), recorded_at |
 
 Markdown cross-refs: display rendering of `patient_display_name`/`reason_text` and privacy controls are in
 [04-display-monitor.md](04-display-monitor.md); dashboard call-next mechanics in

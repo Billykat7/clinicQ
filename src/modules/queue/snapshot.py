@@ -52,11 +52,12 @@ from prometheus_client import REGISTRY, Counter
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.commons.enums import SnapshotReadOutcome
+from src.commons.enums import EstimateBasis, EstimateConfidence, SnapshotReadOutcome
 from src.commons.time import now_sast, stored_sast
 from src.core.config import Settings, get_settings
 from src.core.site_scope import published_select
 from src.database.models import Queue, SiteQueueSnapshot
+from src.modules.queue.estimate import WaitEstimate, WaitRange
 from src.modules.queues.live import (
     NOT_MEASURED,
     QueueReading,
@@ -82,6 +83,36 @@ REPAIRS = Counter(
 )
 
 
+def _wait_figures(
+    wait: WaitEstimate | None,
+) -> tuple[int, int, str, bool] | None:
+    """The part of an estimate a snapshot keeps: the range, the confidence and whether approximate."""
+    if wait is None:
+        return None
+    return (
+        wait.wait.low_minutes,
+        wait.wait.high_minutes,
+        wait.confidence.value,
+        wait.approximate,
+    )
+
+
+def _wait_from(
+    low: int | None, high: int | None, confidence: str | None, approximate: bool | None
+) -> WaitEstimate | None:
+    """Rebuild a stored estimate; anything incomplete or inconsistent is no estimate at all."""
+    if low is None or high is None or confidence is None or approximate is None:
+        return None
+    try:
+        return WaitEstimate(
+            wait=WaitRange(int(low), int(high)),
+            confidence=EstimateConfidence(confidence),
+            basis=EstimateBasis.EXPECTED if approximate else EstimateBasis.OBSERVED,
+        )
+    except ValueError:
+        return None
+
+
 @dataclass(frozen=True, slots=True)
 class Snapshot:
     """One queue's snapshot, as both stores hold it."""
@@ -89,20 +120,22 @@ class Snapshot:
     queue_id: str
     site_id: str
     waiting: int | None
-    average_wait_minutes: int | None
+    #: The wait for somebody joining now: a range and a confidence, never an average (Issue 42).
+    wait: WaitEstimate | None
     updated_at: datetime
 
     def reading(self) -> QueueReading:
         """What a discovery reader answers for this queue."""
-        return QueueReading(waiting=self.waiting, as_of=self.updated_at)
+        return QueueReading(waiting=self.waiting, as_of=self.updated_at, wait=self.wait)
 
     def encode(self) -> str:
         """The compact JSON Redis stores."""
+        figures = _wait_figures(self.wait)
         return json.dumps(
             {
                 "s": self.site_id,
                 "w": self.waiting,
-                "a": self.average_wait_minutes,
+                "e": list(figures) if figures is not None else None,
                 "t": self.updated_at.isoformat(),
             },
             separators=(",", ":"),
@@ -113,11 +146,12 @@ class Snapshot:
         """Read a stored value back; anything unreadable is a miss, never an error."""
         try:
             data = json.loads(raw)
+            estimate = data["e"]
             return cls(
                 queue_id=queue_id,
                 site_id=str(data["s"]),
                 waiting=None if data["w"] is None else int(data["w"]),
-                average_wait_minutes=None if data["a"] is None else int(data["a"]),
+                wait=None if estimate is None else _wait_from(*estimate),
                 updated_at=datetime.fromisoformat(data["t"]),
             )
         except ValueError, KeyError, TypeError:
@@ -125,11 +159,27 @@ class Snapshot:
 
     def same_figures(self, other: Snapshot) -> bool:
         """Whether two snapshots say the same thing, whenever each was taken."""
-        return (self.waiting, self.average_wait_minutes, self.site_id) == (
+        return (self.waiting, _wait_figures(self.wait), self.site_id) == (
             other.waiting,
-            other.average_wait_minutes,
+            _wait_figures(other.wait),
             other.site_id,
         )
+
+
+def _row_snapshot(row: SiteQueueSnapshot, updated_at: datetime) -> Snapshot:
+    """A ``site_queue_snapshot`` row as a :class:`Snapshot`."""
+    return Snapshot(
+        row.queue_id,
+        row.site_id,
+        row.waiting,
+        _wait_from(
+            row.wait_low_minutes,
+            row.wait_high_minutes,
+            row.wait_confidence,
+            row.wait_approximate,
+        ),
+        updated_at,
+    )
 
 
 class SnapshotCache(Protocol):
@@ -348,7 +398,7 @@ def _count(
             queue_id=queue.id,
             site_id=queue.site_id,
             waiting=readings.get(queue.id, NOT_MEASURED).waiting,
-            average_wait_minutes=None,  # the estimator's (Issue 42)
+            wait=readings.get(queue.id, NOT_MEASURED).wait,
             updated_at=moment,
         )
         for queue in queues
@@ -399,13 +449,7 @@ def cached_waiting_counts(
         for row in rows:
             updated_at = stored_sast(row.updated_at)
             if _fresh(updated_at, moment, cfg.queue_snapshot_max_age_seconds):
-                snapshot = Snapshot(
-                    row.queue_id,
-                    row.site_id,
-                    row.waiting,
-                    row.average_wait_minutes,
-                    updated_at,
-                )
+                snapshot = _row_snapshot(row, updated_at)
                 answers[row.queue_id] = snapshot.reading()
                 warm.append(snapshot)
         READS.labels(outcome=SnapshotReadOutcome.TABLE.value).inc(len(warm))
@@ -425,12 +469,16 @@ def cached_waiting_counts(
 def _write(db: Session, snapshots: Collection[Snapshot]) -> None:
     """Upsert snapshots into ``site_queue_snapshot`` (``merge`` on the primary key). Caller commits."""
     for snapshot in snapshots:
+        figures = _wait_figures(snapshot.wait)
         db.merge(
             SiteQueueSnapshot(
                 queue_id=snapshot.queue_id,
                 site_id=snapshot.site_id,
                 waiting=snapshot.waiting,
-                average_wait_minutes=snapshot.average_wait_minutes,
+                wait_low_minutes=figures[0] if figures else None,
+                wait_high_minutes=figures[1] if figures else None,
+                wait_confidence=figures[2] if figures else None,
+                wait_approximate=figures[3] if figures else None,
                 updated_at=snapshot.updated_at,
             )
         )
@@ -515,13 +563,7 @@ def reconcile_snapshots(
         # An expired cache key is not drift, and neither is a queue with no row yet: that one is
         # simply recorded. Drift is a stored figure that disagrees with the count.
         row_drifted = row is not None and not fresh.same_figures(
-            Snapshot(
-                queue_id,
-                row.site_id,
-                row.waiting,
-                row.average_wait_minutes,
-                fresh.updated_at,
-            )
+            _row_snapshot(row, fresh.updated_at)
         )
         cache_drifted = hit is not None and not fresh.same_figures(hit)
         if row_drifted or cache_drifted:
