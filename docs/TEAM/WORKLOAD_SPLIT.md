@@ -97,7 +97,7 @@ ever empty: that is the whole design goal. Issue numbers in brackets.
 | **5** | 9–10 | M4 · M5 | ✅ done — M4 closed, tag `v0.4.0` to follow; M5 delivered with it |
 | **6** | 11–12 | M5 · M6 | 🚧 in progress — M5 delivered (issues 31–38, tag `v0.5.0` to follow); M6: tickets [39], join [40] and lifecycle [41] delivered; preferences [67] and the front-desk board [49] not started |
 | **7** | 13–14 | M6 ⚠️ | 🚧 in progress — M6 closed (issues 39–47, tag `v0.6.0` to follow); adapter framework [72], simulators [78], ticket page [68], PWA shell [69], call-next actions [50] and walk-in intake [51] not started |
-| **8** | 15–16 | M7 | 📋 planned |
+| **8** | 15–16 | M7 | 🚧 in progress — reorder UI [52] delivered; appointment slots [80], USSD menu tree [73], QR ticket [70], room view [53], security hardening [97] and i18n [77] not started |
 | **9** | 17–18 | M7 · M8 · M9 | 📋 planned |
 | **10** | 19–20 | M9 · M10 | 📋 planned |
 | **11** | 21–22 | M10 · M11 | 📋 planned |
