@@ -21,7 +21,20 @@ there, with no separate publish step to re-gate.
 **The shipped grant is ``admin`` over the root.** Without it the consoles exist in the catalog and
 open for nobody — the flag would render a rail icon that 403s for every user, including the
 administrator who is supposed to hand the grants out. Everyone else is provisioned from the
-console.
+console, with one exception below.
+
+**The operator reads its own notification centre (Refs #48).** The dashboard layout offers the bell
+only to a caller who holds ``communications.notifications:read``, the grant its routes require. The
+centre is first-person by construction: each ``/notifications/center`` route reads and marks only
+the caller's own rows, keyed on their user id. So ``platform_admin`` holds it at ``own``, which is
+enough for those routes and too narrow for the ``business`` tab.
+
+The clinic roles hold no grant here, on purpose. A receptionist, nurse or clinic manager holds their
+role **at a site**, and the centre routes name no site, so a site-held role never counts there
+(``src.core.rbac.active_roles_for_user``). A grant on those roles would pass ``can()`` on their
+clinic pages, which resolve roles at the site, and still be refused by the route: every page would
+show a bell whose poll answers 403. Nothing in ClinicQ writes to a staff member's centre yet. When
+something does, the centre routes must first resolve the caller's roles at any of their sites.
 """
 
 from src.commons.enums import (
@@ -78,6 +91,12 @@ MANIFEST = ModuleManifest(
             resource="communications",
             verb=PermissionVerb.DELETE.value,
             scope=GrantScope.BUSINESS.value,
+        ),
+        RoleGrant(
+            role=UserRole.PLATFORM_ADMIN.value,
+            resource="communications.notifications",
+            verb=PermissionVerb.READ.value,
+            scope=GrantScope.OWN.value,
         ),
     ),
     children=(

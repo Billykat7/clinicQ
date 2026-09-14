@@ -16,8 +16,12 @@
 {% block layout_head %}
   <script src="/static/js/session-refresh.js" defer></script>
   <script src="/static/js/login-modal.js" defer></script>
-  {# Notification centre: bell unread badge and adaptive preview dropdown (Issue #113). #}
+  {# Notification centre: bell unread badge and adaptive preview dropdown (Issue #113). Offered only
+     to a caller who holds the grant its routes require (show_notification_bell, Refs #48), so the
+     badge poll never answers 403. #}
+  {% if show_notification_bell %}
   <script src="/static/js/notification-center.js" defer></script>
+  {% endif %}
   {# Shared accessible dropdown/combobox: upgrades every select[data-combobox] (Issue #108). #}
   <script src="/static/js/combobox.js" defer></script>
 {% endblock %}
@@ -36,7 +40,9 @@
   <div class="auth-corner">
     {% include "components/theme_toggle.html" %}
     {# Notification bell: between the theme toggle and the profile button (Issue #113). #}
+    {% if show_notification_bell %}
     {% include "partials/notification_center.html" %}
+    {% endif %}
     <button type="button" class="btn btn-sm" id="signin-btn" data-open-signin hidden>Sign in</button>
     <button type="button" class="avatar-btn" id="avatar-btn" aria-haspopup="dialog" aria-expanded="false" aria-label="Account menu" hidden><span id="avatar-initial" aria-hidden="true"></span></button>
   </div>

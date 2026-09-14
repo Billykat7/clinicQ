@@ -18,6 +18,7 @@ from src.core.nav_visibility import (
     nav_visibility_for_request_safe,
 )
 from src.database.session import get_db
+from src.modules.notifications import CENTRE_RESOURCE_KEY
 
 # Where the breadcrumb trail's leading "home" crumb points. The partial draws that crumb itself,
 # so a trail — built here or by hand in a route — never carries it.
@@ -97,6 +98,25 @@ def can_view_internals(nav: NavVisibility) -> bool:
     return nav.visible(INTERNAL_NAV_KEY)
 
 
+def can_open_notification_centre(nav: NavVisibility) -> bool:
+    """Return whether the signed-in shell should offer this caller the notification bell (Refs #48).
+
+    The bell's script polls ``/notifications/center/unread-count`` on every page, so the bell is
+    offered only to a caller who holds the grant those routes require:
+    :data:`~src.modules.notifications.CENTRE_RESOURCE_KEY` at ``read``, at the ``own`` tier the
+    route's ``require`` defaults to. A caller without it would otherwise get a 403 on every page.
+
+    It resolves through the page's own :class:`NavVisibility`, the roles the page was rendered for.
+    A clinic page resolves the roles held at that clinic, while the centre routes name no site. That
+    is why the clinic roles hold no centre grant: one would light the bell here and still be refused
+    there (see ``src/modules/communications/rbac_manifest.py``).
+
+    A pure function of an already-resolved :class:`NavVisibility`, like :func:`can_view_internals`,
+    so the property can be asserted directly rather than through rendered HTML.
+    """
+    return nav.can(CENTRE_RESOURCE_KEY, PermissionVerb.READ)
+
+
 def public_page_context(request: Request, **extra: Any) -> dict[str, Any]:
     """Context for the public front-door pages (home, search, features, legal, apply).
 
@@ -165,6 +185,7 @@ def page_context(
         "is_authenticated": nav.show_icon_sidebar,
         "can_view_status": nav.show_logs,
         "can_view_internals": can_view_internals(nav),
+        "show_notification_bell": can_open_notification_centre(nav),
         "active_nav": "",
         "page_title": "",
     }

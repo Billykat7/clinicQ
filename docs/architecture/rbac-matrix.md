@@ -13,7 +13,7 @@ answers *whose rows*:
 
 | Tier | Reaches | Who has it |
 |---|---|---|
-| `own` | the rows the caller is the subject of: a patient's own record; for a nurse, the queues assigned to them | `patient`, and the nurse's call-next grant |
+| `own` | the rows the caller is the subject of: a patient's own record; for a nurse, the queues assigned to them | `patient`, the nurse's call-next grant, and the operator's own notification centre |
 | `assigned` | the rows at the sites the caller holds a role at (`user_roles` with `scope_type='site'`) | `receptionist`, `nurse_doctor`, `clinic_manager` |
 | `business` | every clinic. A `platform_admin` reading a clinic it is not assigned to does so explicitly and is audited (Issue 19) | `platform_admin`, `admin`, `user` |
 
@@ -60,7 +60,7 @@ shows what ships.
 | `communications.messages.drafts` | — | — | — | — | — | delete · business | — |
 | `communications.messages.inbox` | — | — | — | — | — | delete · business | — |
 | `communications.messages.sent` | — | — | — | — | — | delete · business | — |
-| `communications.notifications` | — | — | — | — | — | delete · business | — |
+| `communications.notifications` | — | — | — | — | read · own | delete · business | — |
 | `dashboard` | — | read · business | read · business | read · business | read · business | delete · business | read · business |
 | `document.signature` | — | — | — | — | — | — | — |
 | `documents` | — | — | — | — | — | — | — |
