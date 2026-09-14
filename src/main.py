@@ -37,6 +37,7 @@ from src.core.telemetry import (
 from src.schemas.health import DependencyChecks, LivenessResponse, ReadinessResponse
 from src.web.dashboard.routes import router as dashboard_router
 from src.web.dashboard.settings import router as dashboard_settings_router
+from src.web.dashboard.walkin import router as dashboard_walk_in_router
 from src.web.dev import router as dev_router
 from src.web.discover import router as discover_router
 from src.web.routes import router as web_router
@@ -113,6 +114,7 @@ def create_app(settings_obj: Settings | None = None) -> FastAPI:
     # The clinic dashboard (M7): one clinic's screens, inside the frame Issue 48 resolves.
     app.include_router(dashboard_router)
     app.include_router(dashboard_settings_router)
+    app.include_router(dashboard_walk_in_router)
     # Clinic discovery (Issue 32): the patient's first screen, on the discovery service.
     app.include_router(discover_router)
     # The component catalogue and layout samples (Issue 5) exist only in development: in staging

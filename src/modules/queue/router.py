@@ -42,6 +42,7 @@ from sqlalchemy.orm import Session
 from src.api.rbac_deps import require_patient
 from src.commons.enums import (
     ActorKind,
+    ConsentPurpose,
     JoinRefusal,
     PatientChannel,
     TicketSource,
@@ -63,6 +64,7 @@ from src.core.site_scope import (
 )
 from src.database.models import Patient, Queue, Site, Ticket, Visit
 from src.database.session import get_db
+from src.modules.patients.consent import record_consent
 from src.modules.patients.service import get_or_create_patient
 from src.modules.queue import service
 from src.modules.queue.cancellation import (
@@ -114,6 +116,7 @@ from src.modules.queue.tickets import (
 )
 from src.modules.queue.transfer import VisitSummary, transfer_ticket, visit_summary
 from src.modules.queue.waits import estimates_for
+from src.modules.queue.walk_ins import undo_walk_in
 from src.modules.queues.service import get_queue
 from src.modules.sites.hours import published_schedules, schedule_for
 
@@ -245,38 +248,85 @@ def issue_walk_in(
     access: TicketsIssue,
     db: DbSession,
     settings: SettingsDep,
+    request_key: RequestKey = None,
 ) -> JoinOut:
-    """Issue a walk-in in the same sequence as every remote join. A phone number is optional."""
+    """Issue a walk-in in the same sequence as every remote join. A phone number is optional.
+
+    With a phone, the patient's answer to being messaged about their turn is recorded as their
+    ``notifications`` consent (Issue 51), in the same transaction as the ticket. With an
+    ``Idempotency-Key``, a repeated press answers ``200`` with the ticket the first one issued.
+    """
     site = db.get(Site, access.site_id)
     queue = get_queue(db, access, queue_id)
     if site is None or site.is_deleted or queue is None:
         raise site_not_found()
-    patient = None
-    if payload.phone is not None:
-        patient, _ = get_or_create_patient(db, normalize_phone(payload.phone))
-        patient.last_channel = PatientChannel.WALK_IN.value
-    try:
-        result = service.join_queue(
-            db,
-            site=site,
-            queue=queue,
-            schedule=schedule_for(db, access),
-            source=TicketSource.WALK_IN,
-            patient=patient,
-            actor=access.user.email,
-            actor_id=str(access.user.id),
-            walk_in_name=payload.name,
-            reason_text=payload.reason_text,
-            comment_consent=payload.comment_consent,
-            client_ip=resolve_client_ip(request, settings),
-            settings=settings,
-        )
-    except JoinRefusedError as error:
-        if error.refusal is JoinRefusal.RATE_LIMITED:
-            raise _too_many(error) from error
-        raise
+    issued: list[JoinResult] = []
+
+    def issue() -> Ticket:
+        patient = None
+        if payload.phone is not None:
+            patient, _ = get_or_create_patient(db, normalize_phone(payload.phone))
+            patient.last_channel = PatientChannel.WALK_IN.value
+        try:
+            result = service.join_queue(
+                db,
+                site=site,
+                queue=queue,
+                schedule=schedule_for(db, access),
+                source=TicketSource.WALK_IN,
+                patient=patient,
+                actor=access.user.email,
+                actor_id=str(access.user.id),
+                walk_in_name=payload.name,
+                reason_text=payload.reason_text,
+                comment_consent=payload.comment_consent,
+                client_ip=resolve_client_ip(request, settings),
+                settings=settings,
+            )
+        except JoinRefusedError as error:
+            if error.refusal is JoinRefusal.RATE_LIMITED:
+                raise _too_many(error) from error
+            raise
+        if patient is not None and payload.notifications_consent:
+            record_consent(
+                db,
+                patient,
+                ConsentPurpose.NOTIFICATIONS,
+                granted=True,
+                channel=PatientChannel.WALK_IN,
+                recorded_by=str(access.user.id),
+                site_id=site.id,
+            )
+        issued.append(result)
+        return result.ticket
+
+    ticket = run_once(
+        db,
+        access,
+        request_key,
+        operation="walk_in",
+        target=queue.id,
+        act=issue,
+    )
+    if issued:
+        return _answer(issued[0], response)
+    return _answer(service.describe_ticket(db, queue, ticket), response)
+
+
+@router.post(
+    "/sites/{site_id}/tickets/{ticket_id}/undo-walk-in",
+    response_model=CancelOut,
+    operation_id="queueUndoWalkIn",
+    summary="Undo the last walk-in issued at the desk, within the undo window",
+)
+def undo_last_walk_in(ticket_id: str, access: TicketsIssue, db: DbSession) -> CancelOut:
+    """Take back the caller's most recent walk-in while it is still waiting and inside
+    ``QUEUE_WALK_IN_UNDO_SECONDS``. It is cancelled with the reason ``joined_by_mistake`` and the audit
+    row says ``undo walk-in``; its number is never reused."""
+    ticket = get_in_site_or_404(db, Ticket, ticket_id, access)
+    result = undo_walk_in(db, access, ticket.id, actor=_staff(access))
     db.commit()
-    return _answer(result, response)
+    return _cancelled(result)
 
 
 @router.get(

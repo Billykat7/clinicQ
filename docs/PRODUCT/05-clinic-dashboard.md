@@ -96,6 +96,13 @@ calls one patient, never two. A patient called by mistake can be put back **in t
 
 - **Add walk-in**: name/initials (optional phone number for notifications), reason (optional, private
   note vs public comment; see [04](04-display-monitor.md)), joins the same sequence as remote tickets.
+  On the **Walk-in** screen the name field has focus and the queue last used is already chosen, so a
+  walk-in is a name and the Enter key, in well under ten seconds and without a mouse. With a phone
+  number, the desk reads out the consent sentence and ticks the patient's answer, which is recorded as
+  their consent to messages about their turn. The number appears in large type to show the patient, and
+  **Print stub** (Alt+P) prints it for a 58 mm thermal printer, with no name, phone or reason on the
+  paper. The last walk-in the desk issued can be undone for two minutes while the patient still waits;
+  the ticket is cancelled, audited, and its number is never given out again.
 - **Manual reorder**: staff can drag a ticket up the queue for genuine clinical priority (visibly unwell,
   elderly, emergency); every reorder is logged with the staff member's id and a reason code, for
   audit/accountability (this is the human-override valve that keeps the "one fair queue" rule in

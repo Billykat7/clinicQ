@@ -96,6 +96,7 @@ def cancel_ticket(
     channel: PatientChannel,
     actor: Actor,
     reason: CancellationReason | None = None,
+    why: str | None = None,
     moment: datetime | None = None,
 ) -> CancelResult:
     """Cancel one ticket from any channel. The caller commits.
@@ -110,6 +111,8 @@ def cancel_ticket(
         channel: Where the cancellation came from; recorded on the ticket and in the audit row.
         actor: The patient, or the staff member at the desk.
         reason: Why, if the patient said.
+        why: A few more words for the audit row, when the operation has its own name
+            (``undo walk-in``, Issue 51).
         moment: When (aware); ``None`` means now in Johannesburg.
 
     Returns:
@@ -131,8 +134,10 @@ def cancel_ticket(
     ):
         raise CalledTicketSelfCancelError
     who = "patient" if actor.kind is ActorKind.PATIENT else "staff"
-    note = f"cancelled by {who} via {channel.value}" + (
-        f", reason {reason.value}" if reason is not None else ""
+    note = (
+        f"cancelled by {who} via {channel.value}"
+        + (f", reason {reason.value}" if reason is not None else "")
+        + (f", {why}" if why else "")
     )
     moved = transition_ticket(
         db,

@@ -1263,6 +1263,15 @@ class Settings(BaseSettings):
             "place (env: QUEUE_CALL_UNDO_SECONDS)."
         ),
     )
+    queue_walk_in_undo_seconds: int = Field(
+        default=120,
+        ge=10,
+        le=600,
+        description=(
+            "Seconds after issuing a walk-in during which the desk may undo it, while the patient is "
+            "still at the counter (env: QUEUE_WALK_IN_UNDO_SECONDS)."
+        ),
+    )
     queue_recall_timeout_minutes: int = Field(
         default=5,
         ge=1,

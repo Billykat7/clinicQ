@@ -149,18 +149,22 @@ paths:
       description: |
         The same service and the same sequence as a remote join. `name` is what the desk calls the
         patient by and is never shown on the public board. With a `phone`, the walk-in is that
-        patient's ticket, so a second walk-in for the same number answers `200` with the first.
-        Requires `queues.tickets` `update` at this clinic.
+        patient's ticket, so a second walk-in for the same number answers `200` with the first, and
+        `notifications_consent` records the patient's answer to being messaged about their turn
+        (Issue 51). A repeated `Idempotency-Key` (a double-pressed *Issue ticket*) answers `200` with
+        the ticket the first request issued and issues nothing. Requires `queues.tickets` `update` at
+        this clinic.
       security: [{ sessionCookie: [] }, { bearerAuth: [] }]
       parameters:
         - { $ref: "#/components/parameters/SiteId" }
         - { $ref: "#/components/parameters/QueueId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/WalkInIn" }
-            example: { name: "Gogo M.", reason_text: null, comment_consent: false, phone: null }
+            example: { name: "Gogo M.", reason_text: null, comment_consent: false, phone: null, notifications_consent: false }
       responses:
         "201":
           description: A new walk-in ticket.
@@ -184,14 +188,63 @@ paths:
                 wait: { low_minutes: 30, high_minutes: 60, confidence: low, approximate: true, label: "~30–60 min (approximate)" }
                 message: "You are T006."
         "200":
-          description: The phone number given already holds a ticket in this queue today; it is returned.
+          description: |
+            The phone number given already holds a ticket in this queue today, or the request repeats
+            an `Idempotency-Key` already used for this walk-in; the existing ticket is returned.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/JoinOut" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/SiteNotFound" }
-        "409": { $ref: "#/components/responses/JoinRefused" }
+        "409":
+          description: |
+            The walk-in was refused and nothing was issued. `code` is one of the join refusals
+            (`queue.join.clinic_closed`, `queue.join.queue_closed`, `queue.join.queue_full`; see
+            `JoinRefused`), or `ticket.request.key_reused` when the `Idempotency-Key` was already used
+            for another action.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "Hillbrow Community Health Centre is closed: Water outage", code: "queue.join.clinic_closed" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/tickets/{ticket_id}/undo-walk-in:
+    post:
+      tags: [queue]
+      operationId: queueUndoWalkIn
+      summary: Undo the last walk-in issued at the desk, within the undo window
+      description: |
+        Takes back the most recent walk-in the signed-in person issued today at this clinic, while it
+        is still waiting and within `QUEUE_WALK_IN_UNDO_SECONDS` (120 by default) of issuing it: the
+        patient is most likely still at the counter. The ticket is cancelled with the reason
+        `joined_by_mistake`, and its audit row says `undo walk-in`; the number is never reused. An
+        older or someone else's walk-in is cancelled with the cancel route instead. Requires
+        `queues.tickets` `update` at this clinic.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/SiteId" }
+        - { $ref: "#/components/parameters/TicketId" }
+      responses:
+        "200":
+          description: The walk-in, cancelled, and how many behind it moved up.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CancelOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/SiteNotFound" }
+        "409":
+          description: |
+            Nothing changed. `code` is `ticket.walk_in_undo.not_latest` when the ticket is not the last
+            walk-in this person issued today, `ticket.walk_in_undo.window_closed` when it was issued
+            longer ago than the window, or `ticket.transition.stale` when it is no longer waiting.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                detail: "T012 was issued more than 120 seconds ago, so it can no longer be undone. Cancel the ticket instead."
+                code: "ticket.walk_in_undo.window_closed"
         "422": { $ref: "#/components/responses/Unprocessable" }
 
   # ── Reading tickets (Issue 40) ──────────────────────────────────────────────────────────
@@ -1057,7 +1110,11 @@ components:
           type: [string, "null"]
           maxLength: 20
           description: Optional. Any South African form (`082 123 4567`, `+27821234567`); links the walk-in to that patient.
-      example: { name: null, reason_text: "Chest pain", comment_consent: true, phone: "082 123 4567" }
+        notifications_consent:
+          type: boolean
+          default: false
+          description: The patient's answer, asked at the desk, to being messaged about their turn. Recorded as their `notifications` consent. Only with a `phone` (otherwise `422`).
+      example: { name: null, reason_text: "Chest pain", comment_consent: true, phone: "082 123 4567", notifications_consent: true }
 
     TransitionIn:
       type: object
