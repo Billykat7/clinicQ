@@ -19,7 +19,7 @@ from typing import Final
 from src.commons.enums import ConsentPurpose
 
 #: The version recorded with every answer. Bump it whenever any wording below changes.
-CONSENT_WORDING_VERSION: Final = "2026-09-v1-draft"
+CONSENT_WORDING_VERSION: Final = "2026-09-v2-draft"
 
 #: What the patient is asked, per purpose, on a screen with room for a sentence.
 CONSENT_WORDING: Final[dict[ConsentPurpose, str]] = {
@@ -42,6 +42,11 @@ CONSENT_WORDING: Final[dict[ConsentPurpose, str]] = {
         "Send me one short message after my visit, asking how it went. "
         "Answering is up to you, and your answer never affects your care."
     ),
+    ConsentPurpose.VISIT_NOTE_HISTORY: (
+        "Let the nurse or doctor at a clinic read the short notes written at my earlier visits to "
+        "that same clinic. The notes are private, never shown to other patients, and deleted after "
+        "a short time. If you say no, each visit's notes are seen only during that visit."
+    ),
 }
 
 #: The same questions for a USSD menu: one line each, GSM-7 characters only, well under 160.
@@ -50,6 +55,7 @@ USSD_CONSENT_WORDING: Final[dict[ConsentPurpose, str]] = {
     ConsentPurpose.DISPLAY_COMMENT: "Also show my reason for visiting? 1 Yes 2 No",
     ConsentPurpose.NOTIFICATIONS: "Message me about my turn? 1 Yes 2 No",
     ConsentPurpose.FEEDBACK_SURVEY: "One message after the visit to ask how it went? 1 Yes 2 No",
+    ConsentPurpose.VISIT_NOTE_HISTORY: "Let the clinic nurse see notes from my past visits here? 1 Yes 2 No",
 }
 
 #: Shown above the questions, wherever they are asked.

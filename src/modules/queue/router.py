@@ -445,7 +445,9 @@ def transfer(
 ) -> TransferOut:
     """Transfer a waiting or in-progress ticket to another queue at this clinic, keeping the visit."""
     ticket = get_in_site_or_404(db, Ticket, ticket_id, access)
-    target = get_queue(db, access, payload.queue_id)
+    # The patient must be in a queue the caller acts in; where they go is any queue at the clinic,
+    # so a nurse can send someone on to the pharmacy without being on the pharmacy (Issue 53).
+    target = get_queue(db, access.whole_site(), payload.queue_id)
     if target is None:
         raise site_not_found()
     result = transfer_ticket(

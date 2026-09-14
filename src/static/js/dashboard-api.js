@@ -1,4 +1,4 @@
-/* The clinic settings screens' one piece of plumbing (Issue 54).
+/* The dashboard's declarative API plumbing: the settings screens (Issue 54) and the room view (Issue 53).
  *
  * Every change on these screens is a request to an API route that already exists and already
  * decides: the grant, the validation and the audit row are the server's. So this file has no rule

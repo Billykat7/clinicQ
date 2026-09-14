@@ -57,6 +57,7 @@ from src.modules.documents.storage import LocalObjectStorage
 from src.modules.notifications import service as notifications_service
 from src.modules.queue import snapshot as queue_snapshot
 from src.modules.queue import timers as queue_timers
+from src.modules.visits import notes as visit_notes
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,10 @@ _QUEUE_SNAPSHOT_LOCK_KEY: int = 336
 # it even without the lock.
 _RECALL_TIMERS_LOCK_KEY: int = 443
 
+# Stable 64-bit key for the visit note retention sweep (Issue 53). Idempotent across instances (it
+# deletes only what is past its expiry), so the lock only saves a second instance the work.
+_VISIT_NOTE_RETENTION_LOCK_KEY: int = 553
+
 # ── job identifiers ──────────────────────────────────────────────────────────
 # So a restart replaces rather than duplicates each job.
 
@@ -93,6 +98,7 @@ _DOCUMENT_RETENTION_JOB_ID = "document_retention_sweep"
 _PERMISSION_USAGE_JOB_ID = "permission_usage_flush"
 _QUEUE_SNAPSHOT_JOB_ID = "queue_snapshot_reconciliation"
 _RECALL_TIMERS_JOB_ID = "queue_recall_timers"
+_VISIT_NOTE_RETENTION_JOB_ID = "visit_note_retention_sweep"
 
 # Process-wide scheduler; created by :func:`start_scheduler`, stopped by :func:`shutdown_scheduler`.
 _scheduler: BackgroundScheduler | None = None
@@ -258,6 +264,31 @@ def run_recall_timer_sweep(
         return swept.moved
 
 
+def run_visit_note_retention_sweep(
+    settings: Settings | None = None, *, moment: datetime | None = None
+) -> int:
+    """Delete the visit notes past their retention window once; return how many (Issue 53).
+
+    Elects a single runner across instances via the advisory lock, then delegates to
+    :func:`src.modules.visits.notes.purge_expired_notes`, which deletes the rows and records one audit
+    line with the count and never the content. Idempotent: a re-run finds nothing already deleted, so a
+    missed night catches up without ill effect. Safe to call directly as well as from the scheduler.
+    """
+    with (
+        get_db_context() as db,
+        _advisory_lock(db, _VISIT_NOTE_RETENTION_LOCK_KEY) as acquired,
+    ):
+        if not acquired:
+            logger.debug(
+                "Visit note retention sweep skipped: another instance holds the lock."
+            )
+            return 0
+        purged = visit_notes.purge_expired_notes(db, moment=moment)
+        if purged:
+            logger.info("Visit note retention sweep deleted %d note(s).", purged)
+        return purged
+
+
 def start_scheduler(settings: Settings | None = None) -> BackgroundScheduler | None:
     """Start the process-wide scheduler and register every enabled job.
 
@@ -336,6 +367,19 @@ def start_scheduler(settings: Settings | None = None) -> BackgroundScheduler | N
         # A missed run is coalesced: the deadlines are in the database, so one late run recalls
         # everything several missed runs would have, and nothing twice.
         misfire_grace_time=cfg.queue_recall_sweep_seconds,
+        coalesce=True,
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        run_visit_note_retention_sweep,
+        trigger=CronTrigger(
+            hour=cfg.visit_note_retention_sweep_hour, minute=0, timezone=APP_TIMEZONE
+        ),
+        id=_VISIT_NOTE_RETENTION_JOB_ID,
+        name="Nightly visit note retention sweep",
+        # A missed run is coalesced: the sweep deletes whatever is past its expiry, so one late run
+        # deletes what several missed runs would have, and nothing that is not due.
+        misfire_grace_time=3600,
         coalesce=True,
         replace_existing=True,
     )

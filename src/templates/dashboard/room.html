@@ -1,26 +1,131 @@
 {% extends "dashboard/base.html" %}
-{#- A clinician's room (Issue 48's frame; Issue 53 adds calling, transfers and visit notes).
+{#- A clinician's room (Issue 48's frame; Issue 53's view).
 
-    Only the queues this person is assigned to at this clinic (Issue 28). Another room's queues are
-    never read for this page, so there is nothing here to hide. -#}
+    Only the queues this person is assigned to at this clinic (Issue 28), read through an access the
+    site guard narrows to those rooms, so another room's patients are never read for this page. For
+    each room: Call next, the patients with the clinician now with Start, Done and Transfer, and this
+    visit's private notes (with earlier visits' notes when the patient agreed to share them).
+
+    Every button is a request to an existing API route, which decides; the page reloads after a change
+    so what is on screen is the server's state. Built for a 10-inch tablet: large touch targets, one
+    column in portrait, and nothing that needs a mouse. Notes are never shown anywhere but here. -#}
 {% from "components/empty_state.html" import empty_state %}
 
+{% block layout_head %}
+  {{ super() }}
+  <script src="/static/js/dashboard-api.js" defer></script>
+{% endblock %}
+
 {% block clinic_content %}
-{% if queues %}
-<ul class="queue-grid queue-grid--room" aria-label="Your queues at {{ clinic.site.name }}">
-  {% for queue in queues %}
-  <li class="queue-card{% if not queue.is_active %} is-inactive{% endif %}">
-    <div class="queue-card-head">
-      <h2 class="queue-card-name">{{ queue.name }}</h2>
-      {% if queue.room_label %}<span class="queue-card-room">{{ queue.room_label }}</span>{% endif %}
+{% if room.rooms %}
+<div class="room-grid">
+  {% for current in room.rooms %}
+  {% set queue = current.card %}
+  <section class="card room-card{% if queue.stuck %} is-stuck{% endif %}" aria-labelledby="room-{{ queue.id }}" data-api-scope>
+    <header class="room-head">
+      <div>
+        <h2 id="room-{{ queue.id }}">{{ queue.name }}</h2>
+        {% if queue.room_label %}<p class="room-label">{{ queue.room_label }}</p>{% endif %}
+      </div>
+      <dl class="room-counts">
+        <div><dt>Waiting</dt><dd>{{ queue.waiting }}</dd></div>
+        <div><dt>Longest wait</dt><dd>{% if queue.longest_wait_minutes is none %}None{% else %}{{ queue.longest_wait_minutes }} min{% endif %}</dd></div>
+      </dl>
+    </header>
+    <div class="room-call">
+      <button type="button" class="btn room-call-next" data-api="/api/v1/sites/{{ site.id }}/queues/{{ queue.id }}/tickets/call-next" data-method="POST"{% if not queue.waiting %} disabled{% endif %}>Call next</button>
+      <span class="msg" data-api-msg aria-live="polite"></span>
     </div>
-    <dl class="queue-card-counts">
-      <div><dt>Waiting</dt><dd>{{ queue.waiting }}</dd></div>
-      <div><dt>With you</dt><dd>{{ queue.with_staff }}</dd></div>
-    </dl>
-  </li>
+
+    {% for patient in current.patients %}
+    <article class="room-patient" aria-labelledby="patient-{{ patient.ticket_id }}">
+      <header class="room-patient-head">
+        <h3 id="patient-{{ patient.ticket_id }}"><span class="room-number">{{ patient.number }}</span>{% if patient.name %} <span class="room-name">{{ patient.name }}</span>{% endif %}</h3>
+        <span class="badge badge-{{ patient.badge.tone.value }}">{{ patient.badge.label }}</span>
+        {% if patient.minutes_since_called is not none %}<span class="hint">called {{ patient.minutes_since_called }} min ago</span>{% endif %}
+      </header>
+
+      <div class="room-actions" data-api-scope>
+        {% if patient.can_start %}
+        <button type="button" class="btn btn-quiet room-action" data-api="/api/v1/sites/{{ site.id }}/tickets/{{ patient.ticket_id }}/transitions" data-method="POST" data-body='{"to": "in_progress", "expected_status": "{{ patient.status.value }}"}'>Start</button>
+        {% endif %}
+        {% if patient.can_finish %}
+        <button type="button" class="btn room-action" data-api="/api/v1/sites/{{ site.id }}/tickets/{{ patient.ticket_id }}/transitions" data-method="POST" data-body='{"to": "done", "expected_status": "{{ patient.status.value }}"}'>Done</button>
+        {% endif %}
+        <span class="msg" data-api-msg aria-live="polite"></span>
+      </div>
+
+      <details class="room-transfer">
+        <summary>Transfer to another queue</summary>
+        <form class="room-transfer-form" data-api="/api/v1/sites/{{ site.id }}/tickets/{{ patient.ticket_id }}/transfer" data-method="POST">
+          <div class="field">
+            <label for="to-{{ patient.ticket_id }}">Send to</label>
+            <select id="to-{{ patient.ticket_id }}" name="queue_id" required>
+              {% for target in room.transfer_targets if target.id != queue.id %}
+              <option value="{{ target.id }}">{{ target.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label for="why-{{ patient.ticket_id }}">Why</label>
+            <select id="why-{{ patient.ticket_id }}" name="reason" required>
+              {% for value, label in room.transfer_reasons %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-quiet room-action">Transfer</button>
+            <span class="msg" data-api-msg aria-live="polite"></span>
+          </div>
+        </form>
+      </details>
+
+      <section class="room-notes" aria-labelledby="notes-{{ patient.ticket_id }}">
+        <h4 id="notes-{{ patient.ticket_id }}">Visit notes <span class="hint">private: never shown to patients or on the board</span></h4>
+        {% if patient.notes.notes %}
+        <ol class="note-list">
+          {% for note in patient.notes.notes %}
+          <li>
+            <p class="note-text">{{ note.text }}</p>
+            <p class="note-meta">{{ note.author }}, <time datetime="{{ note.created_at.isoformat() }}">{{ note.created_at.strftime('%d %b %H:%M') }}</time></p>
+          </li>
+          {% endfor %}
+        </ol>
+        {% else %}
+        <p class="hint">No notes for this visit yet.</p>
+        {% endif %}
+        <form class="note-form" data-api="/api/v1/sites/{{ site.id }}/tickets/{{ patient.ticket_id }}/notes" data-method="POST">
+          <label class="sr-only" for="note-{{ patient.ticket_id }}">Add a note for {{ patient.number }}</label>
+          <textarea id="note-{{ patient.ticket_id }}" name="text" rows="3" maxlength="{{ note_max_length }}" required placeholder="A short note for the next clinician"></textarea>
+          <div class="form-actions">
+            <button type="submit" class="btn room-action">Add note</button>
+            <span class="msg" data-api-msg aria-live="polite"></span>
+          </div>
+        </form>
+        <details class="room-history">
+          <summary>Earlier visits</summary>
+          {% if patient.notes.previous is none %}
+          <p class="hint">{{ patient.notes.previous_withheld }}</p>
+          {% elif patient.notes.previous %}
+          <ol class="note-list">
+            {% for note in patient.notes.previous %}
+            <li>
+              <p class="note-text">{{ note.text }}</p>
+              <p class="note-meta">{{ note.author }}, <time datetime="{{ note.created_at.isoformat() }}">{{ note.created_at.strftime('%d %b %Y') }}</time></p>
+            </li>
+            {% endfor %}
+          </ol>
+          {% else %}
+          <p class="hint">No notes from earlier visits at this clinic.</p>
+          {% endif %}
+        </details>
+      </section>
+    </article>
+    {% else %}
+    <p class="hint room-empty">Nobody is with you in {{ queue.name }}. Call the next patient when you are ready.</p>
+    {% endfor %}
+  </section>
   {% endfor %}
-</ul>
+</div>
 {% else %}
 {{ empty_state("You are not assigned to a room here", body="A clinic manager assigns rooms in the staff settings.") }}
 {% endif %}

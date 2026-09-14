@@ -34,17 +34,20 @@ from src.commons.enums import (
     AuditAction,
     AuditEntityType,
     ScopeShape,
+    TicketSource,
     UserRole,
 )
 from src.core import refresh_token_policy, security
 from src.core.config import Settings, get_settings
 from src.core.rbac_manifest_registry import manifest_scope_shape_map
 from src.core.rbac_manifest_sync import sync_rbac_catalog
-from src.core.site_scope import CROSS_SITE_REASON_HEADER
-from src.database.models import AuditEvent, Base, User, UserRoleAssignment
+from src.core.site_scope import CROSS_SITE_REASON_HEADER, SiteAccess
+from src.database.models import AuditEvent, Base, Queue, User, UserRoleAssignment
 from src.database.schema import sqlite_schema_translate_map
 from src.database.session import get_db
 from src.main import create_app
+from src.modules.queue.sequence import issue_ticket
+from src.modules.staff.assignments import set_room_assignments
 from tests.factories import (
     FACTORY_STAFF_PASSWORD,
     QueueFactory,
@@ -62,6 +65,10 @@ _QUEUE_AT = {
     _SITE_A: "0199b0c0-0000-7000-8000-0000000000a1",
     _SITE_B: "0199b0c0-0000-7000-8000-0000000000b1",
 }
+
+#: One ticket at each clinic, in that queue, for the routes that name a ticket (Issue 53). Filled in
+#: by the fixture, because a ticket's id is allocated when it is issued.
+_TICKET_AT: dict[str, str] = {}
 
 #: The site-scoped surfaces whose routes exist, and how to probe each one.
 #:
@@ -204,6 +211,23 @@ CASES: dict[str, dict[str, object]] = {
         "reader": "a@clinicq.example",
         "paths": lambda site, _row: (f"/api/v1/sites/{site}/tickets/reorders",),
     },
+    "visitnote": {
+        # Private visit notes (Issue 53): read by the nurse on the room the ticket is in. Naming
+        # ``visits.notes`` covers the resource as well as the model; the ``visits`` case covers the
+        # root of the tree with the same probe.
+        "resource": "visits.notes",
+        "reader": "nurse.a@clinicq.example",
+        "paths": lambda site, _row: (
+            f"/api/v1/sites/{site}/tickets/{_TICKET_AT.get(site, _NOWHERE)}/notes",
+        ),
+    },
+    "visits": {
+        "resource": "visits",
+        "reader": "nurse.a@clinicq.example",
+        "paths": lambda site, _row: (
+            f"/api/v1/sites/{site}/tickets/{_TICKET_AT.get(site, _NOWHERE)}/notes",
+        ),
+    },
     "staffinvitation": {
         # Who has been invited to a clinic (Issue 22): the same grant as the staff list, so a
         # receptionist reads it, and another clinic's list is a 404 like everything else.
@@ -224,15 +248,6 @@ PENDING: dict[str, str] = {
         "a consent event records the clinic it was given at for provenance (Issue 21), but no "
         "clinic-facing route reads consent: a patient reads their own through their session. A "
         "route that lists a clinic's consent events must add a case here"
-    ),
-    "visits": (
-        "the clinician's side of a visit (Issue 48) is a resource tree with no route yet: the room "
-        "view's page opens through the dashboard's own site check, and the first API on it is the "
-        "visit notes (Issue 53), which must add a case here"
-    ),
-    "visits.notes": (
-        "private visit notes (Issue 53) gate the room view's link today and have no route yet; the "
-        "notes API that Issue 53 adds must add a case here"
     ),
     "sitequeuesnapshot": (
         "a queue snapshot carries its clinic for the index discovery reads by (Issue 36), but no "
@@ -287,6 +302,7 @@ def clinics(monkeypatch: pytest.MonkeyPatch) -> Iterator[SimpleNamespace]:
             SiteFactory.create(db, id=site_id)
             QueueFactory.create(db, site_id=site_id, id=_QUEUE_AT[site_id])
         for name, role, site in (
+            ("nurse.a", UserRole.NURSE_DOCTOR, _SITE_A),
             ("a", UserRole.RECEPTIONIST, _SITE_A),
             ("b", UserRole.RECEPTIONIST, _SITE_B),
             ("colleague_b", UserRole.NURSE_DOCTOR, _SITE_B),
@@ -297,6 +313,18 @@ def clinics(monkeypatch: pytest.MonkeyPatch) -> Iterator[SimpleNamespace]:
                 db, email=f"{name}@clinicq.example", role=role, site_id=site
             )
             people[name] = user
+        # A ticket in each clinic's queue, and Clinic A's nurse on that queue (Issue 53).
+        for site_id in (_SITE_A, _SITE_B):
+            queue = db.get(Queue, _QUEUE_AT[site_id])
+            _TICKET_AT[site_id] = issue_ticket(
+                db, queue=queue, source=TicketSource.WALK_IN
+            ).id
+        set_room_assignments(
+            db,
+            SiteAccess(site_id=_SITE_A, user=people["manager.a"]),
+            people["nurse.a"].id,
+            [_QUEUE_AT[_SITE_A]],
+        )
         # The operator: every clinic through the tier, assigned to none of them.
         operator = StaffFactory.create(
             db, email="operator@clinicq.example", role=UserRole.PLATFORM_ADMIN
@@ -436,7 +464,11 @@ def test_the_caller_sees_only_their_own_clinics_staff(clinics: SimpleNamespace) 
     listing = clinics.client("a@clinicq.example").get(f"/api/v1/sites/{_SITE_A}/staff")
     assert listing.status_code == status.HTTP_200_OK
     emails = {member["email"] for member in listing.json()["items"]}
-    assert emails == {"a@clinicq.example", "manager.a@clinicq.example"}
+    assert emails == {
+        "a@clinicq.example",
+        "manager.a@clinicq.example",
+        "nurse.a@clinicq.example",
+    }
 
 
 # --- the platform-admin escape hatch ---------------------------------------------------
@@ -543,6 +575,7 @@ def test_a_role_held_at_one_clinic_is_not_held_at_another(
         "a@clinicq.example",
         "manager.a@clinicq.example",
         "manager@clinicq.example",
+        "nurse.a@clinicq.example",
     }
     roles_at_a = next(
         m["roles"] for m in at_a if m["email"] == "manager@clinicq.example"

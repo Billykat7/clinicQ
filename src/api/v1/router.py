@@ -27,6 +27,7 @@ from src.modules.queues.router import router as queues_router
 from src.modules.sites.router import router as sites_router
 from src.modules.staff.router import invitations_router as staff_invitations_router
 from src.modules.staff.router import router as staff_router
+from src.modules.visits.router import router as visits_router
 from src.modules.widgets.router import router as widgets_router
 
 # ── your routers ─────────────────────────────────────────────────────────────
@@ -52,4 +53,5 @@ api_v1_router.include_router(queues_router)
 api_v1_router.include_router(queue_router)
 api_v1_router.include_router(staff_router)
 api_v1_router.include_router(staff_invitations_router)
+api_v1_router.include_router(visits_router)
 api_v1_router.include_router(discovery_router)

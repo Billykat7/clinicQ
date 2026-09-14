@@ -506,3 +506,77 @@
 .queue-with-staff { list-style: none; margin: 0; padding: 0; display: grid; gap: .25rem; font-size: var(--step--1); }
 .queue-with-staff li { display: flex; align-items: center; gap: .45rem; }
 .line-waited { color: var(--muted); font-size: var(--step--2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ── A clinician's room, for a 10-inch tablet (Issue 53) ─────── */
+
+.room-grid { display: grid; gap: 1rem; align-items: start; }
+@media (min-width: 70rem) {
+  .room-grid { grid-template-columns: repeat(auto-fit, minmax(30rem, 1fr)); }
+}
+.room-card { display: grid; gap: .9rem; }
+.room-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: .75rem; }
+.room-head h2 { font-size: var(--step-2); margin: 0; }
+.room-label { margin: .1rem 0 0; color: var(--muted); }
+.room-counts { display: flex; gap: 1.25rem; margin: 0; }
+.room-counts dt { font-size: var(--step--2); color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.room-counts dd { margin: 0; font-size: var(--step-2); font-weight: 700; font-variant-numeric: tabular-nums; }
+/* Touch targets a gloved or hurried finger can hit: at least 3rem tall. */
+.room-call-next { min-height: 3.5rem; font-size: var(--step-1); padding-inline: 2rem; }
+.room-call { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+.room-action { min-height: 3rem; min-width: 7rem; font-size: var(--step-0); }
+.room-patient {
+  display: grid;
+  gap: .75rem;
+  padding: .9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+}
+.room-patient-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .75rem; }
+.room-patient-head h3 { margin: 0; font-size: var(--step-1); }
+.room-number { font-weight: 800; font-variant-numeric: tabular-nums; }
+.room-name { font-weight: 500; }
+.room-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
+.room-transfer summary,
+.room-history summary {
+  min-height: 3rem;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+/* A flex summary loses the browser's disclosure triangle, so the room draws its own. */
+.room-transfer summary::-webkit-details-marker,
+.room-history summary::-webkit-details-marker { display: none; }
+.room-transfer summary::before,
+.room-history summary::before {
+  content: "";
+  width: .5rem;
+  height: .5rem;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+}
+.room-transfer[open] > summary::before,
+.room-history[open] > summary::before { transform: rotate(45deg); }
+.room-transfer-form { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); align-items: end; }
+.room-transfer-form select { min-height: 3rem; }
+.room-notes h4 { margin: 0 0 .4rem; font-size: var(--step-0); }
+.room-notes h4 .hint { font-weight: 400; font-size: var(--step--2); color: var(--muted); margin-left: .35rem; }
+.note-list { list-style: none; margin: 0 0 .6rem; padding: 0; display: grid; gap: .5rem; }
+.note-list li { padding: .55rem .7rem; border-left: 3px solid var(--brand); background: var(--surface); border-radius: 0 var(--radius) var(--radius) 0; }
+.note-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.note-meta { margin: .25rem 0 0; font-size: var(--step--1); color: var(--muted); }
+.note-form textarea {
+  width: 100%;
+  min-height: 5.5rem;
+  font: inherit;
+  font-size: var(--step-0);
+  padding: .6rem .75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+}
+.room-empty { margin: 0; }
