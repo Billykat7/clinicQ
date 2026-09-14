@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Status** | 🚧 In progress · **critical path**: issues 39 (tickets and their numbering), 40 (the one join service), 41 (the lifecycle), 42 (wait ranges), 43 (recall and no-show timers), 44 (cancellation), 45 (transfers) and 46 (priority overrides) delivered |
-| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ **89%** (8/9 issues) |
+| **Status** | ✅ Done: issues 39–47 closed with the merge of #169, release note [`v0.6.0`](../RELEASES/RELEASE_v0_6_0.md), whose tag follows that merge. Every exit criterion is met; pushing a changed position to an open screen waits for the board stream (Issue 57) |
+| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (9/9 issues) |
 | **Sprints** | 6–7 (weeks 11–14), semester 2 |
 | **Release tag** | `v0.6.0` |
 | **Primary owner** | A, Backend Lead |
@@ -102,12 +102,17 @@ flowchart LR
 
 ## Exit criteria
 
-- [ ] 100 concurrent joins on one queue produce 100 unique consecutive numbers, proven by a test
-- [ ] Every illegal transition (e.g. `done → called`) is rejected with 409 and never mutates state
-- [ ] A walk-in and a remote join issued in the same second occupy adjacent numbers in one sequence
-- [ ] The estimate is a range derived from the last N completed visits on that queue, not a constant
-- [ ] A called ticket that is not attended auto-recalls once, then becomes `no_show`, and the patient is told why
-- [ ] A priority override cannot be saved without a reason code, and every one is visible in the audit log
+- [x] 100 concurrent joins on one queue produce 100 unique consecutive numbers, proven by a test
+  (`tests/integration/queue/test_sequence_concurrency.py`, on PostgreSQL, with the naive `COUNT(*) + 1`
+  failing the same harness)
+- [x] Every illegal transition (e.g. `done → called`) is rejected with 409 and never mutates state
+  (all 64 pairs in the service and over HTTP; property tests over every queue operation)
+- [x] A walk-in and a remote join issued in the same second occupy adjacent numbers in one sequence
+- [x] The estimate is a range derived from the last N completed visits on that queue, not a constant;
+  with too few visits it falls back to the service's expected time and says *approximate*
+- [x] A called ticket that is not attended auto-recalls once, then becomes `no_show`, and the patient is
+  told why (the message is in the notification ledger; real SMS delivery is M9)
+- [x] A priority override cannot be saved without a reason code, and every one is visible in the audit log
 
 ## Demo at the end of the milestone
 
