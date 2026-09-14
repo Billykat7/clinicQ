@@ -96,7 +96,7 @@ ever empty: that is the whole design goal. Issue numbers in brackets.
 | **4** | 7–8 | M3 · M4 | ✅ done — M3 closed, tag `v0.3.0` to cut |
 | **5** | 9–10 | M4 · M5 | ✅ done — M4 closed, tag `v0.4.0` to follow; M5 delivered with it |
 | **6** | 11–12 | M5 · M6 | 🚧 in progress — M5 delivered (issues 31–38, tag `v0.5.0` to follow); M6: tickets [39], join [40] and lifecycle [41] delivered; preferences [67] and the front-desk board [49] not started |
-| **7** | 13–14 | M6 ⚠️ | 🚧 in progress — estimates [42] delivered; timers [43], cancel [44], transfer [45], priority [46] and contract [47] not yet |
+| **7** | 13–14 | M6 ⚠️ | 🚧 in progress — estimates [42] and timers [43] delivered; cancel [44], transfer [45], priority [46] and contract [47] not yet |
 | **8** | 15–16 | M7 | 📋 planned |
 | **9** | 17–18 | M7 · M8 · M9 | 📋 planned |
 | **10** | 19–20 | M9 · M10 | 📋 planned |

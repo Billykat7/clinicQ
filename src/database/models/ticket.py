@@ -244,6 +244,10 @@ class Ticket(Base, TimestampMixin):
         DateTime(timezone=True), nullable=True
     )
     """When the patient was first called to a room (Africa/Johannesburg)."""
+    recalled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """When the recall timer (or staff) recalled the patient; the no-show clock starts here (Issue 43)."""
     started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

@@ -12,7 +12,11 @@ jobs in the application timezone. The kernel registers only the sweeps it owns:
 * the **grant-usage flush**, which writes this instance's buffered permission hits; and
 * the **queue snapshot reconciliation** (Issue 36), which recounts every active queue and repairs
   any cached or stored snapshot that has drifted from the count (see
-  :func:`src.modules.queue.snapshot.reconcile_snapshots`).
+  :func:`src.modules.queue.snapshot.reconcile_snapshots`); and
+* the **recall timers** (Issue 43), which recall a called patient who has not arrived, once, and
+  then mark them a no-show (see :func:`src.modules.queue.timers.run_recall_timers`). Open decision 1
+  was settled for this sweep: an APScheduler job under the advisory lock, not an ``arq`` worker,
+  because the deadlines live in the database and this module already gives single-runner sweeps.
 
 Your own sweeps are added the same way: a ``run_*`` function that takes the advisory lock, and one
 ``scheduler.add_job`` call in :func:`start_scheduler`.
@@ -36,6 +40,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import datetime
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -51,6 +56,7 @@ from src.modules.documents import service as documents_service
 from src.modules.documents.storage import LocalObjectStorage
 from src.modules.notifications import service as notifications_service
 from src.modules.queue import snapshot as queue_snapshot
+from src.modules.queue import timers as queue_timers
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +80,11 @@ _PERMISSION_USAGE_LOCK_KEY: int = 176
 # (it overwrites a snapshot with a fresh count), so the lock only saves a second instance the work.
 _QUEUE_SNAPSHOT_LOCK_KEY: int = 336
 
+# Stable 64-bit key for the recall timer sweep (Issue 43). The lock is what makes "never
+# double-fires" hold across instances; the row locks and the lifecycle's expected-status check hold
+# it even without the lock.
+_RECALL_TIMERS_LOCK_KEY: int = 443
+
 # ── job identifiers ──────────────────────────────────────────────────────────
 # So a restart replaces rather than duplicates each job.
 
@@ -81,6 +92,7 @@ _NOTIFICATION_RETRY_JOB_ID = "notification_retry_sweep"
 _DOCUMENT_RETENTION_JOB_ID = "document_retention_sweep"
 _PERMISSION_USAGE_JOB_ID = "permission_usage_flush"
 _QUEUE_SNAPSHOT_JOB_ID = "queue_snapshot_reconciliation"
+_RECALL_TIMERS_JOB_ID = "queue_recall_timers"
 
 # Process-wide scheduler; created by :func:`start_scheduler`, stopped by :func:`shutdown_scheduler`.
 _scheduler: BackgroundScheduler | None = None
@@ -218,6 +230,34 @@ def run_queue_snapshot_reconciliation(settings: Settings | None = None) -> int:
         return queue_snapshot.reconcile_snapshots(db, settings=cfg)
 
 
+def run_recall_timer_sweep(
+    settings: Settings | None = None, *, moment: datetime | None = None
+) -> int:
+    """Run the recall timers once; return how many tickets were recalled or marked no-show.
+
+    Elects a single runner across instances via the advisory lock, then delegates to
+    :func:`src.modules.queue.timers.run_recall_timers`. Nothing is held in memory between runs, so a
+    restarted process picks up every deadline exactly where the last run left it. ``moment`` is for
+    tests and operators replaying a sweep; the scheduler passes nothing (now). Safe to call directly.
+    """
+    cfg = settings or get_settings()
+    with (
+        get_db_context() as db,
+        _advisory_lock(db, _RECALL_TIMERS_LOCK_KEY) as acquired,
+    ):
+        if not acquired:
+            logger.debug("Recall timer sweep skipped: another instance holds the lock.")
+            return 0
+        swept = queue_timers.run_recall_timers(db, moment=moment, settings=cfg)
+        if swept.moved:
+            logger.info(
+                "Recall timers: %d recalled, %d marked no-show.",
+                len(swept.recalled),
+                len(swept.no_shows),
+            )
+        return swept.moved
+
+
 def start_scheduler(settings: Settings | None = None) -> BackgroundScheduler | None:
     """Start the process-wide scheduler and register every enabled job.
 
@@ -283,6 +323,19 @@ def start_scheduler(settings: Settings | None = None) -> BackgroundScheduler | N
         # A missed run is coalesced: the sweep recounts from the source, so one catch-up repairs
         # whatever several missed runs would have.
         misfire_grace_time=cfg.queue_snapshot_reconcile_seconds,
+        coalesce=True,
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        run_recall_timer_sweep,
+        trigger=IntervalTrigger(
+            seconds=cfg.queue_recall_sweep_seconds, timezone=APP_TIMEZONE
+        ),
+        id=_RECALL_TIMERS_JOB_ID,
+        name="Recall timers",
+        # A missed run is coalesced: the deadlines are in the database, so one late run recalls
+        # everything several missed runs would have, and nothing twice.
+        misfire_grace_time=cfg.queue_recall_sweep_seconds,
         coalesce=True,
         replace_existing=True,
     )

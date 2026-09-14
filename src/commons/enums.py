@@ -1172,6 +1172,10 @@ class NotificationTemplate(StrEnum):
     # In-app messaging (M11 / Issue #68) — a new message on a thread notifies its other
     # participants; its own key keeps that delivery status queryable apart from other mail.
     NEW_MESSAGE = "new_message"
+    # The queue (M6 / Issue 43): a called patient who did not arrive is told they were called once
+    # more, and then that the ticket was marked missed and how to join again.
+    TICKET_RECALLED = "ticket_recalled"
+    TICKET_NO_SHOW = "ticket_no_show"
     # Catch-all for a pre-rendered message with no dedicated key (kept small on purpose).
     GENERIC = "generic"
 
@@ -1268,6 +1272,12 @@ NOTIFICATION_TEMPLATE_CATEGORY: dict[NotificationTemplate, NotificationCategory]
     NotificationTemplate.MAINTENANCE_MANAGER_DIGEST: NotificationCategory.MAINTENANCE,
     # In-app messaging (Issue #68)
     NotificationTemplate.NEW_MESSAGE: NotificationCategory.MESSAGES,
+    # The queue (Issue 43). A patient's own place in a queue, which they asked for by joining: the
+    # essential category, so it is delivered on the channel they joined by. It is still gated by
+    # the patient's notification consent first (Issue 21). Issue 67 gives patients their own
+    # preferences and may give queue messages a category of their own.
+    NotificationTemplate.TICKET_RECALLED: NotificationCategory.ACCOUNT,
+    NotificationTemplate.TICKET_NO_SHOW: NotificationCategory.ACCOUNT,
 }
 
 
@@ -1302,6 +1312,9 @@ NOTIFICATION_URGENT_TEMPLATES: frozenset[NotificationTemplate] = frozenset(
         NotificationTemplate.EMAIL_CHANGE_VERIFICATION,
         NotificationTemplate.OTP_SIGN_IN,
         NotificationTemplate.STAFF_INVITATION,
+        # A recall is useless an hour late: quiet hours never hold one back (Issue 43).
+        NotificationTemplate.TICKET_RECALLED,
+        NotificationTemplate.TICKET_NO_SHOW,
     }
 )
 

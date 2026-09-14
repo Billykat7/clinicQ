@@ -32,6 +32,9 @@ from src.database.models.mixins import ActiveMixin, SoftDeleteMixin, TimestampMi
 #: The widest a queue's expected service time may sensibly be. Above this somebody has typed hours
 #: into a minutes field, and the estimator would report a wait measured in days.
 MAX_EXPECTED_SERVICE_MINUTES = 240
+#: The range a recall timeout may be set in, in minutes (Issue 43). Under a minute nobody reaches a
+#: room; over an hour the room has stood empty for the whole of it.
+RECALL_TIMEOUT_RANGE = (1, 60)
 #: The most tickets one queue may be configured to issue in a service day. A ceiling rather than a
 #: target: it exists so a mistyped capacity cannot silently cap a clinic at three patients.
 MAX_DAILY_CAPACITY = 2000
@@ -78,6 +81,9 @@ class Queue(Base, TimestampMixin, ActiveMixin, SoftDeleteMixin):
     """The estimator's prior until real samples exist (Issue 42)."""
     max_daily_capacity: Mapped[int | None] = mapped_column(Integer, nullable=True)
     """``None`` means no cap. A number is the most tickets this queue issues in a service day."""
+    recall_timeout_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    """Minutes a called patient has to arrive before a recall, then a no-show (Issue 43). ``None``
+    uses the clinic's, then the platform default."""
     allows_remote_join: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true"
     )

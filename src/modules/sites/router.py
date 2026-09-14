@@ -39,6 +39,7 @@ from src.commons.enums import (
 from src.commons.time import business_date, now_sast
 from src.core.audit import record_audit_event
 from src.core.client_ip import resolve_client_ip
+from src.core.config import Settings, get_settings
 from src.core.request_logging import bind_request_context
 from src.core.security import CurrentStaff
 from src.core.site_scope import (
@@ -49,6 +50,7 @@ from src.core.site_scope import (
 )
 from src.database.models.site import Site
 from src.modules.discovery import analytics as discovery_analytics
+from src.modules.queue.timers import timeout_minutes
 from src.modules.sites import (
     catalogue,
     hours_service,
@@ -84,6 +86,8 @@ from src.modules.sites.schemas import (
     OpenStateOut,
     PaymentProfileIn,
     PaymentProfileOut,
+    RecallSettingsIn,
+    RecallSettingsOut,
     SchemeOptionOut,
     SiteIn,
     SiteListOut,
@@ -142,6 +146,8 @@ SiteDisplayUpdate = Annotated[
 
 #: Operational settings (``sites.settings``) and the clinic's reports (``sites.reports``) are the
 #: clinic manager's: a receptionist neither sees nor changes them (Issue 38).
+#: The application's settings, for defaults a clinic's own setting falls back to.
+SettingsDep = Annotated[Settings, Depends(get_settings)]
 SiteSettingsRead = Annotated[
     SiteAccess, Depends(require_site_access("sites.settings", "read"))
 ]
@@ -1118,6 +1124,70 @@ def confirm_payment_profile(
 # --------------------------------------------------------------------------------------
 # Discovery analytics (Issue 38): the opt-out and the view-to-join report
 # --------------------------------------------------------------------------------------
+
+
+#: Said beside the recall timeout, wherever a manager sets it (Issue 43).
+RECALL_EXPLANATION = (
+    "A called patient who has not arrived within this many minutes is called once more and sent a "
+    "message; if they have still not arrived after the same time again, the ticket is marked missed "
+    "and the room moves on. A queue can set its own time."
+)
+
+
+def _recall_out(site: Site, settings: Settings) -> RecallSettingsOut:
+    return RecallSettingsOut(
+        site_id=site.id,
+        recall_timeout_minutes=site.recall_timeout_minutes,
+        effective_minutes=timeout_minutes(
+            None, site.recall_timeout_minutes, settings.queue_recall_timeout_minutes
+        ),
+        explanation=RECALL_EXPLANATION,
+    )
+
+
+@router.get(
+    "/{site_id}/settings/recall",
+    response_model=RecallSettingsOut,
+    operation_id="sitesGetRecallSettings",
+    summary="How long a called patient has to arrive before a recall, then a no-show",
+)
+def get_recall_settings(
+    access: SiteSettingsRead, db: DbSession, settings: SettingsDep
+) -> RecallSettingsOut:
+    """The clinic's recall timeout and the one that applies."""
+    return _recall_out(_site_or_404(db, access), settings)
+
+
+@router.put(
+    "/{site_id}/settings/recall",
+    response_model=RecallSettingsOut,
+    operation_id="sitesSetRecallSettings",
+    summary="Set how long a called patient has to arrive at this clinic",
+)
+def set_recall_settings(
+    payload: RecallSettingsIn,
+    request: Request,
+    access: SiteSettingsUpdate,
+    db: DbSession,
+    settings: SettingsDep,
+) -> RecallSettingsOut:
+    """Set the clinic's timeout, or clear it to use the platform default. Audited when it changes."""
+    site = _site_or_404(db, access)
+    if site.recall_timeout_minutes != payload.recall_timeout_minutes:
+        site.recall_timeout_minutes = payload.recall_timeout_minutes
+        _audit(
+            db,
+            request,
+            access.user.email,
+            str(access.user.id),
+            AuditAction.UPDATE,
+            site.id,
+            f"recall timeout set to {payload.recall_timeout_minutes or 'the default'} "
+            f"for {site.slug}",
+        )
+    db.commit()
+    db.refresh(site)
+    return _recall_out(site, settings)
 
 
 def _analytics_out(site: Site) -> AnalyticsSettingsOut:

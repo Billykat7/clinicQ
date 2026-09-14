@@ -795,6 +795,52 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
+  # ── Recall timers (Issue 43) ─────────────────────────────────────────────────────────────
+  /sites/{site_id}/settings/recall:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    get:
+      tags: [sites]
+      operationId: sitesGetRecallSettings
+      summary: How long a called patient has to arrive before a recall, then a no-show
+      description: |
+        `sites.settings:read`. The clinic's own timeout (`null` when it uses the platform default),
+        the one that actually applies to a queue here that sets none, and what it does.
+      responses:
+        "200":
+          description: The timeout.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecallSettingsOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    put:
+      tags: [sites]
+      operationId: sitesSetRecallSettings
+      summary: Set how long a called patient has to arrive at this clinic
+      description: |
+        `sites.settings:update`. 1 to 60 minutes, or `null` for the platform default
+        (`QUEUE_RECALL_TIMEOUT_MINUTES`, 5). A queue's own `recall_timeout_minutes` wins over this.
+        A change is written to the clinic's audit trail.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecallSettingsIn" }
+            example: { recall_timeout_minutes: 8 }
+      responses:
+        "200":
+          description: The timeout, as saved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecallSettingsOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
   /sites/{site_id}/reports/discovery-conversion:
     parameters:
       - $ref: "#/components/parameters/SiteId"
@@ -1788,6 +1834,25 @@ components:
         reason_retention_days: { type: integer }
         reason_retention_ceiling_days: { type: integer, description: The platform ceiling a clinic cannot raise. }
         warning_lines: { type: array, items: { type: string }, description: What these settings put on the screen, in plain language. }
+    RecallSettingsIn:
+      type: object
+      additionalProperties: false
+      properties:
+        recall_timeout_minutes: { type: [integer, "null"], minimum: 1, maximum: 60 }
+      example: { recall_timeout_minutes: 8 }
+    RecallSettingsOut:
+      type: object
+      required: [site_id, recall_timeout_minutes, effective_minutes, explanation]
+      properties:
+        site_id: { type: string }
+        recall_timeout_minutes: { type: [integer, "null"], description: "The clinic's own; `null` uses the platform default." }
+        effective_minutes: { type: integer, minimum: 1, description: "What applies to a queue here that sets none." }
+        explanation: { type: string }
+      example:
+        site_id: "0199b0c0-0000-7000-8000-00000000a001"
+        recall_timeout_minutes: null
+        effective_minutes: 5
+        explanation: "A called patient who has not arrived within this many minutes is called once more and sent a message; if they have still not arrived after the same time again, the ticket is marked missed and the room moves on. A queue can set its own time."
     AnalyticsSettingsIn:
       type: object
       required: [analytics_enabled]
@@ -1921,6 +1986,7 @@ components:
         display_order: { type: integer, minimum: 0, maximum: 999, default: 0 }
         expected_service_minutes: { type: integer, minimum: 1, maximum: 240, default: 10 }
         max_daily_capacity: { type: [integer, "null"], minimum: 1, maximum: 2000 }
+        recall_timeout_minutes: { type: [integer, "null"], minimum: 1, maximum: 60, description: "Minutes to arrive before a recall, then a no-show (Issue 43). `null` uses the clinic's, then the platform default." }
         allows_remote_join: { type: boolean, default: true, description: "`false` is walk-ins only, enforced on the server." }
         is_active: { type: boolean, default: true }
       example:
@@ -1933,7 +1999,7 @@ components:
         expected_service_minutes: 5
     QueueOut:
       type: object
-      required: [id, site_id, name, slug, kind, room_label, ticket_prefix, display_order, expected_service_minutes, max_daily_capacity, allows_remote_join, is_active, created_at, modified_at]
+      required: [id, site_id, name, slug, kind, room_label, ticket_prefix, display_order, expected_service_minutes, max_daily_capacity, recall_timeout_minutes, allows_remote_join, is_active, created_at, modified_at]
       properties:
         id: { type: string, format: uuid }
         site_id: { type: string, format: uuid }
@@ -1945,6 +2011,7 @@ components:
         display_order: { type: integer }
         expected_service_minutes: { type: integer }
         max_daily_capacity: { type: [integer, "null"] }
+        recall_timeout_minutes: { type: [integer, "null"] }
         allows_remote_join: { type: boolean }
         is_active: { type: boolean }
         created_at: { type: string, format: date-time }
