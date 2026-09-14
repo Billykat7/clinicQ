@@ -306,6 +306,26 @@
   color: var(--kb-alert);
 }
 .kiosk-connection::before { content: "⟳ " / ""; }
+/* The board is not up to date (Issue 62): in the alert colour with a border and a shape, so it reads as a
+   warning in every theme and in greyscale. It takes the notice's place, so the layout does not move. */
+.kiosk-stale {
+  min-width: 0;
+  /* No taller than the footer's own height (5.5u), so showing it never moves the panels. */
+  padding: calc(var(--u) * .3) calc(var(--u) * 1.6);
+  line-height: 1.15;
+  border: calc(var(--u) * .3) solid var(--kb-alert);
+  border-radius: calc(var(--u) * 1.2);
+  font-size: calc(var(--u) * 3.4);
+  font-weight: 700;
+  color: var(--kb-alert);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kiosk-stale::before { content: "⚠ " / ""; }
+/* Too old to show (four hours): the numbers are hidden and only the banner remains. */
+.kiosk[data-stale="expired"] .kiosk-grid,
+.kiosk[data-stale="expired"] .kiosk-empty { visibility: hidden; }
 .kiosk-pages { flex: none; margin-left: auto; font-size: calc(var(--u) * 3.4); font-weight: 600; color: var(--kb-muted); font-variant-numeric: tabular-nums; }
 
 .kiosk-empty {

@@ -88,7 +88,7 @@ gantt
     M5 Discovery             :done,   m5, 4, 2
     M6 QUEUE ENGINE          :crit, done, m6, 5, 2
     M7 Dashboard             :crit, done, m7, 7, 2
-    M8 Display board         :crit,   m8, 8, 2
+    M8 Display board         :crit, done, m8, 8, 2
     M9 Notifications & PWA   :        m9, 8, 2
     M10 USSD & WhatsApp      :        m10, 9, 2
     M11 Appointments         :        m11, 10, 2

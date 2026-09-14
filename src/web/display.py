@@ -26,12 +26,15 @@ seen it.
 
 **The box's own routes:** ``GET /display`` (the start page: its board if paired, a pairing code if not),
 ``GET /display/pairing`` (the code page asks whether it has been paired yet) and ``POST /display/heartbeat``
-(the board page reports every minute; a revoked box is told to go back to the start page).
+(the board page reports every minute; a revoked box is told to go back to the start page), and
+``GET /display/board-sw.js``, the service worker that lets a paired box show its last board, and say how
+old it is, when it starts with no network (Issue 62).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Annotated, Any, Final
 
 from fastapi import APIRouter, Depends, Request, status
@@ -90,6 +93,17 @@ DEVICE_COOKIE_MAX_AGE: Final = 400 * 24 * 3600
 PAIRING_POLL_SECONDS: Final = 3
 #: How often a paired box's board page reports in.
 DEVICE_HEARTBEAT_SECONDS: Final = 60
+#: The kiosk board's service worker (Issue 62) and the mark its version is written over.
+BOARD_WORKER_FILE: Final = (
+    Path(__file__).resolve().parents[1] / "static" / "board-sw.js"
+)
+BOARD_WORKER_VERSION_MARK: Final = "__CLINICQ_BOARD_VERSION__"
+#: A board that goes this long without news from the clinic says so, with the time it last had any. Longer
+#: than a poll's interval, so a board kept current by polling does not flicker between the two.
+STALE_AFTER_SECONDS: Final = 20
+#: A last-known board older than this is no longer shown when the box is offline: after four hours the
+#: numbers mislead more than they help, and a name the screen showed should not stay on it all day.
+STALE_LIMIT_SECONDS: Final = 4 * 3600
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,6 +227,24 @@ def start_page(request: Request, db: DbSession) -> Response:
     return response
 
 
+@router.get("/board-sw.js", include_in_schema=False)
+def board_service_worker() -> Response:
+    """The kiosk board's service worker (Issue 62), served from here so it may look after ``/display`` and below.
+
+    It is ``src/static/board-sw.js`` with the release's version written in, so every release installs a
+    new worker, which fetches the new page and assets and drops the old ones. Never cached by the browser's
+    HTTP cache: a worker checks for its own update on every navigation.
+    """
+    body = BOARD_WORKER_FILE.read_text(encoding="utf-8").replace(
+        BOARD_WORKER_VERSION_MARK, get_settings().version
+    )
+    return Response(
+        body,
+        media_type="text/javascript",
+        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": START_PATH},
+    )
+
+
 @router.get("/pairing")
 def pairing_state(request: Request, db: DbSession) -> Response:
     """Whether the box asking has been paired: ``paired`` with its board's address, ``waiting``, or ``expired``."""
@@ -327,6 +359,12 @@ def board_page(site_id: str, request: Request, db: DbSession) -> Response:
             if audience.viewer is BoardViewer.DEVICE
             else "",
             "device_heartbeat_seconds": DEVICE_HEARTBEAT_SECONDS,
+            # Only a paired box keeps its board for offline use (Issue 62); a staff preview keeps nothing.
+            "offline_worker_url": request.url_for("board_service_worker").path
+            if audience.viewer is BoardViewer.DEVICE
+            else "",
+            "stale_after_seconds": STALE_AFTER_SECONDS,
+            "stale_limit_seconds": STALE_LIMIT_SECONDS,
             "start_url": START_PATH,
             "app_version": get_settings().version,
             "announce_call": phrase.call,

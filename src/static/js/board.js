@@ -20,6 +20,9 @@
  *   - Health notices. One at a time, changed every data-message-seconds with a short fade (no fade
  *     under reduced motion; board.css).
  *
+ * Every board drawn is announced as a `board:applied` event, whose detail says whether it was an old one;
+ * board-offline.js keeps the new ones (Issue 62).
+ *
  * Built to run for days on a small box: the panels are kept and updated rather than rebuilt, no
  * listener is added after start-up, and the only timers are a one-second tick and the notice change.
  *
@@ -61,13 +64,16 @@
   var pageShownAt = Date.now();
   var panels = {}; // queue id -> its panel element, kept across updates
   var announced = {}; // "number@called_at" -> true, so each call is said once
+  var quiet = false; // drawing an old board: its calls are marked as said, and not said
+  var oldBoard = false; // the board on screen is an old one, kept from before (Issue 62)
 
   function serverNow() {
     return Date.now() + clockOffset;
   }
 
   function calledRecently(ticket) {
-    if (!ticket.called_at || ticket.status === STATUS_IN_PROGRESS) return false;
+    // An old board (Issue 62) says nothing is happening now: none of its calls is "Called now".
+    if (oldBoard || !ticket.called_at || ticket.status === STATUS_IN_PROGRESS) return false;
     var age = serverNow() - Date.parse(ticket.called_at);
     return age >= -5000 && age < HIGHLIGHT_MS;
   }
@@ -186,6 +192,8 @@
         var key = ticket.number + '@' + ticket.called_at;
         if (calledRecently(ticket) && !announced[key]) {
           announced[key] = true;
+          // An old board's calls were said when they happened; they are not said again (Issue 62).
+          if (quiet) return;
           // A call is its number and where to go: nothing else about the ticket leaves this function.
           var call = { number: ticket.number, room: queue.room || queue.label };
           if (announcer) text(announcer, fill(announcer.getAttribute('data-template'), call));
@@ -238,16 +246,24 @@
     announce();
   }
 
-  function apply(payload) {
+  /* Draw a board. options.stale marks one that is old (kept from before, Issue 62): its time is not
+     taken as the clinic's clock, none of its calls is highlighted as "Called now", and none is announced
+     again. The next board from the clinic ends that. */
+  function apply(payload, options) {
     if (!payload || !Array.isArray(payload.queues)) return;
+    var stale = !!(options && options.stale);
     state = payload;
     // The clinic's theme (Issue 59) follows a settings change at once, with no reload.
     if (payload.theme && root.getAttribute('data-board-theme') !== payload.theme) {
       root.setAttribute('data-board-theme', payload.theme);
     }
     var asOf = Date.parse(payload.as_of);
-    if (isFinite(asOf)) clockOffset = asOf - Date.now();
+    if (isFinite(asOf) && !stale) clockOffset = asOf - Date.now();
+    oldBoard = stale;
+    quiet = stale;
     render();
+    quiet = false;
+    document.dispatchEvent(new CustomEvent('board:applied', { detail: { stale: stale } }));
   }
 
   function tick() {
@@ -283,7 +299,8 @@
   }
 
   try {
-    apply(JSON.parse(root.getAttribute('data-initial') || 'null'));
+    // A page the service worker kept (data-from-cache, Issue 62) carries an old board.
+    apply(JSON.parse(root.getAttribute('data-initial') || 'null'), { stale: root.hasAttribute('data-from-cache') });
   } catch (error) {
     // A page without a usable payload draws the first board the stream or /state brings.
   }

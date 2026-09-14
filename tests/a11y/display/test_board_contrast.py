@@ -45,7 +45,7 @@ PAIRS: Final[tuple[tuple[str, str, str, float], ...]] = (
     ),
     ("a new call's number, status and reason", "new-ink", "new-bg", TEXT_MINIMUM),
     ("health notice, page count, empty board", "muted", "bg", TEXT_MINIMUM),
-    ("reconnecting line", "alert", "bg", TEXT_MINIMUM),
+    ("reconnecting line and stale banner", "alert", "bg", TEXT_MINIMUM),
     ("new-call highlight against its panel", "new-bg", "panel", NON_TEXT_MINIMUM),
 )
 
