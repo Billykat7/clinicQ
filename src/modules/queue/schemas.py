@@ -15,11 +15,13 @@ from pydantic import BaseModel, Field, field_validator
 from src.commons.enums import (
     CancellationReason,
     EstimateConfidence,
+    PriorityReason,
     TicketSource,
     TicketStatus,
     TransferReason,
 )
 from src.commons.time import stored_sast
+from src.database.models.queue_reorder import MAX_REORDER_NOTE_LENGTH, QueueReorder
 from src.database.models.ticket import MAX_REASON_LENGTH, Ticket
 from src.modules.queue.estimate import WaitEstimate
 from src.modules.queue.sequence import format_reference_code
@@ -156,6 +158,81 @@ class MyTicketOut(TicketOut):
     """Waiting tickets ahead in call order; ``None`` once the ticket is no longer waiting."""
     wait: WaitOut | None = None
     """The expected wait from now; ``None`` once the ticket is no longer waiting."""
+
+
+class PriorityIn(BaseModel):
+    """A priority override: ahead of which waiting ticket, why (required) and an optional note."""
+
+    ahead_of_ticket_id: str
+    reason: PriorityReason
+    """Required. The server also refuses an override without one."""
+    note: str | None = Field(default=None, max_length=MAX_REORDER_NOTE_LENGTH)
+
+    _trim = field_validator("note")(_blank_to_none)
+
+
+class ReorderOut(BaseModel):
+    """One override on the trail: which ticket, who, why, and the place before and after."""
+
+    id: str
+    ticket_id: str
+    queue_id: str
+    staff: str
+    reason: PriorityReason
+    note: str | None
+    position_before: int = Field(ge=1)
+    position_after: int = Field(ge=1)
+    created_at: datetime
+
+    @classmethod
+    def of(cls, row: QueueReorder) -> ReorderOut:
+        """The wire form of a ``queue_reorder`` row."""
+        return cls(
+            id=row.id,
+            ticket_id=row.ticket_id,
+            queue_id=row.queue_id,
+            staff=row.staff,
+            reason=PriorityReason(row.reason_code),
+            note=row.note,
+            position_before=row.position_before,
+            position_after=row.position_after,
+            created_at=stored_sast(row.created_at),
+        )
+
+
+class PriorityOut(BaseModel):
+    """The moved ticket, its new place, and the record of the move."""
+
+    ticket: TicketOut
+    reorder: ReorderOut
+    waiting_ahead: int = Field(ge=0)
+
+
+class ReorderTrailOut(BaseModel):
+    """A clinic's priority overrides on a service day, newest first."""
+
+    site_id: str
+    service_day: date
+    total: int = Field(ge=0)
+    items: list[ReorderOut]
+
+
+class StaffOverrideCountOut(BaseModel):
+    """How many overrides one staff member made. Not a score."""
+
+    staff: str
+    overrides: int = Field(ge=0)
+
+
+class OverrideCountsOut(BaseModel):
+    """Override counts per staff member over a period, listed by name, never ranked (Issue 46)."""
+
+    site_id: str
+    start: date
+    end: date
+    items: list[StaffOverrideCountOut]
+    note: str
+    """What the counts are, and what they are not."""
 
 
 class TransferIn(BaseModel):

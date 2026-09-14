@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Status** | 🚧 In progress · **critical path**: issues 39 (tickets and their numbering), 40 (the one join service), 41 (the lifecycle), 42 (wait ranges), 43 (recall and no-show timers), 44 (cancellation) and 45 (transfers) delivered |
-| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩⬜⬜ **78%** (7/9 issues) |
+| **Status** | 🚧 In progress · **critical path**: issues 39 (tickets and their numbering), 40 (the one join service), 41 (the lifecycle), 42 (wait ranges), 43 (recall and no-show timers), 44 (cancellation), 45 (transfers) and 46 (priority overrides) delivered |
+| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ **89%** (8/9 issues) |
 | **Sprints** | 6–7 (weeks 11–14), semester 2 |
 | **Release tag** | `v0.6.0` |
 | **Primary owner** | A, Backend Lead |

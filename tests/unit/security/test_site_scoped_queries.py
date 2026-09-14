@@ -150,6 +150,15 @@ _UNSCOPED_BY_DESIGN: dict[str, str] = {
     "modules/queue/transfer.py::_notify": (
         "reads the new ticket's own patient and clinic by id to word the transfer message (Issue 45)"
     ),
+    "modules/queue/priority.py::_key_ahead_of": (
+        "reads the order key of the waiting ticket just ahead of the named one, **in that ticket's "
+        "own queue and day**; both tickets were scoped by the route (get_in_site_or_404), and it "
+        "returns a number, never a row (Issue 46)"
+    ),
+    "modules/queue/priority.py::override_priority": (
+        "reads the moved ticket's own queue by id to write its snapshot through (Issue 36's hook); "
+        "the ticket was scoped by the route (Issue 46)"
+    ),
     "modules/staff/invitations.py::usable_invitation": (
         "an invitation link is opened by someone who has no account and therefore no clinic to be "
         "scoped by; the id comes from the signed token, and the row's own site_id is what "

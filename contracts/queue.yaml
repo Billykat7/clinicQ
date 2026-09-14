@@ -388,6 +388,107 @@ paths:
         "404": { $ref: "#/components/responses/SiteNotFound" }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
+  # ── Clinical priority (Issue 46) ────────────────────────────────────────────────────────
+  /sites/{site_id}/tickets/{ticket_id}/priority:
+    post:
+      tags: [queue]
+      operationId: queuePriorityOverride
+      summary: Move a waiting patient forward for clinical priority, with a reason
+      description: |
+        Places a waiting patient just ahead of another **waiting** ticket in the same queue. A
+        `reason` is required and is a closed `PriorityReason`: without one the request is a 422 and
+        nothing is saved. Naming a ticket that is already called, recalled or in progress is refused
+        (409, `ticket.priority.ahead_of_called`), because nobody may be moved ahead of a patient being
+        seen. Each override writes a `queue_reorder` row (place before and after, staff, reason) and an
+        audit row. The positions of everyone else are derived, so no other ticket changes. Nothing
+        about priority is ever returned to a patient or shown on the public board. Requires
+        `queues.tickets.priority` `update`.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/SiteId" }
+        - { $ref: "#/components/parameters/TicketId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PriorityIn" }
+            example: { ahead_of_ticket_id: 01a09cf1-9563-7512-aebc-6e2b4b0beb58, reason: visibly_unwell, note: "short of breath" }
+      responses:
+        "200":
+          description: The patient's new place, and the record of the move.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriorityOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/SiteNotFound" }
+        "409":
+          description: |
+            Refused, nothing changed: `ticket.priority.ahead_of_called`, `ticket.priority.not_waiting`,
+            `ticket.priority.not_forward` or `ticket.priority.other_queue`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "A patient cannot be moved ahead of someone who has already been called or is being seen.", code: "ticket.priority.ahead_of_called" }
+        "422":
+          description: No reason code (or one outside the list), or another field failed validation. Nothing is saved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationError" }
+
+  /sites/{site_id}/tickets/reorders:
+    get:
+      tags: [queue]
+      operationId: queueReorderTrail
+      summary: The clinic's priority overrides today
+      description: Every override made today at this clinic, newest first. The clinic manager's dashboard trail (Issue 52). Requires `queues.tickets.priority` `read`.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/SiteId" }
+      responses:
+        "200":
+          description: Today's overrides.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReorderTrailOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/SiteNotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/tickets/reorders/counts:
+    get:
+      tags: [queue]
+      operationId: queueOverrideCounts
+      summary: How often each staff member used a priority override (not a ranking)
+      description: |
+        Counts per staff member over a period (the last 30 days by default), **listed by name, never
+        by count**, with a note saying the counts describe use of a clinical tool and are not a
+        measure of anybody's performance. Requires `sites.reports` `read` (the clinic manager).
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/SiteId" }
+        - { name: start, in: query, required: false, schema: { type: [string, "null"], format: date } }
+        - { name: end, in: query, required: false, schema: { type: [string, "null"], format: date } }
+      responses:
+        "200":
+          description: The counts.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OverrideCountsOut" }
+              example:
+                site_id: 01a09c0b-ce1c-743e-b8ff-544bb4ac8774
+                start: "2026-08-16"
+                end: "2026-09-14"
+                items:
+                  - { staff: "desk.a@clinicq.example", overrides: 1 }
+                  - { staff: "manager.a@clinicq.example", overrides: 2 }
+                note: "How often each staff member used a priority override. Overrides are clinical judgements, and these counts are not a measure of anybody's performance; they are listed by name, not by count."
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/SiteNotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
   # ── Transfers and visits (Issue 45) ─────────────────────────────────────────────────────
   /sites/{site_id}/tickets/{ticket_id}/transfer:
     post:
@@ -870,6 +971,74 @@ components:
         waiting_ahead: { type: integer, minimum: 0, description: "Waiting tickets ahead of this one now." }
         wait: { $ref: "#/components/schemas/WaitOut" }
         message: { type: string, description: "A sentence for the patient." }
+    PriorityReason:
+      type: string
+      description: Why a patient was moved forward. Required for every override; never free text.
+      enum: [visibly_unwell, elderly, infant, pregnancy, staff_referral, other]
+      example: visibly_unwell
+    PriorityIn:
+      type: object
+      required: [ahead_of_ticket_id, reason]
+      properties:
+        ahead_of_ticket_id: { type: string, description: "A waiting ticket in the same queue." }
+        reason: { $ref: "#/components/schemas/PriorityReason" }
+        note: { type: [string, "null"], maxLength: 140, description: "A few optional words beside the reason. Redacted in the audit trail." }
+      example: { ahead_of_ticket_id: 01a09cf1-9563-7512-aebc-6e2b4b0beb58, reason: elderly, note: null }
+    ReorderOut:
+      type: object
+      required: [id, ticket_id, queue_id, staff, reason, note, position_before, position_after, created_at]
+      properties:
+        id: { type: string }
+        ticket_id: { type: string }
+        queue_id: { type: string }
+        staff: { type: string }
+        reason: { $ref: "#/components/schemas/PriorityReason" }
+        note: { type: [string, "null"] }
+        position_before: { type: integer, minimum: 1 }
+        position_after: { type: integer, minimum: 1 }
+        created_at: { type: string, format: date-time }
+      example:
+        id: 01a09cf1-0000-7000-8000-00000000r001
+        ticket_id: 01a09cf1-951b-7278-a2be-5fe7590abe56
+        queue_id: 01a09c0b-ce5e-7037-8071-cd12f438bd3d
+        staff: "desk.a@clinicq.example"
+        reason: visibly_unwell
+        note: "short of breath"
+        position_before: 7
+        position_after: 2
+        created_at: "2026-09-14T08:02:11+02:00"
+    PriorityOut:
+      type: object
+      required: [ticket, reorder, waiting_ahead]
+      properties:
+        ticket: { $ref: "#/components/schemas/TicketOut" }
+        reorder: { $ref: "#/components/schemas/ReorderOut" }
+        waiting_ahead: { type: integer, minimum: 0 }
+    ReorderTrailOut:
+      type: object
+      required: [site_id, service_day, total, items]
+      properties:
+        site_id: { type: string }
+        service_day: { type: string, format: date }
+        total: { type: integer, minimum: 0 }
+        items: { type: array, items: { $ref: "#/components/schemas/ReorderOut" } }
+    OverrideCountsOut:
+      type: object
+      required: [site_id, start, end, items, note]
+      properties:
+        site_id: { type: string }
+        start: { type: string, format: date }
+        end: { type: string, format: date }
+        items:
+          type: array
+          description: Listed by staff name, never by count.
+          items:
+            type: object
+            required: [staff, overrides]
+            properties:
+              staff: { type: string }
+              overrides: { type: integer, minimum: 0 }
+        note: { type: string }
     TransferReason:
       type: string
       description: Why staff moved a patient on. Required; never free text.

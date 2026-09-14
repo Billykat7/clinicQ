@@ -197,6 +197,13 @@ CASES: dict[str, dict[str, object]] = {
         "reader": "a@clinicq.example",
         "paths": lambda site, _row: (f"/api/v1/sites/{site}/visits",),
     },
+    "queuereorder": {
+        # Priority overrides (Issue 46): the clinic's trail. Naming ``queues.tickets.priority`` as
+        # the resource covers the override grant as well as the model.
+        "resource": "queues.tickets.priority",
+        "reader": "a@clinicq.example",
+        "paths": lambda site, _row: (f"/api/v1/sites/{site}/tickets/reorders",),
+    },
     "staffinvitation": {
         # Who has been invited to a clinic (Issue 22): the same grant as the staff list, so a
         # receptionist reads it, and another clinic's list is a 404 like everything else.
@@ -225,7 +232,6 @@ PENDING: dict[str, str] = {
         "live counts from the tickets themselves. A route that lists a clinic's snapshots must add "
         "a case here"
     ),
-    "queues.tickets.priority": "the priority override lands with Issue 46",
 }
 
 

@@ -640,6 +640,30 @@ class ActorKind(StrEnum):
     SYSTEM = "system"
 
 
+class PriorityReason(StrEnum):
+    """Why staff moved a patient forward in a queue (Issue 46). Required: an override without one
+    is refused by the server. A closed list, never free text.
+
+    The "one fair queue" rule survives contact with a real clinic only if staff can move a visibly
+    unwell patient forward; a reason code is what keeps that a clinical judgement on the record
+    rather than a quiet way round the line.
+
+    - ``VISIBLY_UNWELL``: the patient looks too ill to wait.
+    - ``ELDERLY``: an older patient who should not wait as long.
+    - ``INFANT``: a baby or a small child.
+    - ``PREGNANCY``: a pregnant patient.
+    - ``STAFF_REFERRAL``: a clinician asked for the patient to be seen sooner.
+    - ``OTHER``: none of these; the note says what.
+    """
+
+    VISIBLY_UNWELL = "visibly_unwell"
+    ELDERLY = "elderly"
+    INFANT = "infant"
+    PREGNANCY = "pregnancy"
+    STAFF_REFERRAL = "staff_referral"
+    OTHER = "other"
+
+
 class TransferReason(StrEnum):
     """Why staff moved a patient to another queue (Issue 45). Required, and never free text.
 
@@ -1595,6 +1619,8 @@ AUDIT_REDACTED_FIELDS: frozenset[str] = frozenset(
         "avatar_url",
         "reason_text",
         "note_text",
+        # A priority override's optional note (Issue 46): free text beside a patient's ticket.
+        "note",
         "sign_in_ip",
         "user_agent",
     }
