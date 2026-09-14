@@ -114,8 +114,12 @@ def test_the_table_speaks_for_every_status_and_nothing_leaves_a_terminal_one() -
         assert status is TicketStatus.WAITING or status_path(status)
     # A recall happens exactly once: nothing leads back to called from recalled.
     assert TicketStatus.CALLED not in TRANSITIONS[TicketStatus.RECALLED]
-    # Of 64 pairs, the table allows these 12 and refuses the other 52.
-    assert sum(is_legal(a, b) for a, b in _PAIRS) == 12
+    # Of 64 pairs, the table allows these 13 and refuses the other 51.
+    assert sum(is_legal(a, b) for a, b in _PAIRS) == 13
+    # Back to waiting only from called: an undone call (Issue 50), never from further along.
+    assert [a for a, b in _PAIRS if b is TicketStatus.WAITING and is_legal(a, b)] == [
+        TicketStatus.CALLED
+    ]
 
 
 def test_every_move_is_timestamped(session_factory: sessionmaker[Session]) -> None:

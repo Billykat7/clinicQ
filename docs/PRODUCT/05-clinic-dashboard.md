@@ -83,6 +83,15 @@ sequenceDiagram
     Note over N: If patient doesn't arrive within timeout, dashboard shows a Recall button (see 03)
 ```
 
+On every front-desk card and in every room, **Call next** is the largest button, with the number it will
+call on it. Beside each patient with staff are the buttons the ticket's status allows: **Start**,
+**Recall**, **No-show** (which asks first, because it ends the ticket) and **Done**, with how long the
+patient has been called or in the room, counting as the screen stays open. A press changes the card at
+once; if the clinic refuses it (someone else moved the patient, the nurse was moved to another room),
+the card goes back to how it was and says why. A double tap, or a press repeated on a slow connection,
+calls one patient, never two. A patient called by mistake can be put back **in the same place** with
+**Undo call** for 30 seconds; the audit trail keeps both the call and its undoing.
+
 ## Walk-in intake and reordering
 
 - **Add walk-in**: name/initials (optional phone number for notifications), reason (optional, private

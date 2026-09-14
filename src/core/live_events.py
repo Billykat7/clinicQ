@@ -201,6 +201,7 @@ class SiteEventBroker:
         *,
         is_disconnected: Callable[[], Awaitable[bool]],
         still_allowed: Callable[[], Awaitable[bool]] | None = None,
+        accept: Callable[[LiveEvent], bool] | None = None,
         heartbeat_seconds: float = HEARTBEAT_SECONDS,
     ) -> AsyncIterator[str]:
         """The server-sent events of one clinic, until the client goes or loses its access.
@@ -211,6 +212,8 @@ class SiteEventBroker:
             still_allowed: Asked at every beat: a stream whose caller lost their access (an
                 assignment removed, an account switched off) ends at the next heartbeat rather than
                 running until the browser closes.
+            accept: Asked of every event before it is sent; one it refuses is skipped. A room's
+                stream (Issue 50) takes only its own queues' events.
             heartbeat_seconds: How long a silent stream waits before saying it is alive.
 
         Yields:
@@ -224,11 +227,14 @@ class SiteEventBroker:
             yield format_event(
                 LiveEvent(LiveEventType.HEARTBEAT, site_id), self.next_id()
             )
+            loop = asyncio.get_running_loop()
+            last_sent = loop.time()
             while True:
+                # The beat is due a heartbeat after the last thing *sent*: events a filtered stream
+                # skips must not keep it silent past the client's grace period.
+                wait = max(0.0, heartbeat_seconds - (loop.time() - last_sent))
                 try:
-                    event = await asyncio.wait_for(
-                        subscriber.queue.get(), heartbeat_seconds
-                    )
+                    event = await asyncio.wait_for(subscriber.queue.get(), wait)
                 except TimeoutError:
                     if await is_disconnected() or (
                         still_allowed is not None and not await still_allowed()
@@ -237,6 +243,9 @@ class SiteEventBroker:
                     event = LiveEvent(LiveEventType.HEARTBEAT, site_id)
                 if event is None or subscriber.dropped:
                     return
+                if accept is not None and not accept(event):
+                    continue
+                last_sent = loop.time()
                 yield format_event(event, self.next_id())
         finally:
             self.unsubscribe(site_id, subscriber)

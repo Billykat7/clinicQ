@@ -5,31 +5,29 @@ room view reads only the queues the nurse is assigned to (Issue 28), through an 
 would give them for ``visits.notes``: narrowed to those rooms, so a ticket in another room is never
 read here, let alone shown.
 
-For each room it reads the patients **with the clinician now** (called, called again or being seen),
-each with this visit's notes and, where the patient agreed, notes from earlier visits
+For each room it reads the patients **with the clinician now** (called, called again or being seen)
+from Issue 49's card for that queue, each with its buttons (:mod:`src.web.dashboard.actions`,
+Issue 50), this visit's notes and, where the patient agreed, notes from earlier visits
 (:func:`src.modules.visits.notes.read_notes`). What the buttons do is the API's: *Call next*, *Start*,
-*Done* and *Transfer* are the queue engine's routes (Issues 41 and 45), and *Add note* is the notes route.
+*Done*, *Recall*, *No-show*, *Undo call* and *Transfer* are the queue engine's routes (Issues 41, 45 and
+50), and *Add note* is the notes route.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from src.commons.enums import TicketStatus, TransferReason
-from src.commons.time import business_date, now_sast, stored_sast
+from src.commons.enums import TransferReason
+from src.commons.time import now_sast, stored_sast
 from src.core.site_scope import SiteAccess
-from src.database.models import Ticket, VisitNote
-from src.modules.queue.lifecycle import is_legal
-from src.modules.queue.tickets import CALL_ORDER, site_day_select
+from src.database.models import VisitNote
 from src.modules.queue.transfer import TRANSFER_REASON_LABELS
 from src.modules.queues.service import list_queues
 from src.modules.visits.notes import VisitNotes, read_notes
-from src.web.components import TICKET_STATUS_BADGES, StatusBadge
-from src.web.dashboard.board import WITH_STAFF, BoardCard, read_board
+from src.web.dashboard.board import BoardCard, WithStaffTicket, read_board
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,17 +69,9 @@ def _notes_view(found: VisitNotes) -> RoomNotes:
 
 @dataclass(frozen=True, slots=True)
 class RoomPatient:
-    """A patient with the clinician now, and what the room can do next with them."""
+    """A patient with the clinician now: the card's ticket, with its buttons, and its notes."""
 
-    ticket_id: str
-    number: str
-    name: str | None
-    status: TicketStatus
-    badge: StatusBadge
-    minutes_since_called: int | None
-    #: Whether the lifecycle allows *Start* (to in progress) and *Done* from the ticket's status.
-    can_start: bool
-    can_finish: bool
+    ticket: WithStaffTicket
     notes: RoomNotes
 
 
@@ -117,43 +107,19 @@ def read_room(
     """The clinician's rooms, read through ``access`` (which the caller narrowed to their queues)."""
     now = moment or now_sast()
     board = read_board(db, access, only=access.queue_ids, moment=now)
-    with_staff: Sequence[Ticket] = (
-        db.execute(
-            site_day_select(access, business_date(now), statuses=WITH_STAFF)
-            .order_by(None)
-            .order_by(Ticket.queue_id, *CALL_ORDER)
+    rooms = tuple(
+        Room(
+            card=card,
+            patients=tuple(
+                RoomPatient(
+                    ticket=ticket,
+                    notes=_notes_view(read_notes(db, access, ticket.id, moment=now)),
+                )
+                for ticket in card.with_staff_tickets
+            ),
         )
-        .scalars()
-        .all()
+        for card in board.cards
     )
-    rooms = []
-    for card in board.cards:
-        patients = tuple(
-            RoomPatient(
-                ticket_id=ticket.id,
-                number=ticket.number,
-                name=ticket.walk_in_name,
-                status=ticket.status_enum,
-                badge=TICKET_STATUS_BADGES[ticket.status_enum],
-                minutes_since_called=(
-                    max(
-                        0,
-                        int(
-                            (now - stored_sast(ticket.called_at)).total_seconds() // 60
-                        ),
-                    )
-                    if ticket.called_at
-                    else None
-                ),
-                # Asked of the lifecycle's own table (Issue 41), never decided here.
-                can_start=is_legal(ticket.status_enum, TicketStatus.IN_PROGRESS),
-                can_finish=is_legal(ticket.status_enum, TicketStatus.DONE),
-                notes=_notes_view(read_notes(db, access, ticket.id, moment=now)),
-            )
-            for ticket in with_staff
-            if ticket.queue_id == card.id
-        )
-        rooms.append(Room(card=card, patients=patients))
     # Where a patient may be sent on to: any open queue at the clinic, not only the clinician's own.
     # The page leaves out the patient's current queue; the API refuses it anyway.
     targets = tuple(
@@ -161,7 +127,7 @@ def read_room(
         for queue in list_queues(db, access.whole_site(), include_inactive=False).items
     )
     return RoomView(
-        rooms=tuple(rooms),
+        rooms=rooms,
         transfer_targets=targets,
         transfer_reasons=tuple(
             (reason.value, TRANSFER_REASON_LABELS[reason]) for reason in TransferReason

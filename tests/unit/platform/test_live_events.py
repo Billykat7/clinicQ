@@ -111,6 +111,46 @@ def test_a_silent_stream_sends_a_heartbeat_and_ends_when_the_client_goes() -> No
     assert asyncio.run(scenario()) == ("heartbeat", 0)
 
 
+def test_a_filtered_stream_skips_other_queues_and_still_beats_on_time() -> None:
+    """A room's stream (Issue 50): only its queue's events, and a heartbeat even while others are busy."""
+
+    async def scenario() -> list[tuple[str, dict]]:
+        broker = SiteEventBroker()
+        stream = broker.stream(
+            "site-a",
+            is_disconnected=_never,
+            accept=lambda event: event.queue_id in {None, "mine"},
+            heartbeat_seconds=0.2,
+        )
+        await anext(stream)
+        received: list[tuple[str, dict]] = []
+
+        async def busy_elsewhere() -> None:
+            # Another room's events every 50 ms: skipped, and never enough to hold the beat back.
+            for _ in range(10):
+                broker.publish(
+                    LiveEvent(LiveEventType.QUEUE_UPDATED, "site-a", queue_id="theirs")
+                )
+                await asyncio.sleep(0.05)
+            broker.publish(
+                LiveEvent(LiveEventType.QUEUE_UPDATED, "site-a", queue_id="mine")
+            )
+
+        publisher = asyncio.create_task(busy_elsewhere())
+        while len(received) < 3:
+            received.append(_parse(await asyncio.wait_for(anext(stream), 1)))
+            if received[-1][1].get("queue_id") == "mine":
+                break
+        await publisher
+        await stream.aclose()
+        return received
+
+    received = asyncio.run(scenario())
+    assert all(data.get("queue_id") != "theirs" for _, data in received)
+    assert received[0][0] == "heartbeat"
+    assert received[-1][1]["queue_id"] == "mine"
+
+
 def test_a_stream_whose_caller_lost_access_ends_at_the_next_beat() -> None:
     """An assignment removed mid-shift closes the stream rather than leaving it open all day."""
 

@@ -80,8 +80,9 @@ def test_every_illegal_pair_is_a_409_over_http_and_changes_nothing(
 ) -> None:
     """All 64 pairs through the route: 200 and moved, or 409 with the row read back unchanged.
 
-    ``cancelled`` and ``transferred`` are refused from every status here, legal or not: the cancel
-    and transfer routes make them, with the channel and the next queue's ticket (Issue 47).
+    ``cancelled``, ``transferred`` and ``waiting`` are refused from every status here, legal or not: the
+    cancel and transfer routes make the first two, with the channel and the next queue's ticket
+    (Issue 47), and the undo-call route the third, within its window (Issue 50).
     """
     front = desk.staff("desk.a")
     refused = dedicated = 0
@@ -121,7 +122,7 @@ def test_every_illegal_pair_is_a_409_over_http_and_changes_nothing(
             )
             assert response.json()["code"] == ILLEGAL_TRANSITION_CODE
             assert now == snapshot, (current, requested)
-    assert (refused, dedicated) == (41, 16)
+    assert (refused, dedicated) == (33, 24)
 
 
 def test_each_move_writes_an_audit_row_with_actor_role_and_time(
@@ -190,11 +191,15 @@ def test_a_terminal_ticket_cannot_be_reopened_and_a_correction_is_a_new_ticket(
         drive_ticket_to(db, db.get(Ticket, first["id"]), TicketStatus.DONE)
         db.commit()
 
-    reopen = _move(desk, first["id"], TicketStatus.WAITING)
+    reopen = _move(desk, first["id"], TicketStatus.IN_PROGRESS)
+    # Back to waiting is not a status change at all: only an undone call, within seconds (Issue 50).
+    requeue = _move(desk, first["id"], TicketStatus.WAITING)
     again = patient.post(desk.join_path(desk.triage), json={})
 
     assert reopen.status_code == status.HTTP_409_CONFLICT
     assert reopen.json()["detail"] == "A done ticket cannot change any more."
+    assert requeue.status_code == status.HTTP_409_CONFLICT
+    assert requeue.json()["code"] == DEDICATED_MOVE_CODE
     assert again.status_code == status.HTTP_201_CREATED
     assert again.json()["ticket"]["number"] == "T002"
     with desk.session() as db:

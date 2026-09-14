@@ -1254,6 +1254,15 @@ class Settings(BaseSettings):
     # Recall and no-show timers (Issue 43). A called patient who does not arrive within the timeout
     # is recalled once; still absent after the same timeout again, the ticket becomes a no-show.
     # A queue's own timeout wins over its clinic's, and the clinic's over this default.
+    queue_call_undo_seconds: int = Field(
+        default=30,
+        ge=5,
+        le=120,
+        description=(
+            "Seconds after a call during which staff may undo it and put the patient back in their "
+            "place (env: QUEUE_CALL_UNDO_SECONDS)."
+        ),
+    )
     queue_recall_timeout_minutes: int = Field(
         default=5,
         ge=1,

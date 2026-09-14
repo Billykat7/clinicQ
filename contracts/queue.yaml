@@ -257,13 +257,14 @@ paths:
       summary: Move a ticket to another status
       description: |
         The only way a ticket's status changes (non-negotiable 2). The legal moves are:
-        `waiting → called | cancelled | transferred`; `called → in_progress | recalled | no_show |
-        cancelled`; `recalled → in_progress | no_show | cancelled`; `in_progress → done |
-        transferred`, where `cancelled` and `transferred` are made only by the cancel and transfer
-        routes. `done`, `no_show`, `cancelled` and `transferred` never change again: a
-        correction is a new ticket. Every move is audited with the actor. Concurrent moves on one
-        ticket are serialised; the second is judged against the status the first left. Requires
-        `queues.tickets` `update` at this clinic.
+        `waiting → called | cancelled | transferred`; `called → waiting | in_progress | recalled |
+        no_show | cancelled`; `recalled → in_progress | no_show | cancelled`; `in_progress → done |
+        transferred`, where `cancelled`, `transferred` and `waiting` are made only by the cancel,
+        transfer and undo-call routes. `done`, `no_show`, `cancelled` and `transferred` never
+        change again: a correction is a new ticket. Every move is audited with the actor. Concurrent
+        moves on one ticket are serialised; the second is judged against the status the first left.
+        A repeated `Idempotency-Key` answers with the first request's ticket and moves nothing.
+        Requires `queues.tickets` `update` at this clinic.
       security: [{ sessionCookie: [] }, { bearerAuth: [] }]
       parameters:
         - { $ref: "#/components/parameters/SiteId" }
@@ -273,6 +274,7 @@ paths:
           description: A ticket at this clinic.
           schema: { type: string }
           example: 01a09cf1-951b-7278-a2be-5fe7590abe56
+        - { $ref: "#/components/parameters/IdempotencyKey" }
       requestBody:
         required: true
         content:
@@ -303,10 +305,12 @@ paths:
           description: |
             The move was refused and nothing changed. `code` is `ticket.transition.illegal` when the
             table does not allow it from the ticket's current status, `ticket.transition.stale`
-            when `expected_status` no longer matches because someone else moved the ticket first, or
-            `ticket.transition.dedicated_route` when `to` is `cancelled` or `transferred`: those are
-            made by the cancel and transfer routes, which record the channel and issue the ticket in
-            the next queue.
+            when `expected_status` no longer matches because someone else moved the ticket first,
+            `ticket.transition.dedicated_route` when `to` is `cancelled`, `transferred` or `waiting`:
+            those are made by the cancel, transfer and undo-call routes, which record the channel,
+            issue the ticket in the next queue, or check the undo window, or
+            `ticket.request.key_reused` when the `Idempotency-Key` was already used for another
+            action.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -324,12 +328,15 @@ paths:
       summary: Call the next waiting ticket in a queue
       description: |
         Calls the first waiting ticket today in call order (arrival order, whatever the channel).
-        Two staff pressing it at the same instant call two different tickets. Requires
-        `queues.call` `update`: any queue here for the front desk, their own queues for a nurse.
+        Two staff pressing it at the same instant call two different tickets; one person pressing
+        it twice with the same `Idempotency-Key` (a double tap, a retried request) calls one, and
+        the repeat answers with that ticket. Requires `queues.call` `update`: any queue here for the
+        front desk, their own queues for a nurse.
       security: [{ sessionCookie: [] }, { bearerAuth: [] }]
       parameters:
         - { $ref: "#/components/parameters/SiteId" }
         - { $ref: "#/components/parameters/QueueId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
       responses:
         "200":
           description: The ticket now called.
@@ -351,11 +358,70 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/SiteNotFound" }
         "409":
-          description: Nobody is waiting in this queue today.
+          description: |
+            Nothing was called. `code` is `ticket.call_next.empty` when nobody is waiting in this queue
+            today, or `ticket.request.key_reused` when the `Idempotency-Key` was already used for
+            another action.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
               example: { detail: "Nobody is waiting in this queue.", code: "ticket.call_next.empty" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/tickets/{ticket_id}/undo-call:
+    post:
+      tags: [queue]
+      operationId: queueUndoCall
+      summary: Undo a call made by mistake, within the undo window
+      description: |
+        Puts a patient called by mistake back in the same place in the line (`called → waiting`).
+        Only a `called` ticket, and only within `QUEUE_CALL_UNDO_SECONDS` (30 by default) of the
+        call: after that the patient may be on their way, so staff recall them or mark a no-show
+        instead. The ticket's call time is cleared; the audit trail keeps both the call and its
+        undoing. Requires `queues.call` `update`: any queue here for the front desk, their own queues
+        for a nurse.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/SiteId" }
+        - { $ref: "#/components/parameters/TicketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The ticket, waiting again in its place.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TicketOut" }
+              example:
+                id: 01a09cf1-951b-7278-a2be-5fe7590abe56
+                site_id: 01a09c0b-ce1c-743e-b8ff-544bb4ac8774
+                queue_id: 01a09c0b-ce5e-7037-8071-cd12f438bd3d
+                number: T005
+                reference_code: K7M-4QP
+                source: web
+                status: waiting
+                service_day: "2026-09-14"
+                joined_at: "2026-09-14T07:31:12+02:00"
+                walk_in_name: null
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/SiteNotFound" }
+        "409":
+          description: |
+            Nothing changed. `code` is `ticket.undo.window_closed` when the call is older than the
+            undo window, `ticket.transition.stale` when the ticket is no longer `called` (started,
+            recalled, cancelled), or `ticket.request.key_reused` when the `Idempotency-Key` was
+            already used for another action.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                window_closed:
+                  value:
+                    detail: "T005 was called more than 30 seconds ago, so the call can no longer be undone. Recall them, or mark them a no-show if they do not come."
+                    code: "ticket.undo.window_closed"
+                stale:
+                  value: { detail: "This ticket is now in_progress, not called. Refresh and try again.", code: "ticket.transition.stale" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
 
   /sites/{site_id}/queues/{queue_id}/tickets/next:
     get:
@@ -866,6 +932,17 @@ components:
       description: One of the clinic's queues.
       schema: { type: string }
       example: 01a09c0b-ce5e-7037-8071-cd12f438bd3d
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: |
+        A fresh random value per intended action (a UUID), sent again only when retrying that same
+        action. A repeat from the same person for the same action answers with the first request's
+        ticket and moves nothing, so a double tap or a retried request never acts twice. Keys are kept
+        for a day.
+      schema: { type: string, pattern: "^[A-Za-z0-9_-]{8,64}$" }
+      example: 3f0c9a8e-2b6d-4d4f-9a51-7c1e2f8b6a40
 
   responses:
     Unauthenticated:

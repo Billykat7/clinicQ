@@ -1,4 +1,4 @@
-/* The front desk, live (Issue 49).
+/* The front desk and the room, live (Issues 49 and 50).
  *
  * The board must never look current when it is not. So the line above it always says one of three
  * things, and the board's age is shown whenever the page is not sure it is live:
@@ -21,9 +21,13 @@
  *     heard (another server behind a balancer) costs a minute of freshness, never a wrong board.
  *
  * Updates never take focus from the person using the page. A card is replaced only when nothing in
- * it has focus and its waiting line is not being dragged; open disclosures and scroll positions are
- * carried over; and nothing is swapped while a dialog (the reason prompt) is open. A refresh that
- * could not be applied is applied when focus leaves.
+ * it has focus, its waiting line is not being dragged and no patient button's request is in flight
+ * (dashboard-actions.js); open disclosures, half-written notes and scroll positions are carried over;
+ * and nothing is swapped while a dialog (the reason prompt, a confirmation) is open. A refresh that
+ * could not be applied is applied when focus leaves. Each replaced card is announced with
+ * `board:card-replaced`, so its status line can say again what just happened.
+ *
+ * The room (Issue 50) uses this file unchanged: its connection line names its own stream and cards.
  *
  * Issue 55 adds exponential backoff with jitter, the offline state and queued actions on top of this.
  *
@@ -88,7 +92,7 @@
     var typing = active && card.contains(active) && (
       active.isContentEditable || active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT'
     );
-    return Boolean(typing) || Boolean(card.querySelector('.is-dragging'));
+    return Boolean(typing) || Boolean(card.querySelector('.is-dragging')) || card.hasAttribute('data-action-busy');
   }
 
   /** A selector that finds the focused control again in a replaced card, or null. */
@@ -103,18 +107,48 @@
     if (details && active.tagName === 'SUMMARY') {
       return 'details[data-queue-line="' + details.getAttribute('data-queue-line') + '"] > summary';
     }
+    if (active.hasAttribute('data-action') && window.CSS && CSS.escape) {
+      return 'button[data-action-url="' + CSS.escape(active.getAttribute('data-action-url')) + '"]' +
+        '[data-action="' + CSS.escape(active.getAttribute('data-action')) + '"]' +
+        (active.hasAttribute('data-pending') ? '[data-pending="' + CSS.escape(active.getAttribute('data-pending')) + '"]' : '');
+    }
     return null;
+  }
+
+  /** Tell the rest of the page a card was swapped in (dashboard-actions.js puts its message back). */
+  function announce(card) {
+    document.dispatchEvent(new CustomEvent('board:card-replaced', { detail: { queueId: card.getAttribute('data-queue-id') } }));
   }
 
   function dialogOpen() {
     return Boolean(document.querySelector('dialog[open]'));
   }
 
-  /** Carry what the person has open or scrolled over from the old card to the new one. */
+  /** Whether the person has typed into or chosen in `field` since the card was drawn. */
+  function changedByPerson(field) {
+    if (field.tagName === 'SELECT') {
+      var initial = Array.prototype.find.call(field.options, function (option) { return option.defaultSelected; }) || field.options[0];
+      return Boolean(initial) && field.value !== initial.value;
+    }
+    return field.value !== field.defaultValue;
+  }
+
+  /** Carry what the person has open, typed or scrolled over from the old card to the new one. */
   function carryOver(oldCard, newCard) {
     oldCard.querySelectorAll('details[open][data-queue-line]').forEach(function (details) {
       var match = newCard.querySelector('details[data-queue-line="' + details.getAttribute('data-queue-line') + '"]');
       if (match) match.open = true;
+    });
+    oldCard.querySelectorAll('details[data-keep-open]').forEach(function (details) {
+      var match = newCard.querySelector('details[data-keep-open="' + details.getAttribute('data-keep-open') + '"]');
+      if (match) match.open = details.open;
+    });
+    // A half-written note or a chosen destination is the person's, not the server's: keep it.
+    oldCard.querySelectorAll('textarea[id], select[id], input[id]').forEach(function (field) {
+      if (field.type === 'hidden' || field.type === 'checkbox' || field.type === 'radio') return;
+      if (!changedByPerson(field)) return;
+      var match = newCard.querySelector('#' + (window.CSS && CSS.escape ? CSS.escape(field.id) : field.id));
+      if (match && match.tagName === field.tagName) match.value = field.value;
     });
     var oldList = oldCard.querySelector('.queue-line-list');
     var newList = newCard.querySelector('.queue-line-list');
@@ -135,9 +169,11 @@
       // Queues were added, removed or reordered: replace the whole grid unless someone is mid-task.
       if (Array.prototype.some.call(oldCards, busy)) return false;
       current.replaceWith(fresh);
+      fresh.querySelectorAll('[data-queue-id]').forEach(announce);
       return true;
     }
     var deferred = false;
+    var replaced = [];
     Array.prototype.forEach.call(oldCards, function (oldCard, index) {
       var newCard = newCards[index];
       if (busy(oldCard)) {
@@ -146,7 +182,14 @@
       }
       carryOver(oldCard, newCard);
       var refocus = focusKey(oldCard);
-      oldCard.replaceWith(newCard.cloneNode(true));
+      var placedCard = newCard.cloneNode(true);
+      oldCard.replaceWith(placedCard);
+      // cloneNode copies a field's attribute, not a value set from script: set carried drafts again.
+      newCard.querySelectorAll('textarea[id], select[id], input[id]').forEach(function (field) {
+        var twin = placedCard.querySelector('#' + (window.CSS && CSS.escape ? CSS.escape(field.id) : field.id));
+        if (twin && twin.value !== field.value) twin.value = field.value;
+      });
+      replaced.push(placedCard);
       if (refocus) {
         var target = current.querySelector(refocus);
         if (target) target.focus({ preventScroll: true });
@@ -161,6 +204,7 @@
       current.setAttribute('data-as-of', fresh.getAttribute('data-as-of'));
       current.setAttribute('data-as-of-label', fresh.getAttribute('data-as-of-label'));
     }
+    replaced.forEach(announce);
     return !deferred;
   }
 

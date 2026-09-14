@@ -55,6 +55,7 @@ from src.database.session import get_db_context
 from src.modules.documents import service as documents_service
 from src.modules.documents.storage import LocalObjectStorage
 from src.modules.notifications import service as notifications_service
+from src.modules.queue import request_keys
 from src.modules.queue import snapshot as queue_snapshot
 from src.modules.queue import timers as queue_timers
 from src.modules.visits import notes as visit_notes
@@ -89,6 +90,7 @@ _RECALL_TIMERS_LOCK_KEY: int = 443
 # Stable 64-bit key for the visit note retention sweep (Issue 53). Idempotent across instances (it
 # deletes only what is past its expiry), so the lock only saves a second instance the work.
 _VISIT_NOTE_RETENTION_LOCK_KEY: int = 553
+_QUEUE_REQUEST_KEY_LOCK_KEY: int = 554
 
 # ── job identifiers ──────────────────────────────────────────────────────────
 # So a restart replaces rather than duplicates each job.
@@ -99,6 +101,7 @@ _PERMISSION_USAGE_JOB_ID = "permission_usage_flush"
 _QUEUE_SNAPSHOT_JOB_ID = "queue_snapshot_reconciliation"
 _RECALL_TIMERS_JOB_ID = "queue_recall_timers"
 _VISIT_NOTE_RETENTION_JOB_ID = "visit_note_retention_sweep"
+_QUEUE_REQUEST_KEY_JOB_ID = "queue_request_key_sweep"
 
 # Process-wide scheduler; created by :func:`start_scheduler`, stopped by :func:`shutdown_scheduler`.
 _scheduler: BackgroundScheduler | None = None
@@ -289,6 +292,28 @@ def run_visit_note_retention_sweep(
         return purged
 
 
+def run_queue_request_key_sweep(*, moment: datetime | None = None) -> int:
+    """Delete the queue request keys older than a day once; return how many (Issue 50).
+
+    A key only has to outlive the retries of the action it was sent with, so a day is generous. Elects
+    a single runner across instances via the advisory lock, then delegates to
+    :func:`src.modules.queue.request_keys.purge_request_keys`. Idempotent and safe to call directly.
+    """
+    with (
+        get_db_context() as db,
+        _advisory_lock(db, _QUEUE_REQUEST_KEY_LOCK_KEY) as acquired,
+    ):
+        if not acquired:
+            logger.debug(
+                "Queue request key sweep skipped: another instance holds the lock."
+            )
+            return 0
+        purged = request_keys.purge_request_keys(db, moment=moment)
+        if purged:
+            logger.info("Queue request key sweep deleted %d key(s).", purged)
+        return purged
+
+
 def start_scheduler(settings: Settings | None = None) -> BackgroundScheduler | None:
     """Start the process-wide scheduler and register every enabled job.
 
@@ -379,6 +404,16 @@ def start_scheduler(settings: Settings | None = None) -> BackgroundScheduler | N
         name="Nightly visit note retention sweep",
         # A missed run is coalesced: the sweep deletes whatever is past its expiry, so one late run
         # deletes what several missed runs would have, and nothing that is not due.
+        misfire_grace_time=3600,
+        coalesce=True,
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        run_queue_request_key_sweep,
+        trigger=IntervalTrigger(hours=1, timezone=APP_TIMEZONE),
+        id=_QUEUE_REQUEST_KEY_JOB_ID,
+        name="Queue request key sweep",
+        # Keys older than a day are deleted whenever the job runs, so a late run loses nothing.
         misfire_grace_time=3600,
         coalesce=True,
         replace_existing=True,

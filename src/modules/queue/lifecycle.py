@@ -18,7 +18,7 @@ nobody would notice until a patient was called twice or never. So:
 
 The table::
 
-    waiting ──▶ called ──▶ in_progress ──▶ done
+    waiting ◀─▶ called ──▶ in_progress ──▶ done
        │          │  │            │
        │          │  └─▶ recalled ─┼──▶ in_progress
        │          │        │       └──▶ transferred
@@ -38,11 +38,19 @@ finds ``called → called`` illegal and gets a 409. A caller that knows what it 
 ``expected_status``, so a move decided on a stale screen is refused as :class:`StaleTransitionError`
 (also 409) even when the new move would be legal from the current status.
 
-**Two moves are more than a status change**, and the transitions route refuses them
+**Three moves are more than a status change**, and the transitions route refuses them
 (:func:`staff_move`, :data:`DEDICATED_MOVES`). A ``transferred`` ticket must have its ticket in the
 next queue (Issue 45), and a ``cancelled`` one records the channel it was cancelled through
 (Issue 44), so each is made by its own operation, which calls :func:`transition_ticket` itself. The
-property tests of Issue 47 found both reachable as bare status changes before this rule.
+property tests of Issue 47 found those two reachable as bare status changes before this rule.
+
+The third is **undoing a call** (Issue 50): ``called → waiting``, for the patient called by mistake (the
+wrong queue, a double press on a slow connection). It is only :func:`undo_call`, and only within
+``QUEUE_CALL_UNDO_SECONDS`` of the call, so "waiting" can never be reached as a bare status change and
+a patient who has been in the corridor for minutes is not silently put back. The patient returns to the
+**same place**: the line is ordered by the ticket's own order key and sequence, which a call never
+changes, and the call's time is cleared so the ticket reads exactly as it did before the call. The audit
+trail keeps both steps, the call and its undoing.
 
 The diagram in ``docs/PRODUCT/03-booking-and-queue.md`` is checked against :data:`TRANSITIONS` by
 ``tests/unit/queue/test_ticket_state_machine.py``, so the documentation cannot drift from the code.
@@ -50,7 +58,7 @@ The diagram in ``docs/PRODUCT/03-booking-and-queue.md`` is checked against :data
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import MappingProxyType
 from typing import Final
 
@@ -65,8 +73,9 @@ from src.commons.enums import (
     TicketStatus,
 )
 from src.commons.exceptions import ConflictError, NotFoundError
-from src.commons.time import business_date, now_sast
+from src.commons.time import business_date, now_sast, stored_sast
 from src.core.audit import SYSTEM_ACTOR, record_audit_event
+from src.core.config import get_settings
 from src.database.models.queue import Queue
 from src.database.models.ticket import Ticket, status_write_permitted
 from src.modules.queue.snapshot import on_queue_changed
@@ -92,8 +101,8 @@ TRANSITIONS: Final[Mapping[TicketStatus, frozenset[TicketStatus]]] = MappingProx
         # Waiting in the line: called to a room, withdrawn, or moved to another queue.
         _W: frozenset({_C, _X, _T}),
         # Called: they arrive (in progress), do not (recalled once, or a no-show at once when
-        # staff say so), or the ticket is withdrawn.
-        _C: frozenset({_P, _R, _N, _X}),
+        # staff say so), the ticket is withdrawn, or the call is undone within its window (Issue 50).
+        _C: frozenset({_P, _R, _N, _X, _W}),
         # Recalled once: they arrive after all, are marked a no-show, or the ticket is withdrawn.
         # Never back to called: a recall happens exactly once (Issue 43).
         _R: frozenset({_P, _N, _X}),
@@ -109,6 +118,7 @@ ILLEGAL_TRANSITION_CODE: Final = "ticket.transition.illegal"
 STALE_TRANSITION_CODE: Final = "ticket.transition.stale"
 DEDICATED_MOVE_CODE: Final = "ticket.transition.dedicated_route"
 NOBODY_WAITING_CODE: Final = "ticket.call_next.empty"
+UNDO_WINDOW_CLOSED_CODE: Final = "ticket.undo.window_closed"
 
 
 class IllegalTransitionError(ConflictError):
@@ -143,9 +153,14 @@ class StaleTransitionError(ConflictError):
 
 
 #: Moves the transitions route refuses, and the operation that makes each one whole: a transfer
-#: issues the ticket in the next queue, a cancellation records its channel.
+#: issues the ticket in the next queue, a cancellation records its channel, and an undone call is
+#: only allowed within its window.
 DEDICATED_MOVES: Final[Mapping[TicketStatus, str]] = MappingProxyType(
-    {TicketStatus.CANCELLED: "Cancel", TicketStatus.TRANSFERRED: "Transfer"}
+    {
+        TicketStatus.CANCELLED: "Cancel",
+        TicketStatus.TRANSFERRED: "Transfer",
+        TicketStatus.WAITING: "Undo call",
+    }
 )
 
 
@@ -154,8 +169,13 @@ class DedicatedMoveError(ConflictError):
 
     def __init__(self, requested: TicketStatus) -> None:
         super().__init__(
-            f"A ticket is {requested.value} with {DEDICATED_MOVES[requested]}, "
-            "not by changing its status.",
+            (
+                "A patient goes back to waiting only by undoing their call, within seconds of it, "
+                "not by changing the ticket's status."
+                if requested is TicketStatus.WAITING
+                else f"A ticket is {requested.value} with {DEDICATED_MOVES[requested]}, "
+                "not by changing its status."
+            ),
             code=DEDICATED_MOVE_CODE,
         )
         self.requested = requested
@@ -166,6 +186,17 @@ class NobodyWaitingError(ConflictError):
 
     def __init__(self) -> None:
         super().__init__("Nobody is waiting in this queue.", code=NOBODY_WAITING_CODE)
+
+
+class UndoWindowClosedError(ConflictError):
+    """The call is too old to undo: HTTP 409. The patient may already be on their way."""
+
+    def __init__(self, number: str, seconds: int) -> None:
+        super().__init__(
+            f"{number} was called more than {seconds} seconds ago, so the call can no longer be "
+            "undone. Recall them, or mark them a no-show if they do not come.",
+            code=UNDO_WINDOW_CLOSED_CODE,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -224,7 +255,10 @@ def _locked(db: Session, ticket_id: str) -> Ticket:
 
 def _stamp(ticket: Ticket, requested: TicketStatus, moment: datetime) -> None:
     """Record when the move happened on the column that moment belongs to."""
-    if requested is TicketStatus.CALLED and ticket.called_at is None:
+    if requested is TicketStatus.WAITING:
+        # An undone call (Issue 50): the ticket reads as it did before it was called.
+        ticket.called_at = None
+    elif requested is TicketStatus.CALLED and ticket.called_at is None:
         ticket.called_at = moment
     elif requested is TicketStatus.RECALLED:
         ticket.recalled_at = moment
@@ -373,5 +407,54 @@ def call_next(
         actor=actor,
         expected_status=TicketStatus.WAITING,
         note="call next",
+        moment=moment,
+    )
+
+
+def undo_window_ends(ticket: Ticket, *, seconds: int | None = None) -> datetime | None:
+    """When a call on ``ticket`` stops being undoable, or ``None`` when it is not a call to undo.
+
+    ``seconds`` defaults to ``QUEUE_CALL_UNDO_SECONDS``. Read by :func:`undo_call` to decide, and by the
+    dashboard to show the *Undo* button only while pressing it can succeed.
+    """
+    if ticket.status_enum is not TicketStatus.CALLED or ticket.called_at is None:
+        return None
+    window = seconds if seconds is not None else get_settings().queue_call_undo_seconds
+    return stored_sast(ticket.called_at) + timedelta(seconds=window)
+
+
+def undo_call(
+    db: Session,
+    ticket_id: str,
+    *,
+    actor: Actor,
+    moment: datetime | None = None,
+) -> Ticket:
+    """Put a patient called by mistake back in their place, within the undo window. The caller commits.
+
+    Two audit rows tell the story: the call, and this move back to ``waiting`` with the note
+    ``undo call``. The ticket keeps its number, order key and sequence, so it is exactly where it was.
+
+    Raises:
+        NotFoundError: No such ticket.
+        StaleTransitionError: The ticket is no longer ``called`` (started, recalled, cancelled…).
+        UndoWindowClosedError: The call is older than ``QUEUE_CALL_UNDO_SECONDS``.
+    """
+    moment = moment or now_sast()
+    ticket = _locked(db, ticket_id)
+    if ticket.status_enum is not TicketStatus.CALLED:
+        raise StaleTransitionError(ticket.status_enum, TicketStatus.CALLED)
+    ends = undo_window_ends(ticket)
+    if ends is None or moment > ends:
+        raise UndoWindowClosedError(
+            ticket.number, get_settings().queue_call_undo_seconds
+        )
+    return transition_ticket(
+        db,
+        ticket.id,
+        TicketStatus.WAITING,
+        actor=actor,
+        expected_status=TicketStatus.CALLED,
+        note="undo call",
         moment=moment,
     )

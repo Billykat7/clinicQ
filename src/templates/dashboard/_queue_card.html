@@ -1,0 +1,83 @@
+{#- The patient buttons the front desk and the room share (Issue 50).
+
+    Which buttons a ticket offers comes from the view model (src/web/dashboard/actions.py), which asks
+    the lifecycle; whether they are enabled comes from the caller's grants here (can_call, can_move),
+    and a button the caller may not press is disabled with the reason, never hidden. Every button is a
+    request to the queue API, sent by dashboard-actions.js with an Idempotency-Key, so a double tap acts
+    once. The card changes at once while the server answers, and is put back, with the server's reason
+    shown in its status line, if the server refuses.
+
+    Nothing here decides a rule: no status is compared and no time is checked in the template. -#}
+
+{% macro call_next_button(site, queue, can_call) %}
+<button type="button" class="btn queue-call-next"
+        data-action="call-next"
+        data-action-url="/api/v1/sites/{{ site.id }}/queues/{{ queue.id }}/tickets/call-next"
+        data-next-number="{{ queue.next_number or '' }}"
+        {% if not can_call %}disabled title="Your role at this clinic cannot call patients"{% elif not queue.waiting %}disabled title="Nobody is waiting"{% endif %}>
+  <span class="queue-call-next-label">Call next</span>
+  {% if queue.next_number %}<span class="queue-call-next-number">{{ queue.next_number }}</span>{% endif %}
+</button>
+{% endmacro %}
+
+{% macro action_message() %}
+<p class="queue-action-msg" data-action-msg role="status" aria-live="polite"></p>
+{% endmacro %}
+
+{% macro elapsed_time(ticket) %}
+{% if ticket.elapsed %}
+<span class="with-staff-elapsed" data-since="{{ ticket.elapsed.since.isoformat() }}">{{ ticket.elapsed.minutes }} min</span>
+{% endif %}
+{% endmacro %}
+
+{% macro ticket_buttons(site, ticket, can_call, can_move) %}
+<div class="ticket-actions">
+  {% for action in ticket.actions %}
+  {% set permitted = can_call if action.needs == "call" else can_move %}
+  {% if action.to is none %}
+  <button type="button" class="btn btn-quiet ticket-action ticket-undo"
+          data-action="undo"
+          data-action-url="/api/v1/sites/{{ site.id }}/tickets/{{ ticket.id }}/undo-call"
+          data-pending="{{ action.pending_label }}"
+          data-undo-until="{{ ticket.undo_until.isoformat() if ticket.undo_until else '' }}"
+          {% if not permitted %}disabled title="Your role at this clinic cannot undo a call"{% endif %}>{{ action.label }}</button>
+  {% else %}
+  <button type="button" class="btn ticket-action{% if not action.primary %} btn-quiet{% endif %} ticket-action-{{ action.kind.value }}"
+          data-action="move"
+          data-action-url="/api/v1/sites/{{ site.id }}/tickets/{{ ticket.id }}/transitions"
+          data-action-body='{"to": "{{ action.to.value }}", "expected_status": "{{ ticket.status.value }}"}'
+          data-pending="{{ action.pending_label }}"
+          {% if action.confirm %}data-confirm="{{ action.confirm }}"{% endif %}
+          {% if not permitted %}disabled title="Your role at this clinic cannot change a ticket"{% endif %}>{{ action.label }}</button>
+  {% endif %}
+  {% endfor %}
+</div>
+{% endmacro %}
+
+{% macro with_staff_list(site, queue, can_call, can_move) %}
+<ul class="queue-with-staff" aria-label="With staff in {{ queue.name }}" data-with-staff>
+  {% for ticket in queue.with_staff_tickets %}
+  <li class="with-staff-ticket" data-ticket-id="{{ ticket.id }}" data-number="{{ ticket.number }}">
+    <div class="with-staff-head">
+      <span class="line-number">{{ ticket.number }}</span>
+      <span class="badge badge-{{ ticket.badge.tone.value }}" data-ticket-badge>{{ ticket.badge.label }}</span>
+      {{ elapsed_time(ticket) }}
+    </div>
+    {{ ticket_buttons(site, ticket, can_call, can_move) }}
+  </li>
+  {% endfor %}
+</ul>
+{% endmacro %}
+
+{% macro confirm_dialog() %}
+<dialog class="move-dialog confirm-dialog" id="action-confirm" aria-labelledby="action-confirm-title">
+  <form method="dialog">
+    <h2 id="action-confirm-title">Are you sure?</h2>
+    <p id="action-confirm-text"></p>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-danger" value="confirm">Yes, go ahead</button>
+      <button type="submit" class="btn btn-quiet" value="cancel" autofocus>Cancel</button>
+    </div>
+  </form>
+</dialog>
+{% endmacro %}

@@ -9,7 +9,8 @@ luck, only on the database's locks.
 * **Parallel joins** across all four channels and four queues: every queue's numbers are 1..n with
   no gap and no repeat, and every channel drew from the same sequence.
 * **Simultaneous Call next**: several staff pressing at once, round after round, never call the same
-  ticket twice and never miss one.
+  ticket twice and never miss one; and **one press sent several times at once** with the same
+  ``Idempotency-Key`` (Issue 50) calls exactly one patient.
 * **Transfer during call**, **cancel during call**: a ticket raced by two moves ends in exactly one
   state, with exactly one winner, and the loser changed nothing.
 * **One patient, two channels, one instant**: one ticket.
@@ -47,16 +48,24 @@ from src.commons.enums import (
     TransferReason,
 )
 from src.commons.exceptions import ConflictError
-from src.database.models import Patient, Queue, Site, Ticket
+from src.core.site_scope import SiteAccess
+from src.database.models import Patient, Queue, QueueRequestKey, Site, Ticket, User
 from src.database.schema import apply_postgres_search_path
 from src.modules.patients.service import patient_for_gateway
 from src.modules.queue.cancellation import cancel_own_ticket
 from src.modules.queue.lifecycle import Actor, NobodyWaitingError, call_next
+from src.modules.queue.request_keys import run_once
 from src.modules.queue.service import join_queue
 from src.modules.queue.transfer import transfer_ticket
 from src.modules.queues.live import read_waiting_counts
 from src.modules.sites.hours import published_schedules
-from tests.factories import PatientFactory, QueueFactory, SiteFactory, TicketFactory
+from tests.factories import (
+    PatientFactory,
+    QueueFactory,
+    SiteFactory,
+    StaffFactory,
+    TicketFactory,
+)
 from tests.integration.queue.conftest import open_all_day, queue_settings
 
 pytestmark = pytest.mark.postgres
@@ -223,6 +232,62 @@ def test_staff_pressing_call_next_at_once_never_call_the_same_ticket(
     assert all(isinstance(ticket_id, str) for ticket_id in called), called
     assert len(called) == len(set(called)) == 30
     assert set(called) == waiting
+
+
+def test_one_press_sent_twice_at_the_same_instant_calls_one_patient(
+    world: SimpleNamespace,
+) -> None:
+    """Issue 50's double tap, raced: one Idempotency-Key, four requests at once, ten rounds.
+
+    Every request answers with the same ticket, exactly one ticket is called per round, and one key row
+    is kept: the second insert of the key waits on the unique constraint for the first transaction and
+    replays its answer, so the requests that lost the race never call anyone.
+    """
+    queue_id = world.queues[1].id
+    with world.session() as db:
+        queue = db.get(Queue, queue_id)
+        for _ in range(10):
+            TicketFactory.create(db, queue=queue)
+        staff = StaffFactory.create(db, site_id=world.site.id)
+        db.commit()
+        staff_id = staff.id
+
+    for round_ in range(10):
+        key = f"double-tap-{round_:04d}"
+
+        def press(key: str = key) -> str:
+            with world.session() as db:
+                access = SiteAccess(site_id=world.site.id, user=db.get(User, staff_id))
+                ticket = run_once(
+                    db,
+                    access,
+                    key,
+                    operation="call_next",
+                    target=queue_id,
+                    act=lambda: call_next(
+                        db, db.get(Queue, queue_id), actor=_staff("desk")
+                    ),
+                )
+                return ticket.id
+
+        answers = _race(*(press for _ in range(4)))
+        assert all(isinstance(answer, str) for answer in answers), answers
+        assert len(set(answers)) == 1, (round_, answers)
+
+    with world.session() as db:
+        called = db.scalar(
+            select(func.count())
+            .select_from(Ticket)
+            .where(
+                Ticket.queue_id == queue_id, Ticket.status == TicketStatus.CALLED.value
+            )
+        )
+        keys = db.scalar(
+            select(func.count())
+            .select_from(QueueRequestKey)
+            .where(QueueRequestKey.user_id == staff_id)
+        )
+    assert (called, keys) == (10, 10)
 
 
 def test_a_transfer_racing_a_call_next_ends_in_exactly_one_state(

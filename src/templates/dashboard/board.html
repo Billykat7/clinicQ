@@ -2,16 +2,18 @@
 {#- The front desk (Issue 48's frame; Issue 49 makes it live; Issue 52 adds reordering).
 
     Every queue at the clinic side by side, each card answering "is anyone stuck?" at a glance, with
-    its waiting line and the overrides of the day. The cards live in dashboard/_board_cards.html, which
+    its waiting line and the overrides of the day, and Call next with the patients' buttons (Issue 50). The cards live in dashboard/_board_cards.html, which
     dashboard-live.js fetches again whenever the clinic's stream reports a change, or on a timer when
     the stream is unavailable. The line above the board says which of those is happening, and how old
     the cards are whenever they might not be current. -#}
 {% from "dashboard/_reorder.html" import move_dialog %}
+{% from "dashboard/_queue_card.html" import confirm_dialog %}
 
 {% block layout_head %}
   {{ super() }}
   <script src="/static/js/dashboard-live.js" defer></script>
   <script src="/static/js/dashboard-reorder.js" defer></script>
+  <script src="/static/js/dashboard-actions.js" defer></script>
 {% endblock %}
 
 {% block clinic_actions %}
@@ -25,4 +27,5 @@
 {% block clinic_content %}
 {% include "dashboard/_board_cards.html" %}
 {% if can_reorder and queues %}{{ move_dialog(site, reasons, note_max_length) }}{% endif %}
+{% if queues %}{{ confirm_dialog() }}{% endif %}
 {% endblock %}

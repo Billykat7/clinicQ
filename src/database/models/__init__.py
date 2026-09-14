@@ -46,6 +46,7 @@ from src.database.models.permission_usage import (
 )
 from src.database.models.queue import Queue
 from src.database.models.queue_reorder import QueueReorder
+from src.database.models.queue_request_key import QueueRequestKey
 from src.database.models.rbac_role import RbacRole
 from src.database.models.refresh_token import RefreshToken
 from src.database.models.resource import Resource
@@ -113,6 +114,7 @@ __all__ = [
     "PublicHoliday",
     "Queue",
     "QueueReorder",
+    "QueueRequestKey",
     "RbacRole",
     "RefreshToken",
     "Resource",

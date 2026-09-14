@@ -503,8 +503,46 @@
 .queue-card-times { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin: 0; }
 .queue-card-times dt { font-size: var(--step--2); color: var(--muted); }
 .queue-card-times dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
-.queue-with-staff { list-style: none; margin: 0; padding: 0; display: grid; gap: .25rem; font-size: var(--step--1); }
-.queue-with-staff li { display: flex; align-items: center; gap: .45rem; }
+.queue-with-staff { list-style: none; margin: 0; padding: 0; display: grid; gap: .4rem; font-size: var(--step--1); }
+.queue-with-staff li { display: grid; gap: .35rem; padding: .45rem .55rem; border: 1px solid var(--line-soft); border-radius: var(--radius); background: var(--bg); }
+
+/* ── Call next and the patient buttons (Issue 50) ─────────────── */
+
+/* The one button pressed hundreds of times a day: full width on a card, and the next number on it. */
+.queue-call-next {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .6rem;
+  width: 100%;
+  min-height: 3.5rem;
+  font-size: var(--step-1);
+  font-weight: 700;
+}
+.queue-call-next-number {
+  padding: .1rem .5rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 18%, transparent);
+  font-size: var(--step-0);
+  font-variant-numeric: tabular-nums;
+}
+.queue-action-msg { margin: 0; font-size: var(--step--1); color: var(--muted); }
+.queue-action-msg.is-ok { color: var(--brand-deep); }
+.queue-action-msg.is-error { color: var(--danger-ink); font-weight: 600; }
+.with-staff-head { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; }
+.with-staff-elapsed { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ticket-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.ticket-action { min-height: 2.75rem; min-width: 5.5rem; }
+/* On a front-desk card, several buttons share a narrow column: compact, still 2.5rem tall. */
+.queue-card .ticket-action { min-width: 0; min-height: 2.5rem; padding-inline: .85rem; font-size: var(--step--1); }
+.ticket-action-no_show { color: var(--danger-ink); }
+.with-staff-ticket.is-pending { opacity: .75; }
+.with-staff-ticket.is-pending [data-ticket-badge] { outline: 2px dashed currentColor; outline-offset: 1px; }
+li.with-staff-ticket[data-pending-call] { font-weight: 600; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) {
+  .with-staff-ticket[data-pending-call] { animation: pending-pulse 1.2s ease-in-out infinite; }
+  @keyframes pending-pulse { 50% { opacity: .55; } }
+}
 .line-waited { color: var(--muted); font-size: var(--step--2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* ── A clinician's room, for a 10-inch tablet (Issue 53) ─────── */
@@ -521,9 +559,11 @@
 .room-counts dt { font-size: var(--step--2); color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
 .room-counts dd { margin: 0; font-size: var(--step-2); font-weight: 700; font-variant-numeric: tabular-nums; }
 /* Touch targets a gloved or hurried finger can hit: at least 3rem tall. */
-.room-call-next { min-height: 3.5rem; font-size: var(--step-1); padding-inline: 2rem; }
-.room-call { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
-.room-action { min-height: 3rem; min-width: 7rem; font-size: var(--step-0); }
+.room-call { display: grid; gap: .5rem; }
+.room-call .queue-call-next { width: auto; justify-self: start; padding-inline: 2rem; }
+.room-action,
+.room-card .ticket-action { min-height: 3rem; min-width: 7rem; font-size: var(--step-0); }
+.room-card [data-with-staff] { display: grid; gap: .9rem; }
 .room-patient {
   display: grid;
   gap: .75rem;
@@ -536,7 +576,6 @@
 .room-patient-head h3 { margin: 0; font-size: var(--step-1); }
 .room-number { font-weight: 800; font-variant-numeric: tabular-nums; }
 .room-name { font-weight: 500; }
-.room-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
 .room-transfer summary,
 .room-history summary {
   min-height: 3rem;
