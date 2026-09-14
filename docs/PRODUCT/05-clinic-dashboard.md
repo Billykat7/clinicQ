@@ -60,6 +60,14 @@ staff screens show, the card lists the queue's overrides of the day, and the cli
 override with counts per staff member (listed by name, never ranked) on the **Overrides** screen. A
 role without the permission sees the same line with its controls switched off.
 
+A nurse or doctor opens **My room**, built for a 10-inch tablet: only the queues they are assigned to,
+a large **Call next**, and for each patient with them **Start**, **Done** and **Transfer**, all through
+the queue engine. Beside the patient sits a short **visit note** box (up to 1,000 characters). A note is
+encrypted where it is stored, shows its author and time, is kept for 30 days by default and then removed
+by a nightly sweep, and never appears on the board, the display or anything a patient sees. Notes from a
+patient's earlier visits show only when the patient agreed to share them. A clinician's buttons and API
+calls reach only their own rooms: another room's queue answers as if it did not exist.
+
 ## Call-next sequence (ties dashboard, patient notification, and display together)
 
 ```mermaid
@@ -100,7 +108,7 @@ sequenceDiagram
 |-------|-----------|
 | `staff_users` | id, site_id, role (receptionist/nurse/doctor/manager/platform_admin), auth fields |
 | `queue_reorders` | id, ticket_id, staff_id, reason_code, occurred_at |
-| `visit_notes` (private, staff-only) | id, ticket_id, staff_id, note_text, created_at; **never shown on the display monitor** |
+| `visit_note` (private, staff-only) | id, site_id, queue_id, ticket_id, visit_id, patient_id, author_user_id, author, note_text (encrypted), created_at, expires_at; **never shown on the display monitor or to patients** |
 | `daily_queue_stats` | site_id, queue_id, date, avg_wait_minutes, no_show_count, ticket_count (pre-aggregated for fast dashboard charts) |
 
 Markdown: this is [05-clinic-dashboard.md](05-clinic-dashboard.md); queue mechanics in

@@ -3,13 +3,13 @@
 
     Each tab is its own URL, and only the tabs whose grant the caller holds at this clinic render
     (``settings_tabs``, from src/web/dashboard/settings.py). Every write on every tab is a request to
-    the clinic's JSON API, made by dashboard-settings.js; the API checks the grant, validates the
+    the clinic's JSON API, made by dashboard-api.js; the API checks the grant, validates the
     change and records it in the audit log. -#}
 
 {% block layout_head %}
   {{ super() }}
   <script src="/static/js/admin-crud.js" defer></script>
-  <script src="/static/js/dashboard-settings.js" defer></script>
+  <script src="/static/js/dashboard-api.js" defer></script>
 {% endblock %}
 
 {% block clinic_content %}

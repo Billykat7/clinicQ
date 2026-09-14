@@ -882,6 +882,24 @@ class Settings(BaseSettings):
         ),
     )
 
+    visit_note_retention_days: int = Field(
+        default=30,
+        ge=1,
+        le=90,
+        description=(
+            "Days a private visit note is kept before the nightly sweep deletes it; at most the "
+            "platform's 90-day ceiling (env: VISIT_NOTE_RETENTION_DAYS)."
+        ),
+    )
+    visit_note_retention_sweep_hour: int = Field(
+        default=2,
+        ge=0,
+        le=23,
+        description=(
+            "Hour of day (Africa/Johannesburg, 0-23) the nightly visit-note retention sweep runs "
+            "(env: VISIT_NOTE_RETENTION_SWEEP_HOUR)."
+        ),
+    )
     document_retention_sweep_hour: int = Field(
         default=3,
         ge=0,

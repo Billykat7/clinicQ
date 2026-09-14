@@ -763,6 +763,72 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
+  # ── Private visit notes (Issue 53) ──────────────────────────────────────────────────────
+  /sites/{site_id}/tickets/{ticket_id}/notes:
+    get:
+      tags: [queue]
+      operationId: visitNotesForTicket
+      summary: The private notes of a ticket's visit (clinicians only)
+      description: |
+        This visit's notes, oldest first, including notes written in another queue before a
+        transfer, and the patient's notes from **earlier visits to this clinic** only if the patient
+        agreed (`visit_note_history` consent); otherwise `previous` is `null` and `previous_withheld`
+        says why. A note past its retention window is never returned. Requires `visits.notes` `read`,
+        which only a nurse or doctor holds, on **their own rooms**: another room's ticket is the same
+        404 as another clinic's. Nothing here is ever shown on a board or to a patient.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/SiteId" }
+        - { $ref: "#/components/parameters/TicketId" }
+      responses:
+        "200":
+          description: The notes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VisitNotesOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/SiteNotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    post:
+      tags: [queue]
+      operationId: visitNoteAdd
+      summary: Add a private note to a ticket's visit (clinicians only)
+      description: |
+        Adds one note, attributed to the caller and timestamped, stored encrypted and deleted after
+        `VISIT_NOTE_RETENTION_DAYS` (30 by default). Notes are never edited: a correction is another
+        note. A note on a patient who has not been seen (waiting, cancelled, no-show) is refused. The
+        audit row records that a note was added and by whom, never its words. Requires `visits.notes`
+        `update` on the caller's own rooms.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/SiteId" }
+        - { $ref: "#/components/parameters/TicketId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VisitNoteIn" }
+            example: { text: "BP 150/95, asked to return Friday for a recheck." }
+      responses:
+        "201":
+          description: The note as stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VisitNoteOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/SiteNotFound" }
+        "409":
+          description: |
+            Refused, nothing written: `ticket.note.not_seen` (the patient is waiting, cancelled or a
+            no-show at this ticket).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "A visit note is written once the patient has been called, not before.", code: "ticket.note.not_seen" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1024,6 +1090,44 @@ components:
         ticket: { $ref: "#/components/schemas/TicketOut" }
         reorder: { $ref: "#/components/schemas/ReorderOut" }
         waiting_ahead: { type: integer, minimum: 0 }
+    VisitNoteIn:
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text: { type: string, minLength: 1, maxLength: 1000 }
+    VisitNoteOut:
+      type: object
+      required: [id, ticket_id, visit_id, queue_id, author, text, created_at, expires_at]
+      properties:
+        id: { type: string }
+        ticket_id: { type: string }
+        visit_id: { type: string }
+        queue_id: { type: string }
+        author: { type: string }
+        text: { type: string }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+      example:
+        id: 01a09cf1-0000-7000-8000-00000000n001
+        ticket_id: 01a09cf1-951b-7278-a2be-5fe7590abe56
+        visit_id: 01a09cf1-951b-7278-a2be-5fe7590abe57
+        queue_id: 01a09c0b-ce5e-7037-8071-cd12f438bd3d
+        author: "nurse.a@clinicq.example"
+        text: "BP 150/95, asked to return Friday for a recheck."
+        created_at: "2026-09-14T10:12:00+02:00"
+        expires_at: "2026-10-14T10:12:00+02:00"
+    VisitNotesOut:
+      type: object
+      required: [ticket_id, visit_id, notes, previous, previous_withheld]
+      properties:
+        ticket_id: { type: string }
+        visit_id: { type: string }
+        notes: { type: array, items: { $ref: "#/components/schemas/VisitNoteOut" } }
+        previous:
+          type: [array, "null"]
+          items: { $ref: "#/components/schemas/VisitNoteOut" }
+        previous_withheld: { type: [string, "null"] }
     ReorderTrailOut:
       type: object
       required: [site_id, service_day, total, items]

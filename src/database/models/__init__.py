@@ -71,6 +71,7 @@ from src.database.models.ticket import Ticket, TicketSequence
 from src.database.models.user import User
 from src.database.models.user_role_assignment import UserRoleAssignment
 from src.database.models.visit import Visit
+from src.database.models.visit_note import VisitNote
 from src.database.models.wait_time_sample import WaitTimeSample
 from src.database.models.widget import Widget
 
@@ -135,6 +136,7 @@ __all__ = [
     "User",
     "UserRoleAssignment",
     "Visit",
+    "VisitNote",
     "WaitTimeSample",
     "Widget",
     "metadata",

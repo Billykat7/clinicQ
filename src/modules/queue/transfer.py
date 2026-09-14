@@ -68,6 +68,14 @@ from src.modules.queue.waits import estimates_for
 from src.modules.queues.service import QUEUE_CLOSED
 
 #: What staff are told when the target is the queue the patient is already in.
+#: How each transfer reason reads on a staff screen (Issue 53's room view offers them).
+TRANSFER_REASON_LABELS: Final[dict[TransferReason, str]] = {
+    TransferReason.NEXT_STEP: "Next step of the visit",
+    TransferReason.REFERRED: "Referred to another service",
+    TransferReason.WRONG_QUEUE: "Joined the wrong queue",
+    TransferReason.OTHER: "Other",
+}
+
 SAME_QUEUE: Final = "The patient is already in that queue."
 #: What staff are told when the target queue has issued its capacity for the day.
 TARGET_FULL: Final = "That queue is full for today. Choose another queue."

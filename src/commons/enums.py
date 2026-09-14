@@ -782,12 +782,16 @@ class ConsentPurpose(StrEnum):
     - ``NOTIFICATIONS``: send me messages about my place in the queue. The code that proves my
       number is not this: I asked for that one by typing my number (see ``has_consent``).
     - ``FEEDBACK_SURVEY``: ask me afterwards how the visit went.
+    - ``VISIT_NOTE_HISTORY``: let the nurse or doctor at a clinic read the short notes written at my
+      earlier visits to that clinic (Issue 53). Without it, each visit's notes are seen only at that
+      visit.
     """
 
     DISPLAY_NAME = "display_name"
     DISPLAY_COMMENT = "display_comment"
     NOTIFICATIONS = "notifications"
     FEEDBACK_SURVEY = "feedback_survey"
+    VISIT_NOTE_HISTORY = "visit_note_history"
 
 
 class OtpSubjectKind(StrEnum):
@@ -1606,6 +1610,7 @@ class AuditEntityType(StrEnum):
     SITE = "site"
     QUEUE = "queue"
     TICKET = "ticket"
+    VISIT_NOTE = "visit_note"
     CLINIC_SERVICE = "clinic_service"
     STAFF_INVITATION = "staff_invitation"
     AUDIT_LOG = "audit_log"

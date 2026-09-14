@@ -20,7 +20,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from typing import Annotated
 
@@ -47,9 +47,10 @@ from src.core.nav_visibility import (
     nav_visibility_at_site,
     peek_user_from_refresh_cookie,
 )
-from src.core.site_scope import SiteAccess, permitted_queue_ids
+from src.core.site_scope import SiteAccess, own_queue_scope
 from src.database.models import User
 from src.database.models.queue_reorder import MAX_REORDER_NOTE_LENGTH
+from src.database.models.visit_note import MAX_VISIT_NOTE_LENGTH
 from src.database.session import get_db
 from src.modules.queues.service import list_queues
 from src.web.context import page_context, require_authenticated_html
@@ -61,6 +62,7 @@ from src.web.dashboard.reorder import (
     queue_lines,
     reason_choices,
 )
+from src.web.dashboard.room import read_room
 from src.web.dashboard.shell import (
     SECTION_PARAM,
     ClinicShell,
@@ -77,6 +79,9 @@ from src.web.routes import (
 )
 
 router = APIRouter(tags=["web"])
+
+#: The resource the room view is gated on and narrowed by: a clinician's own queues (Issue 53).
+NOTES_RESOURCE = "visits.notes"
 
 DbSession = Annotated[Session, Depends(get_db)]
 
@@ -375,8 +380,15 @@ async def clinic_room(site_id: str, request: Request, db: DbSession) -> Response
     )
     if not isinstance(opened, ClinicPage):
         return opened
-    own = permitted_queue_ids(db, opened.access.user)
-    opened.context["queues"] = read_board(db, opened.access, only=own).cards
+    user = opened.access.user
+    rooms = own_queue_scope(db, user, NOTES_RESOURCE, site_id)
+    access = replace(opened.access, queue_ids=rooms)
+    view = read_room(db, access)
+    opened.context.update(
+        room=view,
+        queues=[room.card for room in view.rooms],
+        note_max_length=MAX_VISIT_NOTE_LENGTH,
+    )
     return render_clinic_page(request, opened, "dashboard/room.html")
 
 

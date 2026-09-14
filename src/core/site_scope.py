@@ -25,7 +25,7 @@ header it is a 404 like anyone else's, so cross-site access is never something t
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Annotated, Any
 
 from fastapi import Depends, HTTPException, Request, status
@@ -38,6 +38,7 @@ from src.commons.enums import (
     AuditAction,
     AuditEntityType,
     GrantScope,
+    ScopeShape,
     UserRole,
 )
 from src.core.audit import record_audit_event
@@ -76,11 +77,23 @@ class SiteAccess:
     user: User
     #: Whether this was the audited cross-site hatch rather than the caller's own clinic.
     cross_site: bool = False
+    #: The queues a query may touch at this clinic, or ``None`` for all of them (Issue 53). Set for a
+    #: caller whose grant on a queue-shaped resource reaches only ``own``: a nurse's rooms. Every
+    #: helper below narrows by it, so another room's ticket answers 404 exactly as another clinic's.
+    queue_ids: frozenset[str] | None = None
 
     @property
     def site_ids(self) -> frozenset[str]:
         """The sites a query may touch: this one. A filter is never wider than the request."""
         return frozenset({self.site_id})
+
+    def whole_site(self) -> SiteAccess:
+        """The same access without the room narrowing, for a lookup that is about the clinic.
+
+        Used where a room-scoped caller legitimately names another queue at their clinic: the
+        destination of a transfer (Issue 45), which is not a queue they act *in*.
+        """
+        return replace(self, queue_ids=None)
 
 
 def permitted_site_ids(db: Session, user: User) -> frozenset[str]:
@@ -178,6 +191,36 @@ def resolve_site_access(
     raise site_not_found()
 
 
+def own_queue_scope(
+    db: Session, user: User, resource_key: str, site_id: str
+) -> frozenset[str] | None:
+    """The queues ``user`` may act in at ``site_id`` on ``resource_key``, or ``None`` for every queue.
+
+    The row half of the ``own`` tier on a queue-shaped resource (``ScopeShape.QUEUE``, Issue 53): a
+    nurse's grant on ``queues.call`` or ``queues.tickets`` reaches only the queues they were put on
+    (Issue 28), and this is where that becomes a filter rather than a hope. A grant that reaches
+    ``assigned`` or wider, or a resource of another shape, is not narrowed here.
+
+    Resolved with the roles held **at this clinic**, like the verb, so a receptionist here who is a
+    nurse elsewhere is not narrowed here.
+    """
+    from src.core.rbac_manifest_registry import manifest_scope_shape_map
+    from src.core.scope import resolve_scope_tier
+
+    if manifest_scope_shape_map().get(resource_key) is not ScopeShape.QUEUE:
+        return None
+    tier = resolve_scope_tier(
+        db,
+        user,
+        resource_key,
+        scope_type=AssignmentScopeType.SITE.value,
+        scope_id=site_id,
+    )
+    if tier.satisfies(GrantScope.ASSIGNED):
+        return None
+    return permitted_queue_ids(db, user)
+
+
 def require_site_access(resource_key: str, verb: str):
     """Dependency factory for a route with a ``{site_id}`` path parameter (Issue 19).
 
@@ -210,7 +253,8 @@ def require_site_access(resource_key: str, verb: str):
             scope_type=AssignmentScopeType.SITE.value,
             scope_id=site_id,
         )
-        return access
+        rooms = own_queue_scope(db, staff, resource_key, site_id)
+        return access if rooms is None else replace(access, queue_ids=rooms)
 
     setattr(dependency, RBAC_GATE_ATTRIBUTE, (resource_key, verb))
     return dependency
@@ -227,7 +271,16 @@ def scoped_select(model: type[Any], access: SiteAccess) -> Select[Any]:
     The only way a service builds a query on a site-scoped model: the filter is applied here, from
     the access the guard resolved, so a service cannot forget it or widen it.
     """
-    return select(model).where(model.site_id.in_(access.site_ids))
+    statement = select(model).where(model.site_id.in_(access.site_ids))
+    if access.queue_ids is not None:
+        # A room-scoped caller (Issue 53): only their queues, and the rows hanging off them.
+        from src.database.models import Queue
+
+        if model is Queue:
+            statement = statement.where(Queue.id.in_(sorted(access.queue_ids)))
+        elif "queue_id" in model.__table__.columns:
+            statement = statement.where(model.queue_id.in_(sorted(access.queue_ids)))
+    return statement
 
 
 def select_in_scope(model: type[Any], access: SiteAccess | None) -> Select[Any]:
