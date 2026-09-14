@@ -19,8 +19,8 @@ Three things the issue did not spell out turned out to matter:
 2. **The nav-gate table could not store the tier the front desk needs.** A receptionist's grant on
    `queues.tickets` reaches the whole clinic (`assigned`); a nurse's grant on the same resource reaches
    only their own queues (`own`). The front desk must open for the first and not the second, so its
-   gate requires `assigned`. `nav_gate_overrides.scope` still only allowed `own` and `business` (Issue
-   #171 added the middle tier to `role_permission` and missed this table), and `make seed-rbac`
+   gate requires `assigned`. `nav_gate_overrides.scope` still only allowed `own` and `business` (the kernel
+   change that added the middle tier to `role_permission` missed this table), and `make seed-rbac`
    failed: `CHECK constraint failed: ck_nav_gate_overrides_ck_nav_gate_overrides_scope`. Migration
    `0025` widens the constraint.
 3. **A nurse needed a screen a receptionist does not get,** and no existing grant separates them
