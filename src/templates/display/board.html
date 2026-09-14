@@ -1,0 +1,98 @@
+{% extends "layouts/board.html" %}
+{#- The waiting-room board (Issue 56): now serving and up next for every queue, a clock and the clinic.
+
+    Read from five metres by a room of people anxious not to miss their turn, so the page shows little
+    and shows it large. Everything here comes from the privacy projection (Issue 58): the page is
+    rendered through board_template_response, which refuses raw ticket data, and the payload carried
+    in data-initial has no name or reason the clinic's display mode or the patient's consent forbids.
+
+    board.js draws the panels from that payload at once and again from /state every few seconds, so
+    the markup for a panel lives in the <template> elements below rather than in the script. The words
+    a panel needs (its captions and statuses) are data attributes on those templates.
+
+    Layout (board.css): one panel fills the screen, two and three stand side by side, four make a
+    grid of two by two, and more than four show four at a time, a page after the next. -#}
+
+{% block title %}{{ board.clinic_name }}{% endblock %}
+
+{% block styles %}
+  {{ super() }}
+  <link rel="stylesheet" href="/static/css/board.css">
+{% endblock %}
+
+{% block body_class %}{{ super() }} kiosk-page{% endblock %}
+
+{% block body %}
+{% set initials = board.clinic_name.split()[:2] | map('first') | join | upper %}
+<main id="main" class="kiosk" lang="{{ board.language.value }}"
+      data-state-url="{{ state_url }}"
+      data-poll-seconds="{{ poll_seconds }}"
+      data-highlight-seconds="{{ highlight_seconds }}"
+      data-panels-per-page="{{ panels_per_page }}"
+      data-page-seconds="{{ page_seconds }}"
+      data-message-seconds="{{ message_seconds }}"
+      data-initial="{{ payload | tojson | forceescape }}">
+  <header class="kiosk-header">
+    {# The branding slot: the clinic's initials and its name. A logo, when clinics can upload one, goes here. #}
+    <div class="kiosk-brand">
+      <span class="kiosk-monogram" aria-hidden="true">{{ initials }}</span>
+      <h1 class="kiosk-clinic">{{ board.clinic_name }}</h1>
+    </div>
+    <time class="kiosk-clock" data-board-clock datetime="{{ board.as_of.isoformat(timespec='minutes') }}">{{ board.as_of.strftime("%H:%M") }}</time>
+  </header>
+
+  <div class="kiosk-grid" data-layout="0" data-board-grid></div>
+  <p class="kiosk-empty" data-board-empty hidden>No queues are open at the moment.</p>
+
+  <footer class="kiosk-footer">
+    {% if messages %}
+    <p class="kiosk-ticker" lang="{{ message_language.value }}" data-board-ticker data-messages="{{ messages | list | tojson | forceescape }}">{{ messages[0] }}</p>
+    {% endif %}
+    <p class="kiosk-pages" data-board-pages data-template="Page {page} of {pages}" hidden></p>
+  </footer>
+
+  {# Said once to assistive technology when a ticket is called; the screen shows it in the panel. #}
+  <p class="sr-only" aria-live="assertive" data-board-announce data-template="{number}: {room}"></p>
+
+  <template id="kiosk-panel">
+    <section class="panel">
+      <header class="panel-head">
+        <h2 class="panel-label"></h2>
+        <p class="panel-room"></p>
+      </header>
+      <div class="panel-now">
+        <p class="panel-caption">Now serving</p>
+        <ol class="panel-serving"></ol>
+        <p class="panel-none">—</p>
+        <p class="panel-also" data-template="Also called: {numbers}"></p>
+      </div>
+      <div class="panel-next">
+        <p class="panel-caption">Up next</p>
+        <ol class="panel-queue"></ol>
+        <p class="panel-waiting" data-none="Nobody waiting" data-one="1 waiting" data-many="{count} waiting"></p>
+      </div>
+    </section>
+  </template>
+
+  <template id="kiosk-serving">
+    <li class="serving" data-status-called="Please come in" data-status-recalled="Called again" data-status-in_progress="Being seen" data-status-new="Called now">
+      <span class="serving-number"></span>
+      <span class="serving-state"></span>
+      <span class="serving-name"></span>
+      <span class="serving-comment"></span>
+    </li>
+  </template>
+
+  <template id="kiosk-next">
+    <li class="next">
+      <span class="next-number"></span>
+      <span class="next-name"></span>
+    </li>
+  </template>
+</main>
+{% endblock %}
+
+{% block scripts %}
+  <script src="/static/js/board-clock.js" defer></script>
+  <script src="/static/js/board.js" defer></script>
+{% endblock %}

@@ -75,6 +75,28 @@ The board is just a **browser tab in kiosk mode** on any TV/monitor connected to
 consistent with the project's "PWA + server-rendered pages" approach
 ([06](06-channels-app-ussd-whatsapp-web.md), [13](13-tech-implementation.md)).
 
+## The board page (Issue 56)
+
+`GET /display/{site_id}` is the page a kiosk box opens: full screen, no sign-in, no pointer, no scrollbars.
+Its own stylesheet (`src/static/css/board.css`) and script (`src/static/js/board.js`) are separate from the
+staff screens', and nothing is inline.
+
+- **Header:** the clinic's initials and name (the branding slot), and a clock on the clinic's time.
+- **One panel per open queue:** its name and room, the number **now serving** in large type with its
+  status ("Please come in", "Called again", "Being seen"), any earlier calls on one line, the next numbers
+  **up next**, and how many are waiting.
+- **Layouts:** one queue fills the screen, two and three stand side by side, and four make a grid of two
+  by two. A clinic with more queues shows four panels at a time and turns the page every 15 seconds, with
+  "Page 1 of 2" in the corner.
+- **A new call** is highlighted for 20 seconds: inverted colours, a heavy border and the words
+  "▶ Called now", with a short pulse. Under reduced motion there is no pulse, and everything else stays.
+  A call on a page that is not showing brings that page forward.
+- **Footer:** one general health notice at a time (`BOARD_HEALTH_TICKER`), never scrolling.
+- **Legibility:** on a 32-inch screen a number being served is at least 49 mm tall in every layout, and a
+  number up next at least 22 mm, at 1080p or 720p alike. See `docs/OPS/BOARD_LEGIBILITY.md`.
+
+The page polls `/display/{site_id}/state` every 10 seconds until the live stream arrives (Issue 57).
+
 ## What the server sends (Issue 58)
 
 Every board response is built by one function, `project_board()` in

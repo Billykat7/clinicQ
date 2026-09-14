@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Status** | 🚧 In progress: issue 58 (the server-side privacy projection every board response passes through) delivered |
-| **Progress** | 🟩⬜⬜⬜⬜⬜⬜⬜⬜⬜ **14%** (1/7 issues) |
+| **Status** | 🚧 In progress: issues 58 (the server-side privacy projection every board response passes through) and 56 (the kiosk board page) delivered |
+| **Progress** | 🟩🟩🟩⬜⬜⬜⬜⬜⬜⬜ **29%** (2/7 issues) |
 | **Sprints** | 9 (weeks 17–18), semester 2. The sprint plan spreads its issues over sprints 5–11: some start early against stubs and some are scheduled after this window, which moves the milestone's close (and its tag) to sprint 11 (see the table) |
 | **Release tag** | `v0.8.0` |
 | **Primary owner** | D, Frontend/Clinic · E, DevOps/QA (device provisioning) |
@@ -49,7 +49,7 @@ and audio-announcement requirements.
 
 | # | Issue | Owner | Estimate | Sprint | Needs first (this milestone) |
 |---|-------|-------|----------|--------|------------------------------|
-| [56](../ISSUES/M8/ISSUE_56_board_page_kiosk.md) | Waiting-room board page (kiosk) with now-serving and up-next panels | D | 3 days | 5 | nothing |
+| [56](../ISSUES/M8/ISSUE_56_board_page_kiosk.md) | Waiting-room board page (kiosk) with now-serving and up-next panels | D | 3 days | 5 | [58](../ISSUES/M8/ISSUE_58_board_privacy_rendering.md) |
 | [57](../ISSUES/M8/ISSUE_57_board_sse_channel.md) | SSE live update channel with reconnect, backoff and heartbeat | A | 2 days | 9 | [56](../ISSUES/M8/ISSUE_56_board_page_kiosk.md) |
 | [58](../ISSUES/M8/ISSUE_58_board_privacy_rendering.md) | Server-side privacy-mode rendering and consent gating | A | 2 days | 9 | nothing |
 | [59](../ISSUES/M8/ISSUE_59_board_accessibility.md) | Accessibility pass: contrast, type scale, 5-metre legibility, reduced motion | D | 2 days | 10 | [56](../ISSUES/M8/ISSUE_56_board_page_kiosk.md) |
@@ -70,6 +70,7 @@ flowchart LR
     I60["60: Audio chime and multi-language…"]
     I61["61: Kiosk device registry, pairing…"]
     I62["62: Board resilience: cached…"]
+    I58 --> I56
     I56 --> I57
     I56 --> I59
     I57 --> I60
@@ -78,7 +79,7 @@ flowchart LR
     I61 --> I62
 ```
 
-**Start here:** [Issue 56](../ISSUES/M8/ISSUE_56_board_page_kiosk.md), [Issue 58](../ISSUES/M8/ISSUE_58_board_privacy_rendering.md).
+**Start here:** [Issue 58](../ISSUES/M8/ISSUE_58_board_privacy_rendering.md).
 
 **Needed from other milestones** (merged, or stubbed by agreement, before the issues that use them start):
 
