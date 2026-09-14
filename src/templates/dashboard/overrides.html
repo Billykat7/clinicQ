@@ -1,0 +1,147 @@
+{% extends "dashboard/base.html" %}
+{#- The clinic manager's view of a day's priority overrides (Issue 52).
+
+    A report list, so it follows docs/IDE/RULES/list-view-ui-pattern.mdc in its server-rendered form:
+
+    * the filters are a plain GET form, so a filtered day is a link a manager can send;
+    * the columns sort on the rows already in the page, with no request;
+    * clicking a row opens the override beside the list, with its note.
+
+    The counts per staff member cover the whole day whatever the filters say. They are listed by
+    name, never by count, and carry the sentence the API sends with them: they describe the use of a
+    clinical tool, not anybody's performance. -#}
+{% block layout_head %}
+  {{ super() }}
+  <script src="/static/js/admin-crud.js" defer></script>
+  <script src="/static/js/dashboard-overrides.js" defer></script>
+{% endblock %}
+
+{% block clinic_content %}
+<form class="filter-bar" data-filter-key="clinic-overrides" method="get">
+  <div class="filter-bar-head">
+    <button type="button" class="filter-bar-toggle" aria-expanded="true" aria-controls="ov-filter-body">Filters</button>
+    <span class="filter-bar-summary" hidden></span>
+    <div class="filter-bar-actions">
+      <a class="btn btn-quiet btn-sm filter-clear" href="{{ request.url.path }}">Clear filters</a>
+    </div>
+  </div>
+  <div class="filter-bar-body form-grid" id="ov-filter-body">
+    <div class="field" data-filter data-filter-label="Day">
+      <label for="ov-day">Day</label>
+      <input type="date" id="ov-day" name="day" value="{{ overrides.day.isoformat() }}" max="{{ today.isoformat() }}">
+    </div>
+    <div class="field" data-filter data-filter-label="Queue">
+      <label for="ov-queue">Queue</label>
+      <select id="ov-queue" name="queue">
+        <option value="">Every queue</option>
+        {% for queue_id, name in queue_names.items() %}
+        <option value="{{ queue_id }}"{% if filters.queue == queue_id %} selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field" data-filter data-filter-label="Reason">
+      <label for="ov-reason">Reason</label>
+      <select id="ov-reason" name="reason">
+        <option value="">Every reason</option>
+        {% for reason in reasons %}
+        <option value="{{ reason.value }}"{% if filters.reason and filters.reason.value == reason.value %} selected{% endif %}>{{ reason.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field" data-filter data-filter-label="Staff member">
+      <label for="ov-staff">Staff member</label>
+      <select id="ov-staff" name="staff">
+        <option value="">Everyone</option>
+        {% for count in overrides.counts %}
+        <option value="{{ count.staff }}"{% if filters.staff == count.staff %} selected{% endif %}>{{ count.staff }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-sm">Show</button>
+    </div>
+  </div>
+</form>
+
+<div class="overrides-layout">
+  <div class="split split-full" id="ov-split">
+    <div class="card">
+      <div class="table-wrap table-scroll">
+        <table class="data" id="ov-table">
+          <thead>
+            <tr>
+              <th data-sort-key="at">Time</th>
+              <th data-sort-key="ticket">Ticket</th>
+              <th data-sort-key="queue">Queue</th>
+              <th data-sort-key="staff">Staff member</th>
+              <th data-sort-key="reason">Reason</th>
+              <th data-sort-key="before">Place</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in entries %}
+            <tr tabindex="0"
+                data-at="{{ entry.at.isoformat() }}"
+                data-time="{{ entry.at.strftime('%H:%M') }}"
+                data-ticket="{{ entry.ticket_number }}"
+                data-queue="{{ queue_names.get(entry.queue_id, '') }}"
+                data-staff="{{ entry.staff }}"
+                data-reason="{{ entry.reason_label }}"
+                data-note="{{ entry.note or '' }}"
+                data-before="{{ entry.position_before }}"
+                data-after="{{ entry.position_after }}">
+              <td>{{ entry.at.strftime('%H:%M') }}</td>
+              <td>{{ entry.ticket_number }}</td>
+              <td>{{ queue_names.get(entry.queue_id, '—') }}</td>
+              <td>{{ entry.staff }}</td>
+              <td>{{ entry.reason_label }}</td>
+              <td>{{ entry.position_before }} to {{ entry.position_after }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if not entries %}
+      <p class="empty">{% if filters.active %}No override on this day matches these filters.{% else %}No patient was moved forward on this day.{% endif %}</p>
+      {% endif %}
+      <p class="card-sub">{{ entries | length }} override{{ '' if entries | length == 1 else 's' }}{% if filters.active %} of {{ overrides.entries | length }} on this day{% endif %}.</p>
+    </div>
+  </div>
+
+  <section class="card overrides-counts" aria-labelledby="ov-counts-title">
+    <h2 id="ov-counts-title">By staff member</h2>
+    <p class="card-sub">{{ overrides.counts_note }}</p>
+    {% if overrides.counts %}
+    <dl class="overrides-count-list">
+      {% for count in overrides.counts %}
+      <div><dt>{{ count.staff }}</dt><dd>{{ count.overrides }}</dd></div>
+      {% endfor %}
+    </dl>
+    {% else %}
+    <p class="hint">Nobody used a priority override on this day.</p>
+    {% endif %}
+  </section>
+</div>
+
+<div class="slideover slideover-inset" id="ov-detail" data-anchor="#ov-split">
+  <div class="slideover-panel" role="dialog" aria-modal="false" aria-labelledby="ovd-title" tabindex="-1">
+    <div class="slideover-head">
+      <div class="slideover-titles">
+        <p class="detail-eyebrow">Priority override</p>
+        <h2 id="ovd-title"></h2>
+        <p class="hint" id="ovd-meta"></p>
+      </div>
+      <button type="button" class="btn btn-quiet btn-sm slideover-close" data-slideover-close aria-label="Close override">Close</button>
+    </div>
+    <div class="slideover-body">
+      <dl class="detail-list">
+        <dt>Queue</dt><dd id="ovd-queue"></dd>
+        <dt>Reason</dt><dd id="ovd-reason"></dd>
+        <dt>Note</dt><dd id="ovd-note"></dd>
+        <dt>Place in the line</dt><dd id="ovd-places"></dd>
+        <dt>Moved by</dt><dd id="ovd-staff"></dd>
+      </dl>
+    </div>
+  </div>
+</div>
+{% endblock %}

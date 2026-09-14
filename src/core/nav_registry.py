@@ -166,6 +166,17 @@ NAV_DESTINATIONS: tuple[NavDestination, ...] = (
         scope=GrantScope.OWN,
         shortcut="r",
     ),
+    # The manager's view of every priority override of the day, with counts per staff member
+    # (Issue 52). Gated on the clinic's reports, like the counts API it reads.
+    NavDestination(
+        key="overrides",
+        label="Overrides",
+        href="/dashboard/sites/{site_id}/overrides",
+        resource="sites.reports",
+        verb=PermissionVerb.READ,
+        scope=GrantScope.ASSIGNED,
+        shortcut="o",
+    ),
     NavDestination(
         key="clinic_settings",
         label="Clinic settings",

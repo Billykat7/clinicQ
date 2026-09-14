@@ -136,7 +136,12 @@ def test_every_clinic_destination_names_its_site_and_has_its_own_shortcut() -> N
     from src.core.nav_registry import SITE_ID_PLACEHOLDER, site_destinations
 
     clinic = site_destinations()
-    assert [dest.key for dest in clinic] == ["board", "room", "clinic_settings"]
+    assert [dest.key for dest in clinic] == [
+        "board",
+        "room",
+        "overrides",
+        "clinic_settings",
+    ]
     assert all(dest.href.startswith("/dashboard/sites/{site_id}/") for dest in clinic)
     shortcuts = [dest.shortcut for dest in clinic]
     assert None not in shortcuts

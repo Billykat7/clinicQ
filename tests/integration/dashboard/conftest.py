@@ -20,8 +20,13 @@ nurse.a    nurse or doctor         clinic A, assigned to Triage (Room 2) only
 manager.a  clinic manager          clinic A
 desk.b     receptionist            clinic B
 both       receptionist, manager   receptionist at clinic A, clinic manager at clinic B
+trainee    front desk trainee      clinic A; a custom role that reads the queues and changes nothing
 operator   platform administrator  no clinic (unscoped)
 ========== ======================= ===================================================
+
+The trainee's role exists only as grants (``dashboard`` and ``queues.tickets`` at ``read``), the way an
+operator would build one in the access console: it is what a screen shows someone whose grants stop
+short of a control.
 
 ``dashboard.client(name)`` signs in and returns a ``TestClient`` carrying the CSRF token on writes, so
 a refusal in a test is an authorization answer, never a missing header.
@@ -30,7 +35,7 @@ a refusal in a test is an authorization answer, never a missing header.
 from __future__ import annotations
 
 from collections.abc import Generator, Iterator
-from datetime import time
+from datetime import UTC, datetime, time
 from types import SimpleNamespace
 
 import pytest
@@ -43,14 +48,23 @@ from starlette import status
 from src.commons.enums import (
     AppEnvironment,
     AssignmentScopeType,
+    GrantScope,
+    PermissionVerb,
     SiteStatus,
     UserRole,
 )
+from src.commons.ids import new_id
 from src.core import refresh_token_policy, security
 from src.core.config import Settings, get_settings
 from src.core.rbac_manifest_sync import sync_rbac_catalog
 from src.core.site_scope import SiteAccess
-from src.database.models import Base, SiteOpeningHours, UserRoleAssignment
+from src.database.models import (
+    Base,
+    RbacRole,
+    RolePermission,
+    SiteOpeningHours,
+    UserRoleAssignment,
+)
 from src.database.schema import sqlite_schema_translate_map
 from src.database.session import get_db
 from src.main import create_app
@@ -58,6 +72,7 @@ from src.modules.queue.snapshot import NoSnapshotCache, set_snapshot_cache
 from src.modules.staff.assignments import set_room_assignments
 from tests.factories import (
     FACTORY_STAFF_PASSWORD,
+    PatientFactory,
     QueueFactory,
     SiteFactory,
     StaffFactory,
@@ -67,6 +82,8 @@ SITE_A = "0199b0c0-0000-7000-8000-0000000d0a01"
 SITE_B = "0199b0c0-0000-7000-8000-0000000d0b01"
 _SECRET = "dashboard-test-secret-min-32-characters!"
 EMAIL_DOMAIN = "clinicq.example"
+#: A role built from grants alone, as an operator would in the access console.
+TRAINEE_ROLE = "front_desk_trainee"
 
 
 def dashboard_settings(**overrides: object) -> Settings:
@@ -104,6 +121,25 @@ def dashboard(monkeypatch: pytest.MonkeyPatch) -> Iterator[SimpleNamespace]:
 
     with factory() as db:
         sync_rbac_catalog(db)
+        db.add(
+            RbacRole(
+                name=TRAINEE_ROLE, description="Front desk trainee.", is_system=False
+            )
+        )
+        for resource, scope in (
+            ("dashboard", GrantScope.BUSINESS),
+            ("queues.tickets", GrantScope.ASSIGNED),
+        ):
+            db.add(
+                RolePermission(
+                    role=TRAINEE_ROLE,
+                    resource=resource,
+                    max_verb=PermissionVerb.READ.value,
+                    scope=scope.value,
+                    created_at=datetime.now(UTC),
+                )
+            )
+        db.flush()
         SiteFactory.create(
             db, id=SITE_A, name="Zola Clinic", status=SiteStatus.VERIFIED
         )
@@ -133,6 +169,7 @@ def dashboard(monkeypatch: pytest.MonkeyPatch) -> Iterator[SimpleNamespace]:
             ("manager.a", UserRole.CLINIC_MANAGER, SITE_A),
             ("desk.b", UserRole.RECEPTIONIST, SITE_B),
             ("both", UserRole.RECEPTIONIST, SITE_A),
+            ("trainee", TRAINEE_ROLE, SITE_A),
             ("operator", UserRole.PLATFORM_ADMIN, None),
         ):
             people[name] = StaffFactory.create(
@@ -188,6 +225,18 @@ def dashboard(monkeypatch: pytest.MonkeyPatch) -> Iterator[SimpleNamespace]:
             client.headers["X-CSRF-Token"] = token
         return client
 
+    def _patient() -> tuple[TestClient, str]:
+        """A client with a new patient's web session (bearer token), and the patient's id."""
+        with factory() as db:
+            record = PatientFactory.create(db)
+            db.commit()
+            token = security.create_patient_session_token(
+                record.id, new_id(), record.session_version
+            )
+        client = TestClient(app)
+        client.headers["Authorization"] = f"Bearer {token}"
+        return client, record.id
+
     def _page(site_id: str, section: str = "") -> str:
         """A clinic page's path: ``/dashboard/sites/{site_id}`` plus ``/section`` when given."""
         base = f"/dashboard/sites/{site_id}"
@@ -199,6 +248,7 @@ def dashboard(monkeypatch: pytest.MonkeyPatch) -> Iterator[SimpleNamespace]:
         settings=settings,
         client=_client,
         anonymous=lambda: TestClient(app, follow_redirects=False),
+        patient=_patient,
         page=_page,
         site_a=SITE_A,
         site_b=SITE_B,
