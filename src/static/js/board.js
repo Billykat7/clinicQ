@@ -14,7 +14,9 @@
  *   - Newly called. A ticket called (or called again) less than data-highlight-seconds ago, on the
  *     server's clock, is marked is-new and says "Called now". The page with a new call is shown at
  *     once, and does not turn while the highlight lasts. The call is also said once to assistive
- *     technology through an assertive live region.
+ *     technology through an assertive live region, and dispatched once as a `board:call` event on the
+ *     document, whose detail is { number, room } and nothing else, for board-announce.js to say aloud
+ *     (Issue 60).
  *   - Health notices. One at a time, changed every data-message-seconds with a short fade (no fade
  *     under reduced motion; board.css).
  *
@@ -179,19 +181,15 @@
   }
 
   function announce() {
-    if (!announcer) return;
     state.queues.forEach(function (queue) {
       queue.now_serving.forEach(function (ticket) {
         var key = ticket.number + '@' + ticket.called_at;
         if (calledRecently(ticket) && !announced[key]) {
           announced[key] = true;
-          text(
-            announcer,
-            fill(announcer.getAttribute('data-template'), {
-              number: ticket.number,
-              room: queue.room || queue.label,
-            })
-          );
+          // A call is its number and where to go: nothing else about the ticket leaves this function.
+          var call = { number: ticket.number, room: queue.room || queue.label };
+          if (announcer) text(announcer, fill(announcer.getAttribute('data-template'), call));
+          document.dispatchEvent(new CustomEvent('board:call', { detail: call }));
         }
       });
     });

@@ -100,6 +100,7 @@ def board(dashboard: SimpleNamespace) -> SimpleNamespace:
                     show_comment=show_comment,
                     board_language=BoardLanguage(site.board_language),
                     announce_audio=site.announce_audio,
+                    announce_volume=site.announce_volume,
                     retention_days=site.reason_retention_days,
                 ),
                 confirm_public_display=True,

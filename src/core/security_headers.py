@@ -87,6 +87,20 @@ _PERMISSIONS_POLICY = (
     "encrypted-media=(), fullscreen=(self), geolocation=(), gyroscope=(), "
     "magnetometer=(), microphone=(), midi=(), payment=(), usb=()"
 )
+#: The waiting-room board's pages (Issue 60) are the one place that plays sound nobody clicked for: the
+#: chime before a call. ``autoplay=()`` would silence it, so under this prefix, and only here, this
+#: origin's own media may autoplay. Nothing else is loosened.
+BOARD_PATH_PREFIX = "/display"
+_BOARD_PERMISSIONS_POLICY = _PERMISSIONS_POLICY.replace(
+    "autoplay=()", "autoplay=(self)"
+)
+
+
+def permissions_policy_for(path: str) -> str:
+    """The Permissions-Policy for a request path: the board's allows its own autoplay, nothing else does."""
+    if path == BOARD_PATH_PREFIX or path.startswith(BOARD_PATH_PREFIX + "/"):
+        return _BOARD_PERMISSIONS_POLICY
+    return _PERMISSIONS_POLICY
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -102,7 +116,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Permissions-Policy"] = _PERMISSIONS_POLICY
+        response.headers["Permissions-Policy"] = permissions_policy_for(
+            request.url.path
+        )
         # Isolate this origin's browsing context so cross-origin popups it opens (and any
         # opener that framed it) cannot share a window reference — closes the reverse-tabnabbing
         # and Spectre-style cross-origin leakage vectors that frame-ancestors alone does not.

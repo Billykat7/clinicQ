@@ -289,3 +289,6 @@ def test_eight_hours_of_calls_leave_the_heap_the_dom_and_the_layout_where_they_s
     assert after["attached"] == before["attached"], (before, after)
     assert after["listeners"] <= before["listeners"], (before, after)
     assert after["rects"] == before["rects"]
+    # The announcer (Issue 60) ran all day too, in a browser whose speech engine has no voice to say
+    # anything with: the case that would keep every sentence if the board did not cancel it.
+    assert page.evaluate("() => window.ClinicQBoardAnnounce.log().length") == 20

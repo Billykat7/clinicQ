@@ -64,7 +64,7 @@ sequenceDiagram
     R->>API: Call next ticket in Queue X
     API->>API: Apply site's display_mode (number-only/name-lite/full)
     API-->>D: htmx-poll or SSE push: new "now serving" row
-    D->>D: Update board, chime/beep, highlight the new row briefly
+    D->>D: Update board, highlight the new row, chime and say the number and room
     Note over D: Board also shows next 3-5 tickets in queue as "up next", same privacy rule applied
 ```
 
@@ -127,6 +127,23 @@ staff screens', and nothing is inline.
   once, naming it and its clinic, and once more when back. Operators see every screen at
   `/admin/display-devices`.
 - **Setting a box up:** `docs/OPS/KIOSK_SETUP.md`.
+
+## Announcements (Issue 60)
+
+- **A chime, then the number and the room**, in the clinic's language: *"Number A 0 1 2, please go to
+  Room 4."* The number is spelled out so each character is heard.
+- **Never a name.** What the board speaks is a sentence with two blanks, the number and the room, and the
+  server refuses any other blank. The script that speaks is handed only those two values, whatever the
+  screen shows under the clinic's display mode.
+- **One at a time.** Calls made together are said in order, never over each other.
+- **Per clinic:** *Announce each call aloud* (`sites.announce_audio`) and *Loudness of announcements*
+  (`sites.announce_volume`, 0–100 %). Muted, the screen still highlights every call.
+- **Languages:** English, isiZulu, isiXhosa, Afrikaans and Sesotho have their own sentence; the other
+  board languages speak English. **No sentence has been checked by a fluent speaker yet.**
+- **How it is said:** the browser's speech with a voice for the language; otherwise recorded clips of
+  each letter and digit (`src/static/audio/numbers/<language>/`), none recorded yet; otherwise English
+  speech; otherwise the chime alone.
+- **Voices, recordings and the fluent-speaker record:** `docs/OPS/BOARD_AUDIO.md`.
 
 ## Live updates (Issue 57)
 

@@ -88,6 +88,16 @@
     renderModes(current.display_mode);
     el('ds-show-comment').checked = current.display_show_comment;
     el('ds-announce-audio').checked = current.announce_audio;
+    // How loud the announcements are (Issue 60); only meaningful while they are on.
+    const volume = el('ds-volume');
+    volume.value = current.announce_volume;
+    const showVolume = () => {
+      el('ds-volume-value').textContent = `${volume.value}%`;
+      volume.disabled = !el('ds-announce-audio').checked;
+    };
+    volume.addEventListener('input', showVolume);
+    el('ds-announce-audio').addEventListener('change', showVolume);
+    showVolume();
     el('ds-retention').value = current.reason_retention_days;
     el('ds-retention').max = options.retention_ceiling_days;
     el('ds-retention').min = options.retention_floor_days;
@@ -136,6 +146,7 @@
         board_language: el('ds-language').value,
         board_theme: el('ds-theme').value,
         announce_audio: el('ds-announce-audio').checked,
+        announce_volume: Number(el('ds-volume').value),
         reason_retention_days: Number(el('ds-retention').value),
         confirm_public_display: el('ds-confirm').checked,
         confirm_comment_with_full_name: el('ds-confirm-comment').checked,

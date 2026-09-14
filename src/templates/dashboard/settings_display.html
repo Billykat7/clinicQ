@@ -69,8 +69,18 @@
         <input type="checkbox" id="ds-announce-audio">
         Announce each call aloud as well as showing it
       </label>
-      <p class="hint">For patients who cannot read the screen. What the announcement says follows
-        the setting above.</p>
+      <p class="hint">A chime, then the ticket number and the room, in the language of the screen. It
+        never says a patient's name, whatever the screen shows. Switched off, the screen still
+        highlights each call.</p>
+    </div>
+
+    <div class="field" id="ds-volume-wrap">
+      <label for="ds-volume">Loudness of announcements</label>
+      <div class="input-suffix">
+        <input type="range" id="ds-volume" min="0" max="100" step="5" aria-describedby="ds-volume-value">
+        <output class="suffix" id="ds-volume-value" for="ds-volume"></output>
+      </div>
+      <p class="hint">Of the screen's own volume. Set the TV's volume first, then this.</p>
     </div>
 
     {# The confirmations. Hidden until the choice actually needs one, because a checkbox that is

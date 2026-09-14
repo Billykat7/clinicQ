@@ -71,6 +71,7 @@ def _state(*, mode: DisplayMode, tickets: tuple[BoardTicket, ...]) -> BoardState
         language=BoardLanguage.ENGLISH,
         theme=BoardTheme.DIM,
         announce_audio=True,
+        announce_volume=80,
         as_of=datetime(2026, 9, 14, 9, 0, tzinfo=APP_TIMEZONE),
         queues=(
             BoardQueue(

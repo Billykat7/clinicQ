@@ -18,7 +18,13 @@ from types import SimpleNamespace
 from sqlalchemy import select
 from starlette import status
 
-from src.commons.enums import AuditAction, AuditEntityType, BoardTheme, DisplayMode
+from src.commons.enums import (
+    SITE_DEFAULT_ANNOUNCE_VOLUME,
+    AuditAction,
+    AuditEntityType,
+    BoardTheme,
+    DisplayMode,
+)
 from src.database.models import AuditEvent
 from src.modules.sites.settings import (
     COMMENT_WITH_FULL_NAME_WARNING,
@@ -315,3 +321,47 @@ def test_a_manager_chooses_the_board_theme_with_no_confirmation_and_it_is_audite
     assert refused.status_code == status.HTTP_403_FORBIDDEN
     unknown = manager.put(_path(clinics), json=_settings(clinics, board_theme="neon"))
     assert unknown.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+
+
+def test_a_manager_sets_how_loud_announcements_are_within_0_to_100_and_it_is_audited(
+    clinics: SimpleNamespace,
+) -> None:
+    """A volume changes nothing a board says about anyone: no confirmation, one audit row (Issue 60).
+
+    Every clinic starts at the default, a value outside 0 to 100 is refused, and a receptionist may read
+    the volume and cannot change it.
+    """
+    manager = _manager(clinics)
+    assert (
+        manager.get(_path(clinics)).json()["announce_volume"]
+        == SITE_DEFAULT_ANNOUNCE_VOLUME
+    )
+
+    changed = manager.put(_path(clinics), json=_settings(clinics, announce_volume=40))
+    assert changed.status_code == status.HTTP_200_OK, changed.text
+    assert changed.json()["announce_volume"] == 40
+    with clinics.session() as db:
+        row = db.execute(
+            select(AuditEvent).where(
+                AuditEvent.entity_type == AuditEntityType.SITE.value,
+                AuditEvent.action == AuditAction.UPDATE.value,
+            )
+        ).scalar_one()
+    assert (
+        row.context
+        == f"display settings: announce_volume: {SITE_DEFAULT_ANNOUNCE_VOLUME} -> 40"
+    )
+
+    for loudness in (-1, 101):
+        refused = manager.put(
+            _path(clinics), json=_settings(clinics, announce_volume=loudness)
+        )
+        assert refused.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+    desk = clinics.client("desk.a@clinicq.example")
+    assert desk.get(_path(clinics)).json()["announce_volume"] == 40
+    assert (
+        desk.put(
+            _path(clinics), json=_settings(clinics, announce_volume=90)
+        ).status_code
+        == status.HTTP_403_FORBIDDEN
+    )

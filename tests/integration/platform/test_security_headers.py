@@ -21,6 +21,7 @@ from starlette import status
 
 from src.commons.enums import AppEnvironment
 from src.core.config import Settings, get_settings
+from src.core.security_headers import permissions_policy_for
 from src.main import create_app
 
 _TEST_JWT_SECRET = "security-headers-test-secret-min-32-characters"
@@ -177,3 +178,21 @@ def test_non_html_responses_are_not_forced_no_store(client: TestClient) -> None:
     resp = client.get("/health/live")
     assert "text/html" not in resp.headers.get("content-type", "").lower()
     assert resp.headers.get("Cache-Control") != "no-store"
+
+
+def test_only_the_waiting_room_board_may_autoplay_its_own_sound(
+    client: TestClient,
+) -> None:
+    """The board's chime plays with nobody clicking (Issue 60); every other page keeps autoplay off.
+
+    The policy is chosen from the path alone, so it is checked there; the served header is checked on a
+    page that needs no database.
+    """
+    for path in ("/display", "/display/some-clinic", "/display/some-clinic/state"):
+        policy = permissions_policy_for(path)
+        assert "autoplay=(self)" in policy and "autoplay=()" not in policy, path
+        for feature in ("camera=()", "microphone=()", "geolocation=()", "payment=()"):
+            assert feature in policy
+    for path in ("/health/live", "/displays", "/dashboard", "/api/v1/display-devices"):
+        assert "autoplay=()" in permissions_policy_for(path), path
+    assert "autoplay=()" in client.get("/health/live").headers["Permissions-Policy"]

@@ -46,6 +46,12 @@ from src.core.site_scope import permitted_site_ids, site_not_found
 from src.database.models import DisplayDevice
 from src.database.session import get_db
 from src.modules.display import devices
+from src.modules.display.announcements import (
+    CHIME_PATH,
+    FALLBACK_LANGUAGE,
+    announcement_for,
+    number_clips,
+)
 from src.modules.display.board_state import BOARD_HEARTBEAT_SECONDS
 from src.modules.display.enums import BoardViewer, PairingState
 from src.modules.display.messages import health_messages
@@ -296,6 +302,9 @@ def board_page(site_id: str, request: Request, db: DbSession) -> Response:
         db, site, viewer=audience.viewer, queue_ids=audience.queue_ids
     )
     message_language, messages = health_messages(state.language)
+    # What the board says aloud (Issue 60): sentences with a number and a room to fill, never a name.
+    phrase = announcement_for(state.language)
+    fallback = announcement_for(FALLBACK_LANGUAGE)
     return board_template_response(
         request,
         "display/board.html",
@@ -320,5 +329,12 @@ def board_page(site_id: str, request: Request, db: DbSession) -> Response:
             "device_heartbeat_seconds": DEVICE_HEARTBEAT_SECONDS,
             "start_url": START_PATH,
             "app_version": get_settings().version,
+            "announce_call": phrase.call,
+            "announce_voice": phrase.voice_tag,
+            "announce_language": phrase.language,
+            "announce_fallback_call": fallback.call,
+            "announce_fallback_voice": fallback.voice_tag,
+            "announce_clips": number_clips(phrase.language),
+            "announce_chime": CHIME_PATH,
         },
     )

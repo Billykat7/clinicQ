@@ -178,7 +178,7 @@ showed and says it is reconnecting. A small UPS
 | The board shows *⟳ Reconnecting to the clinic…* | The network dropped. It recovers by itself; if it stays for more than a few minutes, check the clinic's internet. |
 | The board went back to a code by itself | The screen was removed in **Display boards**. Pair it again. |
 | The screen goes black after some hours | The TV's sleep or eco timer (A3), or the operating system's screen blanking (A3). |
-| No chime | The TV's volume, and the `--autoplay-policy` flag in A5. The clinic can also have turned announcements off. |
+| No chime or no voice | The TV's volume, and the `--autoplay-policy` flag in A5. In **Clinic settings → Waiting-room screen**, check *Announce each call aloud* and *Loudness of announcements*. A chime with no voice means the box has no voice for the clinic's language: see [BOARD_AUDIO.md](BOARD_AUDIO.md). |
 
 ---
 
