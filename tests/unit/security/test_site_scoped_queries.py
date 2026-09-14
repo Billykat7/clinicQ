@@ -137,6 +137,19 @@ _UNSCOPED_BY_DESIGN: dict[str, str] = {
         "ticket's wait (Issues 42, 44); the tickets came from patient_tickets_select, scoped by "
         "the patient"
     ),
+    "modules/queue/transfer.py::transfer_ticket": (
+        "reads the moved ticket's own queue, visit and clinic by id (Issue 45); the ticket was "
+        "scoped by the route (get_in_site_or_404) and the target queue by get_queue, and the "
+        "function refuses a target at another clinic"
+    ),
+    "modules/queue/transfer.py::_placement_key": (
+        "reads the waiting tickets, and when their visits began, **in the target queue** the route "
+        "resolved through get_queue, to find the moved patient's place (Issue 45). It returns an "
+        "order key, never a row"
+    ),
+    "modules/queue/transfer.py::_notify": (
+        "reads the new ticket's own patient and clinic by id to word the transfer message (Issue 45)"
+    ),
     "modules/staff/invitations.py::usable_invitation": (
         "an invitation link is opened by someone who has no account and therefore no clinic to be "
         "scoped by; the id comes from the signed token, and the row's own site_id is what "

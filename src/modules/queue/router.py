@@ -38,7 +38,7 @@ from src.commons.enums import (
     TicketStatus,
 )
 from src.commons.phone import normalize_phone
-from src.commons.time import business_date
+from src.commons.time import business_date, business_day_bounds, stored_sast
 from src.core.client_ip import resolve_client_ip
 from src.core.config import Settings, get_settings
 from src.core.rate_limit_deps import DISCOVERY_SESSION_COOKIE
@@ -48,9 +48,10 @@ from src.core.site_scope import (
     publicly_visible_site_clauses,
     published_select,
     require_site_access,
+    scoped_select,
     site_not_found,
 )
-from src.database.models import Patient, Queue, Site, Ticket
+from src.database.models import Patient, Queue, Site, Ticket, Visit
 from src.database.session import get_db
 from src.modules.patients.service import get_or_create_patient
 from src.modules.queue import service
@@ -68,7 +69,12 @@ from src.modules.queue.schemas import (
     MyTicketOut,
     TicketListOut,
     TicketOut,
+    TransferIn,
+    TransferOut,
     TransitionIn,
+    VisitLegOut,
+    VisitListOut,
+    VisitOut,
     WaitOut,
     WalkInIn,
 )
@@ -79,6 +85,7 @@ from src.modules.queue.tickets import (
     site_day_select,
     waiting_ahead,
 )
+from src.modules.queue.transfer import VisitSummary, transfer_ticket, visit_summary
 from src.modules.queue.waits import estimates_for
 from src.modules.queues.service import get_queue
 from src.modules.sites.hours import published_schedules, schedule_for
@@ -411,3 +418,101 @@ def next_ticket(queue_id: str, access: CallPeek, db: DbSession) -> TicketOut | N
         .first()
     )
     return TicketOut.of(upcoming) if upcoming is not None else None
+
+
+@router.post(
+    "/sites/{site_id}/tickets/{ticket_id}/transfer",
+    response_model=TransferOut,
+    operation_id="queueTransferTicket",
+    summary="Move a patient to another queue without rejoining",
+)
+def transfer(
+    ticket_id: str, payload: TransferIn, access: TicketsIssue, db: DbSession
+) -> TransferOut:
+    """Transfer a waiting or in-progress ticket to another queue at this clinic, keeping the visit."""
+    ticket = get_in_site_or_404(db, Ticket, ticket_id, access)
+    target = get_queue(db, access, payload.queue_id)
+    if target is None:
+        raise site_not_found()
+    result = transfer_ticket(
+        db, ticket.id, target, actor=_staff(access), reason=payload.reason
+    )
+    db.commit()
+    return TransferOut(
+        from_ticket=TicketOut.of(result.from_ticket),
+        ticket=TicketOut.of(result.ticket),
+        visit_id=result.ticket.visit_id,
+        waiting_ahead=result.waiting_ahead,
+        wait=WaitOut.of(result.wait),
+        message=(
+            f"Moved to {target.name} as {result.ticket.number}. "
+            f"Expected wait {result.wait.label}."
+        ),
+    )
+
+
+def _visit_out(summary: VisitSummary) -> VisitOut:
+    """The wire form of a visit summary."""
+    return VisitOut(
+        id=summary.visit.id,
+        site_id=summary.visit.site_id,
+        started_at=summary.started_at,
+        ended_at=summary.ended_at,
+        total_minutes=(
+            round(summary.total_minutes, 1)
+            if summary.total_minutes is not None
+            else None
+        ),
+        legs=[
+            VisitLegOut(
+                ticket_id=leg.id,
+                queue_id=leg.queue_id,
+                number=leg.number,
+                status=leg.status_enum,
+                joined_at=stored_sast(leg.joined_at),
+                called_at=stored_sast(leg.called_at) if leg.called_at else None,
+                completed_at=stored_sast(leg.completed_at)
+                if leg.completed_at
+                else None,
+                transferred_from_id=leg.transferred_from_id,
+            )
+            for leg in summary.legs
+        ],
+    )
+
+
+@router.get(
+    "/sites/{site_id}/visits/{visit_id}",
+    response_model=VisitOut,
+    operation_id="queueVisit",
+    summary="One patient's journey through the clinic",
+)
+def visit(visit_id: str, access: TicketsRead, db: DbSession) -> VisitOut:
+    """A visit's legs in order, and its total time once it has ended."""
+    return _visit_out(visit_summary(db, access, visit_id))
+
+
+@router.get(
+    "/sites/{site_id}/visits",
+    response_model=VisitListOut,
+    operation_id="queueVisits",
+    summary="The clinic's visits today",
+)
+def visits(access: TicketsRead, db: DbSession) -> VisitListOut:
+    """Every visit that began today at this clinic, earliest first, with its legs."""
+    today = business_date()
+    start, end = business_day_bounds(today)
+    ids = (
+        db.execute(
+            scoped_select(Visit, access)
+            .with_only_columns(Visit.id)
+            .where(Visit.started_at >= start, Visit.started_at < end)
+            .order_by(Visit.started_at)
+        )
+        .scalars()
+        .all()
+    )
+    items = [_visit_out(visit_summary(db, access, visit_id)) for visit_id in ids]
+    return VisitListOut(
+        site_id=access.site_id, service_day=today, total=len(items), items=items
+    )

@@ -191,6 +191,12 @@ CASES: dict[str, dict[str, object]] = {
             f"/api/v1/sites/{site}/queues/{_QUEUE_AT.get(site, _NOWHERE)}/tickets/next",
         ),
     },
+    "visit": {
+        # A patient's journey through a clinic (Issue 45): the front desk reads today's visits.
+        "resource": "queues.tickets",
+        "reader": "a@clinicq.example",
+        "paths": lambda site, _row: (f"/api/v1/sites/{site}/visits",),
+    },
     "staffinvitation": {
         # Who has been invited to a clinic (Issue 22): the same grant as the staff list, so a
         # receptionist reads it, and another clinic's list is a 404 like everything else.

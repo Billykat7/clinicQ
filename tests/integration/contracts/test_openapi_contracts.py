@@ -102,9 +102,12 @@ CONTRACTS: tuple[Contract, ...] = (
         },
     ),
     Contract(name="discovery", filename="discovery.yaml", prefix="/api/v1/clinics"),
-    # Every ticket route, wherever it hangs (Issue 40 starts it; Issue 47 completes it).
+    # Every ticket and visit route, wherever it hangs (Issue 40 starts it; Issue 47 completes it).
     Contract(
-        name="queue", filename="queue.yaml", prefix="/api/v1", pattern=r"/tickets(/|$)"
+        name="queue",
+        filename="queue.yaml",
+        prefix="/api/v1",
+        pattern=r"/(tickets|visits)(/|$)",
     ),
 )
 

@@ -35,6 +35,7 @@ from src.commons.enums import (
     ServiceCategory,
     SiteSector,
     SiteStatus,
+    TransferPlacement,
 )
 from src.commons.geo import (
     CoordinateOutOfRangeError,
@@ -624,6 +625,22 @@ class PaymentProfileOut(BaseModel):
 # --------------------------------------------------------------------------------------
 # Discovery analytics (Issue 38): the opt-out and the view-to-join report
 # --------------------------------------------------------------------------------------
+
+
+class TransferSettingsIn(BaseModel):
+    """Where a patient moved to another queue lands in it (Issue 45)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    transfer_placement: TransferPlacement
+
+
+class TransferSettingsOut(BaseModel):
+    """A clinic's transfer placement, with what it means."""
+
+    site_id: str
+    transfer_placement: TransferPlacement
+    explanation: str = Field(description="What the setting does, in plain words.")
 
 
 class RecallSettingsIn(BaseModel):

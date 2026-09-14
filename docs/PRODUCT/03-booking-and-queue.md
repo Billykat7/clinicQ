@@ -72,6 +72,14 @@ flowchart LR
 Each queue has its own display feed ([04](04-display-monitor.md)) or they can share one multi-panel
 screen if the clinic only has one monitor.
 
+**A transfer keeps the visit.** Staff move a patient on with one action: the ticket in the queue they
+leave becomes `transferred`, and they get the next number in the new queue without rejoining, sent to
+their phone with the expected wait. Every ticket of the journey belongs to one **visit**, so the whole
+visit (its legs and its total time) is a query, not a guess. Where the patient lands in the new queue
+is the clinic's choice: **by when their visit began** (the default, so time already spent at the
+clinic is not lost) or **at the back of the line**. A transfer into a queue that is closed or full
+for the day is refused with a clear message and changes nothing.
+
 ## Ticket lifecycle
 
 A ticket's status changes in exactly one place, `transition_ticket()` in
@@ -119,6 +127,7 @@ stateDiagram-v2
 | `ticket` | id, site_id, queue_id, patient_id (empty for a walk-in with no phone: no placeholder patient), service_day (the Johannesburg date), sequence (unique per queue and service day, allocated by the database), number (`A043`), reference_code (six characters with no 0/O or 1/I/L), source (web/ussd/whatsapp/walk_in), walk_in_name (the desk's name for a walk-in; a phone join is named by its patient record, behind consent), reason_text (optional, short), comment_consent, status (waiting/called/recalled/in_progress/done/no_show/cancelled/transferred), joined_at, called_at, started_at, completed_at |
 | `ticket_sequence` | queue_id, service_day, last_value: the counter a ticket number comes from, one row per queue per day, so numbering restarts at Johannesburg midnight with nothing to reset |
 | `patients` (optional link, if patient has an account) | id, phone/whatsapp_id, name, consent_flags |
+| `visit` | id, site_id, patient_id (empty for a walk-in with no phone), started_at: the tickets of one patient's journey share it; `ticket.visit_id` and `ticket.transferred_from_id` link the legs |
 | `wait_time_sample` | queue_id, ticket_id, service_day, called_hour, wait_minutes, service_minutes, interval_minutes (the gap since the previous call while the queue was busy; what the estimate reads), recorded_at |
 
 Markdown cross-refs: display rendering of `patient_display_name`/`reason_text` and privacy controls are in

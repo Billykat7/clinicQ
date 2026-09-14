@@ -640,6 +640,43 @@ class ActorKind(StrEnum):
     SYSTEM = "system"
 
 
+class TransferReason(StrEnum):
+    """Why staff moved a patient to another queue (Issue 45). Required, and never free text.
+
+    A closed list because the audit trail and the visit reports (Issue 90) read it, and because a
+    free-text box beside a patient's ticket is where a clinical note would end up.
+
+    - ``NEXT_STEP``: the visit's next stop: triage done, on to the doctor; the doctor done, on to
+      the pharmacy.
+    - ``REFERRED``: sent to a service the first queue does not offer.
+    - ``WRONG_QUEUE``: joined the wrong line.
+    - ``OTHER``: none of these.
+    """
+
+    NEXT_STEP = "next_step"
+    REFERRED = "referred"
+    WRONG_QUEUE = "wrong_queue"
+    OTHER = "other"
+
+
+class TransferPlacement(StrEnum):
+    """Where a transferred patient goes in the next queue. A clinic setting (Issue 45).
+
+    - ``ARRIVAL_ORDER`` (the default): among the patients waiting there, by when each **visit**
+      began. A patient triaged at 07:40 goes ahead of one who walked in at 08:10, because they have
+      been at the clinic longer: "fair by arrival order" (non-negotiable 1) applied to the whole
+      visit rather than to each line.
+    - ``BACK_OF_LINE``: behind everyone already waiting there, as if they had just joined.
+    """
+
+    ARRIVAL_ORDER = "arrival_order"
+    BACK_OF_LINE = "back_of_line"
+
+
+#: Where a transferred patient goes unless the clinic says otherwise (see TransferPlacement).
+SITE_DEFAULT_TRANSFER_PLACEMENT: TransferPlacement = TransferPlacement.ARRIVAL_ORDER
+
+
 class CancellationReason(StrEnum):
     """Why a patient gave their place back, when they chose to say (Issue 44). Optional.
 
@@ -1199,6 +1236,8 @@ class NotificationTemplate(StrEnum):
     # more, and then that the ticket was marked missed and how to join again.
     TICKET_RECALLED = "ticket_recalled"
     TICKET_NO_SHOW = "ticket_no_show"
+    # A patient moved on to the next queue of their visit (Issue 45): the new queue, number and wait.
+    TICKET_TRANSFERRED = "ticket_transferred"
     # Catch-all for a pre-rendered message with no dedicated key (kept small on purpose).
     GENERIC = "generic"
 
@@ -1301,6 +1340,7 @@ NOTIFICATION_TEMPLATE_CATEGORY: dict[NotificationTemplate, NotificationCategory]
     # preferences and may give queue messages a category of their own.
     NotificationTemplate.TICKET_RECALLED: NotificationCategory.ACCOUNT,
     NotificationTemplate.TICKET_NO_SHOW: NotificationCategory.ACCOUNT,
+    NotificationTemplate.TICKET_TRANSFERRED: NotificationCategory.ACCOUNT,
 }
 
 
@@ -1338,6 +1378,7 @@ NOTIFICATION_URGENT_TEMPLATES: frozenset[NotificationTemplate] = frozenset(
         # A recall is useless an hour late: quiet hours never hold one back (Issue 43).
         NotificationTemplate.TICKET_RECALLED,
         NotificationTemplate.TICKET_NO_SHOW,
+        NotificationTemplate.TICKET_TRANSFERRED,
     }
 )
 

@@ -49,6 +49,7 @@ from src.commons.exceptions import ConflictError, NotFoundError
 from src.core.site_scope import SiteAccess, scoped_select
 from src.database.models.ticket import Ticket
 from src.modules.queue.lifecycle import Actor, lock_ticket, transition_ticket
+from src.modules.queue.tickets import behind
 
 #: What a patient is told when they try to cancel after being called.
 SPEAK_TO_RECEPTION: Final = (
@@ -82,7 +83,7 @@ def _behind(db: Session, ticket: Ticket) -> int:
                 Ticket.queue_id == ticket.queue_id,
                 Ticket.service_day == ticket.service_day,
                 Ticket.status == TicketStatus.WAITING.value,
-                Ticket.sequence > ticket.sequence,
+                behind(ticket),
             )
         ).scalar_one()
     )

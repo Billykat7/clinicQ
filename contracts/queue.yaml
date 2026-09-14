@@ -388,6 +388,140 @@ paths:
         "404": { $ref: "#/components/responses/SiteNotFound" }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
+  # ── Transfers and visits (Issue 45) ─────────────────────────────────────────────────────
+  /sites/{site_id}/tickets/{ticket_id}/transfer:
+    post:
+      tags: [queue]
+      operationId: queueTransferTicket
+      summary: Move a patient to another queue without rejoining
+      description: |
+        Moves a `waiting` or `in_progress` ticket to another queue at the same clinic. The ticket left
+        behind becomes `transferred`; a new ticket is issued in the target queue from its own sequence,
+        in the same visit, pointing back with `transferred_from_id`. Where the patient lands is the
+        clinic's `transfer_placement`: `arrival_order` (by when the visit began, the default) or
+        `back_of_line`. The patient is sent the new queue, number and wait. Both tickets are audited
+        with the staff member and the reason. A refusal changes nothing. Requires `queues.tickets`
+        `update` at this clinic.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/SiteId" }
+        - { $ref: "#/components/parameters/TicketId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TransferIn" }
+            example: { queue_id: 01a09c0b-ce5e-7037-8071-cd12f438bd3e, reason: next_step }
+      responses:
+        "200":
+          description: The patient is in the new queue.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TransferOut" }
+              example:
+                from_ticket:
+                  id: 01a09cf1-951b-7278-a2be-5fe7590abe56
+                  site_id: 01a09c0b-ce1c-743e-b8ff-544bb4ac8774
+                  queue_id: 01a09c0b-ce5e-7037-8071-cd12f438bd3d
+                  number: T005
+                  reference_code: K7M-4QP
+                  source: web
+                  status: transferred
+                  service_day: "2026-09-14"
+                  joined_at: "2026-09-14T07:31:12+02:00"
+                  walk_in_name: null
+                ticket:
+                  id: 01a09cf1-9563-7512-aebc-6e2b4b0beb59
+                  site_id: 01a09c0b-ce1c-743e-b8ff-544bb4ac8774
+                  queue_id: 01a09c0b-ce5e-7037-8071-cd12f438bd3e
+                  number: A012
+                  reference_code: K7M-4QP
+                  source: web
+                  status: waiting
+                  service_day: "2026-09-14"
+                  joined_at: "2026-09-14T07:31:12+02:00"
+                  walk_in_name: null
+                visit_id: 01a09cf1-94f8-73c5-b87a-cfcac3909999
+                waiting_ahead: 3
+                wait: { low_minutes: 15, high_minutes: 30, confidence: medium, approximate: false, label: "~15–30 min" }
+                message: "Moved to General consultation as A012. Expected wait ~15–30 min."
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/SiteNotFound" }
+        "409":
+          description: |
+            Refused, and nothing changed. `ticket.transfer.queue_closed` (the target is not taking
+            patients), `ticket.transfer.queue_full`, `ticket.transfer.same_queue`,
+            `ticket.transfer.already_there` (the patient already holds a ticket there), or
+            `ticket.transition.illegal` when the ticket cannot be transferred from its status.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                closed:
+                  value: { detail: "This queue is not taking patients at the moment.", code: "ticket.transfer.queue_closed" }
+                full:
+                  value: { detail: "That queue is full for today. Choose another queue.", code: "ticket.transfer.queue_full" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/visits:
+    get:
+      tags: [queue]
+      operationId: queueVisits
+      summary: The clinic's visits today
+      description: Every visit that began today at this clinic, earliest first, with its legs. Requires `queues.tickets` `read`.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/SiteId" }
+      responses:
+        "200":
+          description: Today's visits.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VisitListOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/SiteNotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/visits/{visit_id}:
+    get:
+      tags: [queue]
+      operationId: queueVisit
+      summary: One patient's journey through the clinic
+      description: |
+        The visit's tickets in the order they were issued, when it began, and, once its last leg is
+        finished (anything terminal but `transferred`), when it ended and its total minutes.
+        Requires `queues.tickets` `read`.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/SiteId" }
+        - name: visit_id
+          in: path
+          required: true
+          schema: { type: string }
+          example: 01a09cf1-94f8-73c5-b87a-cfcac3909999
+      responses:
+        "200":
+          description: The visit.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VisitOut" }
+              example:
+                id: 01a09cf1-94f8-73c5-b87a-cfcac3909999
+                site_id: 01a09c0b-ce1c-743e-b8ff-544bb4ac8774
+                started_at: "2026-09-14T07:31:12+02:00"
+                ended_at: "2026-09-14T09:02:40+02:00"
+                total_minutes: 91.5
+                legs:
+                  - { ticket_id: 01a09cf1-0000-7000-8000-000000000001, queue_id: 01a09c0b-0000-7000-8000-00000000000a, number: T005, status: transferred, joined_at: "2026-09-14T07:31:12+02:00", called_at: "2026-09-14T07:40:00+02:00", completed_at: "2026-09-14T07:52:00+02:00", transferred_from_id: null }
+                  - { ticket_id: 01a09cf1-0000-7000-8000-000000000002, queue_id: 01a09c0b-0000-7000-8000-00000000000b, number: A012, status: transferred, joined_at: "2026-09-14T07:52:00+02:00", called_at: "2026-09-14T08:20:00+02:00", completed_at: "2026-09-14T08:41:00+02:00", transferred_from_id: 01a09cf1-0000-7000-8000-000000000001 }
+                  - { ticket_id: 01a09cf1-0000-7000-8000-000000000003, queue_id: 01a09c0b-0000-7000-8000-00000000000c, number: P007, status: done, joined_at: "2026-09-14T08:41:00+02:00", called_at: "2026-09-14T08:55:00+02:00", completed_at: "2026-09-14T09:02:40+02:00", transferred_from_id: 01a09cf1-0000-7000-8000-000000000002 }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/SiteNotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
   # ── Giving a place back (Issue 44) ──────────────────────────────────────────────────────
   /patients/me/tickets/{ticket_id}/cancel:
     post:
@@ -736,6 +870,58 @@ components:
         waiting_ahead: { type: integer, minimum: 0, description: "Waiting tickets ahead of this one now." }
         wait: { $ref: "#/components/schemas/WaitOut" }
         message: { type: string, description: "A sentence for the patient." }
+    TransferReason:
+      type: string
+      description: Why staff moved a patient on. Required; never free text.
+      enum: [next_step, referred, wrong_queue, other]
+      example: next_step
+    TransferIn:
+      type: object
+      required: [queue_id, reason]
+      properties:
+        queue_id: { type: string, description: "A queue at the same clinic." }
+        reason: { $ref: "#/components/schemas/TransferReason" }
+      example: { queue_id: 01a09c0b-ce5e-7037-8071-cd12f438bd3e, reason: next_step }
+    TransferOut:
+      type: object
+      required: [from_ticket, ticket, visit_id, waiting_ahead, wait, message]
+      properties:
+        from_ticket: { $ref: "#/components/schemas/TicketOut" }
+        ticket: { $ref: "#/components/schemas/TicketOut" }
+        visit_id: { type: string }
+        waiting_ahead: { type: integer, minimum: 0 }
+        wait: { $ref: "#/components/schemas/WaitOut" }
+        message: { type: string }
+    VisitLegOut:
+      type: object
+      required: [ticket_id, queue_id, number, status, joined_at, called_at, completed_at, transferred_from_id]
+      properties:
+        ticket_id: { type: string }
+        queue_id: { type: string }
+        number: { type: string }
+        status: { $ref: "#/components/schemas/TicketStatus" }
+        joined_at: { type: string, format: date-time }
+        called_at: { type: [string, "null"], format: date-time }
+        completed_at: { type: [string, "null"], format: date-time }
+        transferred_from_id: { type: [string, "null"] }
+    VisitOut:
+      type: object
+      required: [id, site_id, started_at, ended_at, total_minutes, legs]
+      properties:
+        id: { type: string }
+        site_id: { type: string }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: [string, "null"], format: date-time, description: "null while the visit is under way." }
+        total_minutes: { type: [number, "null"], minimum: 0 }
+        legs: { type: array, items: { $ref: "#/components/schemas/VisitLegOut" } }
+    VisitListOut:
+      type: object
+      required: [site_id, service_day, total, items]
+      properties:
+        site_id: { type: string }
+        service_day: { type: string, format: date }
+        total: { type: integer, minimum: 0 }
+        items: { type: array, items: { $ref: "#/components/schemas/VisitOut" } }
     CancellationReason:
       type: string
       description: Why a patient gave their place back, when they chose to say. Feeds the no-show analysis (Issue 93).

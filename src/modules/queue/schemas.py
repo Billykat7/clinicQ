@@ -17,6 +17,7 @@ from src.commons.enums import (
     EstimateConfidence,
     TicketSource,
     TicketStatus,
+    TransferReason,
 )
 from src.commons.time import stored_sast
 from src.database.models.ticket import MAX_REASON_LENGTH, Ticket
@@ -155,6 +156,59 @@ class MyTicketOut(TicketOut):
     """Waiting tickets ahead in call order; ``None`` once the ticket is no longer waiting."""
     wait: WaitOut | None = None
     """The expected wait from now; ``None`` once the ticket is no longer waiting."""
+
+
+class TransferIn(BaseModel):
+    """Where to move the patient, and why (a closed list, never free text)."""
+
+    queue_id: str
+    reason: TransferReason
+
+
+class TransferOut(BaseModel):
+    """The ticket left behind, the new ticket, and where the patient stands in the new queue."""
+
+    from_ticket: TicketOut
+    ticket: TicketOut
+    visit_id: str
+    waiting_ahead: int = Field(ge=0)
+    wait: WaitOut
+    message: str
+
+
+class VisitLegOut(BaseModel):
+    """One ticket of a visit: which queue, which number, and when each step happened."""
+
+    ticket_id: str
+    queue_id: str
+    number: str
+    status: TicketStatus
+    joined_at: datetime
+    called_at: datetime | None
+    completed_at: datetime | None
+    transferred_from_id: str | None
+
+
+class VisitOut(BaseModel):
+    """One patient's journey through the clinic, derived from its tickets (Issue 45)."""
+
+    id: str
+    site_id: str
+    started_at: datetime
+    ended_at: datetime | None
+    """``None`` while the visit is under way."""
+    total_minutes: float | None = Field(default=None, ge=0)
+    """Start to end, once it has ended."""
+    legs: list[VisitLegOut]
+
+
+class VisitListOut(BaseModel):
+    """The clinic's visits that began on a service day, earliest first."""
+
+    site_id: str
+    service_day: date
+    total: int = Field(ge=0)
+    items: list[VisitOut]
 
 
 class TicketListOut(BaseModel):

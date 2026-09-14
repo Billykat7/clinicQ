@@ -35,6 +35,7 @@ from src.commons.enums import (
     GrantScope,
     SiteSector,
     SiteStatus,
+    TransferPlacement,
 )
 from src.commons.time import business_date, now_sast
 from src.core.audit import record_audit_event
@@ -95,6 +96,8 @@ from src.modules.sites.schemas import (
     SiteOut,
     SiteRegistrationIn,
     SiteRegistrationOut,
+    TransferSettingsIn,
+    TransferSettingsOut,
     VerificationDecisionIn,
     VerificationQueueItemOut,
     VerificationQueueOut,
@@ -1188,6 +1191,71 @@ def set_recall_settings(
     db.commit()
     db.refresh(site)
     return _recall_out(site, settings)
+
+
+#: Said beside each transfer placement, wherever a manager chooses one (Issue 45).
+TRANSFER_EXPLANATIONS = {
+    TransferPlacement.ARRIVAL_ORDER: (
+        "A patient moved to another queue goes in among the patients waiting there by when their "
+        "visit began, so time already spent at the clinic is not lost. This is the default."
+    ),
+    TransferPlacement.BACK_OF_LINE: (
+        "A patient moved to another queue goes behind everyone already waiting there, as if they "
+        "had just joined."
+    ),
+}
+
+
+def _transfer_out(site: Site) -> TransferSettingsOut:
+    placement = TransferPlacement(site.transfer_placement)
+    return TransferSettingsOut(
+        site_id=site.id,
+        transfer_placement=placement,
+        explanation=TRANSFER_EXPLANATIONS[placement],
+    )
+
+
+@router.get(
+    "/{site_id}/settings/transfers",
+    response_model=TransferSettingsOut,
+    operation_id="sitesGetTransferSettings",
+    summary="Where a patient moved to another queue lands in it",
+)
+def get_transfer_settings(
+    access: SiteSettingsRead, db: DbSession
+) -> TransferSettingsOut:
+    """The clinic's transfer placement and what it means."""
+    return _transfer_out(_site_or_404(db, access))
+
+
+@router.put(
+    "/{site_id}/settings/transfers",
+    response_model=TransferSettingsOut,
+    operation_id="sitesSetTransferSettings",
+    summary="Choose where a patient moved to another queue lands in it",
+)
+def set_transfer_settings(
+    payload: TransferSettingsIn,
+    request: Request,
+    access: SiteSettingsUpdate,
+    db: DbSession,
+) -> TransferSettingsOut:
+    """Set arrival order or the back of the line. Audited when it changes."""
+    site = _site_or_404(db, access)
+    if site.transfer_placement != payload.transfer_placement.value:
+        site.transfer_placement = payload.transfer_placement.value
+        _audit(
+            db,
+            request,
+            access.user.email,
+            str(access.user.id),
+            AuditAction.UPDATE,
+            site.id,
+            f"transfer placement set to {payload.transfer_placement.value} for {site.slug}",
+        )
+    db.commit()
+    db.refresh(site)
+    return _transfer_out(site)
 
 
 def _analytics_out(site: Site) -> AnalyticsSettingsOut:

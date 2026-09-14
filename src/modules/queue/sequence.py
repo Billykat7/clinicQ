@@ -56,6 +56,7 @@ from src.commons.enums import TicketSource
 from src.commons.time import business_date, now_sast
 from src.database.models.queue import Queue
 from src.database.models.ticket import REFERENCE_CODE_LENGTH, Ticket, TicketSequence
+from src.database.models.visit import Visit
 
 #: The characters a reference code is made of: digits and capitals without ``0 O 1 I L``. 31
 #: symbols, so six of them give 31**6 (about 887 million) codes.
@@ -72,6 +73,15 @@ NUMBER_DIGITS: Final = 3
 #: The column a colliding reference code is reported against: PostgreSQL names the constraint
 #: (``uq_ticket_reference_code``) and SQLite the column (``ticket.reference_code``); both contain it.
 _REFERENCE_COLUMN: Final = "reference_code"
+
+
+def is_second_active_ticket(exc: IntegrityError) -> bool:
+    """Whether ``exc`` is ``uq_ticket_active_patient`` refusing a patient's second active ticket in a
+    queue (Issue 40). PostgreSQL names the index; SQLite names its columns."""
+    message = str(exc.orig)
+    return "uq_ticket_active_patient" in message or (
+        "ticket.service_day, ticket.patient_id" in message
+    )
 
 
 class ReferenceCodeExhaustedError(RuntimeError):
@@ -174,6 +184,9 @@ def issue_ticket(
     reason_text: str | None = None,
     comment_consent: bool = False,
     moment: datetime | None = None,
+    visit_id: str | None = None,
+    transferred_from_id: str | None = None,
+    order_key: float | None = None,
 ) -> Ticket:
     """Issue one ticket in ``queue``: a database-allocated number, a reference code, status waiting.
 
@@ -192,6 +205,9 @@ def issue_ticket(
         comment_consent: Per-visit consent to show the reason on the board.
         moment: When the ticket is issued (aware). ``None`` means now in Johannesburg; the service
             day is that moment's Johannesburg date.
+        visit_id: The visit this ticket continues (a transfer, Issue 45). ``None`` starts a new one.
+        transferred_from_id: The leg before this one, for a transfer.
+        order_key: Where it is called in the queue; ``None`` means by its sequence (the back).
 
     Returns:
         The flushed :class:`~src.database.models.ticket.Ticket`.
@@ -211,6 +227,11 @@ def issue_ticket(
         )
     moment = moment or now_sast()
     service_day = business_date(moment)
+    if visit_id is None:
+        visit = Visit(site_id=queue.site_id, patient_id=patient_id, started_at=moment)
+        db.add(visit)
+        db.flush()
+        visit_id = visit.id
     sequence = allocate_sequence(db, queue.id, service_day)
     for _ in range(MAX_REFERENCE_ATTEMPTS):
         ticket = Ticket(
@@ -226,6 +247,9 @@ def issue_ticket(
             reason_text=reason_text,
             comment_consent=comment_consent,
             joined_at=moment,
+            visit_id=visit_id,
+            transferred_from_id=transferred_from_id,
+            order_key=float(sequence) if order_key is None else order_key,
         )
         try:
             # A savepoint, so a colliding reference code undoes only this insert and keeps the
