@@ -168,7 +168,7 @@
         });
         var chime = root.getAttribute('data-announce-chime');
         if (chime) urls.push(chime);
-        if (registration.active) registration.active.postMessage({ type: 'keep', urls: urls });
+        if (registration.active) registration.active.postMessage({ type: 'keep', page: location.pathname, urls: urls });
       })
       .catch(function () {
         // No worker (an old browser, or storage refused): the board still works online.

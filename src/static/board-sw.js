@@ -16,8 +16,9 @@
  *   - Forgetting. A start page that arrives as the pairing screen (/display, 200) means this box is not
  *     paired any more: every kept page is dropped at once, so a removed box cannot show a board offline.
  *     The page can also ask with a { type: 'forget' } message.
- *   - Assets. The board page sends the list of what it loaded ({ type: 'keep', urls }), and those files
- *     are kept. A request for a kept file is answered from the cache at once and refreshed from the
+ *   - Assets. The board page sends its own address and the list of what it loaded
+ *     ({ type: 'keep', page, urls }): the page is kept as above (its first navigation may have come before
+ *     this worker was in charge), and those files are kept. A request for a kept file is answered from the cache at once and refreshed from the
  *     network behind it.
  *   - Everything else (the board's JSON, its stream, the heartbeat, the pairing check) is left to the
  *     network: stale data comes only from the page's own record, which says how old it is.
@@ -72,6 +73,11 @@ self.addEventListener('message', function (event) {
   if (data.type === 'forget') {
     event.waitUntil(forget());
   } else if (data.type === 'keep' && Array.isArray(data.urls)) {
+    // The page that sent this: kept now, because its own navigation may have happened before this
+    // worker was in charge of it (the first load of a box).
+    if (typeof data.page === 'string' && isBoardPath(data.page)) {
+      event.waitUntil(keepPage(data.page));
+    }
     var urls = data.urls.filter(function (url) {
       var parsed = new URL(url, self.location.origin);
       return parsed.origin === self.location.origin && parsed.pathname.indexOf('/static/') === 0;
@@ -89,6 +95,19 @@ self.addEventListener('message', function (event) {
     );
   }
 });
+
+/* Fetch a board page and keep it, as itself and as the last board, if it arrives as a board. */
+function keepPage(path) {
+  return fetch(path, { credentials: 'same-origin', cache: 'no-store', redirect: 'manual' })
+    .then(function (response) {
+      if (response.type !== 'basic' || response.status !== 200) return undefined;
+      var copy = response.clone();
+      return caches.open(CACHE).then(function (cache) {
+        return Promise.all([cache.put(path, response), cache.put(LAST_BOARD, copy)]);
+      });
+    })
+    .catch(function () {});
+}
 
 function withLimit(promise, ms) {
   return new Promise(function (resolve, reject) {

@@ -275,7 +275,8 @@ def test_after_a_power_cut_with_no_network_the_box_shows_its_last_board_and_reco
     _until(
         page,
         "async () => (await caches.keys()).some((n) => n.startsWith('clinicq-board-'))"
-        " && !!(await caches.match('/static/js/board.js'))",
+        " && !!(await caches.match('/static/js/board.js'))"
+        " && !!(await caches.match('/display/__last-board__'))",
     )
     heard = page.evaluate("() => window.ClinicQBoardOffline.state().lastGood")
     first.close()  # the power goes

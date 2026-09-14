@@ -40,8 +40,10 @@ a small `Router` that goes silent both ways with no error. Through it:
     `data-from-cache`.
   - **Forgetting:** a start page that arrives as the pairing screen means the box is not paired, and every
     kept page is dropped.
-  - **Assets:** the page sends the files it loaded, and those are served from the cache and refreshed
-    behind it. The board's JSON, stream, heartbeat and pairing check are never intercepted.
+  - **Assets:** the page sends its own address and the files it loaded. The page is fetched and kept at
+    once, because a box's first navigation happens before the worker is in charge. On CI's Linux runner
+    that timing left nothing cached for the offline boot until this was added. The files are served from
+    the cache and refreshed behind it. The board's JSON, stream, heartbeat and pairing check are never intercepted.
 - **Keeping the last board** (`src/static/js/board-offline.js`, new). It runs **only for a paired box**:
   the server gives a staff preview no worker URL, so a manager's browser keeps nothing.
   - **Keeping:** every board from the clinic is saved in `localStorage` with the time it arrived.
