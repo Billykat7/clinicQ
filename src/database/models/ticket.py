@@ -146,6 +146,12 @@ class Ticket(Base, TimestampMixin):
         CheckConstraint("sequence >= 1", name="sequence_positive"),
         CheckConstraint(_in_clause("status", TicketStatus), name="status"),
         CheckConstraint(_in_clause("source", TicketSource), name="source"),
+        # Only a cancelled ticket says how and why it was cancelled (Issue 44).
+        CheckConstraint(
+            f"(cancelled_via IS NULL AND cancellation_reason IS NULL) OR status = "
+            f"'{TicketStatus.CANCELLED.value}'",
+            name="cancellation_only_when_cancelled",
+        ),
         # Only the desk names a ticket; a phone join is named by the patient's record (Issue 40).
         CheckConstraint(
             f"walk_in_name IS NULL OR source = '{TicketSource.WALK_IN.value}'",
@@ -256,6 +262,10 @@ class Ticket(Base, TimestampMixin):
         DateTime(timezone=True), nullable=True
     )
     """When the ticket reached a terminal status (Africa/Johannesburg)."""
+    cancelled_via: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    """:class:`~src.commons.enums.PatientChannel` a cancellation came through (Issue 44)."""
+    cancellation_reason: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    """:class:`~src.commons.enums.CancellationReason`, when the patient gave one (Issue 44)."""
 
     @property
     def status_enum(self) -> TicketStatus:

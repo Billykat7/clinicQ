@@ -388,12 +388,114 @@ paths:
         "404": { $ref: "#/components/responses/SiteNotFound" }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
+  # ── Giving a place back (Issue 44) ──────────────────────────────────────────────────────
+  /patients/me/tickets/{ticket_id}/cancel:
+    post:
+      tags: [queue]
+      operationId: queueCancelMyTicket
+      summary: Give my place back
+      description: |
+        Cancels one of the signed-in patient's own tickets while it is still **waiting**. Once the
+        patient has been called it is refused (`ticket.cancel.after_call`) with a sentence telling
+        them to speak to reception. Everyone waiting behind moves up one place: positions are derived
+        from the order of the waiting tickets, never stored, so the next read of any ticket shows it.
+        USSD and WhatsApp cancel through the same service. Another patient's ticket is the same 404 as
+        one that does not exist.
+      security: [{ bearerAuth: [] }, { sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/TicketId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CancelIn" }
+            example: { reason: wait_too_long }
+      responses:
+        "200":
+          description: The cancelled ticket, and how many patients moved up.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CancelOut" }
+              example:
+                ticket:
+                  id: 01a09cf1-951b-7278-a2be-5fe7590abe56
+                  site_id: 01a09c0b-ce1c-743e-b8ff-544bb4ac8774
+                  queue_id: 01a09c0b-ce5e-7037-8071-cd12f438bd3d
+                  number: T003
+                  reference_code: K7M-4QP
+                  source: web
+                  status: cancelled
+                  service_day: "2026-09-14"
+                  joined_at: "2026-09-14T07:31:12+02:00"
+                  walk_in_name: null
+                moved_up: 7
+                message: "Ticket T003 is cancelled. Thank you for giving your place back: 7 people moved up."
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Not one of this patient's tickets.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "No such ticket.", code: "http.not_found" }
+        "409":
+          description: Already called (speak to reception), or already finished.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                after_call:
+                  value: { detail: "You have already been called, so this ticket can no longer be cancelled from your phone. Please speak to reception.", code: "ticket.cancel.after_call" }
+                finished:
+                  value: { detail: "A done ticket cannot change any more.", code: "ticket.transition.illegal" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/tickets/{ticket_id}/cancel:
+    post:
+      tags: [queue]
+      operationId: queueCancelTicketAtDesk
+      summary: Cancel a ticket at the front desk
+      description: |
+        Cancels a ticket for a patient at reception, including one that has already been called.
+        Recorded with the front desk as its channel and the staff member as its actor. Requires
+        `queues.tickets` `update` at this clinic.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/SiteId" }
+        - { $ref: "#/components/parameters/TicketId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CancelIn" }
+            example: { reason: null }
+      responses:
+        "200":
+          description: The cancelled ticket.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CancelOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/SiteNotFound" }
+        "409":
+          description: Already finished; a correction is a new ticket.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "A done ticket cannot change any more.", code: "ticket.transition.illegal" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
   /patients/me/tickets:
     get:
       tags: [queue]
       operationId: queueMyTickets
-      summary: The signed-in patient's tickets today
-      description: The patient's own tickets today, at any clinic, earliest first.
+      summary: The signed-in patient's tickets today, with where each stands
+      description: |
+        The patient's own tickets today, at any clinic, earliest first. A waiting ticket carries
+        `waiting_ahead` and `wait`, derived from the queue as it is at this read: a cancellation ahead
+        shows here on the next read. (Pushing it to an open page without a reload is the board stream,
+        Issue 57.)
       security: [{ bearerAuth: [] }, { sessionCookie: [] }]
       responses:
         "200":
@@ -402,7 +504,7 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/TicketOut" }
+                items: { $ref: "#/components/schemas/MyTicketOut" }
               example:
                 - id: 01a09cf1-951b-7278-a2be-5fe7590abe56
                   site_id: 01a09c0b-ce1c-743e-b8ff-544bb4ac8774
@@ -414,6 +516,8 @@ paths:
                   service_day: "2026-09-14"
                   joined_at: "2026-09-14T07:31:12+02:00"
                   walk_in_name: null
+                  waiting_ahead: 3
+                  wait: { low_minutes: 10, high_minutes: 20, confidence: medium, approximate: false, label: "~10–20 min" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
@@ -440,6 +544,13 @@ components:
       description: The clinic.
       schema: { type: string }
       example: 01a09c0b-ce1c-743e-b8ff-544bb4ac8774
+    TicketId:
+      name: ticket_id
+      in: path
+      required: true
+      description: A ticket.
+      schema: { type: string }
+      example: 01a09cf1-951b-7278-a2be-5fe7590abe56
     QueueId:
       name: queue_id
       in: path
@@ -625,6 +736,36 @@ components:
         waiting_ahead: { type: integer, minimum: 0, description: "Waiting tickets ahead of this one now." }
         wait: { $ref: "#/components/schemas/WaitOut" }
         message: { type: string, description: "A sentence for the patient." }
+    CancellationReason:
+      type: string
+      description: Why a patient gave their place back, when they chose to say. Feeds the no-show analysis (Issue 93).
+      enum: [feeling_better, wait_too_long, cannot_get_there, went_elsewhere, joined_by_mistake, other]
+      example: wait_too_long
+    CancelIn:
+      type: object
+      properties:
+        reason:
+          oneOf:
+            - { $ref: "#/components/schemas/CancellationReason" }
+            - { type: "null" }
+      example: { reason: feeling_better }
+    CancelOut:
+      type: object
+      required: [ticket, moved_up, message]
+      properties:
+        ticket: { $ref: "#/components/schemas/TicketOut" }
+        moved_up: { type: integer, minimum: 0, description: "Patients still waiting behind, each now one place further forward." }
+        message: { type: string }
+    MyTicketOut:
+      allOf:
+        - { $ref: "#/components/schemas/TicketOut" }
+        - type: object
+          properties:
+            waiting_ahead: { type: [integer, "null"], minimum: 0, description: "Waiting tickets ahead in call order; null once not waiting." }
+            wait:
+              oneOf:
+                - { $ref: "#/components/schemas/WaitOut" }
+                - { type: "null" }
     TicketListOut:
       type: object
       required: [site_id, service_day, total, items]

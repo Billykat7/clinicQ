@@ -127,6 +127,16 @@ _UNSCOPED_BY_DESIGN: dict[str, str] = {
         "reads the moved ticket's own patient, queue and clinic by id to word its message; the "
         "ticket came from the sweep above and nothing else is reachable from here (Issue 43)"
     ),
+    "modules/queue/cancellation.py::cancel_own_ticket": (
+        "a patient cancelling **their own** ticket (Issue 44) holds no role at a clinic, so there is "
+        "no SiteAccess; the ticket is read by id and refused unless its patient_id is the caller's, "
+        "with the same not-found either way. Staff cancellations go through get_in_site_or_404"
+    ),
+    "modules/queue/router.py::my_tickets": (
+        "reads the queue of each of the signed-in patient's **own** tickets by id, to estimate that "
+        "ticket's wait (Issues 42, 44); the tickets came from patient_tickets_select, scoped by "
+        "the patient"
+    ),
     "modules/staff/invitations.py::usable_invitation": (
         "an invitation link is opened by someone who has no account and therefore no clinic to be "
         "scoped by; the id comes from the signed token, and the row's own site_id is what "

@@ -54,10 +54,18 @@ from src.database.models import Patient, Queue, Site, Ticket
 from src.database.session import get_db
 from src.modules.patients.service import get_or_create_patient
 from src.modules.queue import service
+from src.modules.queue.cancellation import (
+    CancelResult,
+    cancel_own_ticket,
+    cancel_ticket,
+)
 from src.modules.queue.lifecycle import Actor, call_next, transition_ticket
 from src.modules.queue.schemas import (
+    CancelIn,
+    CancelOut,
     JoinIn,
     JoinOut,
+    MyTicketOut,
     TicketListOut,
     TicketOut,
     TransitionIn,
@@ -69,7 +77,9 @@ from src.modules.queue.tickets import (
     CALL_ORDER,
     patient_tickets_select,
     site_day_select,
+    waiting_ahead,
 )
+from src.modules.queue.waits import estimates_for
 from src.modules.queues.service import get_queue
 from src.modules.sites.hours import published_schedules, schedule_for
 
@@ -247,16 +257,86 @@ def site_tickets(
 
 @router.get(
     "/patients/me/tickets",
-    response_model=list[TicketOut],
+    response_model=list[MyTicketOut],
     operation_id="queueMyTickets",
-    summary="The signed-in patient's tickets today",
+    summary="The signed-in patient's tickets today, with where each stands",
 )
-def my_tickets(patient: PatientReading, db: DbSession) -> list[TicketOut]:
-    """The patient's own tickets today, at any clinic, earliest first."""
+def my_tickets(patient: PatientReading, db: DbSession) -> list[MyTicketOut]:
+    """The patient's own tickets today, earliest first. A waiting one says how many are ahead and
+    the wait that means, both derived from the queue as it is now, so a cancellation ahead shows on
+    the next read (Issue 44)."""
     rows = (
         db.execute(patient_tickets_select(patient.id, business_date())).scalars().all()
     )
-    return [TicketOut.of(row) for row in rows]
+    out: list[MyTicketOut] = []
+    for row in rows:
+        mine = MyTicketOut(**TicketOut.of(row).model_dump())
+        if row.status_enum is TicketStatus.WAITING:
+            queue = db.get(Queue, row.queue_id)
+            ahead = waiting_ahead(db, row)
+            mine.waiting_ahead = ahead
+            if queue is not None:
+                mine.wait = WaitOut.of(
+                    estimates_for(db, [queue], {queue.id: ahead})[queue.id]
+                )
+        out.append(mine)
+    return out
+
+
+@router.post(
+    "/patients/me/tickets/{ticket_id}/cancel",
+    response_model=CancelOut,
+    operation_id="queueCancelMyTicket",
+    summary="Give my place back",
+)
+def cancel_my_ticket(
+    ticket_id: str, payload: CancelIn, patient: PatientJoining, db: DbSession
+) -> CancelOut:
+    """Cancel one of the patient's own waiting tickets. After being called: 409, speak to reception."""
+    result = cancel_own_ticket(
+        db, patient.id, ticket_id, channel=PatientChannel.WEB, reason=payload.reason
+    )
+    db.commit()
+    return _cancelled(result)
+
+
+@router.post(
+    "/sites/{site_id}/tickets/{ticket_id}/cancel",
+    response_model=CancelOut,
+    operation_id="queueCancelTicketAtDesk",
+    summary="Cancel a ticket at the front desk",
+)
+def cancel_at_desk(
+    ticket_id: str, payload: CancelIn, access: TicketsIssue, db: DbSession
+) -> CancelOut:
+    """Cancel a ticket for a patient standing at reception, including one already called."""
+    ticket = get_in_site_or_404(db, Ticket, ticket_id, access)
+    result = cancel_ticket(
+        db,
+        ticket.id,
+        channel=PatientChannel.WALK_IN,
+        actor=_staff(access),
+        reason=payload.reason,
+    )
+    db.commit()
+    return _cancelled(result)
+
+
+def _cancelled(result: CancelResult) -> CancelOut:
+    """The answer to a cancellation, with a sentence for the patient."""
+    behind = result.moved_up
+    return CancelOut(
+        ticket=TicketOut.of(result.ticket),
+        moved_up=behind,
+        message=(
+            f"Ticket {result.ticket.number} is cancelled. Thank you for giving your place back"
+            + (
+                f": {behind} {'person' if behind == 1 else 'people'} moved up."
+                if behind
+                else "."
+            )
+        ),
+    )
 
 
 def _staff(access: SiteAccess) -> Actor:

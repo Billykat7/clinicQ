@@ -166,6 +166,19 @@ def is_legal(current: TicketStatus, requested: TicketStatus) -> bool:
     return requested in TRANSITIONS[current]
 
 
+def lock_ticket(db: Session, ticket_id: str) -> Ticket:
+    """The ticket's row, locked for this transaction and re-read fresh: for a rule that must look at
+    the current status before deciding which move to ask for (Issue 44's cancellation window).
+
+    Moving it still takes :func:`transition_ticket`, which re-locks the same row in the same
+    transaction at no cost.
+
+    Raises:
+        NotFoundError: No such ticket.
+    """
+    return _locked(db, ticket_id)
+
+
 def _locked(db: Session, ticket_id: str) -> Ticket:
     """The ticket's row, locked for this transaction and re-read from the database.
 
