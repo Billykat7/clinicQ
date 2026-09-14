@@ -6,7 +6,7 @@ rows. So this reads ``src/`` and fails, naming the file and line, on:
 
 * a call to :func:`~src.modules.queue.sequence.issue_ticket` or
   :func:`~src.modules.queue.sequence.allocate_sequence` from anywhere but the functions listed in
-  :data:`ALLOWED_CALLERS`;
+  :data:`ALLOWED_CALLERS` (the join service, and a transfer continuing a visit the join began);
 * a ``Ticket(...)`` built anywhere but :mod:`src.modules.queue.sequence`.
 
 The fixtures at the bottom prove it fails on both shapes. Reads source, never rendered output.
@@ -24,6 +24,11 @@ _ISSUING = frozenset({"issue_ticket", "allocate_sequence"})
 ALLOWED_CALLERS: dict[str, str] = {
     "modules/queue/service.py::join_queue": "the one join service every channel calls (Issue 40)",
     "modules/queue/sequence.py::issue_ticket": "issue_ticket allocates through allocate_sequence",
+    "modules/queue/transfer.py::transfer_ticket": (
+        "a transfer is the clinic moving a patient on within their visit, not a patient joining: "
+        "it issues the next leg's ticket from the same sequence, and the patient's first ticket "
+        "still came from join_queue() (Issue 45)"
+    ),
 }
 #: The one module that constructs a ticket row.
 _CONSTRUCTOR_HOME = "modules/queue/sequence.py"

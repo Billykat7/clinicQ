@@ -48,6 +48,7 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -182,6 +183,8 @@ class Ticket(Base, TimestampMixin):
         ),
         # A clinic's tickets on a day, across its queues: the per-site daily cap and the reports.
         Index("ix_clinicq_ticket_site_day", "site_id", "service_day"),
+        # A visit's legs, in order (Issue 45).
+        Index("ix_clinicq_ticket_visit", "visit_id", "joined_at"),
         # One active ticket per patient per queue per day (Issue 40). ``join_queue()`` returns the
         # existing ticket instead of issuing a second; this makes a race between two joins by the
         # same patient end the same way, at the database.
@@ -213,6 +216,22 @@ class Ticket(Base, TimestampMixin):
         nullable=True,
     )
     """The patient, when known. ``None`` only for a walk-in the desk issued without a number."""
+    visit_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey(f"{SCHEMA}.visit.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    """The journey this ticket is a leg of (Issue 45). A join starts a visit; a transfer continues it."""
+    transferred_from_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(f"{SCHEMA}.ticket.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    """The leg before this one, when a transfer issued this ticket."""
+    order_key: Mapped[float] = mapped_column(Float, nullable=False)
+    """Where the ticket is called in its queue, lowest first (Issues 45, 46). The sequence, unless a
+    transfer placed it by the visit's arrival or a priority override moved it; positions are counted
+    from this order and never stored."""
     service_day: Mapped[date] = mapped_column(Date, nullable=False)
     """The Johannesburg calendar date the ticket was issued on; numbering restarts with each one."""
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)

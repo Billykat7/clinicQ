@@ -795,6 +795,50 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
+  # ── Transfers (Issue 45) ─────────────────────────────────────────────────────────────────
+  /sites/{site_id}/settings/transfers:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    get:
+      tags: [sites]
+      operationId: sitesGetTransferSettings
+      summary: Where a patient moved to another queue lands in it
+      description: "`sites.settings:read`. The clinic's placement and what it means."
+      responses:
+        "200":
+          description: The placement.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TransferSettingsOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    put:
+      tags: [sites]
+      operationId: sitesSetTransferSettings
+      summary: Choose where a patient moved to another queue lands in it
+      description: |
+        `sites.settings:update`. `arrival_order` (the default) places a transferred patient among
+        those waiting by when each visit began; `back_of_line` behind everyone. A change is written
+        to the clinic's audit trail.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TransferSettingsIn" }
+            example: { transfer_placement: back_of_line }
+      responses:
+        "200":
+          description: The placement, as saved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TransferSettingsOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
   # ── Recall timers (Issue 43) ─────────────────────────────────────────────────────────────
   /sites/{site_id}/settings/recall:
     parameters:
@@ -1834,6 +1878,24 @@ components:
         reason_retention_days: { type: integer }
         reason_retention_ceiling_days: { type: integer, description: The platform ceiling a clinic cannot raise. }
         warning_lines: { type: array, items: { type: string }, description: What these settings put on the screen, in plain language. }
+    TransferSettingsIn:
+      type: object
+      additionalProperties: false
+      required: [transfer_placement]
+      properties:
+        transfer_placement: { type: string, enum: [arrival_order, back_of_line] }
+      example: { transfer_placement: arrival_order }
+    TransferSettingsOut:
+      type: object
+      required: [site_id, transfer_placement, explanation]
+      properties:
+        site_id: { type: string }
+        transfer_placement: { type: string, enum: [arrival_order, back_of_line] }
+        explanation: { type: string }
+      example:
+        site_id: "0199b0c0-0000-7000-8000-00000000a001"
+        transfer_placement: arrival_order
+        explanation: "A patient moved to another queue goes in among the patients waiting there by when their visit began, so time already spent at the clinic is not lost. This is the default."
     RecallSettingsIn:
       type: object
       additionalProperties: false

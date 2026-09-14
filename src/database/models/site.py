@@ -28,18 +28,20 @@ asserts over HTTP.
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.commons.enums import (
     SITE_DEFAULT_BOARD_LANGUAGE,
     SITE_DEFAULT_DISPLAY_MODE,
     SITE_DEFAULT_STATUS,
+    SITE_DEFAULT_TRANSFER_PLACEMENT,
     BoardLanguage,
     DisplayMode,
     SaProvince,
     SiteSector,
     SiteStatus,
+    TransferPlacement,
 )
 from src.commons.geo import Coordinates
 from src.commons.ids import new_id
@@ -65,6 +67,15 @@ class Site(Base, TimestampMixin, ActiveMixin, SoftDeleteMixin):
         Index("ix_clinicq_site_sector_status", "sector", "status"),
         # The verification console's own read: this status, oldest submission first (Issue 29).
         Index("ix_clinicq_site_status_submitted_at", "status", "submitted_at"),
+        # Where a transferred patient lands: one of TransferPlacement's values (Issue 45).
+        CheckConstraint(
+            "transfer_placement IN ("
+            + ", ".join(
+                f"'{placement.value}'" for placement in sorted(TransferPlacement)
+            )
+            + ")",
+            name="transfer_placement",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -162,6 +173,13 @@ class Site(Base, TimestampMixin, ActiveMixin, SoftDeleteMixin):
     Validated against :data:`~src.modules.sites.settings.REASON_RETENTION_CEILING_DAYS`, the
     interim policy ceiling this issue chose until the M13 data map sets the real one."""
 
+    transfer_placement: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default=SITE_DEFAULT_TRANSFER_PLACEMENT.value,
+        server_default=SITE_DEFAULT_TRANSFER_PLACEMENT.value,
+    )
+    """:class:`~src.commons.enums.TransferPlacement`: where a transferred patient goes (Issue 45)."""
     recall_timeout_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     """The clinic's recall timeout in minutes for queues that set none (Issue 43). ``None`` uses the
     platform default (``QUEUE_RECALL_TIMEOUT_MINUTES``)."""

@@ -20,17 +20,18 @@ from collections.abc import Collection
 from datetime import date
 from typing import Final
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import ColumnElement, Select, and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from src.commons.enums import TICKET_ACTIVE_STATUSES, TicketStatus
 from src.core.site_scope import SiteAccess, scoped_select
 from src.database.models.ticket import Ticket
 
-#: The order a queue is called in, and so the order positions are counted in: by sequence, which is
-#: arrival order across every channel (non-negotiable 1). One definition, so the board, call next and
-#: a patient's position cannot disagree; a later issue that changes the order changes it here.
-CALL_ORDER: Final = (Ticket.sequence.asc(),)
+#: The order a queue is called in, and so the order positions are counted in: by ``order_key``, which
+#: is the sequence (arrival order across every channel, non-negotiable 1) unless a transfer placed the
+#: ticket by its visit's arrival (Issue 45) or a priority override moved it (Issue 46); the sequence
+#: breaks a tie. One definition, so the board, call next and a patient's position cannot disagree.
+CALL_ORDER: Final = (Ticket.order_key.asc(), Ticket.sequence.asc())
 
 
 def board_select(
@@ -106,7 +107,23 @@ def waiting_ahead(db: Session, ticket: Ticket) -> int:
                 Ticket.queue_id == ticket.queue_id,
                 Ticket.service_day == ticket.service_day,
                 Ticket.status == TicketStatus.WAITING.value,
-                Ticket.sequence < ticket.sequence,
+                ahead_of(ticket),
             )
         ).scalar_one()
+    )
+
+
+def ahead_of(ticket: Ticket) -> ColumnElement[bool]:
+    """The condition "called before ``ticket``" in :data:`CALL_ORDER`, for counting a position."""
+    return or_(
+        Ticket.order_key < ticket.order_key,
+        and_(Ticket.order_key == ticket.order_key, Ticket.sequence < ticket.sequence),
+    )
+
+
+def behind(ticket: Ticket) -> ColumnElement[bool]:
+    """The condition "called after ``ticket``" in :data:`CALL_ORDER`."""
+    return or_(
+        Ticket.order_key > ticket.order_key,
+        and_(Ticket.order_key == ticket.order_key, Ticket.sequence > ticket.sequence),
     )

@@ -23,7 +23,7 @@ from src.commons.enums import TicketSource, TicketStatus
 from src.commons.ids import new_id
 from src.commons.time import business_date, now_sast
 from src.core.site_scope import SiteAccess
-from src.database.models import Ticket, User
+from src.database.models import Ticket, User, Visit
 from src.modules.queue.sequence import format_ticket_number, new_reference_code
 from src.modules.queue.tickets import board_select, patient_tickets_select
 from tests.factories import PatientFactory, QueueFactory, SiteFactory
@@ -51,6 +51,9 @@ def busy_clinic(migrated_engine: Engine) -> Iterator[SimpleNamespace]:
             for prefix in "TAPD"
         ]
         patients = [PatientFactory.create(db) for _ in range(300)]
+        # One visit for the seeded rows: the plans below read tickets, and only need the key valid.
+        visit = Visit(site_id=site.id, started_at=now_sast())
+        db.add(visit)
         db.commit()
         rows = []
         # Drawn up front and de-duplicated: a bulk insert has no retry, and 20,000 random draws
@@ -74,6 +77,8 @@ def busy_clinic(migrated_engine: Engine) -> Iterator[SimpleNamespace]:
                             "patient_id": patient.id if sequence % 3 == 0 else None,
                             "service_day": day,
                             "sequence": sequence,
+                            "order_key": float(sequence),
+                            "visit_id": visit.id,
                             "number": format_ticket_number(
                                 queue.ticket_prefix, sequence
                             ),

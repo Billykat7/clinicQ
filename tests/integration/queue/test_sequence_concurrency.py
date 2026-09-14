@@ -38,7 +38,7 @@ from sqlalchemy.pool import NullPool
 
 from src.commons.enums import DbSchema, TicketSource
 from src.commons.time import APP_TIMEZONE, business_date, now_sast
-from src.database.models import Ticket, TicketSequence
+from src.database.models import Ticket, TicketSequence, Visit
 from src.database.schema import apply_postgres_search_path
 from src.modules.queue.sequence import (
     allocate_sequence,
@@ -229,8 +229,13 @@ def test_count_plus_one_repeats_numbers_under_the_same_load_and_the_constraint_r
         )
         # The read-then-write window, as in a real request.
         threading.Event().wait(HOLD_SECONDS)
+        visit = Visit(site_id=world.site.id, started_at=now_sast())
+        db.add(visit)
+        db.flush()
         db.add(
             Ticket(
+                visit_id=visit.id,
+                order_key=float(sequence),
                 site_id=world.site.id,
                 queue_id=world.queue.id,
                 service_day=today,
@@ -278,8 +283,9 @@ def test_a_duplicate_inserted_by_hand_is_refused_by_the_constraint(
         conn.execute(
             text(
                 f"INSERT INTO {SCHEMA}.ticket (id, site_id, queue_id, service_day, sequence, "
-                "number, reference_code, source, status, joined_at) VALUES (:id, :site, :queue, "
-                ":day, :sequence, 'T001', 'ZZZZZZ', 'walk_in', 'waiting', now())"
+                "number, reference_code, source, status, joined_at, visit_id, order_key) VALUES (:id, "
+                ":site, :queue, :day, :sequence, 'T001', 'ZZZZZZ', 'walk_in', 'waiting', now(), "
+                ":visit, :sequence)"
             ),
             {
                 "id": "0199b0c0-0000-7000-8000-000000000dup",
@@ -287,6 +293,7 @@ def test_a_duplicate_inserted_by_hand_is_refused_by_the_constraint(
                 "queue": world.queue.id,
                 "day": first.service_day,
                 "sequence": first.sequence,
+                "visit": first.visit_id,
             },
         )
     assert 'unique constraint "uq_ticket_queue_id_service_day_sequence"' in str(
@@ -407,13 +414,14 @@ def test_a_walk_in_needs_no_patient_and_a_remote_join_cannot_lack_one(
         conn.execute(
             text(
                 f"INSERT INTO {SCHEMA}.ticket (id, site_id, queue_id, service_day, sequence, "
-                "number, reference_code, source, joined_at) VALUES (:id, :site, :queue, "
-                "CURRENT_DATE, 99, 'T099', 'YYYYYY', 'web', now())"
+                "number, reference_code, source, joined_at, visit_id, order_key) VALUES (:id, :site, "
+                ":queue, CURRENT_DATE, 99, 'T099', 'YYYYYY', 'web', now(), :visit, 99)"
             ),
             {
                 "id": "0199b0c0-0000-7000-8000-00000000web0",
                 "site": world.site.id,
                 "queue": world.queue.id,
+                "visit": walk_in.visit_id,
             },
         )
     assert 'check constraint "ck_ticket_patient_or_walk_in"' in str(refused.value.orig)

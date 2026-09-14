@@ -103,6 +103,18 @@ def _render_ticket_no_show_sms(context: dict[str, Any]) -> RenderedMessage:
     )
 
 
+def _render_ticket_transferred_sms(context: dict[str, Any]) -> RenderedMessage:
+    """A patient moved on to the next queue of their visit (Issue 45): where, which number, how long."""
+    app_name = get_settings().app_name
+    return RenderedMessage(
+        text=(
+            f"{app_name}: at {context['clinic']} you are now in the {context['queue']} queue as "
+            f"ticket {context['number']}. Expected wait {context['wait']}. You do not need to join "
+            "again."
+        )
+    )
+
+
 # Context renderers, keyed by (channel, template). New SMS templates (and any future
 # context-rendered email) are registered here — the single registry the issue calls for.
 _RENDERERS: dict[tuple[NotificationChannel, NotificationTemplate], Renderer] = {
@@ -120,6 +132,10 @@ _RENDERERS: dict[tuple[NotificationChannel, NotificationTemplate], Renderer] = {
         NotificationChannel.SMS,
         NotificationTemplate.TICKET_NO_SHOW,
     ): _render_ticket_no_show_sms,
+    (
+        NotificationChannel.SMS,
+        NotificationTemplate.TICKET_TRANSFERRED,
+    ): _render_ticket_transferred_sms,
 }
 
 

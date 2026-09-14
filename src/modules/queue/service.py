@@ -64,7 +64,7 @@ from src.database.models.site import Site
 from src.database.models.ticket import Ticket
 from src.modules.discovery import analytics
 from src.modules.queue.estimate import WaitEstimate
-from src.modules.queue.sequence import issue_ticket
+from src.modules.queue.sequence import is_second_active_ticket, issue_ticket
 from src.modules.queue.snapshot import on_queue_changed
 from src.modules.queue.tickets import waiting_ahead
 from src.modules.queue.waits import estimates_for
@@ -157,17 +157,6 @@ def _existing_ticket(
             ),
         )
     ).scalar_one_or_none()
-
-
-def _is_second_active_ticket(exc: IntegrityError) -> bool:
-    """Whether ``exc`` is ``uq_ticket_active_patient`` refusing a patient's second active ticket.
-
-    PostgreSQL names the index; SQLite names its columns.
-    """
-    message = str(exc.orig)
-    return "uq_ticket_active_patient" in message or (
-        "ticket.service_day, ticket.patient_id" in message
-    )
 
 
 def _guard_abuse(
@@ -345,7 +334,7 @@ def join_queue(
         raise JoinRefusedError(JoinRefusal.QUEUE_FULL, QUEUE_FULL) from None
     except IntegrityError as exc:
         # Two joins by one patient in the same instant: the other one won the unique index.
-        if patient is None or not _is_second_active_ticket(exc):
+        if patient is None or not is_second_active_ticket(exc):
             raise
         winner = _existing_ticket(db, queue, patient.id, service_day)
         if winner is None:
