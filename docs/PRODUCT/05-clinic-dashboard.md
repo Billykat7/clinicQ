@@ -36,6 +36,14 @@ flowchart TB
 Each queue card shows: current length, average wait so far today, oldest waiting ticket's wait time (a
 quick "is anyone stuck?" signal), and a big **Call Next** button.
 
+Each card also holds its **waiting line** in call order. Staff move a visibly unwell patient forward
+by dragging them up the line or with the "Move forward" button beside them (the touch and keyboard
+way to do the same thing); either way a prompt asks for a reason from a fixed list and an optional
+note, and a move without a reason is not saved. A moved patient carries a **Priority** badge that only
+staff screens show, the card lists the queue's overrides of the day, and the clinic manager reads every
+override with counts per staff member (listed by name, never ranked) on the **Overrides** screen. A
+role without the permission sees the same line with its controls switched off.
+
 ## Call-next sequence (ties dashboard, patient notification, and display together)
 
 ```mermaid

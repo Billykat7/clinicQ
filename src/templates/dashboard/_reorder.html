@@ -1,0 +1,91 @@
+{#- A queue's waiting line with its reorder controls and its override trail (Issue 52).
+
+    Imported by the front desk into each queue card. Everything shown is decided on the server:
+
+    * ``can_reorder`` (``queues.tickets.priority:update`` at this clinic) decides whether the drag
+      handles and the "Move forward" buttons work. Without it they still render, **disabled**, with
+      a sentence saying why, so nobody hunts for a control that was quietly left out.
+    * ``can_read_priority`` decides whether the staff-only priority badges and the trail are read at
+      all; without it there is nothing to render.
+
+    Both gestures end in one request, made by dashboard-reorder.js: ``POST
+    /api/v1/sites/{site}/tickets/{ticket}/priority`` with the ticket to go ahead of, a reason and an
+    optional note. The server decides whether the move is allowed. -#}
+{% macro queue_line(queue, line, can_reorder, can_read_priority) -%}
+<details class="queue-line" data-queue-line="{{ queue.id }}">
+  <summary class="queue-line-toggle">
+    Waiting line <span class="queue-line-count">({{ line.waiting | length }})</span>
+  </summary>
+  {% if line.waiting %}
+  {% if not can_reorder %}
+  <p class="hint queue-line-locked" id="locked-{{ queue.id }}">Moving a patient forward needs the priority permission at this clinic.</p>
+  {% endif %}
+  <ol class="queue-line-list" data-reorder-list data-queue-id="{{ queue.id }}"{% if not can_reorder %} data-reorder-disabled aria-describedby="locked-{{ queue.id }}"{% endif %}>
+    {% for ticket in line.waiting %}
+    <li class="line-ticket" data-ticket-id="{{ ticket.id }}" data-number="{{ ticket.number }}" data-place="{{ ticket.place }}" draggable="{{ 'true' if can_reorder else 'false' }}">
+      <span class="line-grip{% if not can_reorder %} is-disabled{% endif %}" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
+      <span class="line-place">{{ ticket.place }}</span>
+      <span class="line-number">{{ ticket.number }}</span>
+      <span class="line-name">{{ ticket.name or ticket.source_label }}</span>
+      {% if ticket.priority %}
+      <span class="badge badge-warn line-priority" title="Moved forward at {{ ticket.priority.at.strftime('%H:%M') }} by {{ ticket.priority.staff }}: {{ ticket.priority.reason_label }}">Priority</span>
+      {% endif %}
+      <button type="button" class="line-move" data-move-ticket title="Move forward"{% if not can_reorder or ticket.place == 1 %} disabled{% endif %}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+        <span class="sr-only">Move {{ ticket.number }} forward</span>
+      </button>
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="hint">Nobody is waiting.</p>
+  {% endif %}
+</details>
+{% if can_read_priority %}
+<div class="queue-trail">
+  <h3 class="queue-trail-title">Overrides today</h3>
+  {% if line.trail %}
+  <ol class="queue-trail-list">
+    {% for entry in line.trail %}
+    <li>
+      <time datetime="{{ entry.at.isoformat() }}">{{ entry.at.strftime('%H:%M') }}</time>
+      <strong>{{ entry.ticket_number }}</strong> from {{ entry.position_before }} to {{ entry.position_after }}:
+      {{ entry.reason_label }}{% if entry.note %} ("{{ entry.note }}"){% endif %}, by {{ entry.staff }}
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="hint">None in this queue.</p>
+  {% endif %}
+</div>
+{% endif %}
+{%- endmacro %}
+
+{#- The one reason prompt every move goes through, dragged or tapped. -#}
+{% macro move_dialog(site, reasons, note_max_length) -%}
+<dialog class="move-dialog" id="move-dialog" aria-labelledby="move-title" data-site-id="{{ site.id }}">
+  <form id="move-form" novalidate>
+    <h2 id="move-title">Move <span data-move-number></span> forward</h2>
+    <div class="field">
+      <label for="move-ahead">Call before</label>
+      <select id="move-ahead" name="ahead_of_ticket_id"></select>
+    </div>
+    <fieldset class="field move-reasons">
+      <legend>Reason</legend>
+      {% for reason in reasons %}
+      <label class="check"><input type="radio" name="reason" value="{{ reason.value }}"> {{ reason.label }}</label>
+      {% endfor %}
+      <p class="hint">Every move is recorded with its reason and your name. A move without a reason is not saved.</p>
+    </fieldset>
+    <div class="field">
+      <label for="move-note">Note (optional)</label>
+      <input type="text" id="move-note" name="note" maxlength="{{ note_max_length }}" autocomplete="off">
+    </div>
+    <p class="msg" id="move-msg" role="alert"></p>
+    <div class="form-actions">
+      <button type="submit" class="btn" id="move-save">Save move</button>
+      <button type="button" class="btn btn-quiet" data-move-cancel>Cancel</button>
+    </div>
+  </form>
+</dialog>
+{%- endmacro %}

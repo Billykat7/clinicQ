@@ -59,7 +59,7 @@ def test_a_receptionist_a_nurse_and_a_manager_each_get_their_own_screens(
     expected = {
         "desk.a": (["board"], "board"),
         "nurse.a": (["room"], "room"),
-        "manager.a": (["board", "clinic_settings"], "board"),
+        "manager.a": (["board", "overrides", "clinic_settings"], "board"),
     }
     menus = {}
     for name, (keys, landing) in expected.items():
@@ -170,7 +170,7 @@ def test_switching_clinics_reopens_the_board_scoped_to_the_new_clinic_without_si
     assert shell_b.site.id == dashboard.site_b
     assert [queue.id for queue in board_b.context["queues"]] == [dashboard.other_triage]
     # At clinic B this person is the manager, so the menu changes with the clinic.
-    assert _keys(shell_b) == ["board", "clinic_settings"]
+    assert _keys(shell_b) == ["board", "overrides", "clinic_settings"]
     assert _keys(at_a) == ["board"]
     # And /dashboard now reopens clinic B: the switch was remembered, not just followed.
     assert client.cookies.get(SITE_COOKIE_NAME) == dashboard.site_b

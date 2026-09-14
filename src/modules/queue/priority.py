@@ -60,6 +60,18 @@ COUNTS_ARE_NOT_RANKINGS: Final = (
     "these counts are not a measure of anybody's performance; they are listed by name, not by count."
 )
 
+#: How each reason reads on a staff screen: the words the reason prompt offers and the trail shows
+#: (Issue 52). Next to the vocabulary's service so a reason added to the enum without words fails
+#: ``tests/unit/queue/test_priority_labels.py`` rather than rendering a wire value.
+PRIORITY_REASON_LABELS: Final[dict[PriorityReason, str]] = {
+    PriorityReason.VISIBLY_UNWELL: "Visibly unwell",
+    PriorityReason.ELDERLY: "Elderly",
+    PriorityReason.INFANT: "Infant or small child",
+    PriorityReason.PREGNANCY: "Pregnancy",
+    PriorityReason.STAFF_REFERRAL: "A clinician asked",
+    PriorityReason.OTHER: "Other (say why in the note)",
+}
+
 #: What staff are told for each refusal.
 REASON_REQUIRED: Final = "A priority override needs a reason."
 AHEAD_OF_CALLED: Final = "A patient cannot be moved ahead of someone who has already been called or is being seen."

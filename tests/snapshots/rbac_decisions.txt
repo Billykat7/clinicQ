@@ -1213,6 +1213,7 @@ surface  | role=admin | key=communications.notifications | path=- | allow | tier
 surface  | role=admin | key=logs | path=/admin/logs | allow | tier=business
 surface  | role=admin | key=messages | path=/admin/messages | allow | tier=business
 surface  | role=admin | key=notifications | path=/admin/notifications | allow | tier=business
+surface  | role=admin | key=overrides | path=/dashboard/sites/{site_id}/overrides | deny | tier=own
 surface  | role=admin | key=rbac | path=/admin/rbac/roles | allow | tier=business
 surface  | role=admin | key=room | path=/dashboard/sites/{site_id}/room | deny | tier=own
 surface  | role=admin | key=widgets | path=/admin/widgets | allow | tier=business
@@ -1240,6 +1241,7 @@ surface  | role=clinic_manager | key=communications.notifications | path=- | den
 surface  | role=clinic_manager | key=logs | path=/admin/logs | deny | tier=own
 surface  | role=clinic_manager | key=messages | path=/admin/messages | deny | tier=own
 surface  | role=clinic_manager | key=notifications | path=/admin/notifications | deny | tier=own
+surface  | role=clinic_manager | key=overrides | path=/dashboard/sites/{site_id}/overrides | allow | tier=assigned
 surface  | role=clinic_manager | key=rbac | path=/admin/rbac/roles | deny | tier=own
 surface  | role=clinic_manager | key=room | path=/dashboard/sites/{site_id}/room | deny | tier=own
 surface  | role=clinic_manager | key=widgets | path=/admin/widgets | deny | tier=own
@@ -1267,6 +1269,7 @@ surface  | role=nurse_doctor | key=communications.notifications | path=- | deny 
 surface  | role=nurse_doctor | key=logs | path=/admin/logs | deny | tier=own
 surface  | role=nurse_doctor | key=messages | path=/admin/messages | deny | tier=own
 surface  | role=nurse_doctor | key=notifications | path=/admin/notifications | deny | tier=own
+surface  | role=nurse_doctor | key=overrides | path=/dashboard/sites/{site_id}/overrides | deny | tier=own
 surface  | role=nurse_doctor | key=rbac | path=/admin/rbac/roles | deny | tier=own
 surface  | role=nurse_doctor | key=room | path=/dashboard/sites/{site_id}/room | allow | tier=own
 surface  | role=nurse_doctor | key=widgets | path=/admin/widgets | deny | tier=own
@@ -1294,6 +1297,7 @@ surface  | role=patient | key=communications.notifications | path=- | deny | tie
 surface  | role=patient | key=logs | path=/admin/logs | deny | tier=own
 surface  | role=patient | key=messages | path=/admin/messages | deny | tier=own
 surface  | role=patient | key=notifications | path=/admin/notifications | deny | tier=own
+surface  | role=patient | key=overrides | path=/dashboard/sites/{site_id}/overrides | deny | tier=own
 surface  | role=patient | key=rbac | path=/admin/rbac/roles | deny | tier=own
 surface  | role=patient | key=room | path=/dashboard/sites/{site_id}/room | deny | tier=own
 surface  | role=patient | key=widgets | path=/admin/widgets | deny | tier=own
@@ -1321,6 +1325,7 @@ surface  | role=platform_admin | key=communications.notifications | path=- | den
 surface  | role=platform_admin | key=logs | path=/admin/logs | deny | tier=own
 surface  | role=platform_admin | key=messages | path=/admin/messages | deny | tier=own
 surface  | role=platform_admin | key=notifications | path=/admin/notifications | deny | tier=own
+surface  | role=platform_admin | key=overrides | path=/dashboard/sites/{site_id}/overrides | allow | tier=business
 surface  | role=platform_admin | key=rbac | path=/admin/rbac/roles | deny | tier=own
 surface  | role=platform_admin | key=room | path=/dashboard/sites/{site_id}/room | deny | tier=own
 surface  | role=platform_admin | key=widgets | path=/admin/widgets | deny | tier=own
@@ -1348,6 +1353,7 @@ surface  | role=receptionist | key=communications.notifications | path=- | deny 
 surface  | role=receptionist | key=logs | path=/admin/logs | deny | tier=own
 surface  | role=receptionist | key=messages | path=/admin/messages | deny | tier=own
 surface  | role=receptionist | key=notifications | path=/admin/notifications | deny | tier=own
+surface  | role=receptionist | key=overrides | path=/dashboard/sites/{site_id}/overrides | deny | tier=own
 surface  | role=receptionist | key=rbac | path=/admin/rbac/roles | deny | tier=own
 surface  | role=receptionist | key=room | path=/dashboard/sites/{site_id}/room | deny | tier=own
 surface  | role=receptionist | key=widgets | path=/admin/widgets | deny | tier=own
@@ -1375,6 +1381,7 @@ surface  | role=user | key=communications.notifications | path=- | deny | tier=o
 surface  | role=user | key=logs | path=/admin/logs | deny | tier=own
 surface  | role=user | key=messages | path=/admin/messages | deny | tier=own
 surface  | role=user | key=notifications | path=/admin/notifications | deny | tier=own
+surface  | role=user | key=overrides | path=/dashboard/sites/{site_id}/overrides | deny | tier=own
 surface  | role=user | key=rbac | path=/admin/rbac/roles | deny | tier=own
 surface  | role=user | key=room | path=/dashboard/sites/{site_id}/room | deny | tier=own
 surface  | role=user | key=widgets | path=/admin/widgets | deny | tier=own

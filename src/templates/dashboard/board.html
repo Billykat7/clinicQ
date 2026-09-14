@@ -1,10 +1,17 @@
 {% extends "dashboard/base.html" %}
-{#- The front desk (Issue 48's frame; Issue 49 makes it live).
+{#- The front desk (Issue 48's frame; Issue 49 makes it live; Issue 52 adds reordering).
 
     Every queue at the clinic, in the clinic's order, with how many people are waiting and how many
-    are with a member of staff. The counts are read on the server through the site guard; nothing on
-    this page is decided in the browser. -#}
+    are with a member of staff, its waiting line with the reorder controls, and its overrides today.
+    The counts, the line and the trail are read on the server through the site guard; nothing on this
+    page is decided in the browser. -#}
 {% from "components/empty_state.html" import empty_state %}
+{% from "dashboard/_reorder.html" import queue_line, move_dialog %}
+
+{% block layout_head %}
+  {{ super() }}
+  <script src="/static/js/dashboard-reorder.js" defer></script>
+{% endblock %}
 
 {% block clinic_content %}
 {% if queues %}
@@ -20,9 +27,11 @@
       <div><dt>Waiting</dt><dd>{{ queue.waiting }}</dd></div>
       <div><dt>With staff</dt><dd>{{ queue.with_staff }}</dd></div>
     </dl>
+    {{ queue_line(queue, lines[queue.id], can_reorder, can_read_priority) }}
   </li>
   {% endfor %}
 </ul>
+{% if can_reorder %}{{ move_dialog(site, reasons, note_max_length) }}{% endif %}
 {% else %}
 {{ empty_state("This clinic has no queues yet", body="A clinic manager adds queues in the clinic settings.") }}
 {% endif %}

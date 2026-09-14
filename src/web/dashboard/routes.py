@@ -20,22 +20,31 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
-from src.commons.enums import PermissionVerb, TicketStatus
+from src.commons.enums import PermissionVerb, PriorityReason, TicketStatus
 from src.commons.time import business_date
 from src.core.config import get_settings
 from src.core.nav_registry import all_destination_keys, destination
 from src.core.nav_visibility import NavVisibility, peek_user_from_refresh_cookie
 from src.core.site_scope import SiteAccess, permitted_queue_ids
+from src.database.models.queue_reorder import MAX_REORDER_NOTE_LENGTH
 from src.database.session import get_db
 from src.modules.queue.tickets import site_day_select
 from src.modules.queues.service import list_queues
 from src.web.context import page_context, require_authenticated_html
+from src.web.dashboard.reorder import (
+    PRIORITY_RESOURCE,
+    OverrideFilters,
+    override_day,
+    queue_lines,
+    reason_choices,
+)
 from src.web.dashboard.shell import (
     SECTION_PARAM,
     ClinicShell,
@@ -246,7 +255,25 @@ async def clinic_board(site_id: str, request: Request, db: DbSession) -> Respons
     )
     if not isinstance(opened, ClinicPage):
         return opened
-    opened.context["queues"] = queue_summaries(db, opened.access)
+    queues = queue_summaries(db, opened.access)
+    nav = opened.shell.nav
+    # Offered and shown per the caller's grants at this clinic (Issue 52): a role that may read the
+    # overrides gets the badges and the trail; one that may also make them gets working controls,
+    # and anyone else gets the same controls disabled, never a missing button to wonder about.
+    can_read_priority = nav.can(PRIORITY_RESOURCE, PermissionVerb.READ)
+    opened.context.update(
+        queues=queues,
+        lines=queue_lines(
+            db,
+            opened.access,
+            [queue.id for queue in queues],
+            include_priority=can_read_priority,
+        ),
+        can_read_priority=can_read_priority,
+        can_reorder=nav.can(PRIORITY_RESOURCE, PermissionVerb.UPDATE),
+        reasons=reason_choices(),
+        note_max_length=MAX_REORDER_NOTE_LENGTH,
+    )
     return render_clinic_page(request, opened, "dashboard/board.html")
 
 
@@ -271,6 +298,51 @@ async def clinic_room(site_id: str, request: Request, db: DbSession) -> Response
     own = permitted_queue_ids(db, opened.access.user)
     opened.context["queues"] = queue_summaries(db, opened.access, only=own)
     return render_clinic_page(request, opened, "dashboard/room.html")
+
+
+@router.get("/dashboard/sites/{site_id}/overrides", response_class=HTMLResponse)
+async def clinic_overrides(
+    site_id: str,
+    request: Request,
+    db: DbSession,
+    day: Annotated[date | None, Query()] = None,
+    queue: Annotated[str | None, Query(max_length=36)] = None,
+    reason: Annotated[PriorityReason | None, Query()] = None,
+    staff: Annotated[str | None, Query(max_length=255)] = None,
+) -> Response:
+    """The manager's view of a day's priority overrides, with counts per staff member (Issue 52).
+
+    A server-rendered list (``docs/IDE/RULES/list-view-ui-pattern.mdc``, second wiring style): the
+    filters are a real ``GET`` form, so a filtered day is a link, and the sort and the row's quick
+    view work on the rows already in the page. The counts cover the whole day whatever the filters
+    say, are listed by name, and say what they are not.
+    """
+    key = "overrides"
+    opened = open_clinic_page(
+        request,
+        db,
+        site_id,
+        active_key=key,
+        page_title=destination(key).label,
+        allowed=_visible(key),
+    )
+    if not isinstance(opened, ClinicPage):
+        return opened
+    today = business_date()
+    chosen = min(day or today, today)
+    overrides = override_day(db, opened.access, chosen)
+    filters = OverrideFilters(queue=queue or None, reason=reason, staff=staff or None)
+    opened.context.update(
+        overrides=overrides,
+        entries=filters.apply(overrides.entries),
+        filters=filters,
+        reasons=reason_choices(),
+        queue_names={
+            queue.id: queue.name for queue in list_queues(db, opened.access).items
+        },
+        today=today,
+    )
+    return render_clinic_page(request, opened, "dashboard/overrides.html")
 
 
 @router.get("/dashboard/sites/{site_id}/settings", response_class=HTMLResponse)
