@@ -29,7 +29,6 @@ from sqlalchemy.orm import Session
 
 from src.commons.enums import PermissionVerb, PriorityReason, TicketStatus
 from src.commons.time import business_date
-from src.core.config import get_settings
 from src.core.nav_registry import all_destination_keys, destination
 from src.core.nav_visibility import NavVisibility, peek_user_from_refresh_cookie
 from src.core.site_scope import SiteAccess, permitted_queue_ids
@@ -54,8 +53,6 @@ from src.web.dashboard.shell import (
     staff_sites,
 )
 from src.web.routes import (
-    SITE_DISPLAY_RESOURCE,
-    SITE_PROFILE_RESOURCE,
     _forbidden_html,
     _not_found_html,
     _redirect_to_sign_in,
@@ -343,78 +340,3 @@ async def clinic_overrides(
         today=today,
     )
     return render_clinic_page(request, opened, "dashboard/overrides.html")
-
-
-@router.get("/dashboard/sites/{site_id}/settings", response_class=HTMLResponse)
-async def clinic_settings(site_id: str, request: Request, db: DbSession) -> Response:
-    """The clinic's settings: the waiting-room screen's, the first settings page that exists."""
-    key = "clinic_settings"
-    opened = open_clinic_page(
-        request,
-        db,
-        site_id,
-        active_key=key,
-        page_title=destination(key).label,
-        allowed=_visible(key),
-    )
-    if not isinstance(opened, ClinicPage):
-        return opened
-    return RedirectResponse(
-        f"/dashboard/sites/{site_id}/settings/display", status_code=302
-    )
-
-
-@router.get("/dashboard/sites/{site_id}/settings/display", response_class=HTMLResponse)
-async def site_display_settings_page(
-    site_id: str, request: Request, db: DbSession
-) -> Response:
-    """The waiting-room screen's settings for one clinic (Issue 27, non-negotiable 4).
-
-    Two gates, in the order that keeps a 404 honest: the caller has to hold a role **at this
-    clinic** (another clinic's id renders the not-found page, never a 403 that would confirm the id
-    exists), and then the ``sites.display`` grant **at this clinic** decides whether they may see the
-    page at all. The JSON API behind it re-checks the same grant and adds the ``update`` check for
-    saving, because this gate governs what is *offered* and the API's governs what is *done*.
-
-    The page itself renders no rule: the modes, their descriptions, the bounds and the warnings all
-    come from ``/api/v1/sites/display-options``.
-    """
-    opened = open_clinic_page(
-        request,
-        db,
-        site_id,
-        active_key="clinic_settings",
-        page_title="Waiting-room screen",
-        allowed=lambda nav: nav.can(SITE_DISPLAY_RESOURCE, PermissionVerb.READ.value),
-    )
-    if not isinstance(opened, ClinicPage):
-        return opened
-    return render_clinic_page(request, opened, "dashboard/settings_display.html")
-
-
-@router.get("/dashboard/sites/{site_id}/settings/payment", response_class=HTMLResponse)
-async def site_payment_profile_page(
-    site_id: str, request: Request, db: DbSession
-) -> Response:
-    """A private clinic's payment methods and medical aids, as it reports them (Issue 37).
-
-    Behind ``PAYMENT_FILTER_ENABLED``: while the feature is off the page is not served at all (the
-    API still accepts a profile, so a clinic can fill it in beforehand). The same two gates as the
-    display settings page: a role **at this clinic**, then the ``sites.profile`` grant there. The
-    page renders no rule: whether the clinic may hold a profile, the scheme list and the notice all
-    come from ``/api/v1/sites/{site_id}/payment-profile``, and the server refuses a public clinic's
-    save.
-    """
-    if not get_settings().payment_filter_enabled:
-        return _not_found_html(request, db)
-    opened = open_clinic_page(
-        request,
-        db,
-        site_id,
-        active_key="clinic_settings",
-        page_title="Payment and medical aid",
-        allowed=lambda nav: nav.can(SITE_PROFILE_RESOURCE, PermissionVerb.READ.value),
-    )
-    if not isinstance(opened, ClinicPage):
-        return opened
-    return render_clinic_page(request, opened, "dashboard/settings_payment.html")

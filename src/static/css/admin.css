@@ -28,6 +28,15 @@ body.app {
   background: var(--bg);
   border-radius: 0;
 }
+/* The tile's hover and focus colours leak the same way, and they are worse: ``body`` is hovered
+   whenever the pointer is anywhere on the page, so the whole signed-in shell turned brand green the
+   moment the mouse moved. The reset has to name the states as well (found while screenshotting the
+   clinic dashboard, Issue 54). */
+body.app:hover,
+body.app:focus-visible {
+  background: var(--bg);
+  color: var(--ink);
+}
 body.app.app--no-rail { padding-left: 0; }
 
 .app-main {

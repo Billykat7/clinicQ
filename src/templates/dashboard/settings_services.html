@@ -1,0 +1,149 @@
+{% extends "dashboard/settings_base.html" %}
+{#- The clinic's services (Issue 54 over Issue 26's API), as a server-rendered list.
+
+    Same pattern as the queues: a GET filter bar, sortable headers, and a row that opens the service
+    beside the list. The minutes are the wait estimator's starting point, and the API keeps them in
+    a sensible range. Deactivating keeps every past ticket's service, and asks first. -#}
+
+{% block settings_content %}
+<form class="filter-bar" data-filter-key="settings-services" method="get">
+  <div class="filter-bar-head">
+    <button type="button" class="filter-bar-toggle" aria-expanded="true" aria-controls="ss-filter-body">Filters</button>
+    <span class="filter-bar-summary" hidden></span>
+    <div class="filter-bar-actions">
+      <a class="btn btn-quiet btn-sm filter-clear" href="{{ request.url.path }}" hidden>Clear filters</a>
+    </div>
+  </div>
+  <div class="filter-bar-body form-grid" id="ss-filter-body">
+    <div class="field" data-filter data-filter-label="Status">
+      <label for="ss-status">Status</label>
+      <select id="ss-status" name="status">
+        <option value="">Active and deactivated</option>
+        {% for value, label in status_choices %}
+        <option value="{{ value }}"{% if filters.status == value %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field" data-filter data-filter-label="Category">
+      <label for="ss-category">Category</label>
+      <select id="ss-category" name="category">
+        <option value="">Every category</option>
+        {% for category in categories %}
+        <option value="{{ category.value }}"{% if filters.kind == category.value %} selected{% endif %}>{{ category.value | replace('_', ' ') | capitalize }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-actions"><button type="submit" class="btn btn-sm">Show</button></div>
+  </div>
+</form>
+
+<div class="settings-list-head">
+  <button type="button" class="btn btn-sm" data-new-record="ss-detail">Add a service</button>
+</div>
+
+<div class="split split-full" id="ss-split">
+  <div class="card">
+    <div class="table-wrap table-scroll">
+      <table class="data" id="ss-table" data-settings-list="ss-detail" data-keep-within="#ss-split">
+        <thead>
+          <tr>
+            <th data-sort-key="name">Service</th>
+            <th data-sort-key="category">Category</th>
+            <th data-sort-key="minutes">Minutes</th>
+            <th data-sort-key="queues">Queues</th>
+            <th data-sort-key="status">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in services %}
+          {% set names = service_queue_names[item.id] %}
+          <tr tabindex="0" data-record="{{ item.model_dump(mode='json') | tojson | forceescape }}"
+              data-sort-name="{{ item.name }}" data-sort-category="{{ item.category.value }}"
+              data-sort-minutes="{{ item.expected_minutes }}" data-sort-queues="{{ names | join(', ') }}"
+              data-sort-status="{{ 'active' if item.is_active else 'inactive' }}">
+            <td>{{ item.name }}{% if item.requires_appointment %} <span class="badge badge-muted">by appointment</span>{% endif %}</td>
+            <td>{{ item.category.value | replace('_', ' ') | capitalize }}</td>
+            <td>{{ item.expected_minutes }}</td>
+            <td>{{ names | join(', ') or '—' }}</td>
+            <td>{% if item.is_active %}<span class="badge badge-ok">Offered</span>{% else %}<span class="badge badge-muted">Deactivated</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if not services %}
+    <p class="empty">{% if filters.active %}No service matches these filters.{% else %}This clinic lists no services yet.{% endif %}</p>
+    {% endif %}
+    <p class="card-sub">{{ services | length }} service{{ '' if services | length == 1 else 's' }}.</p>
+  </div>
+</div>
+
+<div class="slideover slideover-inset" id="ss-detail" data-anchor="#ss-split">
+  <div class="slideover-panel" role="dialog" aria-modal="false" aria-labelledby="ssd-title" tabindex="-1">
+    <div class="slideover-head">
+      <div class="slideover-titles">
+        <p class="detail-eyebrow">Service</p>
+        <h2 id="ssd-title"><span data-show-when="new">A new service</span><span data-show-when="existing" data-fill-text="name"></span></h2>
+      </div>
+      <button type="button" class="btn btn-quiet btn-sm slideover-close" data-slideover-close aria-label="Close service">Close</button>
+    </div>
+    <div class="slideover-body">
+      <form class="settings-form" data-api-template="/api/v1/sites/{{ site.id }}/services/{id}" data-api-new="/api/v1/sites/{{ site.id }}/services" data-method-new="POST" data-method-existing="PUT">
+        <div class="field">
+          <label for="ssd-name">Name</label>
+          <input type="text" id="ssd-name" name="name" required minlength="2" maxlength="120">
+        </div>
+        <div class="field-row cols-2">
+          <div class="field">
+            <label for="ssd-slug">Short name for links</label>
+            <input type="text" id="ssd-slug" name="slug" required minlength="2" maxlength="80">
+          </div>
+          <div class="field">
+            <label for="ssd-category">Category</label>
+            <select id="ssd-category" name="category">
+              {% for category in categories %}<option value="{{ category.value }}">{{ category.value | replace('_', ' ') | capitalize }}</option>{% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="ssd-description">What patients are told (optional)</label>
+          <textarea id="ssd-description" name="description" rows="2" maxlength="500" data-empty="null"></textarea>
+        </div>
+        <div class="field-row cols-2">
+          <div class="field">
+            <label for="ssd-minutes">Usual minutes</label>
+            <input type="number" id="ssd-minutes" name="expected_minutes" data-type="number" required value="15">
+          </div>
+          <div class="field">
+            <label for="ssd-order">Position</label>
+            <input type="number" id="ssd-order" name="display_order" data-type="number" min="0" max="999" required value="0">
+          </div>
+        </div>
+        <fieldset class="field">
+          <legend>Handled by</legend>
+          {% for queue in queues %}
+          <label class="check"><input type="checkbox" name="queue_ids" value="{{ queue.id }}" data-type="list"> {{ queue.name }}</label>
+          {% else %}
+          <p class="hint">Add a queue first.</p>
+          {% endfor %}
+        </fieldset>
+        <div class="field">
+          <label class="check"><input type="checkbox" name="requires_appointment"> Only by appointment</label>
+        </div>
+        <div class="field">
+          <label class="check"><input type="checkbox" name="is_active" checked> Offered to patients</label>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn">Save</button>
+          <span class="msg" data-api-msg aria-live="polite"></span>
+        </div>
+      </form>
+      <div class="danger-zone" data-show-when="active" data-api-scope>
+        <p class="hint">Deactivating takes the service out of new joins. Past tickets still name it, and you can offer it again.</p>
+        <button type="button" class="btn btn-danger btn-sm" data-api-template="/api/v1/sites/{{ site.id }}/services/{id}" data-method="DELETE" data-confirm-template="Stop offering {name}? New patients can no longer choose it; past tickets keep it.">Deactivate this service</button>
+        <span class="msg" data-api-msg aria-live="polite"></span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

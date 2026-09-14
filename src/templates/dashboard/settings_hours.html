@@ -1,0 +1,105 @@
+{% extends "dashboard/settings_base.html" %}
+{#- Opening hours, public holidays and temporary closure (Issue 54 over Issue 24's API).
+
+    Three saves, three existing routes: PUT /hours replaces the whole ordinary week, PUT
+    /holidays/{date} answers one public holiday, and POST /closures closes the clinic at once (DELETE
+    lifts it). Each validates and records the change. Closing is the one destructive action here, so
+    it asks first and says what happens. -#}
+
+{% block settings_content %}
+<div class="settings-hours">
+  <section class="card" aria-labelledby="closure-title">
+    <h2 id="closure-title">Close the clinic now</h2>
+    {% if closures %}
+    <p class="card-sub">The clinic is closed to new patients on every channel.</p>
+    <ul class="closure-list">
+      {% for closure in closures %}
+      <li data-api-scope>
+        <div>
+          <strong>{{ closure.reason }}</strong>
+          <span class="hint">Since {{ closure.starts_at.strftime('%d %b %H:%M') }}{% if closure.ends_at %}, until {{ closure.ends_at.strftime('%d %b %H:%M') }}{% else %}, until it is lifted{% endif %}</span>
+        </div>
+        <button type="button" class="btn btn-sm" data-api="/api/v1/sites/{{ site.id }}/closures/{{ closure.id }}" data-method="DELETE" data-confirm="Open the clinic to new patients again? Joins resume on every channel at once.">Lift the closure</button>
+        <span class="msg" data-api-msg aria-live="polite"></span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="card-sub">For a burst pipe or a power cut: new joins stop on every channel the moment you confirm, and patients already waiting are told the reason.</p>
+    <form class="closure-form" data-api="/api/v1/sites/{{ site.id }}/closures" data-method="POST" data-confirm="Close the clinic to new patients now? Joins stop on web, USSD, WhatsApp and at the desk until you lift the closure.">
+      <div class="field">
+        <label for="closure-reason">Reason patients will be shown</label>
+        <input type="text" id="closure-reason" name="reason" required minlength="3" maxlength="200" placeholder="Power failure: we expect to reopen this afternoon">
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-danger">Close the clinic</button>
+        <span class="msg" data-api-msg aria-live="polite"></span>
+      </div>
+    </form>
+    {% endif %}
+  </section>
+
+  <form class="card" data-api="/api/v1/sites/{{ site.id }}/hours" data-method="PUT" data-serializer="hours" aria-labelledby="week-title">
+    <h2 id="week-title">Ordinary week</h2>
+    <p class="card-sub">Up to two sessions a day, for a lunch break. A day with no times is closed.</p>
+    <div class="table-wrap">
+      <table class="data hours-table">
+        <thead><tr><th>Day</th><th>Closed</th>{% for n in range(spans_on_form) %}<th>Session {{ n + 1 }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for day in week.days %}
+          <tr data-weekday="{{ day.weekday }}">
+            <th scope="row">{{ weekday_names[day.weekday] }}</th>
+            <td><input type="checkbox" data-day-closed aria-label="{{ weekday_names[day.weekday] }} closed"{% if not day.spans %} checked{% endif %}></td>
+            {% for n in range(spans_on_form) %}
+            {% set span = day.spans[n] if day.spans | length > n else None %}
+            <td data-span>
+              <span class="span-times">
+                <input type="time" data-opens aria-label="{{ weekday_names[day.weekday] }} session {{ n + 1 }} opens" value="{{ span.opens_at.strftime('%H:%M') if span else '' }}">
+                <span aria-hidden="true">to</span>
+                <input type="time" data-closes aria-label="{{ weekday_names[day.weekday] }} session {{ n + 1 }} closes" value="{{ span.closes_at.strftime('%H:%M') if span else '' }}">
+              </span>
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn">Save the week</button>
+      <span class="msg" data-api-msg aria-live="polite"></span>
+    </div>
+  </form>
+
+  <section class="card" aria-labelledby="holidays-title">
+    <h2 id="holidays-title">Public holidays</h2>
+    <p class="card-sub">A holiday you have not answered is closed. Leave both times empty to close, or give both to open.</p>
+    {% if holidays.items %}
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Date</th><th>Holiday</th><th>Hours</th><th></th></tr></thead>
+        <tbody>
+          {% for holiday in holidays.items %}
+          <tr>
+            <td>{{ holiday.holiday_date.strftime('%a %d %b %Y') }}</td>
+            <td>{{ holiday.name }}{% if not holiday.has_rule %} <span class="badge badge-muted">not answered</span>{% endif %}</td>
+            <td colspan="2">
+              <form class="holiday-form" data-api="/api/v1/sites/{{ site.id }}/holidays/{{ holiday.holiday_date.isoformat() }}" data-method="PUT">
+                <input type="time" name="opens_at" data-empty="null" aria-label="{{ holiday.name }} opens" value="{{ holiday.opens_at.strftime('%H:%M') if holiday.opens_at else '' }}">
+                <span aria-hidden="true">to</span>
+                <input type="time" name="closes_at" data-empty="null" aria-label="{{ holiday.name }} closes" value="{{ holiday.closes_at.strftime('%H:%M') if holiday.closes_at else '' }}">
+                <button type="submit" class="btn btn-quiet btn-sm">Save</button>
+                <span class="msg" data-api-msg aria-live="polite"></span>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="hint">No public holidays in the coming months.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

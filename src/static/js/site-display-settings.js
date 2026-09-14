@@ -67,6 +67,18 @@
     el('ds-confirm-wrap').hidden = !(mode.requires_confirmation || comment);
     el('ds-confirm-comment-wrap').hidden = !commentOnFullName;
     el('ds-confirm-comment-text').textContent = options.comment_with_full_name_warning;
+    refreshPreview();
+  }
+
+  /* The live preview (Issue 54): the server rendered the sample rows for every mode, with and
+     without the reason, through the board's own display rule. This only shows the set that matches
+     the form, so what the manager sees here is what the server would put on the screen. */
+  function refreshPreview() {
+    const mode = selectedMode();
+    const reason = el('ds-show-comment').checked ? 'with' : 'without';
+    document.querySelectorAll('[data-preview-mode]').forEach((block) => {
+      block.hidden = !(block.dataset.previewMode === mode && block.dataset.previewReason === reason);
+    });
   }
 
   async function load() {

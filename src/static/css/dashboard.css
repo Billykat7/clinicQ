@@ -329,3 +329,127 @@
 .overrides-count-list > div { display: flex; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--line-soft); padding-bottom: .3rem; }
 .overrides-count-list dt { overflow-wrap: anywhere; }
 .overrides-count-list dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ── Clinic settings (Issue 54) ─────────────────────────────── */
+
+.settings-tabs { margin-bottom: 1rem; }
+.settings-lead { margin: 0 0 1rem; color: var(--muted); }
+.settings-form .form-actions,
+.card > .form-actions { margin-top: 1rem; }
+.settings-grid { display: grid; gap: 1.5rem; }
+@media (min-width: 70rem) {
+  .settings-grid { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); }
+}
+.settings-fields h2,
+.settings-map h2 { font-size: var(--step-1); margin-bottom: .5rem; }
+.map-picker {
+  height: 18rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin: .5rem 0 .75rem;
+  overflow: hidden;
+}
+.settings-geocode-row { display: flex; gap: .5rem; }
+.settings-geocode-row input { flex: 1; min-width: 0; }
+.geocode-results[hidden] { display: none; }
+.geocode-results {
+  list-style: none;
+  margin: .35rem 0 0;
+  padding: .25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  display: grid;
+  gap: .15rem;
+}
+.geocode-choice {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: none;
+  padding: .45rem .55rem;
+  border-radius: calc(var(--radius) - 3px);
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+}
+.geocode-choice:hover,
+.geocode-choice:focus-visible { background: var(--brand-soft); outline: none; }
+
+.settings-hours,
+.settings-staff { display: grid; gap: 1rem; }
+.hours-table td,
+.hours-table th { vertical-align: middle; }
+.span-times { display: inline-flex; align-items: center; gap: .35rem; }
+.span-times input[type="time"],
+.holiday-form input[type="time"] { width: 7.5rem; }
+.holiday-form { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+.closure-list { list-style: none; margin: .5rem 0 0; padding: 0; display: grid; gap: .5rem; }
+.closure-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem 1rem;
+  padding: .6rem .75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+}
+.closure-list .hint { display: block; color: inherit; opacity: .85; }
+.closure-form { display: grid; gap: .5rem; max-width: 40rem; }
+
+.settings-list-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: .75rem; }
+.order-cell { white-space: nowrap; }
+.order-move {
+  display: inline-grid;
+  place-items: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+.order-move svg { width: .95rem; height: .95rem; }
+.order-move:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.danger-zone {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line-soft);
+  display: grid;
+  gap: .5rem;
+  justify-items: start;
+}
+.detail-subhead { font-size: var(--step-0); margin: 0 0 .4rem; }
+.role-actions { list-style: none; margin: 0 0 1rem; padding: 0; display: grid; gap: .35rem; }
+.role-actions li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; }
+.field-row.cols-3 { display: grid; gap: .75rem; }
+@media (min-width: 60rem) {
+  .field-row.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+.settings-display-layout { display: grid; gap: 1rem; align-items: start; }
+@media (min-width: 80rem) {
+  .settings-display-layout { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+}
+.display-preview h2 { font-size: var(--step-1); }
+.preview-screen {
+  margin: .75rem 0;
+  padding: .75rem;
+  border-radius: var(--radius);
+  background: #10231d;
+  color: #f4f7f5;
+}
+.preview-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: .45rem; }
+.preview-rows li { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .75rem; font-size: var(--step-1); }
+.preview-number { font-weight: 800; font-variant-numeric: tabular-nums; min-width: 3.5rem; }
+.preview-name { font-weight: 600; }
+.preview-comment { font-size: var(--step--1); opacity: .85; }
+
+/* One option per line in a panel's checkbox groups (rooms, a service's queues). Matches the kernel's
+   `.field label:has(> input)` rule's weight, and wins by coming later. */
+.slideover-body fieldset label.check,
+.settings-form fieldset label.check { display: flex; align-items: center; gap: .45rem; margin: .2rem 0; }

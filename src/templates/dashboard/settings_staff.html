@@ -1,0 +1,174 @@
+{% extends "dashboard/settings_base.html" %}
+{#- Who works at the clinic (Issue 54 over Issues 22 and 28), as a server-rendered list.
+
+    Invite someone by email, give or take away a role at this clinic, put them on rooms, switch their
+    account off or on. Every one of those is an existing staff route that checks the manager's grant at
+    this clinic, refuses what it must (a role the manager may not hand out, removing the clinic's last
+    manager) and records the change. Taking something away asks first. -#}
+
+{% block settings_content %}
+<div class="settings-staff">
+  <section class="card" aria-labelledby="invite-title">
+    <h2 id="invite-title">Invite someone</h2>
+    <p class="card-sub">They get a link by email (and by SMS if you add a number) to set a password. The link is never shown here.</p>
+    <form class="invite-form" data-api="/api/v1/sites/{{ site.id }}/staff/invitations" data-method="POST">
+      <div class="field-row cols-3">
+        <div class="field">
+          <label for="inv-email">Email</label>
+          <input type="email" id="inv-email" name="email" required maxlength="254" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="inv-role">Role at this clinic</label>
+          <select id="inv-role" name="role">
+            {% for value, label in assignable_roles %}<option value="{{ value }}">{{ label | capitalize }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="inv-phone">Mobile number (optional)</label>
+          <input type="tel" id="inv-phone" name="phone" data-empty="null" maxlength="32">
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn">Send the invitation</button>
+        <span class="msg" data-api-msg aria-live="polite"></span>
+      </div>
+    </form>
+    {% if invitations %}
+    <div class="table-wrap">
+      <table class="data invitations-table">
+        <thead><tr><th>Invited</th><th>Role</th><th>State</th><th>Expires</th><th></th></tr></thead>
+        <tbody>
+          {% for invitation, state in invitations %}
+          <tr data-api-scope>
+            <td>{{ invitation.email }}</td>
+            <td>{{ role_label(invitation.role) | capitalize }}</td>
+            <td><span class="badge{% if state == 'pending' %} badge-warn{% elif state == 'accepted' %} badge-ok{% else %} badge-muted{% endif %}">{{ state | capitalize }}</span></td>
+            <td>{{ invitation.expires_at.strftime('%d %b %Y') }}</td>
+            <td>
+              {% if state == 'pending' %}
+              <button type="button" class="btn btn-quiet btn-sm" data-api="/api/v1/sites/{{ site.id }}/staff/invitations/{{ invitation.id }}" data-method="DELETE" data-confirm="Withdraw the invitation to {{ invitation.email }}? Their link stops working at once.">Withdraw</button>
+              <span class="msg" data-api-msg aria-live="polite"></span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </section>
+
+  <form class="filter-bar" data-filter-key="settings-staff" method="get">
+    <div class="filter-bar-head">
+      <button type="button" class="filter-bar-toggle" aria-expanded="true" aria-controls="st-filter-body">Filters</button>
+      <span class="filter-bar-summary" hidden></span>
+      <div class="filter-bar-actions">
+        <a class="btn btn-quiet btn-sm filter-clear" href="{{ request.url.path }}" hidden>Clear filters</a>
+      </div>
+    </div>
+    <div class="filter-bar-body form-grid" id="st-filter-body">
+      <div class="field" data-filter data-filter-label="Status">
+        <label for="st-status">Status</label>
+        <select id="st-status" name="status">
+          <option value="">Active and switched off</option>
+          {% for value, label in status_choices %}
+          <option value="{{ value }}"{% if filters.status == value %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field" data-filter data-filter-label="Role">
+        <label for="st-role">Role</label>
+        <select id="st-role" name="role">
+          <option value="">Every role</option>
+          {% for value, label in assignable_roles %}
+          <option value="{{ value }}"{% if filters.kind == value %} selected{% endif %}>{{ label | capitalize }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-actions"><button type="submit" class="btn btn-sm">Show</button></div>
+    </div>
+  </form>
+
+  <div class="split split-full" id="st-split">
+    <div class="card">
+      <div class="table-wrap table-scroll">
+        <table class="data" id="st-table" data-settings-list="st-detail" data-keep-within="#st-split">
+          <thead>
+            <tr>
+              <th data-sort-key="name">Name</th>
+              <th data-sort-key="email">Email</th>
+              <th data-sort-key="roles">Roles here</th>
+              <th data-sort-key="rooms">Rooms</th>
+              <th data-sort-key="status">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in staff_rows %}
+            <tr tabindex="0" data-record="{{ row.record | tojson | forceescape }}"
+                data-sort-name="{{ row.name }}" data-sort-email="{{ row.record.email }}"
+                data-sort-roles="{{ row.role_labels | join(', ') }}" data-sort-rooms="{{ row.room_names | join(', ') }}"
+                data-sort-status="{{ 'active' if row.record.is_active else 'inactive' }}">
+              <td>{{ row.name }}</td>
+              <td>{{ row.record.email }}</td>
+              <td>{{ row.role_labels | join(', ') | capitalize }}</td>
+              <td>{{ row.room_names | join(', ') or '—' }}</td>
+              <td>{% if row.record.is_active %}<span class="badge badge-ok">Active</span>{% else %}<span class="badge badge-muted">Switched off</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if not staff_rows %}
+      <p class="empty">{% if filters.active %}Nobody matches these filters.{% else %}Nobody works here yet.{% endif %}</p>
+      {% endif %}
+      <p class="card-sub">{{ staff_rows | length }} {{ 'person' if staff_rows | length == 1 else 'people' }}.</p>
+    </div>
+  </div>
+
+  <div class="slideover slideover-inset" id="st-detail" data-anchor="#st-split">
+    <div class="slideover-panel" role="dialog" aria-modal="false" aria-labelledby="std-title" tabindex="-1">
+      <div class="slideover-head">
+        <div class="slideover-titles">
+          <p class="detail-eyebrow">Staff member</p>
+          <h2 id="std-title" data-fill-text="email"></h2>
+        </div>
+        <button type="button" class="btn btn-quiet btn-sm slideover-close" data-slideover-close aria-label="Close staff member">Close</button>
+      </div>
+      <div class="slideover-body">
+        <h3 class="detail-subhead">Roles at this clinic</h3>
+        <ul class="role-actions">
+          {% for value, label in assignable_roles %}
+          <li data-api-scope>
+            <span>{{ label | capitalize }}</span>
+            <button type="button" class="btn btn-quiet btn-sm" data-show-when="lacks:{{ value }}" data-api-template="/api/v1/sites/{{ site.id }}/staff/{id}/roles" data-method="POST" data-body='{"role": "{{ value }}"}'>Give this role</button>
+            <button type="button" class="btn btn-quiet btn-sm" data-show-when="has:{{ value }}" data-api-template="/api/v1/sites/{{ site.id }}/staff/{id}/roles/{{ value }}" data-method="DELETE" data-confirm-template="Take the {{ label }} role away from {email} at this clinic? It stops working on their next request.">Take this role away</button>
+            <span class="msg" data-api-msg aria-live="polite"></span>
+          </li>
+          {% endfor %}
+        </ul>
+
+        <form class="settings-form" data-api-template="/api/v1/sites/{{ site.id }}/staff/{id}/queues" data-method="PUT">
+          <fieldset class="field">
+            <legend>Rooms</legend>
+            {% for queue in queues %}
+            <label class="check"><input type="checkbox" name="queue_ids" value="{{ queue.id }}" data-type="list"> {{ queue.name }}{% if queue.room_label %} ({{ queue.room_label }}){% endif %}</label>
+            {% else %}
+            <p class="hint">This clinic has no open queues to assign.</p>
+            {% endfor %}
+          </fieldset>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-sm">Save rooms</button>
+            <span class="msg" data-api-msg aria-live="polite"></span>
+          </div>
+        </form>
+
+        <div class="danger-zone" data-api-scope>
+          <button type="button" class="btn btn-danger btn-sm" data-show-when="active" data-api-template="/api/v1/sites/{{ site.id }}/staff/{id}/active" data-method="PUT" data-body='{"is_active": false}' data-confirm-template="Switch off {email}'s account? They are signed out everywhere at once and cannot sign in until it is switched back on.">Switch off this account</button>
+          <button type="button" class="btn btn-quiet btn-sm" data-show-when="inactive" data-api-template="/api/v1/sites/{{ site.id }}/staff/{id}/active" data-method="PUT" data-body='{"is_active": true}'>Switch this account back on</button>
+          <span class="msg" data-api-msg aria-live="polite"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
