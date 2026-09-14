@@ -81,6 +81,8 @@ shows what ships.
 | `sites.settings` | — | — | — | update · assigned | delete · business | — | — |
 | `sites.staff` | — | read · assigned | read · assigned | delete · assigned | delete · business | — | — |
 | `users` | — | — | — | — | — | delete · business | — |
+| `visits` | — | — | — | — | — | — | — |
+| `visits.notes` | — | — | update · own | — | — | — | — |
 | `widgets` | — | — | — | — | — | delete · business | — |
 | `widgets.archive` | — | — | — | — | — | delete · business | — |
 

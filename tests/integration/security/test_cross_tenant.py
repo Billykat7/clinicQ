@@ -225,6 +225,15 @@ PENDING: dict[str, str] = {
         "clinic-facing route reads consent: a patient reads their own through their session. A "
         "route that lists a clinic's consent events must add a case here"
     ),
+    "visits": (
+        "the clinician's side of a visit (Issue 48) is a resource tree with no route yet: the room "
+        "view's page opens through the dashboard's own site check, and the first API on it is the "
+        "visit notes (Issue 53), which must add a case here"
+    ),
+    "visits.notes": (
+        "private visit notes (Issue 53) gate the room view's link today and have no route yet; the "
+        "notes API that Issue 53 adds must add a case here"
+    ),
     "sitequeuesnapshot": (
         "a queue snapshot carries its clinic for the index discovery reads by (Issue 36), but no "
         "clinic-facing route reads it: patients see the figures through the public discovery "

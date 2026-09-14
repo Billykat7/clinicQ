@@ -1,5 +1,5 @@
 {#
-  Signed-in icon rail (Issue 53).
+  Signed-in icon rail (Issue 53; the clinic's screens, Issue 48).
 
   Server-rendered main navigation for the app shell. Every link renders from the
   declarative nav registry (Issue #104): ``nav.visible(key)`` evaluates the caller's
@@ -23,6 +23,18 @@
   <a href="/dashboard" class="rail-item nav-dashboard{% if active_nav == 'dashboard' %} active{% endif %}" data-tip="Dashboard" aria-label="Dashboard">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
   </a>
+
+  {# The clinic's screens (Issue 48): the ones the nav registry opens for this person at the clinic
+     they are working in, resolved on the server into ``clinic.links``. No role is named here; a
+     receptionist, a nurse and a manager see different icons because their grants differ. #}
+  {% if clinic %}
+  {% from "partials/clinic_icons.html" import clinic_icon %}
+  {% for link in clinic.links %}
+  <a href="{{ link.href }}" class="rail-item nav-{{ link.key | replace('_', '-') }}{% if link.active %} active{% endif %}" data-tip="{{ link.label }}" aria-label="{{ link.label }}"{% if link.active %} aria-current="page"{% endif %}>
+    {{ clinic_icon(link.key) }}
+  </a>
+  {% endfor %}
+  {% endif %}
 
   {# Communications: Messages, Notifications, Announcements and Alerts grouped under one icon
      with tabbed sub-navigation (Issue 92): all four are the business's one inbox, so they belong

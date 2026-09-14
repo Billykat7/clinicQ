@@ -11,14 +11,14 @@ buttons its grants imply. Ported and generalised from the ``maps`` project.
 """
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from fastapi import Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.commons.enums import GrantScope, PermissionVerb
+from src.commons.enums import AssignmentScopeType, GrantScope, PermissionVerb
 from src.core.config import get_settings
 from src.core.nav_registry import destination, group
 from src.core.rbac import (
@@ -26,6 +26,7 @@ from src.core.rbac import (
     TraceOutcome,
     TraceStage,
     _record,
+    active_roles_for_user,
     effective_verb_over_keys,
     granted_covers_required,
     load_effective_grant_keys_for_roles,
@@ -608,7 +609,7 @@ def _all_known_resource_keys(parent_map: dict[str, str | None]) -> set[str]:
 
 
 def _effective_grants(
-    db: Session, role: str
+    db: Session, roles: Sequence[str]
 ) -> tuple[dict[str, PermissionVerb], dict[str, GrantScope]]:
     """Return the caller's effective ``(verbs, scope tiers)`` across every known resource key.
 
@@ -623,7 +624,7 @@ def _effective_grants(
     guarantees the surface gate and the row-scoping behind it can never disagree about how wide a
     caller's grant reaches.
     """
-    grant_rows = load_effective_grant_keys_for_roles(db, [role])
+    grant_rows = load_effective_grant_keys_for_roles(db, roles)
     parent_map = load_resource_parent_map(db)
     keys = _all_known_resource_keys(parent_map)
     grants: dict[str, PermissionVerb] = {}
@@ -631,7 +632,7 @@ def _effective_grants(
         verb_value = effective_verb_over_keys(grant_rows, parent_map, key)
         if verb_value is not None:
             grants[key] = PermissionVerb(verb_value)
-    return grants, scope_tiers_for_roles(db, [role], keys)
+    return grants, scope_tiers_for_roles(db, roles, keys)
 
 
 def valid_refresh_token_row_for_request(
@@ -682,7 +683,7 @@ def access_subject_matches_user(access_subject: str, user: User) -> bool:
 
 
 def _named_action_surfaces_ok(
-    db: Session, role: str, gate_overrides: Mapping[str, NavGate]
+    db: Session, roles: Sequence[str], gate_overrides: Mapping[str, NavGate]
 ) -> frozenset[str]:
     """Return the subset of ``gate_overrides`` keys, gated by a named action, ``role`` holds.
 
@@ -694,7 +695,7 @@ def _named_action_surfaces_ok(
         surface_key
         for surface_key, gate in gate_overrides.items()
         if gate.action is not None
-        and role_has_named_action(db, [role], gate.resource, gate.action)
+        and role_has_named_action(db, list(roles), gate.resource, gate.action)
     )
 
 
@@ -718,7 +719,9 @@ def _all_named_action_pairs() -> frozenset[tuple[str, str]]:
     return frozenset(pairs)
 
 
-def _named_actions_held(db: Session, role: str) -> frozenset[tuple[str, str]]:
+def _named_actions_held(
+    db: Session, roles: Sequence[str]
+) -> frozenset[tuple[str, str]]:
     """Return the subset of :func:`_all_named_action_pairs` that ``role`` currently holds.
 
     One :func:`~src.core.rbac.role_has_named_action` query per catalog pair — see that function's
@@ -728,7 +731,7 @@ def _named_actions_held(db: Session, role: str) -> frozenset[tuple[str, str]]:
     return frozenset(
         (resource, action)
         for resource, action in _all_named_action_pairs()
-        if role_has_named_action(db, [role], resource, action)
+        if role_has_named_action(db, list(roles), resource, action)
     )
 
 
@@ -745,16 +748,49 @@ def nav_visibility_for_role(db: Session, role: str) -> NavVisibility:
     ``role`` reaches under enforcement, which is not a question a development shell with auth
     disabled has an answer to.
     """
+    return nav_visibility_for_roles(db, [role])
+
+
+def nav_visibility_for_roles(db: Session, roles: Iterable[str]) -> NavVisibility:
+    """Compute registry-driven visibility for the **union** of ``roles`` (Issue 48).
+
+    The shape :func:`~src.core.rbac.ensure_permission_key` resolves a request with: every role the
+    caller holds in the scope the request names, unioned. :func:`nav_visibility_for_role` is its
+    one-role case. An empty ``roles`` grants nothing, so every gated destination stays hidden.
+    """
+    role_list = list(dict.fromkeys(role.strip() for role in roles if role.strip()))
     gate_overrides = load_nav_gate_overrides(db)
-    grants, grant_scopes = _effective_grants(db, role)
+    grants, grant_scopes = _effective_grants(db, role_list)
     return NavVisibility(
         authenticated=True,
         grants=grants,
         grant_scopes=grant_scopes,
         gate_overrides=gate_overrides,
-        named_action_surfaces_ok=_named_action_surfaces_ok(db, role, gate_overrides),
-        named_actions_held=_named_actions_held(db, role),
+        named_action_surfaces_ok=_named_action_surfaces_ok(
+            db, role_list, gate_overrides
+        ),
+        named_actions_held=_named_actions_held(db, role_list),
     )
+
+
+def nav_visibility_at_site(db: Session, user: User, site_id: str) -> NavVisibility:
+    """Compute visibility from the roles ``user`` holds **at one clinic** (Issue 48).
+
+    A clinic's screens are gated the way their API is: :func:`~src.core.site_scope.require_site_access`
+    checks a grant with the roles held at the site named in the path (plus any unscoped role), so a
+    manager at Clinic A is a receptionist at Clinic B if that is what they were given there. Building
+    the rail from :attr:`~src.database.models.User.role`, the single-role mirror, would show a
+    two-clinic staff member the same menu at both, and a link the site's own gate then refuses.
+
+    Resolved with :func:`~src.core.rbac.active_roles_for_user`, the function enforcement uses, so the
+    two answer from one role set. Auth disabled (development) shows everything, as elsewhere.
+    """
+    if not get_settings().auth_enabled:
+        return _all_access_nav()
+    roles = active_roles_for_user(
+        db, user, scope_type=AssignmentScopeType.SITE.value, scope_id=site_id
+    )
+    return nav_visibility_for_roles(db, sorted(roles))
 
 
 def nav_visibility_for_user(

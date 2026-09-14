@@ -1,0 +1,29 @@
+{% extends "dashboard/base.html" %}
+{#- The front desk (Issue 48's frame; Issue 49 makes it live).
+
+    Every queue at the clinic, in the clinic's order, with how many people are waiting and how many
+    are with a member of staff. The counts are read on the server through the site guard; nothing on
+    this page is decided in the browser. -#}
+{% from "components/empty_state.html" import empty_state %}
+
+{% block clinic_content %}
+{% if queues %}
+<ul class="queue-grid" aria-label="Queues at {{ clinic.site.name }}">
+  {% for queue in queues %}
+  <li class="queue-card{% if not queue.is_active %} is-inactive{% endif %}">
+    <div class="queue-card-head">
+      <h2 class="queue-card-name">{{ queue.name }}</h2>
+      {% if queue.room_label %}<span class="queue-card-room">{{ queue.room_label }}</span>{% endif %}
+      {% if not queue.is_active %}<span class="badge">Closed to joins</span>{% endif %}
+    </div>
+    <dl class="queue-card-counts">
+      <div><dt>Waiting</dt><dd>{{ queue.waiting }}</dd></div>
+      <div><dt>With staff</dt><dd>{{ queue.with_staff }}</dd></div>
+    </dl>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+{{ empty_state("This clinic has no queues yet", body="A clinic manager adds queues in the clinic settings.") }}
+{% endif %}
+{% endblock %}

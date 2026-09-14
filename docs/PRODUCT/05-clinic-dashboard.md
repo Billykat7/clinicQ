@@ -12,6 +12,14 @@ surface (patient app, USSD, WhatsApp, display monitor) is downstream of actions 
 | **Clinic manager/admin** | Clinic profile + reports | Edit hours/sector/public-private flag, set display mode, view wait-time and no-show reports, manage staff accounts |
 | **Platform admin** (ClinicQ operator) | Cross-clinic view (Phase 2+) | Onboarding, billing status, support tickets, aggregate uptime |
 
+Which of these views a person gets is decided by their **grants at the clinic they are working in**,
+not by their job title: the navigation is the RBAC nav registry evaluated with the roles they hold at
+that clinic, and every page re-checks the same grant, so a screen missing from the menu also refuses
+its URL. Someone who works at two clinics (a receptionist at one and the manager of another, say)
+switches between them from the clinic name in the header without signing in again, and lands on the
+same screen at the other clinic when it is theirs there. Every screen is keyboard-reachable (`g`
+then a key, `?` for the list), and the frame fits a 1366×768 reception PC with no sideways scrolling.
+
 ## Front-desk queue view
 
 ```mermaid

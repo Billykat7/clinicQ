@@ -1,0 +1,229 @@
+/**
+ * ClinicQ — the clinic dashboard frame (Issue 48) and its queue cards.
+ *
+ * Tuned for the reception PC this product has to win over: an old 1366×768 screen, a mouse used
+ * sparingly and a receptionist who is also talking to a patient. So the frame is one slim bar
+ * (clinic, screens, who is signed in) and the page gets the height; nothing is wider than the
+ * viewport, and everything wraps before it would scroll sideways.
+ *
+ * Built on the tokens in site.css and the shell in admin.css, so it follows light and dark with the
+ * rest of the app. No inline styles anywhere: the CSP forbids them.
+ */
+
+/* ── Frame ──────────────────────────────────────────────────── */
+
+/* The bar replaces the page's big top margin: on a 768px-high screen every row counts. */
+.layout-clinic .app-main { padding-top: .6rem; }
+
+.clinic-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem 1.25rem;
+  min-height: var(--tap);
+  /* The theme toggle, bell and avatar sit fixed over the top-right corner (admin.css); keep the
+     bar's own controls clear of them rather than underneath. */
+  padding-right: 9.5rem;
+  margin-bottom: .75rem;
+  border-bottom: 1px solid var(--line-soft);
+  padding-bottom: .55rem;
+}
+
+.clinic-bar-site {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.15;
+}
+.clinic-bar-eyebrow {
+  font-size: var(--step--2);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.clinic-bar-name {
+  font-weight: 700;
+  font-size: var(--step-1);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 22rem;
+}
+
+/* The switcher: a native disclosure, so it opens with Enter or Space and needs no script. */
+.site-switcher { position: relative; }
+.site-switcher-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  cursor: pointer;
+  list-style: none;
+  border-radius: var(--radius);
+  padding: .05rem .25rem .05rem 0;
+}
+.site-switcher-toggle::-webkit-details-marker { display: none; }
+.site-switcher-toggle svg { width: 1rem; height: 1rem; color: var(--muted); transition: transform .15s ease; }
+.site-switcher[open] .site-switcher-toggle svg { transform: rotate(180deg); }
+.site-switcher-toggle:hover .clinic-bar-name { color: var(--brand-deep); }
+.site-switcher-toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.site-switcher-menu {
+  position: absolute;
+  top: calc(100% + .35rem);
+  left: 0;
+  z-index: var(--z-rail);
+  min-width: 16rem;
+  max-width: min(24rem, 80vw);
+  margin: 0;
+  padding: .35rem;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-menu);
+}
+.site-switcher-menu a {
+  display: block;
+  padding: .55rem .7rem;
+  border-radius: calc(var(--radius) - 3px);
+  color: var(--ink);
+  text-decoration: none;
+}
+.site-switcher-menu a:hover,
+.site-switcher-menu a:focus-visible { background: var(--brand-soft); color: var(--brand-deep); outline: none; }
+@media (prefers-reduced-motion: reduce) {
+  .site-switcher-toggle svg { transition: none; }
+}
+
+/* The clinic's screens as text tabs: an icon alone is a guess on a screen used all day. */
+.clinic-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .25rem;
+  margin-right: auto;
+}
+.clinic-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  min-height: 2.25rem;
+  padding: 0 .8rem;
+  border-radius: var(--radius-pill);
+  color: var(--ink);
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.clinic-tab:hover { background: var(--brand-soft); color: var(--brand-deep); }
+.clinic-tab.active { background: var(--brand); color: var(--on-brand); font-weight: 600; }
+.clinic-tab:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.clinic-tab-key {
+  font-size: var(--step--2);
+  line-height: 1;
+  padding: .15rem .3rem;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  opacity: .6;
+}
+
+.clinic-bar-who {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.15;
+  min-width: 0;
+}
+.clinic-bar-person { font-weight: 600; white-space: nowrap; }
+.clinic-bar-role { font-size: var(--step--1); color: var(--muted); white-space: nowrap; }
+.clinic-bar-keys kbd { font: inherit; font-weight: 700; }
+
+.clinic-page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: .5rem 1rem;
+  margin-bottom: 1rem;
+}
+.clinic-page-head h1 { font-size: var(--step-2); }
+
+/* ── Keyboard shortcuts ─────────────────────────────────────── */
+
+.shortcuts-dialog {
+  /* Centred over the page: the shared reset zeroes every element's margin, a dialog's included. */
+  margin: auto;
+  width: min(26rem, calc(100vw - 2rem));
+  padding: 1.25rem 1.4rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+.shortcuts-dialog::backdrop { background: rgba(26, 30, 36, .35); }
+.shortcuts-dialog h2 { font-size: var(--step-1); margin-bottom: .35rem; }
+.shortcuts-dialog .hint { color: var(--muted); font-size: var(--step--1); margin-bottom: .85rem; }
+.shortcuts-list { display: grid; gap: .35rem; margin: 0 0 1rem; }
+.shortcuts-list > div { display: flex; justify-content: space-between; gap: 1rem; }
+.shortcuts-list dd { margin: 0; color: var(--muted); }
+.shortcuts-dialog kbd,
+.shortcuts-list kbd {
+  display: inline-block;
+  min-width: 1.5rem;
+  padding: .05rem .4rem;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--bg-soft);
+  font-family: var(--font-ui);
+  font-size: var(--step--1);
+  text-align: center;
+}
+
+/* ── Queue cards ────────────────────────────────────────────── */
+
+.queue-grid {
+  display: grid;
+  /* Five cards across at 1366px beside the rail, so a clinic's usual four to six queues fit on one
+     screen; fewer columns as the window narrows, never a sideways scroll. */
+  grid-template-columns: repeat(auto-fill, minmax(min(13.5rem, 100%), 1fr));
+  gap: .75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.queue-card {
+  display: flex;
+  flex-direction: column;
+  gap: .6rem;
+  padding: .85rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  min-width: 0;
+}
+.queue-card.is-inactive { opacity: .7; }
+.queue-card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .5rem; }
+.queue-card-name {
+  font-size: var(--step-0);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.queue-card-room { font-size: var(--step--1); color: var(--muted); }
+.queue-card-counts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .5rem;
+  margin: 0;
+}
+.queue-card-counts dt { font-size: var(--step--2); color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.queue-card-counts dd { margin: 0; font-size: var(--step-3); font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+
+/* ── Narrow screens ─────────────────────────────────────────── */
+
+@media (max-width: 40rem) {
+  .layout-clinic .app-main { padding-top: 3.75rem; }
+  .clinic-bar { padding-right: 0; }
+  .clinic-bar-who { align-items: flex-start; }
+}
