@@ -3,7 +3,8 @@
 * **Contrast on every board state, as drawn.** Every visible piece of text in every theme is measured
   against the background it actually sits on, in two page states that together hold every board state:
   a called ticket, a new call, a ticket called again, one being seen, a queue with nobody served or waiting,
-  the page count, the health notice, and the "Reconnecting" line. Everything must reach 4.5:1.
+  the page count, the health notice, the "Reconnecting" line and the "Not up to date" banner (Issue 62).
+  Everything must reach 4.5:1.
 * **Readable without colour.** Under Chromium's achromatopsia emulation (no colour at all) each status
   still has its own words and its own shape, and the new-call highlight still stands apart from its panel.
   With ``BOARD_A11Y_SHOTS`` set to a folder, the test saves greyscale screenshots of every theme there, the
@@ -197,6 +198,8 @@ def test_every_text_on_every_board_state_passes_wcag_aa_as_drawn(
     with serve(board_day.clinic.app) as base_url:
         lost = _open(board_day, base_url)
     lost.locator("[data-board-connection]:not([hidden])").wait_for()
+    # And the stale banner that follows once nothing has been heard for its time (Issue 62).
+    lost.locator("[data-board-stale]:not([hidden])").wait_for(timeout=60_000)
     for item in lost.evaluate(_CONTRAST):
         seen.add(item["text"])
         if item["ratio"] < TEXT_MINIMUM:
@@ -211,6 +214,7 @@ def test_every_text_on_every_board_state_passes_wcag_aa_as_drawn(
         "Nobody waiting",
         "Page 1 of 2",
         "Reconnecting to the clinic…",
+        "Not up to date. Last updated at",
     ):
         assert any(expected in text for text in seen), (theme.value, expected)
     assert failures == [], (theme.value, failures)

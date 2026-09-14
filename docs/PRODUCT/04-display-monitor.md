@@ -171,6 +171,26 @@ except the heartbeat also carries `board`: the privacy projection, as the board 
   - `/metrics` shows `clinicq_live_streams_open`.
 
 
+## When the clinic cannot be reached (Issue 62)
+
+- **The last board stays, marked as old.** A paired box keeps the last board it received. When nothing
+  has been heard from the clinic for 20 seconds, a banner takes the health notice's place:
+  *"⚠ Not up to date. Last updated at 14:32."*, in the clinic's time. It goes as soon as the board is
+  current again.
+- **Back by itself within 30 seconds** of the network returning, with no reload and nobody touching it.
+  An attempt to reconnect that neither opens nor fails (a router that drops everything) is given up after
+  30 seconds, a poll after 8, and a successful poll starts the stream at once.
+- **A power cut with no network at boot.** A service worker (`/display/board-sw.js`, scope `/display`,
+  separate from the patient app's worker of Issue 69) keeps the board page and its files, so the box's
+  start address opens the board shell from its own cache, draws the last board it had, and shows the
+  banner.
+- **Not for ever.** A kept board older than four hours is not shown: the numbers are hidden and the banner
+  says since when the clinic has not been reachable. Old calls replayed from the cache are never announced
+  again.
+- **Only the clinic's own boxes keep anything.** A staff preview registers no worker and stores nothing.
+  A box that shows its pairing code (it was removed) drops its kept board and the worker's copy at once,
+  so it cannot show a board offline either.
+
 ## What the server sends (Issue 58)
 
 Every board response is built by one function, `project_board()` in

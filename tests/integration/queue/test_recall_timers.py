@@ -118,7 +118,11 @@ def test_a_called_ticket_recalls_exactly_once_then_becomes_a_no_show_that_frees_
 ) -> None:
     """How to verify, steps 1 and 2: advance past the timeout, then past it again."""
     provider = FakeSmsProvider()
-    called = now_sast() - timedelta(hours=1)
+    # A fixed hour of one service day, so the call, both sweeps and Call next fall on the same day
+    # whatever time the suite runs (an hour before now crossed midnight between 00:00 and 01:00).
+    called = (now_sast() - timedelta(days=1)).replace(
+        hour=9, minute=0, second=0, microsecond=0
+    )
     with desk.session() as db:
         ticket = _called_ticket(db, desk.triage.id, called_at=called)
         behind = TicketFactory.create(
@@ -161,7 +165,15 @@ def test_a_called_ticket_recalls_exactly_once_then_becomes_a_no_show_that_frees_
             )
         ).all()
         assert occupying == []
-        assert call_next(db, db.get(Queue, desk.triage.id), actor=_DESK).id == behind.id
+        assert (
+            call_next(
+                db,
+                db.get(Queue, desk.triage.id),
+                actor=_DESK,
+                moment=called + timedelta(minutes=11),
+            ).id
+            == behind.id
+        )
         db.commit()
 
         rows = _system_rows(db, ticket.id)
@@ -192,7 +204,11 @@ def test_the_patient_is_told_at_both_steps_and_how_to_rejoin(
 ) -> None:
     """Criterion 3: two SMS through the provider, each on the ledger with a plain explanation."""
     provider = FakeSmsProvider()
-    called = now_sast() - timedelta(hours=1)
+    # A fixed hour of one service day, so the call, both sweeps and Call next fall on the same day
+    # whatever time the suite runs (an hour before now crossed midnight between 00:00 and 01:00).
+    called = (now_sast() - timedelta(days=1)).replace(
+        hour=9, minute=0, second=0, microsecond=0
+    )
     with desk.session() as db:
         ticket = _called_ticket(db, desk.triage.id, called_at=called)
         phone = db.get(Patient, ticket.patient_id).phone_e164

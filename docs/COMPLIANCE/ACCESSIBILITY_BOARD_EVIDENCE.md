@@ -19,8 +19,9 @@ This page records what was checked on the board, how, what was found, what was f
 
 "Every board state" means: a number called a while ago ("● Please come in"), a new call ("▶ Called now"),
 a number called again ("◆ Called again"), a patient being seen ("■ Being seen"), a queue with nobody served
-or waiting ("—", "Nobody waiting"), several pages ("Page 1 of 2"), the health notice, and the lost
-connection ("⟳ Reconnecting to the clinic…").
+or waiting ("—", "Nobody waiting"), several pages ("Page 1 of 2"), the health notice, the lost
+connection ("⟳ Reconnecting to the clinic…"), and, since Issue 62, the board that is not up to date
+("⚠ Not up to date. Last updated at 14:32.").
 
 ## Results
 
@@ -38,7 +39,7 @@ The new-call highlight, a state shown by a filled area, is held to 3:1 against i
 | Captions, statuses, waiting count, earlier calls, the dash | 9.98 | 9.44 | 21.00 |
 | A new call's number and words on the highlight | 13.46 | 18.61 | 19.56 |
 | Health notice, page count, empty board on the page | 11.80 | 8.33 | 21.00 |
-| "Reconnecting" line on the page | 13.46 | 6.00 | 19.56 |
+| "Reconnecting" line and "Not up to date" banner on the page | 13.46 | 6.00 | 19.56 |
 | New-call highlight against its panel (non-text) | 11.39 | 18.61 | 19.56 |
 
 The rendered check found every visible text in all three themes at 4.5:1 or above, in both page states.
@@ -46,7 +47,7 @@ The rendered check found every visible text in all three themes at 4.5:1 or abov
 ### Colour independence (SC 1.4.1)
 
 Every status carries words and a shape, not only a colour: ● called, ▶ called now, ◆ called again,
-■ being seen, ⟳ reconnecting. Under achromatopsia emulation the four ticket statuses still have four
+■ being seen, ⟳ reconnecting, ⚠ not up to date. Under achromatopsia emulation the four ticket statuses still have four
 different words and four different shapes in every theme. The new-call highlight still stands apart from
 its panel, because its contrast with the panel is a ratio of luminance (11.4:1 or more).
 

@@ -124,10 +124,14 @@ def _until(page: Any, predicate: str, timeout: float = 20.0) -> None:
 
 
 def _board(
-    day: SimpleNamespace, *, voices: Iterable[str] = ("en-ZA",), speech: bool = True
+    day: SimpleNamespace,
+    *,
+    voices: Iterable[str] = ("en-ZA",),
+    speech: bool = True,
+    **options: Any,
 ) -> Any:
     """A paired board with the listener installed, live on its stream."""
-    page = day.new_page(1280, 720)
+    page = day.new_page(1280, 720, **options)
     page.add_init_script(_LISTENER)
     query = "?speech=none" if not speech else "?voices=" + ",".join(voices)
     page.goto(day.clinic.page_path + query)
@@ -319,7 +323,8 @@ def test_a_browser_without_speech_spells_the_number_from_recorded_clips(
     )
     triage, *_ = board_day.open_queues(1)
     board_day.issue(triage, 1)
-    page = _board(board_day, speech=False)
+    # Without the board's service worker, whose own requests a test's routes cannot see (Issue 62).
+    page = _board(board_day, speech=False, service_workers="block")
     clip = _silence()
     page.route(
         "**/static/audio/numbers/test/*.wav",

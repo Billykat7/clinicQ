@@ -120,6 +120,7 @@ def _no_board(client: TestClient, path: str) -> tuple[Any, str]:
 _READERS: dict[str, Callable[[TestClient, str], tuple[Any, str]]] = {
     "/display": _no_board,
     "/display/pairing": _no_board,
+    "/display/board-sw.js": _no_board,
     "/display/{site_id}": _page,
     "/display/{site_id}/state": _state,
     "/display/{site_id}/stream": _stream,

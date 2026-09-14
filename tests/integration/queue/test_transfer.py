@@ -276,7 +276,11 @@ def test_a_transfer_lands_by_arrival_order_by_default_or_at_the_back_if_the_clin
 ) -> None:
     """Placement is a site setting: the default keeps the visit's arrival order; the other is the back."""
     doctor = _add_doctor(desk)
-    start = now_sast() - timedelta(hours=2)
+    # A fixed hour of one service day, so every visit and both transfers fall on the same day whatever
+    # time the suite runs (two hours before now crossed midnight between 00:00 and 02:00).
+    start = (now_sast() - timedelta(days=1)).replace(
+        hour=8, minute=0, second=0, microsecond=0
+    )
     with desk.session() as db:
         doctor_queue = db.get(Queue, doctor.id)
         # Waiting at the doctor: somebody whose visit began at +10 min, and somebody at +30 min.
@@ -302,7 +306,12 @@ def test_a_transfer_lands_by_arrival_order_by_default_or_at_the_back_if_the_clin
         db.commit()
 
         by_arrival = transfer_ticket(
-            db, movers[0].id, doctor_queue, actor=_DESK, reason=TransferReason.NEXT_STEP
+            db,
+            movers[0].id,
+            doctor_queue,
+            actor=_DESK,
+            reason=TransferReason.NEXT_STEP,
+            moment=start + timedelta(minutes=40),
         )
         db.commit()
         # Between the +10 and the +30 visit: one waiting ahead, and the +30 patient is now behind.
@@ -314,7 +323,12 @@ def test_a_transfer_lands_by_arrival_order_by_default_or_at_the_back_if_the_clin
         ).transfer_placement = TransferPlacement.BACK_OF_LINE.value
         db.commit()
         at_back = transfer_ticket(
-            db, movers[1].id, doctor_queue, actor=_DESK, reason=TransferReason.NEXT_STEP
+            db,
+            movers[1].id,
+            doctor_queue,
+            actor=_DESK,
+            reason=TransferReason.NEXT_STEP,
+            moment=start + timedelta(minutes=41),
         )
         db.commit()
         assert at_back.waiting_ahead == 3

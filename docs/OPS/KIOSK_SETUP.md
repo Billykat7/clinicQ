@@ -161,9 +161,12 @@ code by itself. The screen stays in the list with the status **Removed**, and st
 "N screens" line, so the clinic keeps a record of it. A removed box can be paired again, at the same
 clinic or another; it then gets a new row.
 
-**Power cuts.** The box comes back by itself. While the network is down the board keeps what it last
-showed and says it is reconnecting. A small UPS
-([07](../PRODUCT/07-devices-and-bom.md)) keeps it on through short cuts.
+**Power cuts and outages.** The box comes back by itself. While the clinic cannot be reached, the board
+keeps the last numbers it had and, after 20 seconds, says *"⚠ Not up to date. Last updated at 14:32."* in
+place of the health notice. If the box starts with no network at all, it still opens the last board from
+its own storage, with the same banner. When the network returns, the board is current again within half a
+minute by itself. After four hours without the clinic the numbers are hidden, because they would mislead.
+A small UPS ([07](../PRODUCT/07-devices-and-bom.md)) keeps it on through short cuts.
 
 ---
 
@@ -176,6 +179,8 @@ showed and says it is reconnecting. A small UPS
 | *This site can't be reached* | The box has no network. Check the Wi-Fi (A1) or cable; the page retries by itself. |
 | The code never turns into the board | The manager typed it for the wrong clinic, or the code changed. Check **Display boards** at the right clinic, and type the code now on the screen. |
 | The board shows *⟳ Reconnecting to the clinic…* | The network dropped. It recovers by itself; if it stays for more than a few minutes, check the clinic's internet. |
+| The board shows *⚠ Not up to date. Last updated at …* | The clinic has not been reachable since that time. The numbers are the last ones the box had. It recovers by itself; if the time keeps getting older, check the clinic's internet. |
+| A blank browser error page after a power cut, instead of the board | The box had never shown its board before losing the network (or was removed since). Once the network is back, it opens the board; from then on it can start offline. |
 | The board went back to a code by itself | The screen was removed in **Display boards**. Pair it again. |
 | The screen goes black after some hours | The TV's sleep or eco timer (A3), or the operating system's screen blanking (A3). |
 | No chime or no voice | The TV's volume, and the `--autoplay-policy` flag in A5. In **Clinic settings → Waiting-room screen**, check *Announce each call aloud* and *Loudness of announcements*. A chime with no voice means the box has no voice for the clinic's language: see [BOARD_AUDIO.md](BOARD_AUDIO.md). |

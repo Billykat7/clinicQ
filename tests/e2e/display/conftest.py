@@ -289,6 +289,7 @@ def board_day(board_clinic: SimpleNamespace) -> Iterator[SimpleNamespace]:
         new_page=new_page,
         manager_page=manager_page,
         paired_secret=paired_secret,
+        pair_context=pair_context,
         track=contexts.append,
     )
     for context in contexts:

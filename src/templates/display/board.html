@@ -9,7 +9,8 @@
     board.js draws the panels from that payload at once, and board-live.js hands it every later board
     from the live stream (Issue 57), or from /state while the stream is down. board-announce.js says each
     new call aloud (Issue 60) from the data-announce-* sentences, which have blanks for the number and
-    the room only. The markup for a panel lives in the <template> elements below rather than in the
+    the room only. board-offline.js keeps the last board a paired box had, and says how old it is when
+    the clinic cannot be reached (Issue 62). The markup for a panel lives in the <template> elements below rather than in the
     script, and the words a panel needs (its captions and statuses) are data attributes on those
     templates.
 
@@ -47,6 +48,9 @@
       data-announce-fallback-voice="{{ announce_fallback_voice }}"
       data-announce-clips="{{ announce_clips | tojson | forceescape }}"
       data-announce-chime="{{ announce_chime }}"
+      data-offline-worker-url="{{ offline_worker_url }}"
+      data-stale-after-seconds="{{ stale_after_seconds }}"
+      data-stale-limit-seconds="{{ stale_limit_seconds }}"
       data-initial="{{ payload | tojson | forceescape }}">
   <header class="kiosk-header">
     {# The branding slot: the clinic's initials and its name. A logo, when clinics can upload one, goes here. #}
@@ -64,6 +68,8 @@
     {% if messages %}
     <p class="kiosk-ticker" lang="{{ message_language.value }}" data-board-ticker data-messages="{{ messages | list | tojson | forceescape }}">{{ messages[0] }}</p>
     {% endif %}
+    {# Shown instead of the notice while the board is not up to date (Issue 62): the time is the clinic's. #}
+    <p class="kiosk-stale" role="status" data-board-stale data-template="Not up to date. Last updated at {time}." data-expired="Not connected to the clinic since {time}." hidden></p>
     <p class="kiosk-connection" data-board-connection data-connecting="" data-reconnecting="Reconnecting to the clinic…" hidden></p>
     <p class="kiosk-pages" data-board-pages data-template="Page {page} of {pages}" hidden></p>
   </footer>
@@ -115,4 +121,5 @@
   <script src="/static/js/board-live.js" defer></script>
   <script src="/static/js/board-device.js" defer></script>
   <script src="/static/js/board-announce.js" defer></script>
+  <script src="/static/js/board-offline.js" defer></script>
 {% endblock %}

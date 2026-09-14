@@ -84,3 +84,31 @@ def test_a_board_that_cannot_be_shown_says_so_to_its_own_screen_and_everyone_els
         sent = anyone.get(f"/display/{site_id}")
         assert sent.status_code == status.HTTP_302_FOUND
         assert sent.headers["location"] == "/display"
+
+
+def test_only_a_paired_box_is_given_the_offline_worker_and_the_worker_carries_the_release(
+    board: SimpleNamespace,
+) -> None:
+    """A box's board registers the worker (Issue 62); a manager's preview keeps nothing offline.
+
+    The worker is served under /display so it may look after the start page, with this release's version
+    written in (a new release installs a new worker) and never from the browser's HTTP cache.
+    """
+    page = f"/display/{board.world.site_a}"
+    box = board.device().get(page).context  # type: ignore[attr-defined]
+    staff = board.world.client("manager.a").get(page).context  # type: ignore[attr-defined]
+
+    assert box["offline_worker_url"] == "/display/board-sw.js"
+    assert staff["offline_worker_url"] == ""
+    assert (box["stale_after_seconds"], box["stale_limit_seconds"]) == (
+        display_routes.STALE_AFTER_SECONDS,
+        display_routes.STALE_LIMIT_SECONDS,
+    )
+
+    worker = board.world.anonymous().get("/display/board-sw.js")
+    assert worker.status_code == status.HTTP_200_OK
+    assert worker.headers["content-type"].startswith("text/javascript")
+    assert worker.headers["cache-control"] == "no-cache"
+    assert worker.headers["service-worker-allowed"] == "/display"
+    assert display_routes.BOARD_WORKER_VERSION_MARK not in worker.text
+    assert f"var VERSION = '{display_routes.get_settings().version}';" in worker.text
