@@ -33,10 +33,12 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from src.commons.enums import (
     SITE_DEFAULT_BOARD_LANGUAGE,
+    SITE_DEFAULT_BOARD_THEME,
     SITE_DEFAULT_DISPLAY_MODE,
     SITE_DEFAULT_STATUS,
     SITE_DEFAULT_TRANSFER_PLACEMENT,
     BoardLanguage,
+    BoardTheme,
     DisplayMode,
     SaProvince,
     SiteSector,
@@ -158,6 +160,13 @@ class Site(Base, TimestampMixin, ActiveMixin, SoftDeleteMixin):
         String(8), nullable=False, default=SITE_DEFAULT_BOARD_LANGUAGE.value
     )
     """:class:`~src.commons.enums.BoardLanguage`: what the board and its announcements speak."""
+    board_theme: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default=SITE_DEFAULT_BOARD_THEME.value,
+        server_default=SITE_DEFAULT_BOARD_THEME.value,
+    )
+    """:class:`~src.commons.enums.BoardTheme`: how the board is coloured for its room (Issue 59)."""
     announce_audio: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true"
     )
@@ -210,6 +219,11 @@ class Site(Base, TimestampMixin, ActiveMixin, SoftDeleteMixin):
     def display_mode_enum(self) -> DisplayMode:
         """``display_mode`` as its enum member."""
         return DisplayMode(self.display_mode)
+
+    @property
+    def board_theme_enum(self) -> BoardTheme:
+        """``board_theme`` as its enum member."""
+        return BoardTheme(self.board_theme)
 
     @property
     def board_language_enum(self) -> BoardLanguage:

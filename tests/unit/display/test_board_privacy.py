@@ -31,7 +31,13 @@ from types import SimpleNamespace
 import pytest
 from starlette.requests import Request
 
-from src.commons.enums import BoardLanguage, DisplayMode, LiveEventType, TicketStatus
+from src.commons.enums import (
+    BoardLanguage,
+    BoardTheme,
+    DisplayMode,
+    LiveEventType,
+    TicketStatus,
+)
 from src.commons.time import APP_TIMEZONE
 from src.core.live_events import LiveEvent
 from src.database.models import Patient, Site, Ticket
@@ -63,6 +69,7 @@ def _state(*, mode: DisplayMode, tickets: tuple[BoardTicket, ...]) -> BoardState
         clinic_name="Zola Clinic",
         display_mode=mode,
         language=BoardLanguage.ENGLISH,
+        theme=BoardTheme.DIM,
         announce_audio=True,
         as_of=datetime(2026, 9, 14, 9, 0, tzinfo=APP_TIMEZONE),
         queues=(

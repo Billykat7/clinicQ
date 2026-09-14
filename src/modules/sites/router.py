@@ -68,6 +68,7 @@ from src.modules.sites.schemas import (
     AcceptedSchemeOut,
     AnalyticsSettingsIn,
     AnalyticsSettingsOut,
+    BoardThemeOptionOut,
     ClinicServiceIn,
     ClinicServiceListOut,
     ClinicServiceOut,
@@ -744,6 +745,7 @@ def _settings_out(site: Site) -> DisplaySettingsOut:
         display_mode=site.display_mode_enum,
         display_show_comment=site.display_show_comment,
         board_language=site.board_language_enum,
+        board_theme=site.board_theme_enum,
         announce_audio=site.announce_audio,
         reason_retention_days=site.reason_retention_days,
         reason_retention_ceiling_days=display_settings.REASON_RETENTION_CEILING_DAYS,
@@ -781,6 +783,13 @@ def display_options(_access: SiteDisplayRead) -> DisplayOptionsOut:
             for mode in DisplayMode
         ],
         languages=list(BoardLanguage),
+        themes=[
+            BoardThemeOptionOut(value=theme, label=label, description=description)
+            for theme, (
+                label,
+                description,
+            ) in display_settings.BOARD_THEME_CHOICES.items()
+        ],
         retention_floor_days=display_settings.REASON_RETENTION_FLOOR_DAYS,
         retention_ceiling_days=display_settings.REASON_RETENTION_CEILING_DAYS,
         comment_warning=display_settings.COMMENT_WARNING,
@@ -827,6 +836,7 @@ def set_display_settings(
                 board_language=payload.board_language,
                 announce_audio=payload.announce_audio,
                 retention_days=payload.reason_retention_days,
+                board_theme=payload.board_theme,
             ),
             confirm_public_display=payload.confirm_public_display,
             confirm_comment_with_full_name=payload.confirm_comment_with_full_name,

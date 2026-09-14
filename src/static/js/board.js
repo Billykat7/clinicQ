@@ -243,6 +243,10 @@
   function apply(payload) {
     if (!payload || !Array.isArray(payload.queues)) return;
     state = payload;
+    // The clinic's theme (Issue 59) follows a settings change at once, with no reload.
+    if (payload.theme && root.getAttribute('data-board-theme') !== payload.theme) {
+      root.setAttribute('data-board-theme', payload.theme);
+    }
     var asOf = Date.parse(payload.as_of);
     if (isFinite(asOf)) clockOffset = asOf - Date.now();
     render();

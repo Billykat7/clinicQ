@@ -18,7 +18,7 @@ from types import SimpleNamespace
 from sqlalchemy import select
 from starlette import status
 
-from src.commons.enums import AuditAction, AuditEntityType, DisplayMode
+from src.commons.enums import AuditAction, AuditEntityType, BoardTheme, DisplayMode
 from src.database.models import AuditEvent
 from src.modules.sites.settings import (
     COMMENT_WITH_FULL_NAME_WARNING,
@@ -274,3 +274,44 @@ def test_the_options_endpoint_is_reachable_by_the_role_that_opens_the_page(
             f"/api/v1/sites/{clinics.site_a}/settings/display-options"
         )
         assert answered.status_code == status.HTTP_200_OK, email
+
+
+def test_a_manager_chooses_the_board_theme_with_no_confirmation_and_it_is_audited(
+    clinics: SimpleNamespace,
+) -> None:
+    """A theme changes colours, never what the board says about anyone: no confirmation, one audit row.
+
+    Every clinic starts on ``dim``, the options name and describe each theme, and a receptionist may read
+    the choice and cannot change it (Issue 59).
+    """
+    manager = _manager(clinics)
+    assert manager.get(_path(clinics)).json()["board_theme"] == BoardTheme.DIM.value
+    options = manager.get(
+        f"/api/v1/sites/{clinics.site_a}/settings/display-options"
+    ).json()
+    assert [theme["value"] for theme in options["themes"]] == [
+        t.value for t in BoardTheme
+    ]
+    assert all(theme["label"] and theme["description"] for theme in options["themes"])
+
+    changed = manager.put(
+        _path(clinics),
+        json=_settings(clinics, board_theme=BoardTheme.HIGH_CONTRAST.value),
+    )
+    assert changed.status_code == status.HTTP_200_OK, changed.text
+    assert changed.json()["board_theme"] == BoardTheme.HIGH_CONTRAST.value
+    with clinics.session() as db:
+        row = db.execute(
+            select(AuditEvent).where(
+                AuditEvent.entity_type == AuditEntityType.SITE.value,
+                AuditEvent.action == AuditAction.UPDATE.value,
+            )
+        ).scalar_one()
+    assert row.context == "display settings: board_theme: dim -> high_contrast"
+
+    refused = clinics.client("desk.a@clinicq.example").put(
+        _path(clinics), json=_settings(clinics, board_theme=BoardTheme.BRIGHT.value)
+    )
+    assert refused.status_code == status.HTTP_403_FORBIDDEN
+    unknown = manager.put(_path(clinics), json=_settings(clinics, board_theme="neon"))
+    assert unknown.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT

@@ -34,7 +34,9 @@ from dataclasses import dataclass
 
 from src.commons.enums import (
     NAME_REVEALING_DISPLAY_MODES,
+    SITE_DEFAULT_BOARD_THEME,
     BoardLanguage,
+    BoardTheme,
     DisplayMode,
 )
 from src.database.models.site import Site
@@ -111,6 +113,24 @@ COMMENT_WITH_FULL_NAME_WARNING = (
 )
 
 
+#: What each board theme is called on the settings screen, and when a clinic would choose it (Issue 59).
+#: Every theme passes the same contrast checks, so none of these is "the accessible one".
+BOARD_THEME_CHOICES: dict[BoardTheme, tuple[str, str]] = {
+    BoardTheme.DIM: (
+        "Dim room",
+        "Light numbers on a dark background. Easy on the eyes and no glare: the usual choice.",
+    ),
+    BoardTheme.BRIGHT: (
+        "Bright room",
+        "Dark numbers on a light background, for a screen in daylight where a dark one mirrors the windows.",
+    ),
+    BoardTheme.HIGH_CONTRAST: (
+        "High contrast",
+        "White and yellow on black with white borders, for patients with low vision.",
+    ),
+}
+
+
 @dataclass(frozen=True, slots=True)
 class DisplayWarning:
     """What a manager is told before a display change takes effect.
@@ -180,6 +200,7 @@ class DisplaySettingsChange:
     board_language: BoardLanguage
     announce_audio: bool
     retention_days: int
+    board_theme: BoardTheme = SITE_DEFAULT_BOARD_THEME
 
 
 def apply_display_settings(
@@ -233,6 +254,7 @@ def apply_display_settings(
         ("display_mode", site.display_mode, change.display_mode.value),
         ("display_show_comment", site.display_show_comment, change.show_comment),
         ("board_language", site.board_language, change.board_language.value),
+        ("board_theme", site.board_theme, change.board_theme.value),
         ("announce_audio", site.announce_audio, change.announce_audio),
         ("reason_retention_days", site.reason_retention_days, change.retention_days),
     ):

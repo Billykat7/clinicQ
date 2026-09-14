@@ -100,6 +100,11 @@ def _open(
     page.goto(day.clinic.page_path)
     page.wait_for_selector(".panel")
     page.evaluate("document.fonts.ready.then(() => true)")
+    # The stream's first event redraws the board: measure after it, so nothing is replaced mid-measure.
+    _until(
+        page,
+        "() => window.ClinicQBoardLive && window.ClinicQBoardLive.state().state === 'live'",
+    )
     return page
 
 

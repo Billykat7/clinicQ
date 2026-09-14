@@ -28,7 +28,9 @@ from pydantic import (
 
 from src.commons.enums import (
     SITE_DEFAULT_BOARD_LANGUAGE,
+    SITE_DEFAULT_BOARD_THEME,
     BoardLanguage,
+    BoardTheme,
     DisplayMode,
     MedicalAidScheme,
     SaProvince,
@@ -368,6 +370,8 @@ class DisplaySettingsIn(BaseModel):
     display_mode: DisplayMode
     display_show_comment: bool = False
     board_language: BoardLanguage = SITE_DEFAULT_BOARD_LANGUAGE
+    board_theme: BoardTheme = SITE_DEFAULT_BOARD_THEME
+    """How the board is coloured for its room (Issue 59). Never changes what the board shows."""
     announce_audio: bool = True
     reason_retention_days: int = Field(
         default=REASON_RETENTION_DEFAULT_DAYS,
@@ -390,6 +394,7 @@ class DisplaySettingsOut(BaseModel):
     display_mode: DisplayMode
     display_show_comment: bool
     board_language: BoardLanguage
+    board_theme: BoardTheme
     announce_audio: bool
     reason_retention_days: int
     #: The ceiling a clinic cannot raise, echoed so a screen can show it without hardcoding it.
@@ -407,6 +412,14 @@ class DisplayModeOptionOut(BaseModel):
     requires_confirmation: bool
 
 
+class BoardThemeOptionOut(BaseModel):
+    """One board theme a clinic may choose, named and described for the settings screen."""
+
+    value: BoardTheme
+    label: str
+    description: str
+
+
 class DisplayOptionsOut(BaseModel):
     """Everything a settings screen needs to render itself without hardcoding a rule.
 
@@ -417,6 +430,7 @@ class DisplayOptionsOut(BaseModel):
 
     modes: list[DisplayModeOptionOut]
     languages: list[BoardLanguage]
+    themes: list[BoardThemeOptionOut]
     retention_floor_days: int
     retention_ceiling_days: int
     comment_warning: str

@@ -99,6 +99,23 @@
       .map((code) => `<option value="${code}"${code === current.board_language ? ' selected' : ''}>${code}</option>`)
       .join('');
 
+    const themes = el('ds-theme');
+    themes.replaceChildren(
+      ...options.themes.map((theme) => {
+        const option = document.createElement('option');
+        option.value = theme.value;
+        option.textContent = theme.label;
+        option.selected = theme.value === current.board_theme;
+        return option;
+      })
+    );
+    const describeTheme = () => {
+      const chosen = options.themes.find((theme) => theme.value === themes.value);
+      el('ds-theme-hint').textContent = chosen ? chosen.description : '';
+    };
+    themes.addEventListener('change', describeTheme);
+    describeTheme();
+
     el('ds-show-comment').addEventListener('change', refreshWarning);
     refreshWarning();
     el('ds-loading').hidden = true;
@@ -117,6 +134,7 @@
         display_mode: selectedMode(),
         display_show_comment: el('ds-show-comment').checked,
         board_language: el('ds-language').value,
+        board_theme: el('ds-theme').value,
         announce_audio: el('ds-announce-audio').checked,
         reason_retention_days: Number(el('ds-retention').value),
         confirm_public_display: el('ds-confirm').checked,

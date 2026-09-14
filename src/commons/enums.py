@@ -903,6 +903,29 @@ class BoardLanguage(StrEnum):
 SITE_DEFAULT_BOARD_LANGUAGE: BoardLanguage = BoardLanguage.ENGLISH
 
 
+class BoardTheme(StrEnum):
+    """How the waiting-room board is coloured. Stored in ``sites.board_theme`` (Issue 59).
+
+    Every theme passes WCAG 2.2 AA contrast on every board state
+    (``tests/a11y/display/test_board_contrast.py``) and marks a status with a shape and words as well as a
+    colour, so the choice is about the room, never about whether the board is readable:
+
+    - ``DIM``: light text on a deep navy ground. The default: easy on the eyes in a dim room, and no glare.
+    - ``BRIGHT``: dark text on a light ground, for a room in daylight where a dark screen mirrors the
+      windows.
+    - ``HIGH_CONTRAST``: white and yellow on black, with white borders, for clinics whose patients
+      include many with low vision.
+    """
+
+    DIM = "dim"
+    BRIGHT = "bright"
+    HIGH_CONTRAST = "high_contrast"
+
+
+#: The theme a new site is created with.
+SITE_DEFAULT_BOARD_THEME: BoardTheme = BoardTheme.DIM
+
+
 class TokenType(StrEnum):
     """Typed JWT ``type`` claim, plus the bearer scheme label.
 

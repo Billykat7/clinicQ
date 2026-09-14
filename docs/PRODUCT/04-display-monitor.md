@@ -95,6 +95,20 @@ staff screens', and nothing is inline.
 - **Legibility:** on a 32-inch screen a number being served is at least 49 mm tall in every layout, and a
   number up next at least 22 mm, at 1080p or 720p alike. See `docs/OPS/BOARD_LEGIBILITY.md`.
 
+## Accessibility and themes (Issue 59)
+
+- **Three themes, one per clinic** (display settings, *Colours of the screen*; `sites.board_theme`):
+  - `dim` (the default): light on dark, for a dim room;
+  - `bright`: dark on light, for daylight;
+  - `high_contrast`: white and yellow on black.
+
+  Every theme passes WCAG 2.2 AA on every board state, and a change reaches open boards at once.
+- **Status is never colour alone:** ● please come in, ▶ called now, ◆ called again, ■ being seen,
+  ⟳ reconnecting, each with its words.
+- **Reduced motion:** no pulse and no fade. The new-call highlight gains a still inner ring.
+- **Evidence** for the accessibility audit (Issue 101), including what has not been checked:
+  `docs/COMPLIANCE/ACCESSIBILITY_BOARD_EVIDENCE.md`.
+
 ## Live updates (Issue 57)
 
 `GET /display/{site_id}/stream` is a server-sent events stream. It is read-only and unauthenticated, and
