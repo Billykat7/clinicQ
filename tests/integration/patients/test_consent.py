@@ -215,12 +215,22 @@ def test_the_comment_needs_its_own_consent_and_the_display_mode(
     _set(ctx, ConsentPurpose.DISPLAY_COMMENT, True)
     with ctx.session() as db:
         patient = _patient(ctx, db)
+        # Standing consent alone is not enough: the reason needs this visit's agreement too (Issue 58).
+        standing_only = board_projection(
+            db,
+            patient,
+            ticket_number="A015",
+            display_mode=DisplayMode.FULL,
+            comment="headache",
+        )
+        assert standing_only.name == "Thabo Mokoena" and standing_only.comment is None
         both = board_projection(
             db,
             patient,
             ticket_number="A015",
             display_mode=DisplayMode.FULL,
             comment="headache",
+            visit_comment_consent=True,
         )
         assert both.name == "Thabo Mokoena" and both.comment == "headache"
 
@@ -231,6 +241,7 @@ def test_the_comment_needs_its_own_consent_and_the_display_mode(
             ticket_number="A015",
             display_mode=DisplayMode.NUMBER_ONLY,
             comment="headache",
+            visit_comment_consent=True,
         )
         assert number_only.name is None and number_only.comment is None
         lite = board_projection(
@@ -239,6 +250,7 @@ def test_the_comment_needs_its_own_consent_and_the_display_mode(
             ticket_number="A015",
             display_mode=DisplayMode.NAME_LITE,
             comment="headache",
+            visit_comment_consent=True,
         )
         assert lite.name == "Thabo M." and lite.comment is None
 

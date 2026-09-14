@@ -75,6 +75,24 @@ The board is just a **browser tab in kiosk mode** on any TV/monitor connected to
 consistent with the project's "PWA + server-rendered pages" approach
 ([06](06-channels-app-ussd-whatsapp-web.md), [13](13-tech-implementation.md)).
 
+## What the server sends (Issue 58)
+
+Every board response is built by one function, `project_board()` in
+`src/modules/display/projection.py`. This covers the JSON at `GET /display/{site_id}/state`, the page
+and its live stream. The rule is applied before anything is serialised:
+
+| Mode | A ticket on the wire |
+|------|----------------------|
+| `number_only` | `{"number": "T004", "status": "called", "called_at": "…"}`: no `name` key and no `comment` key anywhere in the response |
+| `name_lite` | adds `"name": "Thabo M."` for a patient who agreed to show their name; never a `comment` |
+| `full` | adds `"name": "Thabo Mokoena"` for a patient who agreed. It adds `"comment"` only when the clinic switched reasons on **and** the patient agreed to show their reason, both in general and for this visit (`tickets.comment_consent`) |
+
+- **Consent is read at render time** through `has_consent()`, so a withdrawal applies to the next response.
+- **Only the clinic's own screen sees the clinic's mode.** A board address opened by anyone gets
+  `number_only`, because a first name agreed for the waiting room was not agreed for the internet. Until
+  kiosk devices pair (Issue 61), only signed-in staff of that clinic see it.
+- **A queue's name is `label` on the wire**, so a `name` key only ever belongs to a person.
+
 ## Data captured (display side; reuses ticket data from [03](03-booking-and-queue.md))
 
 | Table | Key fields |

@@ -59,7 +59,16 @@ created with `display_mode = number_only`, and no code path may change that defa
 person, displayed publicly, squarely inside what POPIA treats as special personal information. A
 mis-styled template must not be able to cause that.
 
-*Enforced by:* Issues 27 and 58, plus a guard test that fails if a template receives raw ticket data.
+*Enforced by:* Issue 27 (`tests/unit/sites/test_display_defaults.py`: no code path creates a site with
+another mode) and Issue 58. `src/modules/display/projection.py` is the one projection every board response
+passes through: the page, its JSON and its stream. It reads consent afresh through `has_consent()`, and
+leaves a forbidden `name` or `comment` key out of the payload rather than sending it empty.
+
+- `tests/unit/display/test_board_privacy.py` fails the build if a board template is handed a `Ticket`,
+  `Patient`, `Site` or any other raw object, or if a payload carries a key its mode forbids. It also
+  fails if anything but the projection reads a board's tickets.
+- `tests/integration/display/test_board_privacy_endpoints.py` searches the JSON of every `/display`
+  endpoint for a seeded patient's name and for the keys.
 
 ## 5. Enums on the wire, Johannesburg in the business layer
 

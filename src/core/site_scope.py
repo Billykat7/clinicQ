@@ -12,8 +12,9 @@ here, in one module, with three rules:
    would confirm that the id exists, which is all an attacker needs to enumerate another clinic.
    The body is the same for a site that does not exist at all.
 3. **Every query on a site-scoped row is built here**: :func:`scoped_select`,
-   :func:`get_in_site_or_404`, :func:`staff_at_site`, and for a patient who has no role anywhere,
-   :func:`published_select`. A router or service that writes its own
+   :func:`get_in_site_or_404`, :func:`staff_at_site`, for a patient who has no role anywhere,
+   :func:`published_select`, and for the waiting-room board's privacy projection,
+   :func:`displayed_select`. A router or service that writes its own
    ``select(SomeSiteScopedModel)`` fails ``tests/unit/security/test_site_scoped_queries.py``.
 
 The **platform-admin escape hatch** is explicit, audited and read-only: a caller whose grant reaches
@@ -324,6 +325,27 @@ def published_select(model: type[Any], site_ids: Iterable[str]) -> Select[Any]:
         select(model)
         .join(Site, Site.id == model.site_id)
         .where(model.site_id.in_(list(site_ids)), *publicly_visible_site_clauses())
+    )
+
+
+def displayed_select(model: type[Any], site_id: str) -> Select[Any]:
+    """Rows of a site-scoped ``model`` at one clinic, **as its waiting-room board may read them**.
+
+    The board (M8) is a public screen with no signed-in caller, so there is no :class:`SiteAccess`
+    to narrow by. The narrowing that replaces it is two rules:
+
+    * **one clinic**, the board's own, and only while that clinic is publicly visible (the directory's
+      rule, :func:`publicly_visible_site_clauses`), so a draft or suspended clinic has no board;
+    * **only the privacy projection reads through it.** Unlike :func:`published_select` this reaches
+      tickets, because a board shows ticket numbers. What it returns is raw rows, so the one module
+      allowed to call it is :mod:`src.modules.display.projection`, which turns them into what the
+      site's display mode and each patient's consent permit (non-negotiable 4, Issue 58).
+      ``tests/unit/security/test_site_scoped_queries.py`` fails the build on a call anywhere else.
+    """
+    return (
+        select(model)
+        .join(Site, Site.id == model.site_id)
+        .where(model.site_id == site_id, *publicly_visible_site_clauses())
     )
 
 

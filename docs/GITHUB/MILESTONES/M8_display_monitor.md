@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Status** | 📋 Planned |
-| **Progress** | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/7 issues) |
+| **Status** | 🚧 In progress: issue 58 (the server-side privacy projection every board response passes through) delivered |
+| **Progress** | 🟩⬜⬜⬜⬜⬜⬜⬜⬜⬜ **14%** (1/7 issues) |
 | **Sprints** | 9 (weeks 17–18), semester 2. The sprint plan spreads its issues over sprints 5–11: some start early against stubs and some are scheduled after this window, which moves the milestone's close (and its tag) to sprint 11 (see the table) |
 | **Release tag** | `v0.8.0` |
 | **Primary owner** | D, Frontend/Clinic · E, DevOps/QA (device provisioning) |

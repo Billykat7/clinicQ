@@ -36,6 +36,7 @@ _SCOPED_CALLS = frozenset(
         "staff_member_in_site_or_404",
         "roles_held_at_site",
         "published_select",
+        "displayed_select",
     }
 )
 #: Modules whose rows are site-scoped through role assignments rather than a column.
