@@ -5,7 +5,9 @@ A module gets its own database, brought to ``head`` by the real migrations
 The clinic has five queues, each with a room, so a test can switch on one, two, three or all five of them
 and see the board lay itself out. Every test starts from an empty day (:func:`board_day`).
 
-Nothing here signs in: a board is a public page.
+Every page a test opens is a screen paired with the clinic unless it asks otherwise (``paired=False``),
+because since Issue 61 only a paired screen or the clinic's staff may see its board. ``manager_page()`` is
+a browser signed in as the clinic manager, who pairs and removes screens.
 """
 
 from __future__ import annotations
@@ -20,20 +22,36 @@ from sqlalchemy import create_engine, text, update
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import sessionmaker
 
-from src.commons.enums import ActorKind, SiteStatus, TicketSource, TicketStatus
+from src.commons.enums import (
+    ActorKind,
+    SiteStatus,
+    TicketSource,
+    TicketStatus,
+    UserRole,
+)
+from src.commons.time import now_sast
+from src.core import refresh_token_policy, security
 from src.core.config import get_settings
+from src.core.rbac_manifest_sync import sync_rbac_catalog
 from src.database.models import Queue, Ticket
 from src.database.schema import apply_postgres_search_path
 from src.database.session import get_db
 from src.main import create_app
+from src.modules.display import devices
 from src.modules.queue.lifecycle import Actor, call_next, transition_ticket
 from src.modules.queue.sequence import issue_ticket
 from src.modules.queue.snapshot import NoSnapshotCache, set_snapshot_cache
 from src.web import display as display_routes
 from src.web import display_stream
-from tests.e2e.conftest import serve
+from src.web.dashboard import routes as dashboard_routes
+from tests.e2e.conftest import empty_tables, serve
 from tests.e2e.dashboard.conftest import e2e_database
-from tests.factories import QueueFactory, SiteFactory
+from tests.factories import (
+    FACTORY_STAFF_PASSWORD,
+    QueueFactory,
+    SiteFactory,
+    StaffFactory,
+)
 from tests.integration.dashboard.conftest import dashboard_settings
 from tests.integration.queue.conftest import open_all_day
 
@@ -44,6 +62,10 @@ pytestmark = pytest.mark.postgres
 SITE = "0199b0c0-0000-7000-8000-0000000e2e56"
 #: How often the test server's board streams beat (production: 15 seconds).
 SERVER_HEARTBEAT_SECONDS = 0.5
+#: How often the test server's board streams check their screen may still see the board (production: 30).
+ACCESS_CHECK_SECONDS = 2.0
+#: The clinic manager who pairs and removes screens in the browser tests.
+MANAGER_EMAIL = "manager@clinicq.example"
 DESK = Actor(kind=ActorKind.STAFF, label="desk@clinicq.example")
 #: The clinic's queues: name, ticket prefix, room.
 QUEUES = (
@@ -74,8 +96,16 @@ def board_clinic(e2e_database: URL, browser: Any) -> Iterator[SimpleNamespace]:
     set_snapshot_cache(NoSnapshotCache())
 
     with factory() as db:
+        sync_rbac_catalog(db)
         SiteFactory.create(
             db, id=SITE, name="Zola Community Clinic", status=SiteStatus.VERIFIED
+        )
+        StaffFactory.create(
+            db,
+            email=MANAGER_EMAIL,
+            first_name="Manager",
+            role=UserRole.CLINIC_MANAGER,
+            site_id=SITE,
         )
         open_all_day(db, SITE)
         queue_ids = [
@@ -97,7 +127,17 @@ def board_clinic(e2e_database: URL, browser: Any) -> Iterator[SimpleNamespace]:
             yield db
 
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(display_routes, "get_settings", lambda: settings)
+        for module in (
+            security,
+            refresh_token_policy,
+            display_routes,
+            dashboard_routes,
+        ):
+            patch.setattr(module, "get_settings", lambda: settings)
+        # A removed screen is noticed by its open stream within two seconds here, not thirty.
+        patch.setattr(
+            display_stream, "BOARD_ACCESS_CHECK_SECONDS", ACCESS_CHECK_SECONDS
+        )
         # The server beats every half second rather than every 15, so a test that moves the page's clock
         # on has real beats to hear. The page still expects one every 15 seconds (data-heartbeat-seconds).
         patch.setattr(
@@ -112,6 +152,7 @@ def board_clinic(e2e_database: URL, browser: Any) -> Iterator[SimpleNamespace]:
                 base_url=base_url,
                 browser=browser,
                 session=factory,
+                settings=settings,
                 site=SITE,
                 queues=queue_ids,
                 page_path=f"/display/{SITE}",
@@ -122,10 +163,10 @@ def board_clinic(e2e_database: URL, browser: Any) -> Iterator[SimpleNamespace]:
 @pytest.fixture
 def board_day(board_clinic: SimpleNamespace) -> Iterator[SimpleNamespace]:
     """An empty day with helpers to open queues, issue tickets and call them; contexts closed after."""
+    empty_tables(board_clinic.session, _DAY_TABLES)
     with board_clinic.session() as db:
-        tables = ", ".join(f"clinicq.{name}" for name in _DAY_TABLES)
-        db.execute(text(f"TRUNCATE {tables} CASCADE"))
         db.execute(update(Queue).where(Queue.site_id == SITE).values(is_active=True))
+        db.execute(text("DELETE FROM clinicq.display_device"))
         db.commit()
     contexts: list[Any] = []
 
@@ -172,13 +213,55 @@ def board_day(board_clinic: SimpleNamespace) -> Iterator[SimpleNamespace]:
             db.commit()
         return number
 
-    def new_page(width: int = 1920, height: int = 1080, **options: Any) -> Any:
-        """A fresh browser page at ``width`` x ``height``, closed with its context after the test."""
+    def paired_secret() -> str:
+        """The secret of a new screen paired with the clinic, as a manager's pairing leaves it."""
+        with board_clinic.session() as db:
+            started = devices.start_device(db, user_agent="e2e kiosk")
+            started.device.site_id = SITE
+            started.device.paired_at = now_sast()
+            started.device.last_seen_at = now_sast()
+            started.device.pairing_code_hash = None
+            db.commit()
+        return started.secret
+
+    def pair_context(context: Any, base_url: str) -> None:
+        """Make a browser context a screen paired with the clinic."""
+        context.add_cookies(
+            [
+                {
+                    "name": board_clinic.settings.display_device_cookie_name,
+                    "value": paired_secret(),
+                    "url": f"{base_url}/display",
+                    "httpOnly": True,
+                    "sameSite": "Strict",
+                }
+            ]
+        )
+
+    def new_page(
+        width: int = 1920, height: int = 1080, *, paired: bool = True, **options: Any
+    ) -> Any:
+        """A fresh browser page at ``width`` x ``height``: a paired screen unless ``paired=False``."""
         options.setdefault("base_url", board_clinic.base_url)
         context = board_clinic.browser.new_context(
             viewport={"width": width, "height": height}, **options
         )
         contexts.append(context)
+        if paired:
+            pair_context(context, options["base_url"])
+        return context.new_page()
+
+    def manager_page(width: int = 1366, height: int = 900) -> Any:
+        """A page signed in as the clinic manager."""
+        context = board_clinic.browser.new_context(
+            base_url=board_clinic.base_url, viewport={"width": width, "height": height}
+        )
+        contexts.append(context)
+        answer = context.request.post(
+            "/api/v1/auth/password/login",
+            data={"email": MANAGER_EMAIL, "password": FACTORY_STAFF_PASSWORD},
+        )
+        assert answer.ok, answer.text()
         return context.new_page()
 
     yield SimpleNamespace(
@@ -187,6 +270,9 @@ def board_day(board_clinic: SimpleNamespace) -> Iterator[SimpleNamespace]:
         issue=issue,
         call=call,
         new_page=new_page,
+        manager_page=manager_page,
+        paired_secret=paired_secret,
+        track=contexts.append,
     )
     for context in contexts:
         context.close()

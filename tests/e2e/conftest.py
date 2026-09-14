@@ -21,12 +21,14 @@ import os
 import socket
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from typing import Any
 
 import pytest
 import uvicorn
+from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 
 #: How long a server may take to accept connections before the fixture gives up.
 _STARTUP_SECONDS = 20
@@ -68,6 +70,34 @@ def _free_port() -> int:
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         return int(probe.getsockname()[1])
+
+
+#: How many times :func:`empty_tables` tries before giving up on a deadlock.
+_TRUNCATE_ATTEMPTS = 5
+
+
+def empty_tables(session_factory: Any, tables: Iterable[str]) -> None:
+    """``TRUNCATE`` a day's tables between browser tests, trying again if PostgreSQL reports a deadlock.
+
+    ``TRUNCATE`` takes an exclusive lock. A stream the previous test's page left open may still be reading
+    those tables for a moment after its browser closed, and PostgreSQL can resolve that by cancelling the
+    ``TRUNCATE`` as a deadlock. That is a test-ordering race, not a failure, so it is retried after a
+    short pause.
+    """
+    statement = text(
+        "TRUNCATE " + ", ".join(f"clinicq.{name}" for name in tables) + " CASCADE"
+    )
+    for attempt in range(1, _TRUNCATE_ATTEMPTS + 1):
+        with session_factory() as db:
+            try:
+                db.execute(statement)
+                db.commit()
+                return
+            except OperationalError as exc:
+                db.rollback()
+                if "deadlock" not in str(exc).lower() or attempt == _TRUNCATE_ATTEMPTS:
+                    raise
+        time.sleep(0.2 * attempt)
 
 
 @contextmanager

@@ -19,8 +19,10 @@ ordering.
 <div></div>
 
 **Cheapest way to get one pilot clinic's display live this week:** reuse the clinic's existing TV/monitor
-+ a **$45–80 Raspberry Pi** running a kiosk-mode browser pointed at the clinic's display URL. Total new
-hardware spend: **under $100**, often **$0** if a spare screen is already on-site.
++ a **$45–80 Raspberry Pi** running a kiosk-mode browser that opens ClinicQ's `/display` start page. The box
+shows a code, the clinic manager pairs it in the dashboard, and the board appears; the step-by-step is
+[`docs/OPS/KIOSK_SETUP.md`](../OPS/KIOSK_SETUP.md) (Issue 61). Total new hardware spend: **under $100**, often
+**$0** if a spare screen is already on-site.
 
 ## Reception / front-desk hardware
 

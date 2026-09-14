@@ -4,11 +4,12 @@ Server-sent events over one long-lived response (FastAPI's ``StreamingResponse``
 ``text/event-stream``), in the envelope the dashboard's stream uses, carrying the privacy projection
 with every event (:mod:`src.modules.display.board_state`):
 
-* **Read-only and unauthenticated.** A board is a public screen. The stream answers whoever asks with
-  what that viewer may see, exactly as the page and ``/state`` do: numbers only for an address anyone
-  can type, the clinic's own display mode for its signed-in staff (Issue 58). A clinic with no public
-  board answers 404 before any stream opens, and a stream whose clinic stops having one ends at its
-  next check.
+* **Read-only, and only for the clinic's own screens.** No sign-in: the stream answers a paired kiosk
+  box of this clinic (its device cookie) or a signed-in staff member there, exactly as the page and
+  ``/state`` do (Issue 61), and anyone else with ``401``. A clinic with no public board answers 404
+  before any stream opens. A stream ends at its next access check (every
+  :data:`~src.modules.display.board_state.BOARD_ACCESS_CHECK_SECONDS`) once its box is revoked or its
+  clinic stops having a board, and the screen then goes back to pairing.
 * **Full resync on every connection.** The first event is ``board.state``, the whole board, so a screen
   that reconnects after a dropped connection, a restart or a power cut is right before anything else
   arrives.
@@ -46,10 +47,9 @@ from src.modules.display.board_state import (
     projections,
     state_event,
 )
-from src.modules.display.enums import BoardViewer
 from src.modules.display.projection import displayed_site
 from src.web.context import short_session
-from src.web.display import board_viewer
+from src.web.display import BoardAudience, board_audience
 
 router = APIRouter(prefix="/display", include_in_schema=False)
 
@@ -57,31 +57,38 @@ router = APIRouter(prefix="/display", include_in_schema=False)
 RETRY_AFTER_SECONDS = "30"
 
 
-def _open(request: Request, site_id: str) -> BoardViewer | None:
-    """Who the stream is for, or ``None`` when the clinic has no public board."""
+def _open(request: Request, site_id: str) -> BoardAudience | int:
+    """Who the stream is for, or the status that refuses it: 401 for nobody who may see it, 404 for no board."""
     with short_session(request) as db:
-        site = displayed_site(db, site_id)
-        if site is None:
-            return None
-        return board_viewer(request, db, site)
+        audience = board_audience(request, db, site_id)
+        if audience is None:
+            return status.HTTP_401_UNAUTHORIZED
+        if displayed_site(db, site_id) is None:
+            return status.HTTP_404_NOT_FOUND
+        return audience
 
 
 @router.get("/{site_id}/stream")
 async def board_stream(site_id: str, request: Request) -> Response:
     """The board's live events: ``board.state`` first, then each change with the board, and a beat."""
-    viewer = await asyncio.to_thread(_open, request, site_id)
-    if viewer is None:
-        return Response(status_code=status.HTTP_404_NOT_FOUND)
+    opened = await asyncio.to_thread(_open, request, site_id)
+    if isinstance(opened, int):
+        return Response(status_code=opened)
+    audience = opened
 
     def project(newer_than: float) -> dict[str, Any] | None:
         """The board after ``newer_than`` (blocking: run it in a thread)."""
         return projections.payload(
-            lambda: short_session(request), site_id, viewer, newer_than=newer_than
+            lambda: short_session(request),
+            site_id,
+            audience.viewer,
+            queue_ids=audience.queue_ids,
+            newer_than=newer_than,
         )
 
     async def still_allowed() -> bool:
-        """Whether the clinic still has a public board (a fresh read, off the event loop)."""
-        return await asyncio.to_thread(_open, request, site_id) is not None
+        """Whether this box or person may still see the board, and it still exists (off the event loop)."""
+        return await asyncio.to_thread(_open, request, site_id) == audience
 
     try:
         events = broker.events(

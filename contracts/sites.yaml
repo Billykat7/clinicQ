@@ -666,6 +666,98 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
+  # ── Waiting-room screens: kiosk devices (Issue 61) ─────────────────────────────────────
+  /sites/{site_id}/display-devices:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    get:
+      tags: [sites]
+      operationId: displayListDevices
+      summary: This clinic's waiting-room screens and their status
+      description: Readable by the front desk (`sites.display` read). Never a screen's secret or code.
+      responses:
+        "200":
+          description: The clinic's screens, the ones in use first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DisplayDeviceListOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    post:
+      tags: [sites]
+      operationId: displayPairDevice
+      summary: Pair the screen showing a code with this clinic
+      description: |
+        A screen that opens `/display` shows a short code. The clinic manager types it here
+        (`sites.display` update). The screen then opens this clinic's board by itself. A wrong,
+        expired or already-used code answers the same `404`, so the answer does not help anyone guess.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DisplayDevicePairIn" }
+      responses:
+        "201":
+          description: The screen, now paired.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DisplayDeviceOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: No screen is waiting with that code (or, as for every site route, no such clinic of yours).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "No screen is waiting with that code. Check the code on the screen; if it has changed, type the new one." }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/display-devices/{device_id}:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+      - { name: device_id, in: path, required: true, schema: { type: string } }
+    patch:
+      tags: [sites]
+      operationId: displayUpdateDevice
+      summary: Rename a screen or change the queues it shows
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DisplayDeviceUpdateIn" }
+      responses:
+        "200":
+          description: The screen, as saved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DisplayDeviceOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/display-devices/{device_id}/revoke:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+      - { name: device_id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [sites]
+      operationId: displayRevokeDevice
+      summary: Remove a screen from the clinic
+      description: The screen stops showing the board within its next access check and goes back to pairing. Idempotent.
+      responses:
+        "200":
+          description: The screen, revoked.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DisplayDeviceOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
   # ── Payment and medical aid (Issue 37) ────────────────────────────────────────────────
   /sites/{site_id}/payment-profile:
     parameters:
@@ -1855,6 +1947,7 @@ components:
         display_mode: { $ref: "#/components/schemas/DisplayMode" }
         display_show_comment: { type: boolean, default: false }
         board_language: { $ref: "#/components/schemas/BoardLanguage" }
+        board_theme: { type: string, enum: [dim, bright, high_contrast], default: dim, description: How the board is coloured for its room (Issue 59). }
         announce_audio: { type: boolean, default: true }
         reason_retention_days: { type: integer, minimum: 1, maximum: 90 }
         confirm_public_display: { type: boolean, default: false, description: '"I understand what will appear on the screen."' }
@@ -1868,16 +1961,67 @@ components:
         confirm_public_display: true
     DisplaySettingsOut:
       type: object
-      required: [site_id, display_mode, display_show_comment, board_language, announce_audio, reason_retention_days, reason_retention_ceiling_days, warning_lines]
+      required: [site_id, display_mode, display_show_comment, board_language, board_theme, announce_audio, reason_retention_days, reason_retention_ceiling_days, warning_lines]
       properties:
         site_id: { type: string, format: uuid }
         display_mode: { $ref: "#/components/schemas/DisplayMode" }
         display_show_comment: { type: boolean }
         board_language: { $ref: "#/components/schemas/BoardLanguage" }
+        board_theme: { type: string, enum: [dim, bright, high_contrast] }
         announce_audio: { type: boolean }
         reason_retention_days: { type: integer }
         reason_retention_ceiling_days: { type: integer, description: The platform ceiling a clinic cannot raise. }
         warning_lines: { type: array, items: { type: string }, description: What these settings put on the screen, in plain language. }
+    DisplayDeviceStatus:
+      type: string
+      enum: [pairing, online, silent, revoked]
+      description: Derived, never stored. `silent` is a paired screen not heard from for DISPLAY_DEVICE_SILENT_MINUTES.
+    DisplayDevicePairIn:
+      type: object
+      required: [pairing_code]
+      properties:
+        pairing_code: { type: string, minLength: 6, maxLength: 12, description: As shown on the screen; spaces, dashes and lower case are accepted. }
+        label: { type: [string, "null"], maxLength: 80 }
+        queue_ids: { type: [array, "null"], items: { type: string }, description: The queues the screen shows; omitted for all. }
+      example: { pairing_code: "K7M 4PQ", label: "TV by reception" }
+    DisplayDeviceUpdateIn:
+      type: object
+      properties:
+        label: { type: [string, "null"], maxLength: 80 }
+        queue_ids: { type: [array, "null"], items: { type: string } }
+      example: { label: "TV by the pharmacy", queue_ids: ["0199b0c0-0000-7000-8000-0000000c0001"] }
+    DisplayDeviceOut:
+      type: object
+      required: [id, site_id, label, queue_ids, status, paired_at, last_seen_at, revoked_at, app_version, user_agent]
+      properties:
+        id: { type: string }
+        site_id: { type: [string, "null"] }
+        label: { type: [string, "null"] }
+        queue_ids: { type: [array, "null"], items: { type: string } }
+        status: { $ref: "#/components/schemas/DisplayDeviceStatus" }
+        paired_at: { type: [string, "null"], format: date-time }
+        last_seen_at: { type: [string, "null"], format: date-time }
+        revoked_at: { type: [string, "null"], format: date-time }
+        app_version: { type: [string, "null"] }
+        user_agent: { type: [string, "null"] }
+      example:
+        id: "0199b0c0-0000-7000-8000-0000000dd001"
+        site_id: "0199b0c0-0000-7000-8000-00000000a001"
+        label: "TV by reception"
+        queue_ids: null
+        status: online
+        paired_at: "2026-09-14T08:02:11+02:00"
+        last_seen_at: "2026-09-14T09:41:00+02:00"
+        revoked_at: null
+        app_version: "0.8.0"
+        user_agent: "Mozilla/5.0 (X11; Linux aarch64) Chromium"
+    DisplayDeviceListOut:
+      type: object
+      required: [site_id, total, items]
+      properties:
+        site_id: { type: string }
+        total: { type: integer }
+        items: { type: array, items: { $ref: "#/components/schemas/DisplayDeviceOut" } }
     TransferSettingsIn:
       type: object
       additionalProperties: false
@@ -1968,6 +2112,16 @@ components:
               warning: { type: string }
               requires_confirmation: { type: boolean }
         languages: { type: array, items: { $ref: "#/components/schemas/BoardLanguage" } }
+        themes:
+          type: array
+          description: The board themes a clinic may choose (Issue 59), named and described for a settings screen.
+          items:
+            type: object
+            required: [value, label, description]
+            properties:
+              value: { type: string, enum: [dim, bright, high_contrast] }
+              label: { type: string }
+              description: { type: string }
         retention_floor_days: { type: integer }
         retention_ceiling_days: { type: integer }
         comment_warning: { type: string }

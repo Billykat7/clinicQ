@@ -109,6 +109,25 @@ staff screens', and nothing is inline.
 - **Evidence** for the accessibility audit (Issue 101), including what has not been checked:
   `docs/COMPLIANCE/ACCESSIBILITY_BOARD_EVIDENCE.md`.
 
+## Kiosk screens (Issue 61)
+
+- **A board is shown only on the clinic's own screens.** These are a paired kiosk box, or a signed-in
+  staff member previewing. The address `/display/{site_id}` opened anywhere else shows a pairing code,
+  so it can be neither guessed nor shared. Its JSON and stream answer `401`.
+- **Pairing:**
+  - every box opens `/display` and shows a six-character code;
+  - a clinic manager types the code under **Clinic settings → Display boards**, with a name and,
+    optionally, the queues that screen shows;
+  - the box opens the board by itself.
+
+  The box's credential is a long secret in an httpOnly, same-site cookie, stored only as its SHA-256
+  (`display_device.token_hash`), like a refresh token.
+- **Removal:** a removed screen is refused at once and goes back to a code within half a minute.
+- **Watching:** the board reports every minute. A screen silent for 10 minutes alerts the team channel
+  once, naming it and its clinic, and once more when back. Operators see every screen at
+  `/admin/display-devices`.
+- **Setting a box up:** `docs/OPS/KIOSK_SETUP.md`.
+
 ## Live updates (Issue 57)
 
 `GET /display/{site_id}/stream` is a server-sent events stream. It is read-only and unauthenticated, and
@@ -148,9 +167,10 @@ and its live stream. The rule is applied before anything is serialised:
 | `full` | adds `"name": "Thabo Mokoena"` for a patient who agreed. It adds `"comment"` only when the clinic switched reasons on **and** the patient agreed to show their reason, both in general and for this visit (`tickets.comment_consent`) |
 
 - **Consent is read at render time** through `has_consent()`, so a withdrawal applies to the next response.
-- **Only the clinic's own screen sees the clinic's mode.** A board address opened by anyone gets
-  `number_only`, because a first name agreed for the waiting room was not agreed for the internet. Until
-  kiosk devices pair (Issue 61), only signed-in staff of that clinic see it.
+- **Only the clinic's own screens see a board.** A paired kiosk box, or signed-in staff of that clinic,
+  see it under the clinic's mode. Since Issue 61 nobody else gets a board at all, because a first name
+  agreed for the waiting room was not agreed for the internet. The projection still caps any other
+  viewer at `number_only`, as a second lock.
 - **A queue's name is `label` on the wire**, so a `name` key only ever belongs to a person.
 
 ## Data captured (display side; reuses ticket data from [03](03-booking-and-queue.md))

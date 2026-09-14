@@ -128,7 +128,11 @@ def test_tabs_follow_the_grants_at_the_clinic(dashboard: SimpleNamespace) -> Non
         assert desk.get(_settings(dashboard, section)).status_code == (
             status.HTTP_403_FORBIDDEN
         ), section
-    assert _labels(desk.get(_settings(dashboard, "display"))) == ["Waiting-room screen"]
+    # The screen's two tabs share the display grant a receptionist reads: its setting and its screens.
+    assert _labels(desk.get(_settings(dashboard, "display"))) == [
+        "Waiting-room screen",
+        "Display boards",
+    ]
 
     nurse = dashboard.client("nurse.a")
     for section in ("", "profile", "staff", "display"):

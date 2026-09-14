@@ -41,6 +41,25 @@ Each event carries `request_id`, `release` (for example `clinicq@0.2.0`) and `gi
 *"❌ deploy FAILED (the previous version keeps serving)"*: nothing to restore; the old version is
 still up. Read the run's failed step and [RUNBOOK_DEPLOY.md](RUNBOOK_DEPLOY.md), "When a deploy fails".
 
+## A waiting-room board is silent
+
+*"📺 Waiting-room board silent: “TV by reception” at Zola Clinic has not been heard from since 09:12
+(10 min)…"*, from ClinicQ itself (Issue 61). A paired screen reports every minute, so ten minutes without a
+report means its screen is probably dark. The message comes once per silence, and *"✅ Waiting-room board
+back: …"* follows when it reports again.
+
+1. **Is it one screen, or all of them?** Open `<URL>/admin/display-devices/silent`. Several clinics at once
+   points at ClinicQ itself (see *Staging or production is down*) or a provider outage, not at the boxes.
+2. **One clinic:** phone the clinic and ask:
+   - Is the TV on and showing something?
+   - Is the clinic's internet working (can reception use the dashboard)?
+   - Was there a power cut? The box comes back by itself within a few minutes of power returning.
+3. **The TV shows a pairing code:** the screen was removed or lost its pairing. The clinic manager pairs it
+   again under **Clinic settings → Display boards** ([KIOSK_SETUP.md](../OPS/KIOSK_SETUP.md), Part B).
+4. **The TV is black or shows a desktop:** walk the clinic through
+   [KIOSK_SETUP.md](../OPS/KIOSK_SETUP.md), *When it does not work*.
+5. **Write in the channel** what you found. No need to silence anything: the "back" message ends it.
+
 ## Not alerts
 
 - *"⏸ not deployed: this environment is not provisioned yet"*: expected until its host exists.

@@ -33,6 +33,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from src.commons.enums import (
+    DisplayDeviceStatus,
     PermissionVerb,
     QueueKind,
     SaProvince,
@@ -45,6 +46,8 @@ from src.core.config import get_settings
 from src.core.nav_visibility import NavVisibility
 from src.core.rbac_language import role_label
 from src.database.session import get_db
+from src.modules.display import devices as display_devices
+from src.modules.display.router import device_out
 from src.modules.patients.consent import display_preview
 from src.modules.queues.schemas import QueueIn
 from src.modules.queues.service import list_queues
@@ -82,6 +85,7 @@ class SettingsSection(StrEnum):
     SERVICES = "services"
     STAFF = "staff"
     DISPLAY = "display"
+    DEVICES = "devices"
     PAYMENT = "payment"
 
 
@@ -124,6 +128,12 @@ SETTINGS_TABS: Final[tuple[SettingsTab, ...]] = (
     SettingsTab(
         SettingsSection.DISPLAY,
         "Waiting-room screen",
+        "sites.display",
+        PermissionVerb.READ,
+    ),
+    SettingsTab(
+        SettingsSection.DEVICES,
+        "Display boards",
         "sites.display",
         PermissionVerb.READ,
     ),
@@ -451,6 +461,82 @@ async def site_display_settings_page(
         current_mode=site.display_mode_enum.value,
     )
     return render_clinic_page(request, opened, "dashboard/settings_display.html")
+
+
+@dataclass(frozen=True, slots=True)
+class DeviceRow:
+    """One waiting-room screen as the clinic's list shows it (Issue 61)."""
+
+    label: str
+    status: DisplayDeviceStatus
+    queue_names: tuple[str, ...]
+    #: When it was last heard from, in Johannesburg; ``None`` if never.
+    last_seen_at: datetime | None
+    #: The API's view of the screen, for the slideover's forms.
+    record: dict[str, object]
+
+
+#: What each screen status is called, and the badge it wears.
+DEVICE_STATUS_WORDS: Final = {
+    DisplayDeviceStatus.ONLINE: ("Showing the board", "badge-ok"),
+    DisplayDeviceStatus.SILENT: ("Not heard from", "badge-warn"),
+    DisplayDeviceStatus.REVOKED: ("Removed", "badge-muted"),
+    DisplayDeviceStatus.PAIRING: ("Waiting to pair", "badge-muted"),
+}
+
+
+@router.get("/dashboard/sites/{site_id}/settings/devices", response_class=HTMLResponse)
+async def settings_devices(
+    site_id: str,
+    request: Request,
+    db: DbSession,
+    status: Annotated[DisplayDeviceStatus | None, Query()] = None,
+) -> Response:
+    """The clinic's waiting-room screens: pair one with the code on its screen, rename it, remove it (Issue 61).
+
+    A server-rendered list (``docs/IDE/RULES/list-view-ui-pattern.mdc``, second wiring style): the status
+    filter is a GET form, the columns sort in place, and a row opens its screen in the slideover. Every
+    change is a request to ``/api/v1/sites/{site_id}/display-devices``, which checks the grant and audits.
+    """
+    opened = _open_settings(
+        request, db, site_id, SettingsSection.DEVICES, "Display boards"
+    )
+    if not isinstance(opened, ClinicPage):
+        return opened
+    access = opened.access
+    queues = list_queues(db, access, include_inactive=False).items
+    names = {queue.id: queue.name for queue in queues}
+    rows = []
+    for device in display_devices.devices_at(db, access):
+        out = device_out(device)
+        if status is not None and out.status is not status:
+            continue
+        rows.append(
+            DeviceRow(
+                label=device.label or "Unnamed screen",
+                status=out.status,
+                queue_names=tuple(
+                    names[q] for q in (device.queue_ids or []) if q in names
+                ),
+                last_seen_at=stored_sast(device.last_seen_at)
+                if device.last_seen_at
+                else None,
+                record={
+                    **out.model_dump(mode="json"),
+                    "label": device.label or "",
+                    "queue_ids": device.queue_ids or [],
+                    "is_active": out.status is not DisplayDeviceStatus.REVOKED,
+                },
+            )
+        )
+    opened.context.update(
+        device_rows=rows,
+        queues=queues,
+        status_filter=status.value if status else "",
+        status_words={key.value: words for key, words in DEVICE_STATUS_WORDS.items()},
+        silent_minutes=get_settings().display_device_silent_minutes,
+    )
+    return render_clinic_page(request, opened, "dashboard/settings_devices.html")
 
 
 @router.get("/dashboard/sites/{site_id}/settings/payment", response_class=HTMLResponse)

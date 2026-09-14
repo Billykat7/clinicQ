@@ -324,3 +324,33 @@
 }
 .kiosk-grid[hidden] { display: none; }
 .kiosk-empty { grid-row: 2; }
+
+/* ── An unpaired box's start page (Issue 61): the code, as large as a ticket number ── */
+
+.kiosk-pair {
+  grid-template-rows: auto auto auto auto;
+  align-content: center;
+  justify-items: center;
+  gap: calc(var(--u) * 4);
+  text-align: center;
+}
+.pair-code {
+  font-family: var(--font-ui);
+  font-size: calc(var(--u) * 22);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: .08em;
+  font-variant-numeric: tabular-nums;
+  padding: calc(var(--u) * 2) calc(var(--u) * 5);
+  border: calc(var(--u) * 0.5) solid var(--kb-accent);
+  border-radius: calc(var(--u) * 2);
+}
+.pair-steps {
+  display: grid;
+  gap: calc(var(--u) * 1.5);
+  font-size: calc(var(--u) * 3.6);
+  text-align: left;
+  list-style: decimal;
+  padding-left: calc(var(--u) * 5) !important;
+}
+.pair-expiry { font-size: calc(var(--u) * 3); color: var(--kb-muted); }

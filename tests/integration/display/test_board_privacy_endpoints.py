@@ -9,7 +9,7 @@ board endpoint as anyone and as the clinic's own staff and search the JSON for t
 here, so a board endpoint added tomorrow without a case in :data:`_READERS` fails this file.
 
 The other modes are then walked through: ``name_lite`` shows a shortened name to the clinic's own
-screen only; a withdrawal takes the name off the very next response; a reason needs ``full``, the
+screens (a paired kiosk box, or its signed-in staff) and nobody else gets the board at all (Issue 61); a withdrawal takes the name off the very next response; a reason needs ``full``, the
 clinic's switch, the patient's standing consent **and** this visit's. JSON only, never HTML
 (``docs/IDE/RULES/testing-strategy.mdc``).
 """
@@ -70,14 +70,19 @@ def _json(client: TestClient, path: str) -> Any:
 def _page(client: TestClient, path: str) -> tuple[Any, str]:
     """GET the board page: the payload it was rendered with, and its whole body to search."""
     response = client.get(path)
-    assert response.status_code == status.HTTP_200_OK, (path, response.text)
+    if response.status_code != status.HTTP_200_OK:
+        return None, response.text
     assert response.headers["cache-control"] == "no-store"
     return response.context["payload"], response.text
 
 
 def _state(client: TestClient, path: str) -> tuple[Any, str]:
-    """GET the board's JSON: the payload, and the raw body to search."""
-    return _json(client, path), client.get(path).text
+    """GET the board's JSON: the payload (``None`` when refused), and the raw body to search."""
+    response = client.get(path)
+    if response.status_code != status.HTTP_200_OK:
+        return None, response.text
+    assert response.headers["cache-control"] == "no-store"
+    return response.json(), response.text
 
 
 def _stream(client: TestClient, path: str) -> tuple[Any, str]:
@@ -95,7 +100,8 @@ def _stream(client: TestClient, path: str) -> tuple[Any, str]:
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(live_events.broker, "events", events)
         response = client.get(path)
-    assert response.status_code == status.HTTP_200_OK, (path, response.text)
+    if response.status_code != status.HTTP_200_OK:
+        return None, response.text
     boards = [
         data["board"] for _, data in parse_events(response.text) if "board" in data
     ]
@@ -103,9 +109,17 @@ def _stream(client: TestClient, path: str) -> tuple[Any, str]:
     return boards[0], response.text
 
 
-#: How each board route is read, by path template: ``(its payload, every byte it sent)``. A route under
-#: /display with no entry fails the sweep below, so a new endpoint cannot ship without being searched.
+def _no_board(client: TestClient, path: str) -> tuple[Any, str]:
+    """GET a kiosk box's own page (Issue 61): no board data at all, only its bytes to search."""
+    return None, client.get(path).text
+
+
+#: How each route under /display is read: ``(its board payload or None, every byte it sent)``. A GET
+#: route under /display with no entry fails the sweep, so a new endpoint cannot ship without being
+#: searched.
 _READERS: dict[str, Callable[[TestClient, str], tuple[Any, str]]] = {
+    "/display": _no_board,
+    "/display/pairing": _no_board,
     "/display/{site_id}": _page,
     "/display/{site_id}/state": _state,
     "/display/{site_id}/stream": _stream,
@@ -134,19 +148,25 @@ def _everything_agreed(board: SimpleNamespace) -> str:
     return nomvula
 
 
-def _viewers(board: SimpleNamespace) -> dict[str, TestClient]:
-    """Anyone at all, the clinic's own manager, and a receptionist at another clinic."""
+def _viewers(board: SimpleNamespace) -> dict[str, tuple[TestClient, bool]]:
+    """``{who: (client, may they see clinic A's board)}``: its own screen and staff, and everyone else."""
     return {
-        "anonymous": board.world.anonymous(),
-        "manager.a": board.world.client("manager.a"),
-        "desk.b": board.world.client("desk.b"),
+        "screen.a": (board.device(), True),
+        "manager.a": (board.world.client("manager.a"), True),
+        "anonymous": (board.world.anonymous(), False),
+        "screen.b": (board.device(site_id=board.world.site_b), False),
+        "desk.b": (board.world.client("desk.b"), False),
     }
 
 
 def test_under_number_only_no_board_endpoint_carries_a_name_or_a_comment_key_for_anyone(
     board: SimpleNamespace,
 ) -> None:
-    """The issue's proof: every endpoint, every viewer, the JSON searched for the name and the keys."""
+    """The issue's proof: every endpoint, every viewer, every byte searched for the name and the keys.
+
+    Clinic A's own screen and staff get the board with numbers only; anyone else gets nothing at all
+    (Issue 61), and what they get is searched too.
+    """
     _everything_agreed(board)
     routes = _board_routes(board)
     assert routes, "no board routes found: the sweep would pass vacuously"
@@ -154,7 +174,7 @@ def test_under_number_only_no_board_endpoint_carries_a_name_or_a_comment_key_for
         f"board routes with no privacy case: {sorted(set(routes) - set(_READERS))}"
     )
 
-    for viewer, client in _viewers(board).items():
+    for viewer, (client, allowed) in _viewers(board).items():
         for route in routes:
             body, raw = _READERS[route](
                 client, route.format(site_id=board.world.site_a)
@@ -166,6 +186,11 @@ def test_under_number_only_no_board_endpoint_carries_a_name_or_a_comment_key_for
             assert "Zwelithini" not in text, (viewer, route)
             assert REASON not in text, (viewer, route)
             assert not _PERSONAL_KEYS & set(_keys(body)), (viewer, route)
+            if "{site_id}" not in route:
+                continue
+            if not allowed:
+                assert body is None, (viewer, route)
+                continue
             assert body["display_mode"] == DisplayMode.NUMBER_ONLY.value
             # The number is still there: the privacy rule removes people, not the queue.
             triage = next(q for q in body["queues"] if q["id"] == board.world.triage)
@@ -173,38 +198,37 @@ def test_under_number_only_no_board_endpoint_carries_a_name_or_a_comment_key_for
             assert [t["number"] for t in triage["up_next"]] == ["T002"]
 
 
-def test_name_lite_shows_a_short_name_to_the_clinics_own_screen_and_numbers_to_everyone_else(
+def test_name_lite_shows_a_short_name_to_the_clinics_own_screens_and_nothing_to_anyone_else(
     board: SimpleNamespace,
 ) -> None:
-    """The mode the clinic chose applies to its screen; an address anyone can type stays numbers only."""
+    """The mode the clinic chose applies to its screen and its staff; nobody else gets the board at all."""
     _everything_agreed(board)
     board.display(DisplayMode.NAME_LITE, show_comment=True)
-    viewers = _viewers(board)
     path = board.state(board.world.site_a)
 
-    own = _json(viewers["manager.a"], path)
-    serving = next(q for q in own["queues"] if q["id"] == board.world.triage)[
-        "now_serving"
-    ]
-    assert own["display_mode"] == DisplayMode.NAME_LITE.value
-    assert serving == [
-        {
-            "number": "T001",
-            "status": TicketStatus.CALLED.value,
-            "called_at": serving[0]["called_at"],
-            "name": NOMVULA_LITE,
-        }
-    ]
-    # Never the full name, and never a reason beside a name under name_lite.
-    own_text = json.dumps(own, ensure_ascii=False)
-    assert NOMVULA not in own_text and REASON not in own_text
-    assert BoardPersonalField.COMMENT.value not in set(_keys(own))
-
-    for viewer in ("anonymous", "desk.b"):
-        other = _json(viewers[viewer], path)
-        assert other["display_mode"] == DisplayMode.NUMBER_ONLY.value, viewer
-        assert not _PERSONAL_KEYS & set(_keys(other)), viewer
-        assert "Nomvula" not in json.dumps(other, ensure_ascii=False), viewer
+    for viewer, (client, allowed) in _viewers(board).items():
+        answer = client.get(path)
+        if not allowed:
+            assert answer.status_code == status.HTTP_401_UNAUTHORIZED, viewer
+            assert "Nomvula" not in answer.text, viewer
+            continue
+        own = answer.json()
+        serving = next(q for q in own["queues"] if q["id"] == board.world.triage)[
+            "now_serving"
+        ]
+        assert own["display_mode"] == DisplayMode.NAME_LITE.value, viewer
+        assert serving == [
+            {
+                "number": "T001",
+                "status": TicketStatus.CALLED.value,
+                "called_at": serving[0]["called_at"],
+                "name": NOMVULA_LITE,
+            }
+        ], viewer
+        # Never the full name, and never a reason beside a name under name_lite.
+        own_text = json.dumps(own, ensure_ascii=False)
+        assert NOMVULA not in own_text and REASON not in own_text
+        assert BoardPersonalField.COMMENT.value not in set(_keys(own))
 
 
 def test_withdrawing_display_consent_takes_the_name_off_the_next_update(
@@ -295,7 +319,7 @@ def test_the_board_lists_the_newest_calls_first_and_the_waiting_line_in_call_ord
             call_next(db, queue, actor=_DESK)
         db.commit()
 
-    body = _json(board.world.anonymous(), board.state(board.world.site_a))
+    body = _json(board.device(), board.state(board.world.site_a))
     triage = next(q for q in body["queues"] if q["id"] == board.world.triage)
     called = numbers[: NOW_SERVING_LIMIT + 1]
     assert [t["number"] for t in triage["now_serving"]] == list(reversed(called))[
@@ -311,20 +335,26 @@ def test_the_board_lists_the_newest_calls_first_and_the_waiting_line_in_call_ord
     ]
 
 
-def test_a_clinic_with_no_public_board_answers_exactly_like_one_that_does_not_exist(
+def test_a_screen_that_asks_for_another_clinics_board_real_or_made_up_learns_nothing(
     board: SimpleNamespace,
 ) -> None:
-    """A draft clinic's id is not confirmed by its answer: the same 404 as a made-up id."""
+    """Clinic A's screen asking for clinic B's board, or a made-up id, gets the same 401: no probing."""
+    screen = board.device()
+    other = screen.get(board.state(board.world.site_b))
+    unknown = screen.get(board.state("0199b0c0-0000-7000-8000-00000000dead"))
+    assert other.status_code == unknown.status_code == status.HTTP_401_UNAUTHORIZED
+    assert other.json() == unknown.json()
+
+
+def test_a_clinic_that_stops_having_a_board_answers_its_own_screen_with_the_boards_404(
+    board: SimpleNamespace,
+) -> None:
+    """A screen paired with a clinic that is then suspended gets the same 404 an unknown clinic would."""
     with board.session() as db:
         draft = SiteFactory.create(db, name="Draft Clinic", status=SiteStatus.DRAFT)
         db.commit()
         draft_id = draft.id
-    anyone = board.world.anonymous()
-    hidden = anyone.get(board.state(draft_id))
-    unknown = anyone.get(board.state("0199b0c0-0000-7000-8000-00000000dead"))
-    assert hidden.status_code == unknown.status_code == status.HTTP_404_NOT_FOUND
-    # Everything but the request's own id is identical.
-    assert {**hidden.json(), "request_id": None} == {
-        **unknown.json(),
-        "request_id": None,
-    }
+    hidden = board.device(site_id=draft_id).get(board.state(draft_id))
+    assert hidden.status_code == status.HTTP_404_NOT_FOUND
+    page = board.device(site_id=draft_id).get(f"/display/{draft_id}")
+    assert page.status_code == status.HTTP_404_NOT_FOUND

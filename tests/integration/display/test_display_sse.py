@@ -4,8 +4,8 @@ What this file proves, reading events and JSON, never HTML:
 
 * a stream opens with ``board.state``, the whole projected board, and sends each change with the board
   as it is after that change: a full resync on every connection;
-* it is gated like the board: a clinic with no public board is 404, and a clinic with too many streams
-  gets 503 with ``Retry-After``;
+* it is gated like the board: a browser that is not the clinic's paired screen or its staff gets 401
+  (Issue 61), and a clinic with too many streams gets 503 with ``Retry-After``;
 * a consent answer about the board is announced to the patient's queues, so a withdrawal reaches the
   screen on the next event, not the next poll;
 * every screen of a clinic shares one projection per change;
@@ -104,7 +104,7 @@ def test_a_stream_opens_with_the_whole_board_and_sends_each_change_with_the_boar
         ]
 
     with scripted_stream(monkeypatch, script):
-        response = board.world.anonymous().get(f"/display/{board.world.site_a}/stream")
+        response = board.device().get(f"/display/{board.world.site_a}/stream")
     assert response.status_code == status.HTTP_200_OK
     assert response.headers["content-type"].startswith(EVENT_STREAM_MEDIA_TYPE)
     assert response.headers["cache-control"] == "no-cache, no-transform"
@@ -129,13 +129,13 @@ def test_a_stream_opens_with_the_whole_board_and_sends_each_change_with_the_boar
     assert set(called) == {"type", "site_id", "at", "queue_id", "board"}
 
 
-def test_a_stream_is_refused_for_a_clinic_with_no_board_and_when_the_clinic_is_full(
+def test_a_stream_is_refused_to_a_browser_that_is_no_clinics_screen_and_when_the_clinic_is_full(
     board: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """404 before anything opens; 503 with a Retry-After when the clinic is at its stream limit."""
-    anyone = board.world.anonymous()
-    missing = anyone.get("/display/0199b0c0-0000-7000-8000-00000000dead/stream")
-    assert missing.status_code == status.HTTP_404_NOT_FOUND
+    """401 for nobody's screen, before anything opens; 503 with a Retry-After when the clinic is full."""
+    nobody = board.world.anonymous().get(f"/display/{board.world.site_a}/stream")
+    assert nobody.status_code == status.HTTP_401_UNAUTHORIZED
+    anyone = board.device()
 
     async def full(site_id: str, **_: object) -> AsyncIterator[LiveEvent]:
         raise TooManySubscribersError(site_id)
@@ -181,7 +181,12 @@ def test_every_screen_of_a_clinic_shares_one_projection_per_change(
     """Ten streams answering the same event project once; a later event projects again."""
     calls: list[str] = []
 
-    def project(db: object, site_id: str, viewer: BoardViewer) -> dict[str, Any]:
+    def project(
+        db: object,
+        site_id: str,
+        viewer: BoardViewer,
+        queue_ids: frozenset[str] | None = None,
+    ) -> dict[str, Any]:
         calls.append(site_id)
         time.sleep(0.02)  # long enough for the other threads to arrive while it runs
         return {"queues": [], "n": len(calls)}
@@ -220,6 +225,15 @@ def test_every_screen_of_a_clinic_shares_one_projection_per_change(
     # Another viewer of the same clinic is a different board.
     memo.payload(no_db, "site-a", BoardViewer.STAFF, newer_than=later)
     assert len(calls) == 3
+    # And a screen showing only some queues is a different board again (Issue 61).
+    memo.payload(
+        no_db,
+        "site-a",
+        BoardViewer.DEVICE,
+        queue_ids=frozenset({"q1"}),
+        newer_than=later,
+    )
+    assert len(calls) == 4
 
 
 def test_a_simulated_eight_hour_day_of_boards_dropping_and_reconnecting_leaves_no_stream_behind() -> (

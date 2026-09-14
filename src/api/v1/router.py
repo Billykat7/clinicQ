@@ -17,6 +17,7 @@ from src.modules.alerts.router import router as alerts_router
 from src.modules.audit.router import router as audit_router
 from src.modules.audit.router import site_router as site_audit_router
 from src.modules.discovery.router import router as discovery_router
+from src.modules.display.router import router as display_router
 from src.modules.documents.esign_router import router as esign_router
 from src.modules.documents.router import router as documents_router
 from src.modules.messaging.router import router as messaging_router
@@ -55,3 +56,4 @@ api_v1_router.include_router(staff_router)
 api_v1_router.include_router(staff_invitations_router)
 api_v1_router.include_router(visits_router)
 api_v1_router.include_router(discovery_router)
+api_v1_router.include_router(display_router)

@@ -1,0 +1,33 @@
+{% extends "layouts/board.html" %}
+{#- The start page of an unpaired kiosk box (Issue 61): a code for a clinic manager to type in.
+
+    Every box is set up to open /display and nothing else, so nobody at the clinic types an address.
+    This page shows the code in board-sized type, says where to type it, and asks the server every few
+    seconds whether it has been paired (board-pair.js). Once it has, the box opens its board by itself.
+    The code is valid for code_minutes (ten by default); a new one appears when it runs out. -#}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block styles %}
+  {{ super() }}
+  <link rel="stylesheet" href="/static/css/board.css">
+{% endblock %}
+
+{% block body_class %}{{ super() }} kiosk-page{% endblock %}
+
+{% block body %}
+<main id="main" class="kiosk kiosk-pair" data-pairing-url="{{ pairing_url }}" data-poll-seconds="{{ poll_seconds }}">
+  <h1 class="kiosk-clinic">Pair this screen with your clinic</h1>
+  <p class="pair-code" aria-label="Pairing code {{ code }}">{{ code }}</p>
+  <ol class="pair-steps">
+    <li>On a computer signed in to ClinicQ, open <strong>Clinic settings</strong>, then the <strong>Display boards</strong> tab.</li>
+    <li>Type this code and press <strong>Pair</strong>.</li>
+    <li>This screen shows the waiting-room board by itself.</li>
+  </ol>
+  <p class="pair-expiry" data-pair-expiry data-expired="The code has run out. A new one is coming…">This code works for {{ code_minutes }} minutes. After that, a new one appears here.</p>
+</main>
+{% endblock %}
+
+{% block scripts %}
+  <script src="/static/js/board-pair.js" defer></script>
+{% endblock %}
