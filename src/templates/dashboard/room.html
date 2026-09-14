@@ -9,11 +9,12 @@
 
     Built for a 10-inch tablet: large touch targets, one column in portrait, and nothing that needs a
     mouse. -#}
-{% from "dashboard/_queue_card.html" import confirm_dialog %}
+{% from "dashboard/_queue_card.html" import confirm_dialog, outbox %}
 
 {% block layout_head %}
   {{ super() }}
   <script src="/static/js/dashboard-live.js" defer></script>
+  <script src="/static/js/dashboard-outbox.js" defer></script>
   <script src="/static/js/dashboard-actions.js" defer></script>
   <script src="/static/js/dashboard-api.js" defer></script>
 {% endblock %}
@@ -29,6 +30,7 @@
 {% endblock %}
 
 {% block clinic_content %}
+{% if room.rooms %}{{ outbox(outbox_expiry_seconds) }}{% endif %}
 {% include "dashboard/_room_cards.html" %}
 {% if room.rooms %}{{ confirm_dialog() }}{% endif %}
 {% endblock %}

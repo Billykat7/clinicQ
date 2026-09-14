@@ -1,24 +1,36 @@
-/* The front desk and the room, live (Issues 49 and 50).
+/* The front desk and the room, live, and honest about the connection (Issues 49, 50 and 55).
  *
- * The board must never look current when it is not. So the line above it always says one of three
- * things, and the board's age is shown whenever the page is not sure it is live:
+ * The board must never look current when it is not. Clinic internet drops, and load-shedding is a
+ * scheduled fact of life, so the line above the cards always says one of these, and how old the cards
+ * are whenever the page is not sure it is live:
  *
- *   Live                                   the stream is open and the cards are fresh
- *   Reconnecting, data from HH:MM          the stream dropped; the cards are as old as HH:MM
- *   Updating every 5 seconds, data from HH:MM   live updates are unavailable; the page polls instead
+ *   Live                                              the stream is open and the cards are fresh
+ *   Reconnecting (attempt 3), data from HH:MM         the stream dropped; the page is trying again
+ *   Updating every 5 seconds, data from HH:MM         live updates are unavailable; the page polls
+ *   Offline, data from HH:MM (4 min old)              the network is gone; nothing new can arrive
  *
  * How it stays current:
  *
- *   - An EventSource on /board/stream. Any change event (queue.updated, ticket.called,
- *     board.config_changed) fetches the cards again from /board/cards; the events say what changed,
- *     never the new state, so the cards always come through the page's own gate. A heartbeat arrives
- *     every 15 seconds; two missed beats mean the connection is gone even if the browser has not
- *     noticed.
- *   - When the stream will not open (three failures in a row, or no EventSource at all), the page
- *     switches to fetching the cards every 5 seconds, with no reload, and tries the stream again
- *     every minute.
- *   - Even while live, the cards are fetched again every minute, so an event this instance never
- *     heard (another server behind a balancer) costs a minute of freshness, never a wrong board.
+ *   - An EventSource on the page's stream. Any change event (queue.updated, ticket.called,
+ *     board.config_changed) fetches the cards again; the events say what changed, never the new
+ *     state, so the cards always come through the page's own gate.
+ *   - The staff stream beats every 5 seconds. When nothing has arrived for 7 seconds the page asks
+ *     /health, with a 2-second limit: no answer means Offline, within 10 seconds of the network going
+ *     (at once when the browser itself reports it offline). 12 silent seconds with /health answering
+ *     means the stream alone is dead, and it is reopened.
+ *   - Every reconnection waits a little longer than the last: exponential backoff from 1 second,
+ *     capped at 30, with jitter, so fifty reception PCs coming back after load-shedding do not all
+ *     knock at the same instant. Coming back online tries at once.
+ *   - After three failed attempts the page polls the cards every 5 seconds, with no reload, and keeps
+ *     retrying the stream on the same backoff. Even while live, the cards are fetched again every
+ *     minute as a safety net.
+ *   - An expired session never reloads the page (that would lose what the person was doing): the page
+ *     announces `session:expired`, dashboard-outbox.js asks the person to sign in again, and
+ *     `session:renewed` reconnects.
+ *
+ * Every change of state is announced as `board:connection` with its state, and `window.ClinicQLive`
+ * answers what the state is now: dashboard-outbox.js holds pressed actions while the page is offline
+ * and sends them when it is back.
  *
  * Updates never take focus from the person using the page. A card is replaced only when nothing in
  * it has focus, its waiting line is not being dragged and no patient button's request is in flight
@@ -26,10 +38,6 @@
  * and nothing is swapped while a dialog (the reason prompt, a confirmation) is open. A refresh that
  * could not be applied is applied when focus leaves. Each replaced card is announced with
  * `board:card-replaced`, so its status line can say again what just happened.
- *
- * The room (Issue 50) uses this file unchanged: its connection line names its own stream and cards.
- *
- * Issue 55 adds exponential backoff with jitter, the offline state and queued actions on top of this.
  *
  * External file with no inline handlers: the CSP allows script only from 'self'.
  */
@@ -42,20 +50,27 @@
 
   var STREAM_URL = status.getAttribute('data-stream-url');
   var CARDS_URL = status.getAttribute('data-cards-url');
+  var HEALTH_URL = '/health';
   var POLL_MS = 5000;
   var SAFETY_REFRESH_MS = 60000;
-  var RETRY_STREAM_MS = 60000;
-  var HEARTBEAT_GRACE_MS = 35000;
+  var PROBE_AFTER_SILENCE_MS = 7000; // two staff beats are 5 s apart: 7 s of nothing is suspicious
+  var PROBE_TIMEOUT_MS = 2000;
+  var STREAM_DEAD_AFTER_MS = 12000;
+  var BACKOFF_BASE_MS = 1000;
+  var BACKOFF_CAP_MS = 30000;
   var FAILURES_BEFORE_POLLING = 3;
+  var TICK_MS = 1000;
   var DEBOUNCE_MS = 150;
   var CHANGE_EVENTS = ['queue.updated', 'ticket.called', 'board.config_changed'];
 
   var source = null;
-  var mode = 'connecting'; // live | reconnecting | polling | connecting
-  var failures = 0;
-  var lastBeat = 0;
+  var mode = 'connecting'; // connecting | live | reconnecting | polling | offline
+  var attempts = 0; // failed attempts since the last time the page was live
+  var lastHeard = Date.now(); // the last event from the stream, or answer from the server
   var pollTimer = null;
   var retryTimer = null;
+  var probing = false;
+  var sessionExpired = false;
   var debounce = null;
   var pending = null; // a fetched set of cards waiting for focus to leave
   var inFlight = false;
@@ -66,23 +81,44 @@
     return current ? current.getAttribute('data-as-of-label') : '';
   }
 
-  /** Switch to `next` and say so. */
+  /** How old the cards are, in words, once they are more than a minute old. */
+  function ageWords() {
+    var current = document.getElementById('board-cards');
+    var asOf = current ? Date.parse(current.getAttribute('data-as-of')) : NaN;
+    if (isNaN(asOf)) return '';
+    var minutes = Math.floor((Date.now() - asOf) / 60000);
+    return minutes >= 1 ? ' (' + minutes + ' min old)' : '';
+  }
+
+  /** Switch to `next`, say so, and tell the rest of the page. */
   function show(next) {
+    var changed = next !== mode;
     mode = next;
     render(next);
+    if (changed) {
+      document.dispatchEvent(new CustomEvent('board:connection', { detail: { state: next } }));
+    }
   }
 
   /** Say `state` on the line without changing how the page is updating (a failed poll, say). */
   function render(state) {
-    var next = state;
-    status.setAttribute('data-state', next);
+    status.setAttribute('data-state', state);
+    status.setAttribute('data-attempt', String(attempts));
     var text = status.querySelector('.board-connection-text');
     var label = asOfLabel();
-    if (next === 'live') text.textContent = 'Live';
-    else if (next === 'polling') text.textContent = 'Updating every 5 seconds, data from ' + label;
-    else if (next === 'reconnecting') text.textContent = 'Reconnecting, data from ' + label;
-    else text.textContent = 'Connecting, data from ' + label;
+    if (state === 'live') text.textContent = 'Live';
+    else if (state === 'polling') text.textContent = 'Updating every 5 seconds, data from ' + label;
+    else if (state === 'offline') text.textContent = 'Offline, data from ' + label + ageWords();
+    else if (state === 'reconnecting') {
+      text.textContent = 'Reconnecting' + (attempts ? ' (attempt ' + attempts + ')' : '') + ', data from ' + label;
+    } else text.textContent = 'Connecting, data from ' + label;
   }
+
+  window.ClinicQLive = {
+    state: function () { return mode; },
+    /** Whether a request has a chance of reaching the clinic now. */
+    reachable: function () { return mode !== 'offline' && navigator.onLine !== false; },
+  };
 
   // ── Applying new cards without disturbing the person using the page ──────────────────────────
 
@@ -223,8 +259,13 @@
     inFlight = true;
     return fetch(CARDS_URL, { credentials: 'same-origin', headers: { Accept: 'text/html' } })
       .then(function (response) {
+        lastHeard = Date.now();
         if (response.status === 401) {
-          window.location.reload(); // the session ended: let the page send the person to sign in
+          // The session ended. Reloading would lose what the person was doing: ask them to sign in.
+          if (!sessionExpired) {
+            sessionExpired = true;
+            document.dispatchEvent(new CustomEvent('session:expired'));
+          }
           return null;
         }
         if (!response.ok) throw new Error(String(response.status));
@@ -240,7 +281,8 @@
       })
       .catch(function () {
         // Nothing fresh arrived: the board keeps its cards and says how old they are.
-        render('reconnecting');
+        if (mode === 'live' || mode === 'polling') render('reconnecting');
+        probe();
       })
       .then(function () {
         inFlight = false;
@@ -265,74 +307,157 @@
   // Another part of the page (a saved reorder) asks for fresh cards.
   document.addEventListener('board:refresh', refresh);
 
-  // ── The stream, and polling when it is unavailable ─────────────────────────────────────────────
+  // ── The stream, polling, backoff and the offline state ────────────────────────────────────────
+
+  /** How long to wait before attempt `n`: doubling from 1 s, capped at 30 s, with jitter. */
+  function backoff(n) {
+    var ceiling = Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * Math.pow(2, Math.max(0, n - 1)));
+    // Equal jitter: half the delay is fixed, half random, so no two pages retry in lockstep.
+    return ceiling / 2 + Math.random() * (ceiling / 2);
+  }
 
   function stopPolling() {
     window.clearInterval(pollTimer);
     pollTimer = null;
   }
 
-  function startPolling() {
+  function closeStream() {
     if (source) {
       source.close();
       source = null;
     }
-    show('polling');
-    if (!pollTimer) pollTimer = window.setInterval(refresh, POLL_MS);
+  }
+
+  function scheduleRetry() {
     window.clearTimeout(retryTimer);
-    retryTimer = window.setTimeout(connect, RETRY_STREAM_MS);
+    retryTimer = window.setTimeout(connect, backoff(attempts));
+  }
+
+  /** One failed attempt at the stream: poll once enough have failed, and try again later. */
+  function streamFailed() {
+    closeStream();
+    if (mode === 'offline') return;
+    attempts += 1;
+    if (attempts >= FAILURES_BEFORE_POLLING || !window.EventSource) {
+      if (!pollTimer) pollTimer = window.setInterval(refresh, POLL_MS);
+      show('polling');
+    } else {
+      show('reconnecting');
+    }
+    scheduleRetry();
+  }
+
+  function goOffline() {
+    closeStream();
+    stopPolling();
+    window.clearTimeout(retryTimer);
+    if (mode !== 'offline') attempts = 0;
+    show('offline');
+    // Ask again later, on the same backoff: the probe reconnects the moment /health answers.
+    attempts += 1;
+    retryTimer = window.setTimeout(probe, backoff(attempts));
+  }
+
+  function backOnline() {
+    window.clearTimeout(retryTimer);
+    attempts = 0;
+    show('connecting');
+    connect();
+  }
+
+  /** Ask /health whether the clinic is reachable at all; decide between offline and a dead stream. */
+  function probe() {
+    if (probing) return;
+    probing = true;
+    var controller = window.AbortController ? new AbortController() : null;
+    var timer = window.setTimeout(function () { if (controller) controller.abort(); }, PROBE_TIMEOUT_MS);
+    fetch(HEALTH_URL, { cache: 'no-store', credentials: 'omit', signal: controller ? controller.signal : undefined })
+      .then(function (response) {
+        if (!response.ok) throw new Error(String(response.status));
+        lastHeard = Date.now();
+        if (mode === 'offline') backOnline();
+      })
+      .catch(function () {
+        goOffline();
+      })
+      .then(function () {
+        window.clearTimeout(timer);
+        probing = false;
+      });
   }
 
   function connect() {
-    if (!window.EventSource) {
-      startPolling();
+    window.clearTimeout(retryTimer);
+    if (navigator.onLine === false) {
+      goOffline();
       return;
     }
-    if (source) source.close();
-    source = new window.EventSource(STREAM_URL, { withCredentials: true });
-    source.addEventListener('open', function () {
-      failures = 0;
-      lastBeat = Date.now();
+    if (sessionExpired) return; // reconnect once the person has signed in again
+    if (!window.EventSource) {
+      streamFailed();
+      return;
+    }
+    closeStream();
+    var opened = new window.EventSource(STREAM_URL, { withCredentials: true });
+    source = opened;
+    opened.addEventListener('open', function () {
+      if (source !== opened) return;
+      attempts = 0;
+      lastHeard = Date.now();
       stopPolling();
-      window.clearTimeout(retryTimer);
       show('live');
       refresh(); // resync: something may have changed while the stream was down
     });
-    source.addEventListener('heartbeat', function () {
-      lastBeat = Date.now();
-      if (mode !== 'live') show('live');
+    opened.addEventListener('heartbeat', function () {
+      if (source !== opened) return;
+      lastHeard = Date.now();
+      if (mode !== 'live') {
+        attempts = 0;
+        stopPolling();
+        show('live');
+      }
     });
     CHANGE_EVENTS.forEach(function (type) {
-      source.addEventListener(type, function () {
-        lastBeat = Date.now();
+      opened.addEventListener(type, function () {
+        if (source !== opened) return;
+        lastHeard = Date.now();
         refreshSoon();
       });
     });
-    source.addEventListener('error', function () {
-      failures += 1;
-      if (failures >= FAILURES_BEFORE_POLLING || (source && source.readyState === window.EventSource.CLOSED)) {
-        startPolling();
-      } else if (!pollTimer) {
-        show('reconnecting');
-      }
+    opened.addEventListener('error', function () {
+      if (source !== opened) return;
+      // Let the probe say whether this is the network or only the stream.
+      probe();
+      streamFailed();
     });
   }
 
-  // Two missed heartbeats: the connection is gone, whatever the browser thinks.
+  // The watchdog: silence first asks /health; a stream silent too long is reopened.
   window.setInterval(function () {
-    if (mode === 'live' && lastBeat && Date.now() - lastBeat > HEARTBEAT_GRACE_MS) {
-      failures += 1;
-      show('reconnecting');
-      connect();
+    if (mode === 'offline') {
+      render('offline'); // keep the age current
+      return;
     }
-  }, 5000);
+    var silent = Date.now() - lastHeard;
+    if (mode === 'live' && silent > STREAM_DEAD_AFTER_MS) {
+      streamFailed();
+    } else if (silent > PROBE_AFTER_SILENCE_MS) {
+      probe();
+    }
+  }, TICK_MS);
 
   // The safety net: fresh cards every minute whatever the stream says.
   window.setInterval(function () {
     if (mode === 'live') refresh();
   }, SAFETY_REFRESH_MS);
 
-  window.addEventListener('offline', function () { show(pollTimer ? 'polling' : 'reconnecting'); });
+  window.addEventListener('offline', goOffline);
+  window.addEventListener('online', backOnline);
+  document.addEventListener('session:renewed', function () {
+    sessionExpired = false;
+    backOnline();
+    refresh();
+  });
 
   connect();
 })();

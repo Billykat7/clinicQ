@@ -37,7 +37,7 @@ docs/
 | **[M4: Clinics, Queues & Configuration](MILESTONES/M4_clinics_queues_config.md)** | `sites` + PostGIS, hours, multi-room `queues`, services, display settings, onboarding | 23–30 | Backend Lead | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** ✅ done |
 | **[M5: Discovery & Geolocation](MILESTONES/M5_discovery_geolocation.md)** | Nearby search, sector toggle, map, area fallback, snapshot cache, payment filter | 31–38 | Frontend (Patient) | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** ✅ done |
 | **[M6: Queue Engine Core](MILESTONES/M6_queue_engine_core.md)** ⚠️ | Tickets, join, lifecycle, wait estimates, recall/no-show, transfer, priority | 39–47 | Backend Lead | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** ✅ done |
-| **[M7: Clinic Dashboard](MILESTONES/M7_clinic_dashboard.md)** | Front-desk board, call next, walk-in intake, reorder, room view, settings | 48–55 | Frontend (Clinic) | 🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ **88%** 🚧 in progress |
+| **[M7: Clinic Dashboard](MILESTONES/M7_clinic_dashboard.md)** | Front-desk board, call next, walk-in intake, reorder, room view, settings | 48–55 | Frontend (Clinic) | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** ✅ done |
 | **[M8: Waiting-room Display Monitor](MILESTONES/M8_display_monitor.md)** | Kiosk board, SSE, privacy modes, accessibility, audio call-out, device registry | 56–62 | Frontend (Clinic) | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** 📋 planned |
 | **[M9: Notifications & Patient PWA](MILESTONES/M9_notifications_patient_pwa.md)** | Notification service, push, SMS, templates, preferences, ticket page, PWA, QR | 63–71 | Backend (Integrations) | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** 📋 planned |
 | **[M10: USSD & WhatsApp Channels](MILESTONES/M10_ussd_whatsapp_channels.md)** | Adapter framework, USSD menu, WhatsApp bot, 5 languages, simulators, parity | 72–79 | Backend (Integrations) | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** 📋 planned |
@@ -49,7 +49,7 @@ docs/
 **Total: 109 tracked issues across M1–M14**, plus 6 parked
 [backlog items](ISSUES/BACKLOG/).
 
-**Progress:** 🟩🟩🟩🟩🟩⬜⬜⬜⬜⬜ **50%** (54/109 issues) closed · **6 of 14 milestones done**
+**Progress:** 🟩🟩🟩🟩🟩⬜⬜⬜⬜⬜ **50%** (55/109 issues) closed · **7 of 14 milestones done**
 
 > ⚠️ **M6 is the critical path.** Six of the seven milestones after it are consumers of the queue
 > engine. Anything that delays M6 delays the whole second half of the project, see the

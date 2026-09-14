@@ -100,6 +100,9 @@ pytest==9.0.3
 pytest-asyncio==1.3.0
 pytest-cov==7.0.0
 pytest-xdist==3.8.0
+# Browser tests (M7, Issue 55): the dashboard's interactions and offline paths driven through a real
+# Chromium (tests/e2e). Test-time only; `python -m playwright install chromium` fetches the browser.
+playwright==1.62.0
 # Property-based testing — the ledger's allocation invariant (sum(allocations) never exceeds
 # the payment) is proven across generated inputs, not a handful of examples (M7, Issue #40).
 hypothesis==6.165.0

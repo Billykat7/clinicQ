@@ -53,6 +53,12 @@ logger = logging.getLogger(__name__)
 #: How often a silent stream says it is still alive. Issue 57 asks for 15 seconds, so a screen can
 #: notice a dead connection within two missed beats.
 HEARTBEAT_SECONDS: Final = 15.0
+#: The staff dashboard's beat (Issue 55). A reception PC must say "Offline" within 10 seconds of losing
+#: the network, and a page can only tell a quiet stream from a dead one by the beat, so staff streams beat
+#: every 5 seconds. A beat costs a few bytes and no database read: access is re-checked on its own clock.
+STAFF_HEARTBEAT_SECONDS: Final = 5.0
+#: How often a stream re-checks that its caller may still read it: a database read, so not every beat.
+ACCESS_CHECK_SECONDS: Final = 15.0
 #: The most open streams one clinic may hold on one instance: every reception PC, room tablet and
 #: board screen of a large clinic, with room to spare, and a ceiling on what a leak can cost.
 MAX_SUBSCRIBERS_PER_SITE: Final = 100
@@ -203,18 +209,20 @@ class SiteEventBroker:
         still_allowed: Callable[[], Awaitable[bool]] | None = None,
         accept: Callable[[LiveEvent], bool] | None = None,
         heartbeat_seconds: float = HEARTBEAT_SECONDS,
+        access_check_seconds: float = ACCESS_CHECK_SECONDS,
     ) -> AsyncIterator[str]:
         """The server-sent events of one clinic, until the client goes or loses its access.
 
         Args:
             site_id: The clinic whose events to send.
             is_disconnected: The request's disconnect check, asked at every beat.
-            still_allowed: Asked at every beat: a stream whose caller lost their access (an
-                assignment removed, an account switched off) ends at the next heartbeat rather than
-                running until the browser closes.
+            still_allowed: Asked at a beat once ``access_check_seconds`` have passed since it was last
+                asked: a stream whose caller lost their access (an assignment removed, an account
+                switched off) ends then rather than running until the browser closes.
             accept: Asked of every event before it is sent; one it refuses is skipped. A room's
                 stream (Issue 50) takes only its own queues' events.
             heartbeat_seconds: How long a silent stream waits before saying it is alive.
+            access_check_seconds: How long between two asks of ``still_allowed``.
 
         Yields:
             Formatted events, starting with a heartbeat so the client knows the stream is open.
@@ -228,7 +236,7 @@ class SiteEventBroker:
                 LiveEvent(LiveEventType.HEARTBEAT, site_id), self.next_id()
             )
             loop = asyncio.get_running_loop()
-            last_sent = loop.time()
+            last_sent = last_checked = loop.time()
             while True:
                 # The beat is due a heartbeat after the last thing *sent*: events a filtered stream
                 # skips must not keep it silent past the client's grace period.
@@ -236,10 +244,15 @@ class SiteEventBroker:
                 try:
                     event = await asyncio.wait_for(subscriber.queue.get(), wait)
                 except TimeoutError:
-                    if await is_disconnected() or (
-                        still_allowed is not None and not await still_allowed()
-                    ):
+                    if await is_disconnected():
                         return
+                    if (
+                        still_allowed is not None
+                        and loop.time() - last_checked >= access_check_seconds
+                    ):
+                        last_checked = loop.time()
+                        if not await still_allowed():
+                            return
                     event = LiveEvent(LiveEventType.HEARTBEAT, site_id)
                 if event is None or subscriber.dropped:
                     return

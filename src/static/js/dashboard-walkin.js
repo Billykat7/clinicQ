@@ -14,6 +14,9 @@
  * carries an Idempotency-Key. When an answer is lost, the key is kept for that same form, so pressing
  * Enter again asks about the same walk-in rather than issuing a second one.
  *
+ * An ended session never loses the form: the person signs in again in place (login-modal.js) and the
+ * same walk-in is sent again with the same key (Issue 55).
+ *
  * The consent box is switched on only once a phone number is typed, and its answer is sent only then;
  * the API refuses it without a number either way. What can be undone, and until when, is the server's
  * answer in the recent list, which is fetched again after every issue and undo.
@@ -168,11 +171,19 @@
     })
       .then(function (response) {
         return response.json().catch(function () { return {}; }).then(function (data) {
-          retry = null;
           if (response.status === 401) {
-            window.location.reload();
+            // The session ended: sign in again in place, then send the same walk-in with the same key.
+            retry = { signature: signature, key: key, until: Date.now() + RETRY_KEY_MS };
+            if (window.BKPAuth) {
+              say('Your session ended. Sign in again, and the ticket for ' + body.name + ' will be issued.', 'muted');
+              window.BKPAuth.reauthenticate('Your session ended. Sign in again to issue the ticket for ' + body.name + '.')
+                .then(function () { form.requestSubmit(); });
+            } else {
+              window.location.reload();
+            }
             return;
           }
+          retry = null;
           if (!response.ok) {
             say(explain(response.status, data), 'error');
             return;

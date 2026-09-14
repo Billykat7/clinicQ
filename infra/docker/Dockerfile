@@ -44,6 +44,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # The loop tolerates packages a given service does not have, so one list serves every sibling.
 RUN for pkg in \
       pytest pytest-asyncio pytest-cov pytest-xdist hypothesis coverage pluggy iniconfig execnet \
+      playwright pyee \
       black isort flake8 pycodestyle pyflakes mccabe mypy ruff pytokens \
       pre-commit nodeenv identify cfgv virtualenv distlib \
       pip-audit pip-api pip-requirements-parser cyclonedx-python-lib license-expression \

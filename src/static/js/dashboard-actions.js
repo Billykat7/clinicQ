@@ -12,6 +12,10 @@
  *     line says why, in the server's words when it gave some. A success asks the live board for the
  *     server's own cards, so what stays on screen is the server's state.
  *
+ * When the clinic cannot be reached (offline, an answer that never came, a session that ended), the
+ * card is put back and the press goes to dashboard-outbox.js with its key, which sends it when the page
+ * is live again or says why it did not: a press never silently vanishes (Issue 55).
+ *
  * Which buttons exist, whether they are enabled, and until when a call can be undone all come from the
  * server's markup (dashboard/_queue_card.html). This file holds no rule: it counts the minutes and the
  * undo seconds down for display, and the API decides.
@@ -171,6 +175,38 @@
 
   // ── Sending ──────────────────────────────────────────────────────────────────────────────────────
 
+  /** What the action is, in words, for the outbox and its messages: "Call next in Triage". */
+  function labelOf(button, card) {
+    var queue = card.querySelector('.queue-card-name, .room-head h2');
+    var queueName = queue ? queue.textContent.trim() : 'this queue';
+    var kind = button.getAttribute('data-action');
+    if (kind === 'call-next') return 'Call next in ' + queueName;
+    var ticket = button.closest('[data-ticket-id]');
+    var number = ticket ? ticket.getAttribute('data-number') : '';
+    if (kind === 'undo') return 'Undo the call of ' + number;
+    return button.textContent.trim() + ' for ' + number;
+  }
+
+  /** The card cannot send now: put it back as it was and hand the action to the outbox. */
+  function holdForLater(button, card, snapshot, action, reason) {
+    rollback(card, snapshot, button);
+    var outbox = window.ClinicQOutbox;
+    if (!outbox) {
+      // A page without the outbox: keep the key, so pressing again asks about the same action.
+      retryKeys[action.signature] = { key: action.key, until: Date.now() + RETRY_KEY_MS };
+      say(action.queueId, 'The clinic could not be reached, so this may not have gone through. Press again to retry: it will not be done twice.', 'error');
+      return;
+    }
+    if (reason === 'sign-in') {
+      outbox.needsSignIn(action);
+      say(action.queueId, 'Your session ended. Sign in again, and ' + action.label + ' will be sent.', 'muted');
+    } else if (outbox.hold(action)) {
+      say(action.queueId, action.label + ' is waiting for the connection and will be sent when the clinic is back.', 'muted');
+    } else {
+      say(action.queueId, action.label + ' is already waiting for the connection.', 'muted');
+    }
+  }
+
   function send(button, card) {
     var queueId = card.getAttribute('data-queue-id');
     var url = button.getAttribute('data-action-url');
@@ -178,6 +214,16 @@
     var signature = signatureOf(button);
     var key = keyFor(signature);
     var snapshot = card.cloneNode(true);
+    var action = { signature: signature, key: key, url: url, body: body, queueId: queueId, label: labelOf(button, card) };
+    snapshot.removeAttribute('data-action-busy');
+
+    // Offline: nothing can reach the clinic, so do not pretend. Hold it, and say so.
+    if (window.ClinicQLive && !window.ClinicQLive.reachable()) {
+      card.removeAttribute('data-action-busy');
+      holdForLater(button, card, snapshot, action, 'offline');
+      return;
+    }
+
     optimistic(button, card);
     say(queueId, 'Sending…', 'muted');
 
@@ -191,7 +237,8 @@
         return response.json().catch(function () { return {}; }).then(function (data) {
           delete retryKeys[signature];
           if (response.status === 401) {
-            window.location.reload(); // the session ended: the page sends the person to sign in
+            // The session ended (session-refresh.js could not renew it): sign in again in place.
+            holdForLater(button, card, snapshot, action, 'sign-in');
             return;
           }
           if (response.ok) {
@@ -206,14 +253,17 @@
         });
       })
       .catch(function () {
-        // The answer never came: the action may or may not have happened. Keep the key, so pressing
-        // again asks about the same action rather than making a second one.
-        retryKeys[signature] = { key: key, until: Date.now() + RETRY_KEY_MS };
-        rollback(card, snapshot, button);
-        say(queueId, 'The clinic could not be reached, so this may not have gone through. Press again to retry: it will not be done twice.', 'error');
+        // The answer never came: the action may or may not have happened. The outbox sends it again
+        // with the same key when the clinic is reachable, and the server does not do it twice.
+        holdForLater(button, card, snapshot, action, 'unreachable');
         refreshCards();
       });
   }
+
+  document.addEventListener('outbox:settled', function (event) {
+    var detail = event.detail || {};
+    if (detail.queueId) say(detail.queueId, detail.text, detail.kind);
+  });
 
   function confirmFirst(text) {
     if (!text) return Promise.resolve(true);

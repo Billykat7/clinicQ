@@ -165,6 +165,7 @@ def test_a_stream_whose_caller_lost_access_ends_at_the_next_beat() -> None:
             is_disconnected=_never,
             still_allowed=revoked,
             heartbeat_seconds=0.05,
+            access_check_seconds=0.05,
         )
         await anext(stream)
         with pytest.raises(StopAsyncIteration):
@@ -172,6 +173,38 @@ def test_a_stream_whose_caller_lost_access_ends_at_the_next_beat() -> None:
         return broker.subscriber_count()
 
     assert asyncio.run(scenario()) == 0
+
+
+def test_a_fast_beating_stream_checks_access_on_its_own_slower_clock() -> None:
+    """The staff streams beat every 5 s (Issue 55) without reading the database at every beat."""
+
+    async def scenario() -> tuple[int, int]:
+        broker = SiteEventBroker()
+        checks = 0
+
+        async def allowed() -> bool:
+            nonlocal checks
+            checks += 1
+            return True
+
+        stream = broker.stream(
+            "site-a",
+            is_disconnected=_never,
+            still_allowed=allowed,
+            heartbeat_seconds=0.02,
+            access_check_seconds=0.1,
+        )
+        await anext(stream)
+        beats = 0
+        while beats < 10:
+            name, _ = _parse(await asyncio.wait_for(anext(stream), 1))
+            beats += name == "heartbeat"
+        await stream.aclose()
+        return beats, checks
+
+    beats, checks = asyncio.run(scenario())
+    assert beats == 10
+    assert 1 <= checks <= 3
 
 
 def test_a_clinic_cannot_open_more_streams_than_the_limit() -> None:

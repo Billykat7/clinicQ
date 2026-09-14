@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Status** | 🚧 In progress: issues 48 (the dashboard shell, role-aware navigation and the site switcher), 49 (the live front-desk board), 50 (Call next, recall, done, no-show and undo that act once), 51 (walk-in intake by keyboard with a printable stub), 52 (reordering with reason codes and the override trail), 53 (the nurse room view and private visit notes) and 54 (the clinic manager's settings screens) delivered |
-| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ **88%** (7/8 issues) |
+| **Status** | ✅ Done: issues 48–55 closed with the merge of the Issue 55 pull request, release note [`v0.7.0`](../RELEASES/RELEASE_v0_7_0.md), whose tag follows that merge. Five exit criteria are met; the sixth (a call reaching the patient's phone and the waiting-room board within 2 seconds) is met for the staff screens and waits for Issues 57 and 68 for the other two |
+| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (8/8 issues) |
 | **Sprints** | 8–9 (weeks 15–18), semester 2. The sprint plan spreads its issues over sprints 3–11: some start early against stubs and some are scheduled after this window, which moves the milestone's close (and its tag) to sprint 11 (see the table) |
 | **Release tag** | `v0.7.0` |
 | **Primary owner** | D, Frontend/Clinic |
@@ -90,12 +90,19 @@ flowchart LR
 
 ## Exit criteria
 
-- [ ] A receptionist can issue a walk-in ticket in under 10 seconds without using a keyboard shortcut
-- [ ] Call Next updates the patient's phone and the waiting-room board within 2 seconds
-- [ ] A nurse signed into Room 2 sees only Room 2's queue and cannot call another room's ticket
-- [ ] Losing the network shows an explicit 'reconnecting, data from HH:MM' banner, never a frozen board
-- [ ] Private visit notes are never rendered on any public surface, proven by a test
-- [ ] Every reorder shows who did it and why, without leaving the board
+- [x] A receptionist can issue a walk-in ticket in under 10 seconds without using a keyboard shortcut
+  (a name and Enter: 0.42–2.53 s in four keyboard-only flows, #176; a browser test in `tests/e2e`)
+- [ ] Call Next updates the patient's phone and the waiting-room board within 2 seconds. **Met for the
+  staff screens only**: a second device's front desk changed 320–369 ms after the click (#175). The
+  waiting-room board (Issue 57) and the patient's ticket page (Issue 68) do not exist yet; every call is
+  already published after its commit for them to listen to
+- [x] A nurse signed into Room 2 sees only Room 2's queue and cannot call another room's ticket
+  (another room's calls answer 404, #174 and #175)
+- [x] Losing the network shows an explicit 'reconnecting, data from HH:MM' banner, never a frozen board
+  (Reconnecting with the attempt, Updating every 5 seconds or Offline with the data's age; Offline
+  within 10 seconds of the network going, #173 and Issue 55)
+- [x] Private visit notes are never rendered on any public surface, proven by a test (#174)
+- [x] Every reorder shows who did it and why, without leaving the board (#171)
 
 ## Demo at the end of the milestone
 

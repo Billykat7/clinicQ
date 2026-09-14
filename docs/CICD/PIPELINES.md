@@ -24,7 +24,7 @@ Each stage of `ci-local.sh` has a home in `ci.yml`, or is local-only on purpose:
 | — | `conventions` | branch name, commit prefixes, `Closes #N`, a screenshot for UI changes (Issue 13) | 3 min |
 | quality | `quality` | `ruff check .`, `ruff format --check .`, `mypy src/`, `scripts/check-ruff-pin.sh` | 10 min |
 | secrets | `quality` | `gitleaks detect` over the whole history, the exact command `ci-local.sh` runs | (same job) |
-| tests | `test` × 3 shards | `pytest -n auto --dist loadscope --cov`, after the deploy sequence (integration shard) | 15 min |
+| tests | `test` × 4 shards | `pytest -n auto --dist loadscope --cov`, after the deploy sequence (integration shard) | 15 min |
 | coverage | `report` | combines the shards, checks `fail_under`, posts the summary | 5 min |
 | docker | `docker` | `docker build -f infra/docker/Dockerfile .`, thrown away, never pushed | 15 min |
 | pip-audit | — | **local-only** (`scripts/README.md`); Issue 97 schedules it | — |
@@ -36,17 +36,43 @@ Each stage of `ci-local.sh` has a home in `ci.yml`, or is local-only on purpose:
 a place in this table, if a command stops appearing on both sides, or if pip-audit or Trivy appear
 in `ci.yml`.
 
-### The three test shards
+### The four test shards
 
 | Shard | Collects | Why separate |
 |-------|----------|--------------|
 | `unit` | `tests/unit` | fast, no server needed |
 | `integration` | `tests/integration` | HTTP, the database layer, Redis; runs the deploy sequence first |
-| `flows` | `tests --ignore=tests/unit --ignore=tests/integration` | the top-level cross-domain flow files, and any added later |
+| `flows` | `tests --ignore=tests/unit --ignore=tests/integration --ignore=tests/e2e` | the top-level cross-domain flow files, and any added later |
+| `browser` | `tests/e2e` | a real server and Chromium driven by Playwright (Issue 55): it installs the browser first |
 
 The shards run in parallel, so the slowest one (integration, about 1.5 minutes) sets the wall
 clock. The guard test fails if the `flows` collector disappears, because those files sit in neither
 layer folder and would silently drop out of CI.
+
+### The browser shard (Issue 55)
+
+`tests/e2e` holds what only a browser can show: that a press changes the page at once, that the
+dashboard says *Offline* within ten seconds and comes back live without a reload, that an action pressed
+offline is sent on reconnect or reported as not sent, that a walk-in can be issued by keyboard alone.
+Each module starts the application in a background thread on a free port, against a PostgreSQL database
+migrated for it, and drives it with one headless Chromium per worker. `tests/e2e/conftest.py` holds
+the two fixtures (`browser`, `serve`); the waiting-room board's suite (Issue 62) reuses them.
+
+- **Locally:** `pip install -r requirements.txt`, then `python -m playwright install chromium` once, then
+  `pytest tests/e2e/dashboard` (with `TEST_DATABASE_URL`, like every PostgreSQL test). Without Chromium
+  the tests skip and say how to install it.
+- **In CI:** the shard caches `~/.cache/ms-playwright` by the `requirements.txt` hash and runs
+  `python -m playwright install --with-deps chromium`, then the same pytest command as every shard.
+  `REQUIRE_BROWSER_TESTS=1` turns "no browser" into a failure, as `REQUIRE_POSTGRES_TESTS` does for the
+  database.
+- **Time budget:** the eight dashboard tests take about 30 seconds under `-n auto` (22 seconds in one
+  process), and installing Chromium with its system libraries about a minute, so the shard stays well
+  inside its 15-minute timeout and adds one to two billable minutes to a run. A browser test that needs
+  to wait uses Playwright's `expect` with a timeout, never a fixed sleep, except where waiting *is*
+  the test (an action held longer than the outbox allows, set to 8 seconds for the suite).
+
+Playwright and its `pyee` dependency are test-time only: the image build removes them with the other
+test tooling, so they add nothing to the shipped image.
 
 ### Real PostgreSQL and Redis, never a stand-in
 
