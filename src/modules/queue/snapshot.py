@@ -50,6 +50,8 @@ from typing import Any, Final, Protocol
 
 from prometheus_client import REGISTRY, Counter
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from src.commons.enums import EstimateBasis, EstimateConfidence, SnapshotReadOutcome
@@ -467,22 +469,49 @@ def cached_waiting_counts(
 
 
 def _write(db: Session, snapshots: Collection[Snapshot]) -> None:
-    """Upsert snapshots into ``site_queue_snapshot`` (``merge`` on the primary key). Caller commits."""
+    """Upsert snapshots into ``site_queue_snapshot`` in one statement. The caller commits.
+
+    ``INSERT … ON CONFLICT (queue_id) DO UPDATE``, never a read followed by an insert: two joins
+    that are the first on a queue at the same moment would both find no row and both insert, and
+    one patient's join would fail on the primary key. The 07:30 rush test of Issue 47 found exactly
+    that. Rows already loaded in the session are expired so they are read again.
+    """
+    if not snapshots:
+        return
+    rows = []
     for snapshot in snapshots:
         figures = _wait_figures(snapshot.wait)
-        db.merge(
-            SiteQueueSnapshot(
-                queue_id=snapshot.queue_id,
-                site_id=snapshot.site_id,
-                waiting=snapshot.waiting,
-                wait_low_minutes=figures[0] if figures else None,
-                wait_high_minutes=figures[1] if figures else None,
-                wait_confidence=figures[2] if figures else None,
-                wait_approximate=figures[3] if figures else None,
-                updated_at=snapshot.updated_at,
-            )
+        rows.append(
+            {
+                "queue_id": snapshot.queue_id,
+                "site_id": snapshot.site_id,
+                "waiting": snapshot.waiting,
+                "wait_low_minutes": figures[0] if figures else None,
+                "wait_high_minutes": figures[1] if figures else None,
+                "wait_confidence": figures[2] if figures else None,
+                "wait_approximate": figures[3] if figures else None,
+                "updated_at": snapshot.updated_at,
+            }
         )
-    db.flush()
+    insert = (
+        postgresql_insert
+        if db.get_bind().dialect.name == "postgresql"
+        else sqlite_insert
+    )(SiteQueueSnapshot).values(rows)
+    db.execute(
+        insert.on_conflict_do_update(
+            index_elements=[SiteQueueSnapshot.queue_id],
+            set_={
+                column: insert.excluded[column]
+                for column in rows[0]
+                if column != "queue_id"
+            },
+        )
+    )
+    written = {row["queue_id"] for row in rows}
+    for instance in list(db.identity_map.values()):
+        if isinstance(instance, SiteQueueSnapshot) and instance.queue_id in written:
+            db.expire(instance)
 
 
 def refresh_snapshots(

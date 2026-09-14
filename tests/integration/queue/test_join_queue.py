@@ -41,6 +41,7 @@ from src.commons.time import now_sast
 from src.core.audit import REDACTED
 from src.database.models import (
     AuditEvent,
+    DiscoveryEvent,
     Patient,
     Queue,
     Site,
@@ -576,3 +577,48 @@ def test_two_joins_by_one_patient_at_the_same_instant_make_one_ticket(
         ids = {ticket_id for ticket_id, _ in answers}  # type: ignore[misc]
         assert len(ids) == 1
         assert sorted(created for _, created in answers) == [False, True]  # type: ignore[misc]
+
+
+@pytest.mark.postgres
+@pytest.mark.parametrize(
+    "source", [TicketSource.WEB, TicketSource.USSD, TicketSource.WALK_IN]
+)
+def test_a_join_leaves_committing_to_its_caller(
+    pg_clinic: SimpleNamespace, source: TicketSource
+) -> None:
+    """``join_queue`` commits nothing itself: a caller that rolls back leaves no ticket or event.
+
+    The web join used to record its analytics event with a commit, which committed the ticket halfway
+    through the join and released the number lock early (found by Issue 47's rush test). On
+    PostgreSQL, because SQLite's driver does not honour the savepoints this depends on.
+    """
+    with pg_clinic.session() as db:
+        site = db.get(Site, pg_clinic.site.id)
+        patient = (
+            None
+            if source is TicketSource.WALK_IN
+            else db.get(Patient, pg_clinic.patient.id)
+        )
+        join_queue(
+            db,
+            site=site,
+            queue=db.get(Queue, pg_clinic.queue.id),
+            schedule=published_schedules(db, [site.id])[site.id],
+            source=source,
+            patient=patient,
+            actor="caller-commits",
+            walk_in_name="Walk-in" if patient is None else None,
+            discovery_session="session-token",
+            settings=queue_settings(),
+        )
+        db.rollback()
+        tickets = db.scalar(
+            select(func.count(Ticket.id)).where(Ticket.queue_id == pg_clinic.queue.id)
+        )
+        events = db.scalar(
+            select(func.count(DiscoveryEvent.id)).where(
+                DiscoveryEvent.site_id == pg_clinic.site.id
+            )
+        )
+
+    assert (tickets, events) == (0, 0)

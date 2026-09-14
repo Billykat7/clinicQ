@@ -16,6 +16,12 @@ never do is identify a patient, so the rules are written into what is stored, no
   whole feature has a switch, ``DISCOVERY_ANALYTICS_ENABLED``.
 * **Recording never breaks a patient's request.** A failure to write an event is logged and dropped;
   the search, the page or the join goes ahead.
+* **A join's events are part of the join.** A search or a view is recorded and committed on its own.
+  :func:`record_join_started` and :func:`record_join_completed` only add their event, in a savepoint,
+  to the caller's transaction, which commits it with the ticket. An earlier version committed there
+  too, which committed a join's ticket halfway through ``join_queue()``: its number lock was released
+  before its queue snapshot was written, and a failed event would have rolled the ticket back. The
+  07:30 rush test of Issue 47 found it.
 
 The web pages and the API call :func:`record_search` and :func:`record_clinic_viewed`; the join flow
 (Issue 40) calls :func:`record_join_started` and :func:`record_join_completed`; the M12 reports read
@@ -90,14 +96,25 @@ def session_ref(
     return digest.hexdigest()[:SESSION_REF_HEX]
 
 
-def _record(db: Session, event: DiscoveryEvent) -> DiscoveryEvent | None:
-    """Write one event in its own savepoint and commit; a failure is logged, never raised."""
+def _record(
+    db: Session, event: DiscoveryEvent, *, commit: bool = True
+) -> DiscoveryEvent | None:
+    """Write one event in its own savepoint; a failure is logged, never raised.
+
+    With ``commit`` the event is committed at once, for a read-only request (a search, a page view)
+    whose caller commits nothing, and a failure rolls that session back. Without it the event stays
+    in the caller's transaction, and a failure rolls back only the savepoint: the caller's own writes
+    are never committed or undone here.
+    """
     try:
         with db.begin_nested():
             db.add(event)
-        db.commit()
+            db.flush()
+        if commit:
+            db.commit()
     except SQLAlchemyError:
-        db.rollback()
+        if commit:
+            db.rollback()
         logger.warning(
             "A discovery event could not be recorded and was dropped.", exc_info=True
         )
@@ -152,6 +169,7 @@ def _record_about_site(
     session_token: str | None,
     settings: Settings | None,
     moment: datetime | None,
+    commit: bool = True,
 ) -> DiscoveryEvent | None:
     """Record an event about one clinic, unless analytics are off or the clinic has opted out."""
     cfg = settings or get_settings()
@@ -174,6 +192,7 @@ def _record_about_site(
             session_ref=session_ref(session_token, day, cfg),
             site_id=site_id,
         ),
+        commit=commit,
     )
 
 
@@ -207,7 +226,10 @@ def record_join_started(
     settings: Settings | None = None,
     moment: datetime | None = None,
 ) -> DiscoveryEvent | None:
-    """Record that a patient began joining a queue at a clinic. Called by the join flow (Issue 40)."""
+    """Record that a patient began joining a queue at a clinic, in the caller's transaction.
+
+    The caller commits: the event is part of the join flow's own write (Issue 40).
+    """
     return _record_about_site(
         db,
         DiscoveryEventKind.JOIN_STARTED,
@@ -216,6 +238,7 @@ def record_join_started(
         session_token=session_token,
         settings=settings,
         moment=moment,
+        commit=False,
     )
 
 
@@ -228,7 +251,11 @@ def record_join_completed(
     settings: Settings | None = None,
     moment: datetime | None = None,
 ) -> DiscoveryEvent | None:
-    """Record that a patient got a ticket at a clinic. Called by the join flow (Issue 40)."""
+    """Record that a patient got a ticket at a clinic, in the caller's transaction.
+
+    Called by ``join_queue()`` (Issue 40), which commits the event with the ticket, so a join that
+    fails after this point records no completed join either.
+    """
     return _record_about_site(
         db,
         DiscoveryEventKind.JOIN_COMPLETED,
@@ -237,6 +264,7 @@ def record_join_completed(
         session_token=session_token,
         settings=settings,
         moment=moment,
+        commit=False,
     )
 
 
