@@ -111,6 +111,12 @@ _UNSCOPED_BY_DESIGN: dict[str, str] = {
         "(get_queue), filtered by that queue's id, with FOR UPDATE SKIP LOCKED; it returns one "
         "ticket id from that queue and nothing else (Issue 41)"
     ),
+    "modules/queue/waits.py::recent_samples": (
+        "reads the recent wait samples of queues the caller has **already** narrowed (the published "
+        "directory, the reconciliation sweep, or one queue a join just resolved), filtered by those "
+        "queue ids. It returns interval minutes and call hours, never a ticket or a patient "
+        "(Issue 42)"
+    ),
     "modules/staff/invitations.py::usable_invitation": (
         "an invitation link is opened by someone who has no account and therefore no clinic to be "
         "scoped by; the id comes from the signed token, and the row's own site_id is what "

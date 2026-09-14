@@ -159,13 +159,24 @@ def test_the_page_answers_open_hours_queues_services_and_contact(
 def test_wait_times_are_a_range_or_not_shown_never_a_single_number(
     directory: SimpleNamespace,
 ) -> None:
-    """No estimator yet (Issue 42): every queue says so, and no label passes a length off as a wait."""
+    """Every queue shows a range (Issue 42); with no visits yet, each is labelled approximate."""
     with directory.session() as db:
         profile = clinic_profile(db, "hillbrow-chc", moment=_TUESDAY_10AM)
     assert profile is not None and profile.queues
     rows = live_view(profile, join_enabled=False).queues
-    assert all(row.wait_label == WAIT_NOT_AVAILABLE for row in rows)
-    assert all(queue.wait_range is None for queue in profile.queues)
+    assert all(queue.wait is not None for queue in profile.queues)
+    assert all(
+        queue.wait.wait.high_minutes > queue.wait.wait.low_minutes
+        and queue.wait.approximate
+        for queue in profile.queues
+        if queue.wait is not None
+    )
+    assert all(
+        row.wait_label.startswith("Wait about ")
+        and row.wait_label.endswith("(approximate)")
+        for row in rows
+    )
+    assert all(row.wait_label != WAIT_NOT_AVAILABLE for row in rows)
     # The length is a real count since Issue 39; nothing about it may read as minutes.
     assert all("min" not in row.waiting_label for row in rows)
 
@@ -265,7 +276,12 @@ def test_the_profile_api_serves_the_same_data_to_other_channels(
     }
     assert (body["join"]["reason"] is None) == body["join"]["allowed"]
     assert body["week"][0]["name"] == "Monday"
-    assert body["queues"] and all(q["wait_range"] is None for q in body["queues"])
+    assert body["queues"] and all(
+        q["wait_range"]["high_minutes"] > q["wait_range"]["low_minutes"]
+        and q["wait_range"]["approximate"] is True
+        and q["wait_range"]["confidence"] == "low"
+        for q in body["queues"]
+    )
     assert body["services"]
     assert directory.client.get("/api/v1/clinics/Not_A_Slug").status_code == 422
 

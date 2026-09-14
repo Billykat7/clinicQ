@@ -202,6 +202,11 @@ CASES: dict[str, dict[str, object]] = {
 
 #: Site-scoped surfaces with no route yet: the issue that brings them must add a case here.
 PENDING: dict[str, str] = {
+    "waittimesample": (
+        "a visit's wait sample carries its clinic for the reports' index (Issue 42), but no route "
+        "reads samples: patients and staff see only the estimate built from them, as a range. The "
+        "nightly statistics (Issue 88) or a report that lists a clinic's samples must add a case"
+    ),
     "patientconsentevent": (
         "a consent event records the clinic it was given at for provenance (Issue 21), but no "
         "clinic-facing route reads consent: a patient reads their own through their session. A "

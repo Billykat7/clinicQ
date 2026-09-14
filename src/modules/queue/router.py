@@ -61,6 +61,7 @@ from src.modules.queue.schemas import (
     TicketListOut,
     TicketOut,
     TransitionIn,
+    WaitOut,
     WalkInIn,
 )
 from src.modules.queue.service import JoinRefusedError, JoinResult
@@ -107,6 +108,7 @@ def _answer(result: JoinResult, response: Response) -> JoinOut:
         ticket=TicketOut.of(result.ticket),
         created=result.created,
         waiting_ahead=result.waiting_ahead,
+        wait=WaitOut.of(result.wait),
         message=message,
     )
 

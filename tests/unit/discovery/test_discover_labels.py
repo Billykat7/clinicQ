@@ -9,10 +9,10 @@ from datetime import datetime
 
 import pytest
 
-from src.commons.enums import SiteSector
+from src.commons.enums import EstimateBasis, EstimateConfidence, SiteSector
 from src.commons.time import APP_TIMEZONE
 from src.modules.discovery.service import OpenStatus
-from src.modules.queues.live import WaitRange
+from src.modules.queue.estimate import WaitEstimate, WaitRange
 from src.web.discover import (
     QUEUE_NOT_REPORTED,
     SECTOR_BADGES,
@@ -50,12 +50,28 @@ def test_an_unmeasured_queue_is_never_shown_as_empty(
     assert queue_label(waiting) == label
 
 
+def _estimate(low: int, high: int, *, approximate: bool = False) -> WaitEstimate:
+    return WaitEstimate(
+        wait=WaitRange(low, high),
+        confidence=EstimateConfidence.LOW if approximate else EstimateConfidence.MEDIUM,
+        basis=EstimateBasis.EXPECTED if approximate else EstimateBasis.OBSERVED,
+    )
+
+
 def test_a_wait_is_a_range_or_nothing() -> None:
     """No estimate, or an estimate for only some queues, is not a figure to show."""
     assert wait_label([]) == WAIT_NOT_AVAILABLE
     assert wait_label([None, None]) == WAIT_NOT_AVAILABLE
-    assert wait_label([WaitRange(5, 15), None]) == WAIT_NOT_AVAILABLE
-    assert wait_label([WaitRange(5, 15), WaitRange(20, 40)]) == "Wait about 5–40 min"
+    assert wait_label([_estimate(5, 15), None]) == WAIT_NOT_AVAILABLE
+    assert wait_label([_estimate(5, 15), _estimate(20, 40)]) == "Wait about 5–40 min"
+
+
+def test_a_wait_built_from_expected_minutes_says_it_is_approximate() -> None:
+    """One approximate range in the span makes the whole label approximate (Issue 42)."""
+    assert (
+        wait_label([_estimate(5, 15), _estimate(20, 40, approximate=True)])
+        == "Wait about 5–40 min (approximate)"
+    )
 
 
 @pytest.mark.parametrize(

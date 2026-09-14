@@ -63,9 +63,11 @@ from src.database.models.queue import Queue
 from src.database.models.site import Site
 from src.database.models.ticket import Ticket
 from src.modules.discovery import analytics
+from src.modules.queue.estimate import WaitEstimate
 from src.modules.queue.sequence import issue_ticket
 from src.modules.queue.snapshot import on_queue_changed
 from src.modules.queue.tickets import waiting_ahead
+from src.modules.queue.waits import estimates_for
 from src.modules.queues.service import (
     QUEUE_CLOSED,
     REMOTE_SOURCES,
@@ -122,12 +124,23 @@ class _QueueFullError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class JoinResult:
-    """A ticket in the queue, and whether this call issued it or found it already there."""
+    """A ticket in the queue, whether this call issued it, and where it stands."""
 
     ticket: Ticket
     created: bool
     #: How many ``waiting`` tickets are ahead of this one in its queue right now.
     waiting_ahead: int
+    #: How long the patient should expect to wait: always a range (Issue 42).
+    wait: WaitEstimate
+
+
+def _result(
+    db: Session, queue: Queue, ticket: Ticket, *, created: bool, moment: datetime
+) -> JoinResult:
+    """The answer to a join: the ticket, how many are ahead, and the wait that means."""
+    ahead = waiting_ahead(db, ticket)
+    estimate = estimates_for(db, [queue], {queue.id: ahead}, moment=moment)[queue.id]
+    return JoinResult(ticket, created=created, waiting_ahead=ahead, wait=estimate)
 
 
 def _existing_ticket(
@@ -281,9 +294,7 @@ def join_queue(
     if patient is not None:
         existing = _existing_ticket(db, queue, patient.id, service_day)
         if existing is not None:
-            return JoinResult(
-                existing, created=False, waiting_ahead=waiting_ahead(db, existing)
-            )
+            return _result(db, queue, existing, created=False, moment=moment)
 
     gate = join_gate(site, schedule, moment)
     if not gate.allowed:
@@ -339,9 +350,7 @@ def join_queue(
         winner = _existing_ticket(db, queue, patient.id, service_day)
         if winner is None:
             raise
-        return JoinResult(
-            winner, created=False, waiting_ahead=waiting_ahead(db, winner)
-        )
+        return _result(db, queue, winner, created=False, moment=moment)
 
     if cap_key is not None:
         queue_join_limiter.record(cap_key, window_seconds=_DAY_SECONDS)
@@ -375,4 +384,4 @@ def join_queue(
         )
     db.flush()
     on_queue_changed(db, queue, settings=cfg)
-    return JoinResult(ticket, created=True, waiting_ahead=waiting_ahead(db, ticket))
+    return _result(db, queue, ticket, created=True, moment=moment)

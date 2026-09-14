@@ -12,9 +12,10 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-from src.commons.enums import TicketSource, TicketStatus
+from src.commons.enums import EstimateConfidence, TicketSource, TicketStatus
 from src.commons.time import stored_sast
 from src.database.models.ticket import MAX_REASON_LENGTH, Ticket
+from src.modules.queue.estimate import WaitEstimate
 from src.modules.queue.sequence import format_reference_code
 
 
@@ -91,6 +92,29 @@ class TicketOut(BaseModel):
         )
 
 
+class WaitOut(BaseModel):
+    """How long to expect to wait: always a range, with how far to trust it (Issue 42)."""
+
+    low_minutes: int = Field(ge=0)
+    high_minutes: int = Field(gt=0)
+    confidence: EstimateConfidence
+    approximate: bool
+    """True when built from the queue's expected minutes rather than its recent visits."""
+    label: str
+    """The range as a surface shows it: ``~15–25 min``, or ``~15–25 min (approximate)``."""
+
+    @classmethod
+    def of(cls, estimate: WaitEstimate) -> WaitOut:
+        """The wire form of an estimate."""
+        return cls(
+            low_minutes=estimate.wait.low_minutes,
+            high_minutes=estimate.wait.high_minutes,
+            confidence=estimate.confidence,
+            approximate=estimate.approximate,
+            label=estimate.label,
+        )
+
+
 class JoinOut(BaseModel):
     """The answer to a join: the ticket, whether it is new, and where it stands."""
 
@@ -98,6 +122,8 @@ class JoinOut(BaseModel):
     created: bool
     """``False`` when the patient already held this ticket and was given it back."""
     waiting_ahead: int = Field(ge=0)
+    wait: WaitOut
+    """The expected wait from now, for this ticket."""
     message: str
     """A sentence for the patient: "You are A043." or "You already hold A041."."""
 

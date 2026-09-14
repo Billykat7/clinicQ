@@ -9,8 +9,9 @@ nobody would notice until a patient was called twice or never. So:
 * **One function applies them**, :func:`transition_ticket`. It locks the ticket's row
   (``SELECT … FOR UPDATE``), refuses a move the table does not allow with
   :class:`IllegalTransitionError` (HTTP 409) and changes nothing when it does, stamps the time the
-  move happened, writes one audit row naming the actor and whether it was a person or the system,
-  and writes the queue snapshot through.
+  move happened, records the visit's wait sample when it reaches ``done`` (Issue 42), writes one
+  audit row naming the actor and whether it was a person or the system, and writes the queue
+  snapshot through.
 * **Nothing else may write the status.** The model refuses an assignment made outside
   :func:`~src.database.models.ticket.status_write_permitted` at runtime, and
   ``tests/unit/queue/test_status_written_only_by_lifecycle.py`` fails the build on one in the source.
@@ -64,6 +65,7 @@ from src.database.models.queue import Queue
 from src.database.models.ticket import Ticket, status_write_permitted
 from src.modules.queue.snapshot import on_queue_changed
 from src.modules.queue.tickets import CALL_ORDER
+from src.modules.queue.waits import record_visit
 
 _W, _C, _R, _P = (
     TicketStatus.WAITING,
@@ -235,6 +237,9 @@ def transition_ticket(
     with status_write_permitted():
         ticket.status = requested.value
     _stamp(ticket, requested, moment)
+    if requested is TicketStatus.DONE:
+        # The visit's sample commits with the move, so the next estimate already includes it.
+        record_visit(db, ticket, moment=moment)
     record_audit_event(
         db,
         action=AuditAction.UPDATE,
