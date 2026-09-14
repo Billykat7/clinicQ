@@ -1,0 +1,51 @@
+{#- The front desk's cards (Issue 49): rendered into the page, and again on their own whenever the
+    clinic's stream says something changed. One partial for both, so a refreshed card cannot differ
+    from a freshly loaded one.
+
+    ``data-as-of`` is when the server read the cards. The connection line above the board shows that
+    time whenever the page is not sure it is live, so the board never looks current when it is not. -#}
+{% from "components/empty_state.html" import empty_state %}
+{% from "dashboard/_reorder.html" import queue_line %}
+<div class="board-cards" id="board-cards" data-as-of="{{ board.as_of.isoformat() }}" data-as-of-label="{{ board.as_of.strftime('%H:%M') }}">
+{% if queues %}
+<ul class="queue-grid" aria-label="Queues at {{ clinic.site.name }}">
+  {% for queue in queues %}
+  <li class="queue-card{% if not queue.is_active %} is-inactive{% endif %}{% if queue.stuck %} is-stuck{% endif %}" data-queue-id="{{ queue.id }}">
+    <div class="queue-card-head">
+      <h2 class="queue-card-name">{{ queue.name }}</h2>
+      {% if queue.room_label %}<span class="queue-card-room">{{ queue.room_label }}</span>{% endif %}
+      {% if not queue.is_active %}<span class="badge">Closed to joins</span>{% endif %}
+    </div>
+    {% if queue.stuck %}
+    <p class="queue-card-alarm" role="status">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+      Someone has waited {{ queue.longest_wait_minutes }} min
+    </p>
+    {% endif %}
+    <dl class="queue-card-counts">
+      <div><dt>Waiting</dt><dd>{{ queue.waiting }}</dd></div>
+      <div><dt>With staff</dt><dd>{{ queue.with_staff }}</dd></div>
+    </dl>
+    <dl class="queue-card-times">
+      <div><dt>Average wait today</dt><dd>{% if queue.average_wait_minutes is none %}No calls yet{% else %}{{ queue.average_wait_minutes }} min{% endif %}</dd></div>
+      <div><dt>Longest wait now</dt><dd>{% if queue.longest_wait_minutes is none %}Nobody waiting{% else %}{{ queue.longest_wait_minutes }} min{% endif %}</dd></div>
+    </dl>
+    {% if queue.with_staff_tickets %}
+    <ul class="queue-with-staff" aria-label="With staff in {{ queue.name }}">
+      {% for ticket in queue.with_staff_tickets %}
+      <li>
+        <span class="line-number">{{ ticket.number }}</span>
+        <span class="badge badge-{{ ticket.badge.tone.value }}">{{ ticket.badge.label }}</span>
+        {% if ticket.minutes_since_called is not none %}<span class="hint">{{ ticket.minutes_since_called }} min</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {{ queue_line(queue, lines[queue.id], can_reorder, can_read_priority) }}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+{{ empty_state("This clinic has no queues yet", body="A clinic manager adds queues in the clinic settings.") }}
+{% endif %}
+</div>

@@ -57,6 +57,7 @@ from sqlalchemy.orm import Session
 from src.commons.enums import EstimateBasis, EstimateConfidence, SnapshotReadOutcome
 from src.commons.time import now_sast, stored_sast
 from src.core.config import Settings, get_settings
+from src.core.domain_events import QueueChanged, publish_after_commit
 from src.core.site_scope import published_select
 from src.database.models import Queue, SiteQueueSnapshot
 from src.modules.queue.estimate import WaitEstimate, WaitRange
@@ -543,8 +544,21 @@ def on_queue_changed(
     source: WaitingCountReader = read_waiting_counts,
     cache: SnapshotCache | None = None,
     settings: Settings | None = None,
+    called_number: str | None = None,
 ) -> Snapshot:
-    """The hook a join, call-next, cancel or no-show calls for the queue it changed (Issues 40–44)."""
+    """The hook a join, call-next, cancel or no-show calls for the queue it changed (Issues 40–44).
+
+    It also queues a :class:`~src.core.domain_events.QueueChanged` for after the commit (Issue 49),
+    which is how every live screen of the clinic hears about the change: one hook every queue write
+    already calls, so no write can change a queue without the screens being told. ``called_number``
+    is the ticket number when the change was a call.
+    """
+    publish_after_commit(
+        db,
+        QueueChanged(
+            site_id=queue.site_id, queue_id=queue.id, called_number=called_number
+        ),
+    )
     return refresh_snapshots(
         db, [queue], source=source, cache=cache, settings=settings
     )[0]

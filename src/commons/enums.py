@@ -812,6 +812,27 @@ class OtpVerification(StrEnum):
     LOCKED = "locked"
 
 
+class LiveEventType(StrEnum):
+    """What a live stream tells a screen (Issues 49 and 57): one vocabulary for every stream.
+
+    The staff dashboard's stream and the waiting-room board's stream send the same event types in the
+    same server-sent events envelope (:mod:`src.core.live_events`), so a screen that understands one
+    understands the other. An event says *what changed*; the screen reads the new state itself.
+
+    - ``TICKET_CALLED``: a ticket was called (or called again) to a room or counter.
+    - ``QUEUE_UPDATED``: anything else changed in a queue's day: a join, a finished visit, a no-show,
+      a cancellation, a transfer or a priority override.
+    - ``BOARD_CONFIG_CHANGED``: what the clinic's waiting-room screen may show changed.
+    - ``HEARTBEAT``: nothing changed; the connection is alive. Sent every
+      :data:`~src.core.live_events.HEARTBEAT_SECONDS`, so a silent connection is noticed.
+    """
+
+    TICKET_CALLED = "ticket.called"
+    QUEUE_UPDATED = "queue.updated"
+    BOARD_CONFIG_CHANGED = "board.config_changed"
+    HEARTBEAT = "heartbeat"
+
+
 class DisplayMode(StrEnum):
     """What the waiting-room board may show about a ticket. Stored in ``sites.display_mode``.
 

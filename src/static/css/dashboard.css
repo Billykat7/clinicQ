@@ -252,7 +252,7 @@
 }
 .line-ticket {
   display: grid;
-  grid-template-columns: auto 1.2rem auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto 1.2rem auto minmax(0, 1fr) auto auto auto;
   /* A drag must not select the words it passes over. */
   user-select: none;
   align-items: center;
@@ -453,3 +453,56 @@
    `.field label:has(> input)` rule's weight, and wins by coming later. */
 .slideover-body fieldset label.check,
 .settings-form fieldset label.check { display: flex; align-items: center; gap: .45rem; margin: .2rem 0; }
+
+/* ── The live front desk (Issue 49) ─────────────────────────── */
+
+.board-connection {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  margin: 0;
+  padding: .3rem .75rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: var(--step--1);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.board-connection-dot { width: .6rem; height: .6rem; border-radius: 50%; background: var(--muted); }
+.board-connection[data-state="live"] { border-color: var(--brand); color: var(--brand-deep); }
+.board-connection[data-state="live"] .board-connection-dot { background: var(--brand); }
+/* Not live: impossible to mistake for a current board. */
+.board-connection[data-state="reconnecting"],
+.board-connection[data-state="polling"],
+.board-connection[data-state="connecting"] { border-color: var(--warn-ink); background: var(--warn-bg); color: var(--warn-ink); }
+.board-connection[data-state="reconnecting"] .board-connection-dot,
+.board-connection[data-state="polling"] .board-connection-dot,
+.board-connection[data-state="connecting"] .board-connection-dot { background: var(--warn-ink); }
+.board-connection[data-state="reconnecting"] .board-connection-dot { animation: board-pulse 1.2s ease-in-out infinite; }
+@keyframes board-pulse { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) {
+  .board-connection-dot { animation: none !important; }
+}
+
+/* A stuck queue is obvious from across the desk: a thick red edge, a tinted card and a warning line. */
+.queue-card.is-stuck {
+  border-color: var(--danger-ink);
+  box-shadow: inset 5px 0 0 var(--danger), var(--shadow-card);
+  background: color-mix(in srgb, var(--danger-soft) 55%, var(--surface));
+}
+.queue-card-alarm {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  margin: 0;
+  font-weight: 700;
+  color: var(--danger-ink);
+}
+.queue-card-alarm svg { width: 1.1rem; height: 1.1rem; flex: none; }
+.queue-card-times { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin: 0; }
+.queue-card-times dt { font-size: var(--step--2); color: var(--muted); }
+.queue-card-times dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.queue-with-staff { list-style: none; margin: 0; padding: 0; display: grid; gap: .25rem; font-size: var(--step--1); }
+.queue-with-staff li { display: flex; align-items: center; gap: .45rem; }
+.line-waited { color: var(--muted); font-size: var(--step--2); font-variant-numeric: tabular-nums; white-space: nowrap; }

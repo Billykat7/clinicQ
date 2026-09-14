@@ -1117,6 +1117,15 @@ class Settings(BaseSettings):
     # declares, never a claims check. Off by default so it can ship after the MVP without a code
     # change: while off, no patient-facing surface shows or filters by it, and the clinic editor page
     # is not served (the API still accepts a profile, so clinics can fill theirs in beforehand).
+    dashboard_stuck_wait_minutes: int = Field(
+        default=45,
+        ge=5,
+        le=480,
+        description=(
+            "Minutes a waiting patient may wait before the front desk card is marked as having "
+            "someone stuck (env: DASHBOARD_STUCK_WAIT_MINUTES)"
+        ),
+    )
     payment_filter_enabled: bool = Field(
         default=False,
         description=(

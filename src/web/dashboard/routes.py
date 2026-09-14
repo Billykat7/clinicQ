@@ -17,26 +17,43 @@ governs what is done.
 
 from __future__ import annotations
 
-from collections import Counter
-from collections.abc import Callable
+import asyncio
+from collections.abc import AsyncIterator, Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi.responses import (
+    HTMLResponse,
+    RedirectResponse,
+    Response,
+    StreamingResponse,
+)
 from sqlalchemy.orm import Session
 
-from src.commons.enums import PermissionVerb, PriorityReason, TicketStatus
+from src.commons.enums import PermissionVerb, PriorityReason
 from src.commons.time import business_date
+from src.core.live_events import (
+    EVENT_STREAM_MEDIA_TYPE,
+    STREAM_HEADERS,
+    TooManySubscribersError,
+    broker,
+)
 from src.core.nav_registry import all_destination_keys, destination
-from src.core.nav_visibility import NavVisibility, peek_user_from_refresh_cookie
+from src.core.nav_visibility import (
+    NavVisibility,
+    nav_visibility_at_site,
+    peek_user_from_refresh_cookie,
+)
 from src.core.site_scope import SiteAccess, permitted_queue_ids
+from src.database.models import User
 from src.database.models.queue_reorder import MAX_REORDER_NOTE_LENGTH
 from src.database.session import get_db
-from src.modules.queue.tickets import site_day_select
 from src.modules.queues.service import list_queues
 from src.web.context import page_context, require_authenticated_html
+from src.web.dashboard.board import read_board
 from src.web.dashboard.reorder import (
     PRIORITY_RESOURCE,
     OverrideFilters,
@@ -63,11 +80,6 @@ router = APIRouter(tags=["web"])
 
 DbSession = Annotated[Session, Depends(get_db)]
 
-#: Statuses that mean "with a member of staff now": called to the room, called again, or being seen.
-_WITH_STAFF: frozenset[TicketStatus] = frozenset(
-    {TicketStatus.CALLED, TicketStatus.RECALLED, TicketStatus.IN_PROGRESS}
-)
-
 
 @dataclass(frozen=True, slots=True)
 class ClinicPage:
@@ -76,18 +88,6 @@ class ClinicPage:
     shell: ClinicShell
     context: dict[str, object]
     access: SiteAccess
-
-
-@dataclass(frozen=True, slots=True)
-class QueueSummary:
-    """One queue as the dashboard's cards show it: who is waiting, and who is with staff."""
-
-    id: str
-    name: str
-    room_label: str | None
-    is_active: bool
-    waiting: int
-    with_staff: int
 
 
 def open_clinic_page(
@@ -167,40 +167,6 @@ def _visible(key: str) -> Callable[[NavVisibility], bool]:
     return lambda nav: nav.visible(key)
 
 
-def queue_summaries(
-    db: Session, access: SiteAccess, *, only: frozenset[str] | None = None
-) -> list[QueueSummary]:
-    """This clinic's queues in the clinic's order, each with today's waiting and in-room counts.
-
-    ``only`` narrows to those queue ids (a nurse's own queues). Read through the site guard: the
-    queues through :func:`~src.modules.queues.service.list_queues`, the tickets through
-    :func:`~src.modules.queue.tickets.site_day_select`.
-    """
-    queues = [
-        queue
-        for queue in list_queues(db, access).items
-        if only is None or queue.id in only
-    ]
-    waiting: Counter[str] = Counter()
-    with_staff: Counter[str] = Counter()
-    for ticket in db.execute(site_day_select(access, business_date())).scalars():
-        if ticket.status_enum is TicketStatus.WAITING:
-            waiting[ticket.queue_id] += 1
-        elif ticket.status_enum in _WITH_STAFF:
-            with_staff[ticket.queue_id] += 1
-    return [
-        QueueSummary(
-            id=queue.id,
-            name=queue.name,
-            room_label=queue.room_label,
-            is_active=queue.is_active,
-            waiting=waiting[queue.id],
-            with_staff=with_staff[queue.id],
-        )
-        for queue in queues
-    ]
-
-
 @router.get("/dashboard/sites/{site_id}", response_class=HTMLResponse)
 async def clinic_home(
     site_id: str,
@@ -235,35 +201,23 @@ async def clinic_home(
     return RedirectResponse(first.href_at(site_id), status_code=302)
 
 
-@router.get("/dashboard/sites/{site_id}/board", response_class=HTMLResponse)
-async def clinic_board(site_id: str, request: Request, db: DbSession) -> Response:
-    """The front desk: every queue at the clinic with who is waiting and who is with staff.
+def _fill_board(db: Session, page: ClinicPage) -> None:
+    """Put the front desk's cards, lines and controls into an opened page's context.
 
-    The frame for Issue 49's live board, which replaces these server-rendered counts.
+    Offered and shown per the caller's grants at this clinic (Issue 52): a role that may read the
+    overrides gets the badges and the trail; one that may also make them gets working controls, and
+    anyone else gets the same controls disabled, never a missing button to wonder about.
     """
-    key = "board"
-    opened = open_clinic_page(
-        request,
-        db,
-        site_id,
-        active_key=key,
-        page_title=destination(key).label,
-        allowed=_visible(key),
-    )
-    if not isinstance(opened, ClinicPage):
-        return opened
-    queues = queue_summaries(db, opened.access)
-    nav = opened.shell.nav
-    # Offered and shown per the caller's grants at this clinic (Issue 52): a role that may read the
-    # overrides gets the badges and the trail; one that may also make them gets working controls,
-    # and anyone else gets the same controls disabled, never a missing button to wonder about.
+    board = read_board(db, page.access)
+    nav = page.shell.nav
     can_read_priority = nav.can(PRIORITY_RESOURCE, PermissionVerb.READ)
-    opened.context.update(
-        queues=queues,
+    page.context.update(
+        board=board,
+        queues=board.cards,
         lines=queue_lines(
             db,
-            opened.access,
-            [queue.id for queue in queues],
+            page.access,
+            [card.id for card in board.cards],
             include_priority=can_read_priority,
         ),
         can_read_priority=can_read_priority,
@@ -271,7 +225,136 @@ async def clinic_board(site_id: str, request: Request, db: DbSession) -> Respons
         reasons=reason_choices(),
         note_max_length=MAX_REORDER_NOTE_LENGTH,
     )
+
+
+def _open_board(request: Request, db: Session, site_id: str) -> ClinicPage | Response:
+    """Open the front desk at ``site_id`` through the shell's gates."""
+    key = "board"
+    return open_clinic_page(
+        request,
+        db,
+        site_id,
+        active_key=key,
+        page_title=destination(key).label,
+        allowed=_visible(key),
+    )
+
+
+@router.get("/dashboard/sites/{site_id}/board", response_class=HTMLResponse)
+async def clinic_board(site_id: str, request: Request, db: DbSession) -> Response:
+    """The front desk: every queue's card, live (Issue 49), with its waiting line (Issue 52)."""
+    opened = _open_board(request, db, site_id)
+    if not isinstance(opened, ClinicPage):
+        return opened
+    _fill_board(db, opened)
     return render_clinic_page(request, opened, "dashboard/board.html")
+
+
+@router.get("/dashboard/sites/{site_id}/board/cards", response_class=HTMLResponse)
+async def clinic_board_cards(site_id: str, request: Request, db: DbSession) -> Response:
+    """Just the front desk's cards, for the page to swap in when something changed (Issue 49).
+
+    The same gates and the same data as the page, rendered from the same partial, so a refreshed card
+    and a freshly loaded one cannot differ. A signed-out caller gets ``401`` rather than a redirect to
+    the sign-in page, because the caller is a script that has to notice, not a person to send away.
+    """
+    if not require_authenticated_html(request, db):
+        return Response(status_code=status.HTTP_401_UNAUTHORIZED)
+    opened = _open_board(request, db, site_id)
+    if not isinstance(opened, ClinicPage):
+        return opened
+    _fill_board(db, opened)
+    response = templates.TemplateResponse(
+        request, "dashboard/_board_cards.html", opened.context
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@contextmanager
+def _short_session(request: Request) -> Iterator[Session]:
+    """A session that lives only as long as the ``with`` block, from the app's own ``get_db``.
+
+    For a stream, which must not hold a request-scoped session (and so a pooled connection) open for
+    a whole shift. Uses the application's ``get_db`` override when one is installed, so a test's
+    database is the one checked.
+    """
+    provider = request.app.dependency_overrides.get(get_db, get_db)
+    sessions = provider()
+    try:
+        yield next(sessions)
+    finally:
+        sessions.close()
+
+
+def _board_stream_refusal(request: Request, site_id: str) -> Response | str:
+    """The stream's gate: the caller's user id, or the response that refuses them."""
+    with _short_session(request) as db:
+        if not require_authenticated_html(request, db):
+            return Response(status_code=status.HTTP_401_UNAUTHORIZED)
+        user = peek_user_from_refresh_cookie(db, request)
+        if user is None or site_id not in {site.id for site in staff_sites(db, user)}:
+            return Response(status_code=status.HTTP_404_NOT_FOUND)
+        if not nav_visibility_at_site(db, user, site_id).visible("board"):
+            return Response(status_code=status.HTTP_403_FORBIDDEN)
+        return str(user.id)
+
+
+@router.get("/dashboard/sites/{site_id}/board/stream")
+async def clinic_board_stream(site_id: str, request: Request) -> Response:
+    """The clinic's live events as server-sent events (Issue 49, the format Issue 57 shares).
+
+    Gated like the board: signed out ``401``, another clinic ``404``, no front desk here ``403``, and
+    the check runs again at every heartbeat, so a removed assignment or a switched-off account ends
+    the stream within :data:`~src.core.live_events.HEARTBEAT_SECONDS`. The events name what changed and
+    carry no patient data; the page reads the cards again through its own gate.
+
+    No request-scoped session: a stream can stay open all day, and each check opens a short session
+    of its own, off the event loop, and closes it before anything more is sent.
+    """
+    gate = await asyncio.to_thread(_board_stream_refusal, request, site_id)
+    if isinstance(gate, Response):
+        return gate
+    user_id = gate
+
+    def check_access() -> bool:
+        """Whether the caller still works here and still has the front desk (a fresh read)."""
+        with _short_session(request) as db:
+            current = db.get(User, user_id)
+            return bool(
+                current is not None
+                and current.is_active
+                and not current.is_deleted
+                and site_id in {site.id for site in staff_sites(db, current)}
+                and nav_visibility_at_site(db, current, site_id).visible("board")
+            )
+
+    async def still_allowed() -> bool:
+        """:func:`check_access`, in a worker thread so the event loop never waits on the database."""
+        return await asyncio.to_thread(check_access)
+
+    try:
+        events = broker.stream(
+            site_id,
+            is_disconnected=request.is_disconnected,
+            still_allowed=still_allowed,
+        )
+        first = await anext(events)
+    except TooManySubscribersError:
+        return Response(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            headers={"Retry-After": "30"},
+        )
+
+    async def body() -> AsyncIterator[str]:
+        """The first event already taken (which proved the subscription), then the rest."""
+        yield first
+        async for chunk in events:
+            yield chunk
+
+    return StreamingResponse(
+        body(), media_type=EVENT_STREAM_MEDIA_TYPE, headers=STREAM_HEADERS
+    )
 
 
 @router.get("/dashboard/sites/{site_id}/room", response_class=HTMLResponse)
@@ -293,7 +376,7 @@ async def clinic_room(site_id: str, request: Request, db: DbSession) -> Response
     if not isinstance(opened, ClinicPage):
         return opened
     own = permitted_queue_ids(db, opened.access.user)
-    opened.context["queues"] = queue_summaries(db, opened.access, only=own)
+    opened.context["queues"] = read_board(db, opened.access, only=own).cards
     return render_clinic_page(request, opened, "dashboard/room.html")
 
 

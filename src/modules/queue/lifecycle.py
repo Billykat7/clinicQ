@@ -294,8 +294,18 @@ def transition_ticket(
     db.flush()
     queue = db.get(Queue, ticket.queue_id)
     if queue is not None:
-        on_queue_changed(db, queue)
+        on_queue_changed(
+            db,
+            queue,
+            called_number=ticket.number if requested in _CALLING else None,
+        )
     return ticket
+
+
+#: The moves that call a patient to a room: a live screen announces the number (Issue 49).
+_CALLING: frozenset[TicketStatus] = frozenset(
+    {TicketStatus.CALLED, TicketStatus.RECALLED}
+)
 
 
 def staff_move(

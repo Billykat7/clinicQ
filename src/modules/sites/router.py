@@ -41,6 +41,7 @@ from src.commons.time import business_date, now_sast
 from src.core.audit import record_audit_event
 from src.core.client_ip import resolve_client_ip
 from src.core.config import Settings, get_settings
+from src.core.domain_events import BoardSettingsChanged, publish_after_commit
 from src.core.request_logging import bind_request_context
 from src.core.security import CurrentStaff
 from src.core.site_scope import (
@@ -846,6 +847,8 @@ def set_display_settings(
             access.site_id,
             "display settings: " + "; ".join(changed),
         )
+        # Every open screen of the clinic hears about it once this commits (Issue 49).
+        publish_after_commit(db, BoardSettingsChanged(site_id=access.site_id))
     db.commit()
     db.refresh(site)
     return _settings_out(site)
