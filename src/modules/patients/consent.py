@@ -23,6 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.commons.enums import (
+    TICKET_ACTIVE_STATUSES,
     AuditAction,
     AuditEntityType,
     ConsentPurpose,
@@ -30,8 +31,9 @@ from src.commons.enums import (
     NotificationTemplate,
     PatientChannel,
 )
-from src.commons.time import now_sast
+from src.commons.time import business_date, now_sast
 from src.core.audit import record_audit_event
+from src.core.domain_events import QueueChanged, publish_after_commit
 from src.database.models import Patient, PatientConsent, PatientConsentEvent
 from src.modules.patients.consent_text import CONSENT_WORDING_VERSION
 
@@ -149,7 +151,36 @@ def record_consent(
         context=f"{purpose.value}={'granted' if granted else 'withdrawn'} via {channel.value}",
     )
     db.flush()
+    if purpose in BOARD_PURPOSES:
+        _announce_to_boards(db, patient.id)
     return current
+
+
+#: The answers a waiting-room board reads: a change to either redraws the patient's boards (Issue 57).
+BOARD_PURPOSES: frozenset[ConsentPurpose] = frozenset(
+    {ConsentPurpose.DISPLAY_NAME, ConsentPurpose.DISPLAY_COMMENT}
+)
+
+
+def _announce_to_boards(db: Session, patient_id: str) -> None:
+    """Tell the boards showing this patient today that what they may show changed, after the commit.
+
+    The board reads consent afresh every time it projects (Issue 58), so all a withdrawal needs is for
+    the boards to project again: one ``QueueChanged`` per queue the patient is still in today, which the
+    live streams turn into a new board. Nothing about the patient travels with it.
+    """
+    from src.modules.queue.tickets import (
+        patient_tickets_select,  # the queue module imports this one
+    )
+
+    active = {status.value for status in TICKET_ACTIVE_STATUSES}
+    for ticket in db.execute(
+        patient_tickets_select(patient_id, business_date())
+    ).scalars():
+        if ticket.status in active:
+            publish_after_commit(
+                db, QueueChanged(site_id=ticket.site_id, queue_id=ticket.queue_id)
+            )
 
 
 # --------------------------------------------------------------------------------------

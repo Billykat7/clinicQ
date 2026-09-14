@@ -250,6 +250,13 @@
   transition: opacity .6s ease;
 }
 .kiosk-ticker.is-changing { opacity: 0; }
+.kiosk-connection {
+  flex: none;
+  font-size: calc(var(--u) * 3.4);
+  font-weight: 700;
+  color: var(--kb-new-bg);
+}
+.kiosk-connection::before { content: "⟳ "; }
 .kiosk-pages { flex: none; margin-left: auto; font-size: calc(var(--u) * 3.4); font-weight: 600; color: var(--kb-muted); font-variant-numeric: tabular-nums; }
 
 .kiosk-empty {

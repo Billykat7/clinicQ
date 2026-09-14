@@ -17,10 +17,11 @@ clinic's switch, the patient's standing consent **and** this visit's. JSON only,
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from starlette import status
 
@@ -28,15 +29,19 @@ from src.commons.enums import (
     ActorKind,
     ConsentPurpose,
     DisplayMode,
+    LiveEventType,
     SiteStatus,
     TicketStatus,
 )
+from src.core import live_events
+from src.core.live_events import LiveEvent
 from src.database.models import Queue
 from src.modules.display.enums import BoardPersonalField
 from src.modules.display.projection import NOW_SERVING_LIMIT, UP_NEXT_LIMIT
 from src.modules.queue.lifecycle import Actor, call_next
 from tests.factories import SiteFactory
 from tests.integration.display.conftest import NOMVULA, NOMVULA_LITE, REASON
+from tests.integration.display.test_display_sse import parse_events
 from tests.unit.security.test_api_route_gates import _walk
 
 _DESK = Actor(kind=ActorKind.STAFF, label="desk.a@clinicq.example")
@@ -75,11 +80,35 @@ def _state(client: TestClient, path: str) -> tuple[Any, str]:
     return _json(client, path), client.get(path).text
 
 
+def _stream(client: TestClient, path: str) -> tuple[Any, str]:
+    """Open the live stream: the board its first event carries, and every byte of a short stream.
+
+    The broker's endless events are replaced by a heartbeat and one ``ticket.called``, so the response
+    ends and can be read whole; the route and its projection are the real ones (Issue 57).
+    """
+    site_id = path.split("/")[2]
+
+    async def events(site: str, **_: object) -> AsyncIterator[LiveEvent]:
+        yield LiveEvent(LiveEventType.HEARTBEAT, site)
+        yield LiveEvent(LiveEventType.TICKET_CALLED, site)
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(live_events.broker, "events", events)
+        response = client.get(path)
+    assert response.status_code == status.HTTP_200_OK, (path, response.text)
+    boards = [
+        data["board"] for _, data in parse_events(response.text) if "board" in data
+    ]
+    assert len(boards) == 2 and all(b["site_id"] == site_id for b in boards)
+    return boards[0], response.text
+
+
 #: How each board route is read, by path template: ``(its payload, every byte it sent)``. A route under
 #: /display with no entry fails the sweep below, so a new endpoint cannot ship without being searched.
 _READERS: dict[str, Callable[[TestClient, str], tuple[Any, str]]] = {
     "/display/{site_id}": _page,
     "/display/{site_id}/state": _state,
+    "/display/{site_id}/stream": _stream,
 }
 
 

@@ -829,12 +829,18 @@ class LiveEventType(StrEnum):
     - ``BOARD_CONFIG_CHANGED``: what the clinic's waiting-room screen may show changed.
     - ``HEARTBEAT``: nothing changed; the connection is alive. Sent every
       :data:`~src.core.live_events.HEARTBEAT_SECONDS`, so a silent connection is noticed.
+    - ``BOARD_STATE``: the whole waiting-room board as it is now, the first event on every connection
+      to a board's stream, so a board that reconnects is resynced before anything else (Issue 57).
+
+    A board's stream carries the board with every event (``board``, the privacy projection of Issue 58);
+    the dashboard's stream carries only what changed, and the dashboard reads its cards again.
     """
 
     TICKET_CALLED = "ticket.called"
     QUEUE_UPDATED = "queue.updated"
     BOARD_CONFIG_CHANGED = "board.config_changed"
     HEARTBEAT = "heartbeat"
+    BOARD_STATE = "board.state"
 
 
 class DisplayMode(StrEnum):

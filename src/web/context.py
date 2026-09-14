@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 from fastapi import Request
@@ -15,6 +17,7 @@ from src.core.nav_visibility import (
     nav_visibility_for_request,
     nav_visibility_for_request_safe,
 )
+from src.database.session import get_db
 
 # Where the breadcrumb trail's leading "home" crumb points. The partial draws that crumb itself,
 # so a trail — built here or by hand in a route — never carries it.
@@ -224,3 +227,19 @@ def can_explain_denial(nav: NavVisibility) -> bool:
 def require_authenticated_html(request: Request, db: Session) -> bool:
     """Return True when the request has a valid signed-in shell (sidebar visible)."""
     return nav_visibility_for_request(db, request).show_icon_sidebar
+
+
+@contextmanager
+def short_session(request: Request) -> Iterator[Session]:
+    """A session that lives only as long as the ``with`` block, from the app's own ``get_db``.
+
+    For a stream (the dashboard's, Issue 49, and the waiting-room board's, Issue 57), which must not hold
+    a request-scoped session, and so a pooled connection, open for a whole day. Uses the application's
+    ``get_db`` override when one is installed, so a test's database is the one read.
+    """
+    provider = request.app.dependency_overrides.get(get_db, get_db)
+    sessions = provider()
+    try:
+        yield next(sessions)
+    finally:
+        sessions.close()

@@ -95,7 +95,31 @@ staff screens', and nothing is inline.
 - **Legibility:** on a 32-inch screen a number being served is at least 49 mm tall in every layout, and a
   number up next at least 22 mm, at 1080p or 720p alike. See `docs/OPS/BOARD_LEGIBILITY.md`.
 
-The page polls `/display/{site_id}/state` every 10 seconds until the live stream arrives (Issue 57).
+## Live updates (Issue 57)
+
+`GET /display/{site_id}/stream` is a server-sent events stream. It is read-only and unauthenticated, and
+it uses the same envelope as the dashboard's stream (`type`, `site_id`, `at`, `queue_id`). Every event
+except the heartbeat also carries `board`: the privacy projection, as the board may show it.
+
+| Event | When | Carries |
+|-------|------|---------|
+| `board.state` | First, on every connection: a full resync | the whole board |
+| `ticket.called` | A call, or a recall | the board after it |
+| `queue.updated` | A join, a finish, a cancellation, a transfer, a reorder, or a consent answer from a patient on the board | the board after it |
+| `board.config_changed` | The clinic changed what its board may show | the board after it |
+| `heartbeat` | Every 15 seconds of silence | nothing |
+
+- **On the screen** (`board-live.js`):
+  - Two missed beats (30 s) show "⟳ Reconnecting to the clinic…".
+  - Reconnection backs off from 1 to 30 seconds with jitter. After three failures the board also asks
+    `/state` every 10 seconds. A reconnection's first event resyncs everything.
+- **On the server:**
+  - A clinic's streams share the per-instance limit of 100 (`503` with `Retry-After` beyond it).
+  - A client that is gone is noticed at the next beat.
+  - One projection is shared by every screen of a clinic for each change.
+  - With `REDIS_URL`, events fan out to every instance through Redis pub/sub (`LIVE_EVENTS_FANOUT`).
+  - `/metrics` shows `clinicq_live_streams_open`.
+
 
 ## What the server sends (Issue 58)
 

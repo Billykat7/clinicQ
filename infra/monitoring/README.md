@@ -8,7 +8,7 @@ Issue 14's baseline. What to do when an alert arrives is in
 | Uptime | Gatus checks `/health` on staging and production every minute ([`gatus.yaml`](gatus.yaml)) | one message per incident and one on recovery, to the team channel, naming the responsible role |
 | Errors | `sentry-sdk` in the app (`src/core/telemetry.py`) sends unhandled exceptions to `SENTRY_DSN` | Sentry (hosted free tier) or GlitchTip (self-hosted, below), each event tagged `request_id`, `release`, `git_sha` |
 | Deploys | `deploy.yml` posts every deploy's result (`scripts/cd/notify_deploy.py`) | the team channel: environment, version, commit, result, release notes |
-| Metrics | `/metrics` (Prometheus text) with `METRICS_ENABLED=true`, behind `METRICS_TOKEN` | request rate, errors by status class and latency, by route template |
+| Metrics | `/metrics` (Prometheus text) with `METRICS_ENABLED=true`, behind `METRICS_TOKEN` | request rate, errors by status class and latency, by route template; `clinicq_live_streams_open`, the dashboards and waiting-room boards connected to the instance (Issue 57), which should rise and fall with the clinics' opening hours and never climb through a day |
 
 ## Running it
 

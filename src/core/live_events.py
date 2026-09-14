@@ -20,11 +20,13 @@ of Issue 58 to its own events; the envelope stays the same.)
 :class:`~src.core.domain_events.QueueChanged` to publish **after the commit**, and a subscriber below
 hands it to :data:`broker`. A change that rolls back is never announced.
 
-**The broker is in-process.** The production image runs one process per instance, and every
-subscriber of a clinic on that instance hears every event. Several instances behind a balancer would
-each hear only their own writes: that is what Issue 57's Redis fan-out adds, behind the same
-:meth:`SiteEventBroker.publish`. Until then the dashboard also re-reads the board on a slow timer, so
-a missed event costs freshness, never correctness.
+**One broker per process, joined by Redis.** Every subscriber of a clinic on an instance hears every
+event published on that instance. With ``REDIS_URL`` set, :func:`publish_live` also hands each event to
+:class:`RedisFanout` (Issue 57), which publishes it on :data:`FANOUT_CHANNEL`; every other instance's
+fan-out hears it there and gives it to its own broker, so a call made through one worker reaches boards
+connected to another. An instance ignores its own messages (it delivered them already), and a Redis
+outage is logged once and costs other instances' screens freshness, never this one's: the dashboard
+re-reads its cards on a slow timer and a board resyncs on every reconnection.
 
 **Connections are bounded and cleaned up.** Each clinic has at most :data:`MAX_SUBSCRIBERS_PER_SITE`
 open streams; a heartbeat every :data:`HEARTBEAT_SECONDS` both proves the connection is alive to the
@@ -38,14 +40,19 @@ import asyncio
 import json
 import logging
 import threading
-from collections.abc import AsyncIterator, Awaitable, Callable
+import time
+import uuid
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from itertools import count
 from typing import Any, Final
 
+from prometheus_client import Gauge
+
 from src.commons.enums import LiveEventType
 from src.commons.time import now_sast
+from src.core.config import Settings
 from src.core.domain_events import BoardSettingsChanged, QueueChanged, subscribe
 
 logger = logging.getLogger(__name__)
@@ -85,6 +92,9 @@ class LiveEvent:
     queue_id: str | None = None
     #: Extra fields for this type (the called number, say). Never patient data.
     extra: dict[str, Any] = field(default_factory=dict)
+    #: When this process learned of the event, on its monotonic clock: lets a board stream reuse a board
+    #: it projected after the event rather than project it again (Issue 57). Not sent.
+    stamp: float = field(default_factory=time.monotonic, compare=False)
 
     def payload(self) -> dict[str, Any]:
         """The JSON ``data`` of the event: ``type``, ``site_id``, ``at``, and what applies."""
@@ -97,6 +107,27 @@ class LiveEvent:
             body["queue_id"] = self.queue_id
         body.update(self.extra)
         return body
+
+    @classmethod
+    def from_payload(cls, body: dict[str, Any]) -> LiveEvent:
+        """The event another instance published (:meth:`payload` read back).
+
+        Raises:
+            ValueError: ``body`` is not an event's payload.
+            KeyError: A required field is missing.
+        """
+        extra = {
+            key: value
+            for key, value in body.items()
+            if key not in {"type", "site_id", "at", "queue_id"}
+        }
+        return cls(
+            type=LiveEventType(body["type"]),
+            site_id=str(body["site_id"]),
+            at=datetime.fromisoformat(body["at"]),
+            queue_id=body.get("queue_id"),
+            extra=extra,
+        )
 
 
 def format_event(event: LiveEvent, event_id: int) -> str:
@@ -201,7 +232,7 @@ class SiteEventBroker:
         """A new, increasing event id for this process."""
         return next(self._ids)
 
-    async def stream(
+    async def events(
         self,
         site_id: str,
         *,
@@ -210,8 +241,11 @@ class SiteEventBroker:
         accept: Callable[[LiveEvent], bool] | None = None,
         heartbeat_seconds: float = HEARTBEAT_SECONDS,
         access_check_seconds: float = ACCESS_CHECK_SECONDS,
-    ) -> AsyncIterator[str]:
-        """The server-sent events of one clinic, until the client goes or loses its access.
+    ) -> AsyncGenerator[LiveEvent]:
+        """The events of one clinic, as objects, until the client goes or loses its access.
+
+        What :meth:`stream` formats. A stream that sends something other than the event itself (the
+        waiting-room board's, Issue 57, which sends the board as it now is) reads these instead.
 
         Args:
             site_id: The clinic whose events to send.
@@ -225,16 +259,14 @@ class SiteEventBroker:
             access_check_seconds: How long between two asks of ``still_allowed``.
 
         Yields:
-            Formatted events, starting with a heartbeat so the client knows the stream is open.
+            Events, starting with a heartbeat so the client knows the stream is open.
 
         Raises:
             TooManySubscribersError: The clinic is at its limit (raised before anything is sent).
         """
         subscriber = self.subscribe(site_id)
         try:
-            yield format_event(
-                LiveEvent(LiveEventType.HEARTBEAT, site_id), self.next_id()
-            )
+            yield LiveEvent(LiveEventType.HEARTBEAT, site_id)
             loop = asyncio.get_running_loop()
             last_sent = last_checked = loop.time()
             while True:
@@ -259,20 +291,237 @@ class SiteEventBroker:
                 if accept is not None and not accept(event):
                     continue
                 last_sent = loop.time()
-                yield format_event(event, self.next_id())
+                yield event
         finally:
             self.unsubscribe(site_id, subscriber)
+
+    async def stream(
+        self,
+        site_id: str,
+        *,
+        is_disconnected: Callable[[], Awaitable[bool]],
+        still_allowed: Callable[[], Awaitable[bool]] | None = None,
+        accept: Callable[[LiveEvent], bool] | None = None,
+        heartbeat_seconds: float = HEARTBEAT_SECONDS,
+        access_check_seconds: float = ACCESS_CHECK_SECONDS,
+    ) -> AsyncIterator[str]:
+        """The server-sent events of one clinic, formatted: :meth:`events` on the wire.
+
+        Takes the same arguments as :meth:`events`, and raises the same
+        :class:`TooManySubscribersError` before anything is sent.
+        """
+        events = self.events(
+            site_id,
+            is_disconnected=is_disconnected,
+            still_allowed=still_allowed,
+            accept=accept,
+            heartbeat_seconds=heartbeat_seconds,
+            access_check_seconds=access_check_seconds,
+        )
+        try:
+            async for event in events:
+                yield format_event(event, self.next_id())
+        finally:
+            await events.aclose()
 
 
 #: The process's broker: every stream subscribes to it, every committed change is published to it.
 broker = SiteEventBroker()
+
+#: How many streams are open on this instance, every clinic and every kind: what an operator watches to
+#: see that connections do not pile up over a day (Issue 57). On ``/metrics``.
+STREAMS_OPEN = Gauge(
+    "clinicq_live_streams_open",
+    "Open live-event streams (dashboards and waiting-room boards) on this instance.",
+)
+STREAMS_OPEN.set_function(lambda: broker.subscriber_count())
+
+# --------------------------------------------------------------------------------------
+# Fan-out across instances (Issue 57)
+# --------------------------------------------------------------------------------------
+
+#: The Redis pub/sub channel every instance publishes its clinics' events on.
+FANOUT_CHANNEL: Final = "clinicq:live-events"
+#: How long the listener waits before subscribing again after Redis failed.
+FANOUT_RETRY_SECONDS: Final = 5.0
+
+
+class RedisFanout:
+    """Hands this instance's events to the others through Redis pub/sub, and theirs to its broker.
+
+    ``publish`` never raises and never blocks for long: a failed publish is logged once per outage, and
+    this instance's own screens already have the event. A daemon thread listens on the channel and
+    re-subscribes after a failure. Messages carry the publishing instance's ``origin`` so an instance
+    skips its own.
+    """
+
+    def __init__(
+        self,
+        client: Any,
+        target: SiteEventBroker,
+        *,
+        channel: str = FANOUT_CHANNEL,
+        origin: str | None = None,
+        retry_seconds: float = FANOUT_RETRY_SECONDS,
+    ) -> None:
+        """Wrap a ``redis.Redis``-shaped client; events heard on ``channel`` go to ``target``."""
+        self._client = client
+        self._target = target
+        self._channel = channel
+        self.origin = origin or uuid.uuid4().hex
+        self._retry_seconds = retry_seconds
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._degraded = False
+        self._lock = threading.Lock()
+
+    def publish(self, event: LiveEvent) -> None:
+        """Publish ``event`` for the other instances. Never raises."""
+        message = json.dumps(
+            {"origin": self.origin, "event": event.payload()},
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+        try:
+            self._client.publish(self._channel, message)
+        except (
+            Exception
+        ) as exc:  # any transport failure: this instance already delivered it
+            self._failed(exc)
+            return
+        self._recovered()
+
+    def deliver(self, raw: str | bytes) -> bool:
+        """Give one message from the channel to the broker; ``False`` when it was ours or unreadable."""
+        try:
+            body = json.loads(raw)
+            if body.get("origin") == self.origin:
+                return False
+            event = LiveEvent.from_payload(body["event"])
+        except ValueError, KeyError, TypeError, AttributeError:
+            logger.warning(
+                "Ignored an unreadable live-event message on %s.", self._channel
+            )
+            return False
+        self._target.publish(event)
+        return True
+
+    def start(self) -> None:
+        """Start listening, on a daemon thread. Safe to call twice."""
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._stop.clear()
+        self._thread = threading.Thread(
+            target=self._listen, name="live-events-fanout", daemon=True
+        )
+        self._thread.start()
+
+    def stop(self, timeout: float = 2.0) -> None:
+        """Stop listening and wait up to ``timeout`` seconds for the thread."""
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout)
+        self._thread = None
+
+    @property
+    def listening(self) -> bool:
+        """Whether the listener thread is running."""
+        return self._thread is not None and self._thread.is_alive()
+
+    def _listen(self) -> None:
+        """Subscribe and relay until stopped; after a failure, wait and subscribe again."""
+        while not self._stop.is_set():
+            pubsub = None
+            try:
+                pubsub = self._client.pubsub(ignore_subscribe_messages=True)
+                pubsub.subscribe(self._channel)
+                self._recovered()
+                while not self._stop.is_set():
+                    message = pubsub.get_message(timeout=1.0)
+                    if message and message.get("type") == "message":
+                        self.deliver(message["data"])
+            except Exception as exc:
+                self._failed(exc)
+                self._stop.wait(self._retry_seconds)
+            finally:
+                if pubsub is not None:
+                    try:
+                        pubsub.close()
+                    except Exception:  # closing a broken connection may fail too
+                        logger.debug("Closing the live-event subscription failed.")
+
+    def _failed(self, exc: Exception) -> None:
+        with self._lock:
+            if self._degraded:
+                return
+            self._degraded = True
+        logger.warning(
+            "Live events cannot reach Redis (%s: %s): screens on other instances will hear this "
+            "instance's changes only when it comes back.",
+            type(exc).__name__,
+            exc,
+        )
+
+    def _recovered(self) -> None:
+        with self._lock:
+            if not self._degraded:
+                return
+            self._degraded = False
+        logger.info("Live events reach Redis again.")
+
+
+_fanout: RedisFanout | None = None
+
+
+def start_fanout(settings: Settings) -> RedisFanout | None:
+    """Start the fan-out the settings ask for (``REDIS_URL`` and ``LIVE_EVENTS_FANOUT``), or none."""
+    global _fanout
+    if _fanout is not None or not (settings.redis_url and settings.live_events_fanout):
+        return _fanout
+    try:
+        import redis  # lazily, like the snapshot cache: a deployment without Redis needs no driver
+    except ImportError:
+        logger.warning(
+            "REDIS_URL is set but the redis package is missing; no live-event fan-out."
+        )
+        return None
+    try:
+        client = redis.Redis.from_url(
+            settings.redis_url,
+            socket_connect_timeout=settings.redis_probe_timeout_seconds,
+            health_check_interval=30,
+            decode_responses=True,
+        )
+    except ValueError as exc:
+        logger.warning(
+            "REDIS_URL is not a usable Redis URL (%s); no live-event fan-out.", exc
+        )
+        return None
+    _fanout = RedisFanout(client, broker)
+    _fanout.start()
+    return _fanout
+
+
+def stop_fanout() -> None:
+    """Stop the fan-out, if one is running."""
+    global _fanout
+    if _fanout is not None:
+        _fanout.stop()
+        _fanout = None
+
+
+def publish_live(event: LiveEvent) -> None:
+    """Publish ``event`` to this instance's streams, and to the other instances' through Redis."""
+    broker.publish(event)
+    if _fanout is not None:
+        _fanout.publish(event)
 
 
 @subscribe(QueueChanged)
 def _queue_changed(event: QueueChanged) -> None:
     """A committed queue change becomes ``ticket.called`` (with the number) or ``queue.updated``."""
     if event.called_number is not None:
-        broker.publish(
+        publish_live(
             LiveEvent(
                 LiveEventType.TICKET_CALLED,
                 event.site_id,
@@ -281,7 +530,7 @@ def _queue_changed(event: QueueChanged) -> None:
             )
         )
         return
-    broker.publish(
+    publish_live(
         LiveEvent(LiveEventType.QUEUE_UPDATED, event.site_id, queue_id=event.queue_id)
     )
 
@@ -289,4 +538,4 @@ def _queue_changed(event: QueueChanged) -> None:
 @subscribe(BoardSettingsChanged)
 def _board_settings_changed(event: BoardSettingsChanged) -> None:
     """A committed display-settings change becomes ``board.config_changed``."""
-    broker.publish(LiveEvent(LiveEventType.BOARD_CONFIG_CHANGED, event.site_id))
+    publish_live(LiveEvent(LiveEventType.BOARD_CONFIG_CHANGED, event.site_id))

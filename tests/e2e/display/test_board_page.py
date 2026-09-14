@@ -28,7 +28,8 @@ from typing import Any
 import pytest
 
 from src.commons.time import now_sast
-from src.web.display import HIGHLIGHT_SECONDS, PAGE_SECONDS, POLL_SECONDS
+from src.web import display as display_routes
+from src.web.display import HIGHLIGHT_SECONDS, PAGE_SECONDS
 
 pytestmark = pytest.mark.postgres
 
@@ -177,7 +178,7 @@ def test_a_new_call_is_unmistakable_with_motion_and_just_as_clear_without_it(
 def test_the_highlight_ends_and_the_board_picks_up_the_next_call_on_its_own(
     board_day: SimpleNamespace,
 ) -> None:
-    """No reload: the poll brings the next call, and the highlight fades on the server's clock."""
+    """No reload: the stream brings the next call, and the highlight fades on the server's clock."""
     triage, *_ = board_day.open_queues(1)
     board_day.issue(triage, 3)
     first = board_day.call(triage)
@@ -189,7 +190,6 @@ def test_the_highlight_ends_and_the_board_picks_up_the_next_call_on_its_own(
     _until(page, "() => !document.querySelector('.serving.is-new')")
 
     second = board_day.call(triage)
-    page.clock.fast_forward(int((POLL_SECONDS + 1) * 1000))
     page.locator(".serving.is-new .serving-number", has_text=second).wait_for()
     assert page.locator(".panel-also").text_content() == f"Also called: {first}"
 
@@ -217,15 +217,21 @@ def test_more_queues_than_fit_turn_pages_and_a_new_call_brings_its_page_forward(
     page.locator("[data-board-pages]", has_text="Page 1 of 2").wait_for()
 
     called = board_day.call(queues[4])
-    page.clock.fast_forward(int((POLL_SECONDS + 1) * 1000))
     page.locator(".serving.is-new .serving-number", has_text=called).wait_for()
     assert pager.text_content() == "Page 2 of 2"
 
 
 def test_eight_hours_of_calls_leave_the_heap_the_dom_and_the_layout_where_they_started(
-    board_day: SimpleNamespace,
+    board_day: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A clinic day on the page's clock: a call every three minutes for eight hours, measured after GC."""
+    """A clinic day on the page's clock: a call every three minutes for eight hours, measured after GC.
+
+    Every call arrives over one live stream that stays open all day. The page is told to expect a beat
+    only once a day: its clock runs eight hours in about a minute while the server's beats arrive in
+    real time, so an honest watchdog would otherwise reconnect on every page of fast-forwarded time.
+    Reconnection is ``test_board_live.py``'s subject.
+    """
+    monkeypatch.setattr(display_routes, "BOARD_HEARTBEAT_SECONDS", 24 * 3600)
     queues = board_day.open_queues(4)
     for queue_id in queues:
         board_day.issue(queue_id, 4)
@@ -259,10 +265,9 @@ def test_eight_hours_of_calls_leave_the_heap_the_dom_and_the_layout_where_they_s
         queue_id = queues[index % len(queues)]
         board_day.issue(queue_id, 1)
         number = board_day.call(queue_id, finish_previous=True)
-        page.clock.fast_forward(int((POLL_SECONDS + 1) * 1000))
         _until(page, _SHOWS_NUMBER, number)
-        # The rest of the three minutes: every tick, highlight change and notice change in it.
-        page.clock.run_for(180_000 - int((POLL_SECONDS + 1) * 1000))
+        # The three minutes: every tick, highlight change, page turn and notice change in them.
+        page.clock.run_for(180_000)
 
     for index in range(10):  # warm up: the first half hour
         one_call(index)

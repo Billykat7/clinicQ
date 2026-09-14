@@ -9,10 +9,13 @@ Three kinds of check, each with a fixture proving it can fail (a guard that cann
   however deeply nested, raises :class:`UnprojectedBoardDataError` and nothing is rendered.
 * **At runtime, the payload lock.** :meth:`BoardState.payload` refuses to serialise a personal key the
   display mode forbids, so a projection bug is an error, never a name on a screen.
+* **At runtime, the stream door.** :func:`~src.modules.display.board_state.board_event` checks the
+  whole event it builds, so a stream handed a ticket raises instead of sending it (Issue 57).
 * **In the source.** ``displayed_select`` (the only query helper that reaches a board's tickets) and
   ``BoardTicket(...)`` appear only in the projection module; a ``display/`` template is rendered only
-  through ``board_template_response``; and the projection reads consent through ``board_projection``,
-  which asks ``has_consent``.
+  through ``board_template_response``; the board stream formats only ``state_event``, ``board_event``
+  and heartbeats; and the projection reads consent through ``board_projection``, which asks
+  ``has_consent``.
 
 No HTML is read: the template door refuses before anything renders
 (``docs/IDE/RULES/testing-strategy.mdc``).
@@ -28,9 +31,11 @@ from types import SimpleNamespace
 import pytest
 from starlette.requests import Request
 
-from src.commons.enums import BoardLanguage, DisplayMode, TicketStatus
+from src.commons.enums import BoardLanguage, DisplayMode, LiveEventType, TicketStatus
 from src.commons.time import APP_TIMEZONE
+from src.core.live_events import LiveEvent
 from src.database.models import Patient, Site, Ticket
+from src.modules.display.board_state import board_event
 from src.modules.display.projection import (
     BoardPrivacyError,
     BoardQueue,
@@ -108,6 +113,17 @@ def test_projected_data_and_plain_values_pass_the_door() -> None:
             "limits": (3, 5),
         }
     )
+
+
+def test_a_board_stream_handed_raw_data_refuses_before_sending() -> None:
+    """The stream's guard: an event built from anything but the projection is an error, not a message."""
+    called = LiveEvent(LiveEventType.TICKET_CALLED, "site", queue_id="q")
+    with pytest.raises(UnprojectedBoardDataError, match=r"stream\['board'\]"):
+        board_event(called, {"queues": [Ticket(number="A001")]})  # type: ignore[dict-item]
+    sent = board_event(
+        called, _state(mode=DisplayMode.NUMBER_ONLY, tickets=()).payload()
+    )
+    assert set(sent.payload()) == {"type", "site_id", "at", "queue_id", "board"}
 
 
 # --- the payload lock ----------------------------------------------------------------------
@@ -219,6 +235,49 @@ def test_a_display_template_is_rendered_only_through_the_guarded_renderer() -> N
     assert offenders == [], (
         f"render display/ templates with board_template_response: {offenders}"
     )
+
+
+#: What the board stream may format: the full board, a change with its board, or a bare heartbeat.
+_STREAM_BUILDERS = frozenset({"state_event", "board_event"})
+
+
+def stream_sends_unprojected(source: str) -> list[int]:
+    """Lines where a board stream formats something other than a projected event or a heartbeat.
+
+    ``format_event(state_event(...))`` and ``format_event(board_event(...))`` are projected. A bare
+    event is allowed only inside the ``if event.type is LiveEventType.HEARTBEAT`` branch.
+    """
+    tree = ast.parse(source)
+    heartbeat_calls: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.If) and "HEARTBEAT" in ast.unparse(node.test):
+            heartbeat_calls.update(
+                id(child) for stmt in node.body for child in ast.walk(stmt)
+            )
+    found: list[int] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or _call_name(node) != "format_event":
+            continue
+        argument = node.args[0] if node.args else None
+        projected = (
+            isinstance(argument, ast.Call) and _call_name(argument) in _STREAM_BUILDERS
+        )
+        if not projected and id(node) not in heartbeat_calls:
+            found.append(node.lineno)
+    return found
+
+
+def test_the_board_stream_sends_only_projected_events_and_heartbeats() -> None:
+    """The stream route formats nothing a guard has not checked (Issue 57)."""
+    stream = _SRC / "web" / "display_stream.py"
+    assert stream_sends_unprojected(stream.read_text(encoding="utf-8")) == []
+    bypass = (
+        "async def body():\n"
+        "    async for event in events:\n"
+        "        rows = db.execute(select(Ticket)).all()\n"
+        "        yield format_event(LiveEvent(event.type, site_id, extra={'rows': rows}), 1)\n"
+    )
+    assert stream_sends_unprojected(bypass) == [4]
 
 
 def test_the_projection_asks_for_consent_on_every_shown_ticket() -> None:

@@ -1,9 +1,9 @@
 /* The waiting-room board (Issue 56): draws now serving and up next for every queue, all day.
  *
  * The page carries the privacy projection's payload (Issue 58) in data-initial, so the screen is full
- * the moment it loads; the script then asks data-state-url for the board again every
- * data-poll-seconds, drawing each answer as it comes (Issue 57 adds a live stream on top). The payload
- * is the only thing drawn: a ticket's name or reason appears only when the server put it there.
+ * the moment it loads. After that, board-live.js hands it each new board from the live stream, or from
+ * /state while the stream is down (Issue 57), through window.ClinicQBoard.apply. The payload is the
+ * only thing drawn: a ticket's name or reason appears only when the server put it there.
  *
  * What it does with the payload:
  *
@@ -19,9 +19,7 @@
  *     under reduced motion; board.css).
  *
  * Built to run for days on a small box: the panels are kept and updated rather than rebuilt, no
- * listener is added after start-up, there is one poll in flight at most, and the only timers are the
- * poll, a one-second tick and the notice change. window.ClinicQBoard lets the live stream hand the page
- * a new payload.
+ * listener is added after start-up, and the only timers are a one-second tick and the notice change.
  *
  * External file with no inline handlers: the CSP allows script only from 'self'.
  */
@@ -45,8 +43,6 @@
     return (isFinite(value) && value > 0 ? value : fallback) * 1000;
   }
 
-  var STATE_URL = root.getAttribute('data-state-url');
-  var POLL_MS = seconds('data-poll-seconds', 10);
   var HIGHLIGHT_MS = seconds('data-highlight-seconds', 20);
   var PAGE_MS = seconds('data-page-seconds', 15);
   var MESSAGE_MS = seconds('data-message-seconds', 12);
@@ -63,7 +59,6 @@
   var pageShownAt = Date.now();
   var panels = {}; // queue id -> its panel element, kept across updates
   var announced = {}; // "number@called_at" -> true, so each call is said once
-  var polling = false;
 
   function serverNow() {
     return Date.now() + clockOffset;
@@ -265,25 +260,6 @@
     }
   }
 
-  function poll() {
-    if (polling) return;
-    polling = true;
-    fetch(STATE_URL, { cache: 'no-store', credentials: 'same-origin', headers: { Accept: 'application/json' } })
-      .then(function (response) {
-        return response.ok ? response.json() : null;
-      })
-      .then(function (payload) {
-        if (payload) apply(payload);
-      })
-      .catch(function () {
-        // Keep showing the last board. Saying how old it is, and recovering, is Issue 62's.
-      })
-      .then(function () {
-        polling = false;
-        setTimeout(poll, POLL_MS);
-      });
-  }
-
   function rotateMessages() {
     if (!ticker) return;
     var messages;
@@ -307,10 +283,9 @@
   try {
     apply(JSON.parse(root.getAttribute('data-initial') || 'null'));
   } catch (error) {
-    // A page without a usable payload still polls, and draws the first answer.
+    // A page without a usable payload draws the first board the stream or /state brings.
   }
   setInterval(tick, TICK_MS);
-  setTimeout(poll, POLL_MS);
   rotateMessages();
 
   window.ClinicQBoard = {

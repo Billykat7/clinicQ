@@ -31,6 +31,7 @@ from src.core.nav_visibility import peek_user_from_refresh_cookie
 from src.core.site_scope import permitted_site_ids, site_not_found
 from src.database.models import Site
 from src.database.session import get_db
+from src.modules.display.board_state import BOARD_HEARTBEAT_SECONDS
 from src.modules.display.enums import BoardViewer
 from src.modules.display.messages import health_messages
 from src.modules.display.projection import (
@@ -48,7 +49,7 @@ DbSession = Annotated[Session, Depends(get_db)]
 #: A board's answers change with every call, and may carry a name under a wider mode: never cached.
 NO_STORE: dict[str, str] = {"Cache-Control": "no-store"}
 
-#: How often the page asks for the board again while it has no live stream (Issue 57 adds one).
+#: How often the page asks for the board while its live stream is down (Issue 57).
 POLL_SECONDS: Final = 10
 #: How long a newly called ticket stays highlighted, counted from the call on the server's clock.
 HIGHLIGHT_SECONDS: Final = 20
@@ -114,8 +115,9 @@ def board_state(site_id: str, request: Request, db: DbSession) -> Response:
 def board_page(site_id: str, request: Request, db: DbSession) -> Response:
     """The waiting-room board: now serving and up next per queue, a clock and the clinic (Issue 56).
 
-    The page carries the projected payload it first draws, so the screen is full the moment it loads,
-    and ``board.js`` asks ``/state`` again every :data:`POLL_SECONDS`. A clinic with no public board
+    The page carries the projected payload it first draws, so the screen is full the moment it loads;
+    ``board-live.js`` then follows the live stream (Issue 57), falling back to ``/state`` every
+    :data:`POLL_SECONDS` while the stream is down. A clinic with no public board
     gets a plain "not available" screen with the same 404 an unknown id gets.
     """
     site = displayed_site(db, site_id)
@@ -136,6 +138,8 @@ def board_page(site_id: str, request: Request, db: DbSession) -> Response:
             "board": state,
             "payload": state.payload(),
             "state_url": request.url_for("board_state", site_id=site.id).path,
+            "stream_url": request.url_for("board_stream", site_id=site.id).path,
+            "heartbeat_seconds": BOARD_HEARTBEAT_SECONDS,
             "messages": messages if get_settings().board_health_ticker else (),
             "message_language": message_language,
             "poll_seconds": POLL_SECONDS,

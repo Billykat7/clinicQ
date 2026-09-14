@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Status** | ✅ Done: issues 48–55 closed with the merge of the Issue 55 pull request, release note [`v0.7.0`](../RELEASES/RELEASE_v0_7_0.md), whose tag follows that merge. Five exit criteria are met; the sixth (a call reaching the patient's phone and the waiting-room board within 2 seconds) is met for the staff screens and waits for Issues 57 and 68 for the other two |
+| **Status** | ✅ Done: issues 48–55 closed with the merge of the Issue 55 pull request, release note [`v0.7.0`](../RELEASES/RELEASE_v0_7_0.md), whose tag follows that merge. Five exit criteria are met; the sixth (a call reaching the patient's phone and the waiting-room board within 2 seconds) is met for the staff screens and, since Issue 57, the waiting-room board, and waits for Issue 68 for the patient's phone |
 | **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (8/8 issues) |
 | **Sprints** | 8–9 (weeks 15–18), semester 2. The sprint plan spreads its issues over sprints 3–11: some start early against stubs and some are scheduled after this window, which moves the milestone's close (and its tag) to sprint 11 (see the table) |
 | **Release tag** | `v0.7.0` |
@@ -93,9 +93,9 @@ flowchart LR
 - [x] A receptionist can issue a walk-in ticket in under 10 seconds without using a keyboard shortcut
   (a name and Enter: 0.42–2.53 s in four keyboard-only flows, #176; a browser test in `tests/e2e`)
 - [ ] Call Next updates the patient's phone and the waiting-room board within 2 seconds. **Met for the
-  staff screens only**: a second device's front desk changed 320–369 ms after the click (#175). The
-  waiting-room board (Issue 57) and the patient's ticket page (Issue 68) do not exist yet; every call is
-  already published after its commit for them to listen to
+  staff screens and the board**: a second device's front desk changed 320–369 ms after the click (#175),
+  and since Issue 57 the waiting-room board shows the call 42–55 ms after the commit (a browser test in
+  `tests/e2e/display`). The patient's ticket page (Issue 68) does not exist yet
 - [x] A nurse signed into Room 2 sees only Room 2's queue and cannot call another room's ticket
   (another room's calls answer 404, #174 and #175)
 - [x] Losing the network shows an explicit 'reconnecting, data from HH:MM' banner, never a frozen board
