@@ -1,4 +1,4 @@
-{% extends "dashboard/base.html" %}
+{% extends "dashboard/settings_base.html" %}
 
 {# The waiting-room board's settings (Issue 27). This page exists to make one decision hard to
    make by accident: what a screen in a public room says about a named person. Everything it shows
@@ -10,13 +10,10 @@
   <script src="/static/js/site-display-settings.js" defer></script>
 {% endblock %}
 
-{% block clinic_content %}
-<div class="page-head">
-  <h1>Waiting-room screen</h1>
-  <p class="lead">What the screen in the waiting room shows about the people waiting.</p>
-  {% include "partials/breadcrumbs.html" %}
-</div>
+{% block settings_content %}
+<p class="lead settings-lead">What the screen in the waiting room shows about the people waiting.</p>
 
+<div class="settings-display-layout">
 <div class="card" data-site-id="{{ site.id }}" id="display-settings">
   <h2>{{ site.name }}</h2>
   <p class="card-sub">Every clinic starts by showing ticket numbers only. Changing that puts
@@ -88,5 +85,31 @@
       <span class="msg" id="ds-msg" aria-live="polite"></span>
     </div>
   </form>
+</div>
+
+{# The live preview (Issue 54). Every mode is rendered here, on the server, through the board's own
+   display rule (src/modules/patients/consent.py: project_entry), for four made-up patients: one who
+   agreed to show their name and reason, one who agreed to the name only, one who agreed to neither,
+   and a walk-in with no record. The page shows the set matching the form as it changes. #}
+<section class="card display-preview" aria-labelledby="dp-title" aria-live="polite">
+  <h2 id="dp-title">What the screen will show</h2>
+  <p class="card-sub">Four example patients, as the waiting room would see them with the choice above. Nothing is saved until you press Save.</p>
+  {% for reason_key, modes in preview.items() %}
+  {% for mode, rows in modes.items() %}
+  <div class="preview-screen" data-preview-mode="{{ mode }}" data-preview-reason="{{ 'with' if reason_key == 'with_reason' else 'without' }}"{% if not (mode == current_mode and reason_key == 'without_reason') %} hidden{% endif %}>
+    <ol class="preview-rows">
+      {% for row in rows %}
+      <li>
+        <span class="preview-number">{{ row.ticket_number }}</span>
+        {% if row.name %}<span class="preview-name">{{ row.name }}</span>{% endif %}
+        {% if row.comment %}<span class="preview-comment">{{ row.comment }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+  </div>
+  {% endfor %}
+  {% endfor %}
+  <p class="hint">A patient's name appears only if the screen is set to show names and that patient agreed to it; a reason, only beside a full name and with its own agreement.</p>
+</section>
 </div>
 {% endblock %}

@@ -17,7 +17,15 @@ not by their job title: the navigation is the RBAC nav registry evaluated with t
 that clinic, and every page re-checks the same grant, so a screen missing from the menu also refuses
 its URL. Someone who works at two clinics (a receptionist at one and the manager of another, say)
 switches between them from the clinic name in the header without signing in again, and lands on the
-same screen at the other clinic when it is theirs there. Every screen is keyboard-reachable (`g`
+same screen at the other clinic when it is theirs there.
+
+The clinic manager runs their own clinic from **Clinic settings**, one tab per job: the profile (with a
+map pin that patients' nearby search reads the moment it is saved), opening hours and public holidays
+with a one-tap temporary closure, the queues and the services (add, rename, reorder, deactivate), the
+staff (invitations, roles at this clinic, rooms, switching an account off) and the waiting-room screen,
+whose privacy warning sits beside a live preview of what the screen would show. Every tab saves through
+the same API as any other client, so every change is checked and recorded the same way; anything that
+takes something away asks first, and another clinic's settings are simply not found. Every screen is keyboard-reachable (`g`
 then a key, `?` for the list), and the frame fits a 1366×768 reception PC with no sideways scrolling.
 
 ## Front-desk queue view

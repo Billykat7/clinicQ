@@ -209,7 +209,7 @@ def test_the_editor_page_is_served_only_with_the_feature_switched_on(
     clinics: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """``PAYMENT_FILTER_ENABLED`` off: the page is a 404. On: the manager gets it."""
-    from src.web.dashboard import routes
+    from src.web.dashboard import settings as routes
 
     page = f"/dashboard/sites/{clinics.site_a}/settings/payment"
     manager = clinics.client("manager.a@clinicq.example")

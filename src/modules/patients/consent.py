@@ -177,6 +177,39 @@ def _short_name(display_name: str) -> str:
     return f"{first} {last[0]}." if last else first
 
 
+def project_entry(
+    *,
+    ticket_number: str,
+    display_mode: DisplayMode,
+    display_name: str | None,
+    comment: str | None,
+    name_consented: bool,
+    comment_consented: bool,
+) -> BoardEntry:
+    """The display rule itself, given the answers :func:`board_projection` reads (Issue 54).
+
+    Pure, so the settings screen's live preview renders a sample row through the very rule the
+    board uses instead of a copy of it: the mode decides whether a name may appear and in which
+    form, consent decides whether this person's name and reason may, and only a full-name mode ever
+    carries a reason. :func:`board_projection` is the only caller that reads real consent.
+    """
+    if (
+        display_mode is DisplayMode.NUMBER_ONLY
+        or not display_name
+        or not name_consented
+    ):
+        return BoardEntry(ticket_number=ticket_number)
+    name = (
+        display_name if display_mode is DisplayMode.FULL else _short_name(display_name)
+    )
+    shown_comment = (
+        comment
+        if comment and display_mode is DisplayMode.FULL and comment_consented
+        else None
+    )
+    return BoardEntry(ticket_number=ticket_number, name=name, comment=shown_comment)
+
+
 def board_projection(
     db: Session,
     patient: Patient | None,
@@ -196,23 +229,70 @@ def board_projection(
       effect on the next render.
 
     A walk-in with no patient record shows a number, which is what the default mode shows anyway.
+    Consent is only read when the mode could show something, so ``NUMBER_ONLY`` costs no query.
     """
     if patient is None or display_mode is DisplayMode.NUMBER_ONLY:
         return BoardEntry(ticket_number=ticket_number)
-    if not patient.display_name or not has_consent(
+    name_consented = bool(patient.display_name) and has_consent(
         db, patient.id, ConsentPurpose.DISPLAY_NAME
-    ):
-        return BoardEntry(ticket_number=ticket_number)
-    name = (
-        patient.display_name
-        if display_mode is DisplayMode.FULL
-        else _short_name(patient.display_name)
     )
-    shown_comment = (
-        comment
-        if comment
-        and display_mode is DisplayMode.FULL
-        and has_consent(db, patient.id, ConsentPurpose.DISPLAY_COMMENT)
-        else None
+    return project_entry(
+        ticket_number=ticket_number,
+        display_mode=display_mode,
+        display_name=patient.display_name,
+        comment=comment,
+        name_consented=name_consented,
+        comment_consented=bool(
+            name_consented
+            and comment
+            and display_mode is DisplayMode.FULL
+            and has_consent(db, patient.id, ConsentPurpose.DISPLAY_COMMENT)
+        ),
     )
-    return BoardEntry(ticket_number=ticket_number, name=name, comment=shown_comment)
+
+
+@dataclass(frozen=True, slots=True)
+class PreviewSample:
+    """A made-up patient for the settings preview: what they gave, and what they agreed to."""
+
+    ticket_number: str
+    display_name: str | None
+    comment: str | None
+    name_consented: bool
+    comment_consented: bool
+
+
+#: The display-settings preview's patients (Issue 54). Made up, and chosen to show each case: a name
+#: and reason both agreed to, a name agreed to without the reason, a patient who agreed to neither,
+#: and a walk-in with no record. Here, beside the rule, because outside this module nothing may read
+#: a patient's name (``tests/unit/security/test_consent_is_not_bypassable.py``).
+PREVIEW_SAMPLES: tuple[PreviewSample, ...] = (
+    PreviewSample("T012", "Thandiwe Mokoena", "Chest pain", True, True),
+    PreviewSample("T013", "Sipho Dlamini", "Repeat prescription", True, False),
+    PreviewSample("T014", "Lerato Khumalo", "Rash", False, False),
+    PreviewSample("P015", None, None, False, False),
+)
+
+
+def display_preview(show_comment: bool) -> dict[str, list[BoardEntry]]:
+    """``{mode: entries}``: the sample patients as the board would show them under each mode.
+
+    Every mode at once, through :func:`project_entry`, the board's own rule, so the settings screen
+    can switch between them as the manager changes the form without a request and without a copy of
+    the rule in the browser. ``show_comment`` is the clinic's "also show the reason" switch, applied
+    on top the way the saved setting will be.
+    """
+    return {
+        mode.value: [
+            project_entry(
+                ticket_number=sample.ticket_number,
+                display_mode=mode,
+                display_name=sample.display_name,
+                comment=sample.comment if show_comment else None,
+                name_consented=sample.name_consented,
+                comment_consented=sample.comment_consented,
+            )
+            for sample in PREVIEW_SAMPLES
+        ]
+        for mode in DisplayMode
+    }

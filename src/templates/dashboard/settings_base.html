@@ -1,0 +1,38 @@
+{% extends "dashboard/base.html" %}
+{#- The clinic settings frame (Issue 54): the tab bar, the confirmation prompt and the shared script.
+
+    Each tab is its own URL, and only the tabs whose grant the caller holds at this clinic render
+    (``settings_tabs``, from src/web/dashboard/settings.py). Every write on every tab is a request to
+    the clinic's JSON API, made by dashboard-settings.js; the API checks the grant, validates the
+    change and records it in the audit log. -#}
+
+{% block layout_head %}
+  {{ super() }}
+  <script src="/static/js/admin-crud.js" defer></script>
+  <script src="/static/js/dashboard-settings.js" defer></script>
+{% endblock %}
+
+{% block clinic_content %}
+<div class="tabs-scroll settings-tabs">
+  <nav class="tabs tabs-sub" aria-label="Clinic settings">
+    {% for tab in settings_tabs %}
+    <a class="tab{% if tab.active %} active{% endif %}" href="{{ tab.href }}"{% if tab.active %} aria-current="page"{% endif %}>{{ tab.label }}</a>
+    {% endfor %}
+  </nav>
+</div>
+
+{% block settings_content %}{% endblock %}
+
+{# Every destructive change asks first, in words that say what happens. The action's own button
+   carries the sentence (data-confirm); this dialog only shows it. #}
+<dialog class="move-dialog confirm-dialog" id="confirm-dialog" aria-labelledby="confirm-title">
+  <form method="dialog">
+    <h2 id="confirm-title">Are you sure?</h2>
+    <p id="confirm-text"></p>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-danger" value="confirm" id="confirm-yes">Yes, go ahead</button>
+      <button type="submit" class="btn btn-quiet" value="cancel">Cancel</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}

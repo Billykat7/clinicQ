@@ -1,4 +1,4 @@
-{% extends "dashboard/base.html" %}
+{% extends "dashboard/settings_base.html" %}
 
 {# A private clinic's payment methods and medical aids (Issue 37). A self-reported directory tag:
    patients see it with "reported by the clinic, please confirm", and nothing checks anyone's cover.
@@ -11,12 +11,8 @@
   <script src="/static/js/site-payment-profile.js" defer></script>
 {% endblock %}
 
-{% block clinic_content %}
-<div class="page-head">
-  <h1>Payment and medical aid</h1>
-  <p class="lead">What your clinic accepts, as patients will see it under Private.</p>
-  {% include "partials/breadcrumbs.html" %}
-</div>
+{% block settings_content %}
+<p class="lead settings-lead">What your clinic accepts, as patients will see it under Private.</p>
 
 <div class="card" data-site-id="{{ site.id }}" id="payment-profile">
   <h2>{{ site.name }}</h2>

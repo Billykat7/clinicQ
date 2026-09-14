@@ -1,0 +1,169 @@
+{% extends "dashboard/settings_base.html" %}
+{#- The clinic's queues (Issue 54 over Issue 25's API), as a server-rendered list.
+
+    docs/IDE/RULES/list-view-ui-pattern.mdc: the filter bar is a GET form, the headers sort the rows
+    in place, and a row opens its queue beside the list to rename, change, deactivate or bring back.
+    "Add a queue" opens the same panel empty. The order is changed with the arrows and saved in one
+    request, because the order of a clinic's queues is one decision. Deactivating keeps every ticket
+    the queue ever had, and asks first. -#}
+
+{% block settings_content %}
+<form class="filter-bar" data-filter-key="settings-queues" method="get">
+  <div class="filter-bar-head">
+    <button type="button" class="filter-bar-toggle" aria-expanded="true" aria-controls="sq-filter-body">Filters</button>
+    <span class="filter-bar-summary" hidden></span>
+    <div class="filter-bar-actions">
+      <a class="btn btn-quiet btn-sm filter-clear" href="{{ request.url.path }}" hidden>Clear filters</a>
+    </div>
+  </div>
+  <div class="filter-bar-body form-grid" id="sq-filter-body">
+    <div class="field" data-filter data-filter-label="Status">
+      <label for="sq-status">Status</label>
+      <select id="sq-status" name="status">
+        <option value="">Open and closed</option>
+        {% for value, label in status_choices %}
+        <option value="{{ value }}"{% if filters.status == value %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field" data-filter data-filter-label="Kind">
+      <label for="sq-kind">Kind</label>
+      <select id="sq-kind" name="kind">
+        <option value="">Every kind</option>
+        {% for kind in queue_kinds %}
+        <option value="{{ kind.value }}"{% if filters.kind == kind.value %} selected{% endif %}>{{ kind.value | capitalize }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-actions"><button type="submit" class="btn btn-sm">Show</button></div>
+  </div>
+</form>
+
+<div class="settings-list-head">
+  <button type="button" class="btn btn-sm" data-new-record="sq-detail">Add a queue</button>
+  <button type="button" class="btn btn-quiet btn-sm" id="sq-save-order" data-api="/api/v1/sites/{{ site.id }}/queues" data-method="PUT" hidden>Save this order</button>
+  <span class="msg" data-api-msg aria-live="polite"></span>
+</div>
+
+<div class="split split-full" id="sq-split">
+  <div class="card">
+    <div class="table-wrap table-scroll">
+      <table class="data" id="sq-table" data-settings-list="sq-detail" data-keep-within="#sq-split"{% if not filters.active %} data-order-list data-order-save="sq-save-order"{% endif %}>
+        <thead>
+          <tr>
+            <th data-sort-key="order">Order</th>
+            <th data-sort-key="name">Queue</th>
+            <th data-sort-key="kind">Kind</th>
+            <th data-sort-key="room">Room</th>
+            <th data-sort-key="prefix">Prefix</th>
+            <th data-sort-key="minutes">Minutes</th>
+            <th data-sort-key="status">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for queue in queues %}
+          <tr tabindex="0" data-record="{{ queue.model_dump(mode='json') | tojson | forceescape }}"
+              data-sort-order="{{ queue.display_order }}" data-sort-name="{{ queue.name }}" data-sort-kind="{{ queue.kind.value }}"
+              data-sort-room="{{ queue.room_label or '' }}" data-sort-prefix="{{ queue.ticket_prefix }}"
+              data-sort-minutes="{{ queue.expected_service_minutes }}" data-sort-status="{{ 'open' if queue.is_active else 'closed' }}">
+            <td class="order-cell">
+              {% if not filters.active %}
+              <button type="button" class="order-move" data-order-move="up" aria-label="Move {{ queue.name }} up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg></button>
+              <button type="button" class="order-move" data-order-move="down" aria-label="Move {{ queue.name }} down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+              {% endif %}
+            </td>
+            <td>{{ queue.name }}</td>
+            <td>{{ queue.kind.value | capitalize }}</td>
+            <td>{{ queue.room_label or '—' }}</td>
+            <td>{{ queue.ticket_prefix }}</td>
+            <td>{{ queue.expected_service_minutes }}</td>
+            <td>{% if queue.is_active %}<span class="badge badge-ok">Open to joins</span>{% else %}<span class="badge badge-muted">Deactivated</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if not queues %}
+    <p class="empty">{% if filters.active %}No queue matches these filters.{% else %}This clinic has no queues yet. Add one to start taking patients.{% endif %}</p>
+    {% endif %}
+    <p class="card-sub">{{ queues | length }} queue{{ '' if queues | length == 1 else 's' }}{% if filters.active %} matching the filters{% else %}; use the arrows to change the order, then save it{% endif %}.</p>
+  </div>
+</div>
+
+<div class="slideover slideover-inset" id="sq-detail" data-anchor="#sq-split">
+  <div class="slideover-panel" role="dialog" aria-modal="false" aria-labelledby="sqd-title" tabindex="-1">
+    <div class="slideover-head">
+      <div class="slideover-titles">
+        <p class="detail-eyebrow">Queue</p>
+        <h2 id="sqd-title"><span data-show-when="new">A new queue</span><span data-show-when="existing" data-fill-text="name"></span></h2>
+      </div>
+      <button type="button" class="btn btn-quiet btn-sm slideover-close" data-slideover-close aria-label="Close queue">Close</button>
+    </div>
+    <div class="slideover-body">
+      <form class="settings-form" data-api-template="/api/v1/sites/{{ site.id }}/queues/{id}" data-api-new="/api/v1/sites/{{ site.id }}/queues" data-method-new="POST" data-method-existing="PUT">
+        <div class="field">
+          <label for="sqd-name">Name</label>
+          <input type="text" id="sqd-name" name="name" required minlength="2" maxlength="120">
+        </div>
+        <div class="field-row cols-2">
+          <div class="field">
+            <label for="sqd-slug">Short name for links</label>
+            <input type="text" id="sqd-slug" name="slug" required minlength="2" maxlength="80">
+          </div>
+          <div class="field">
+            <label for="sqd-kind">Kind</label>
+            <select id="sqd-kind" name="kind">
+              {% for kind in queue_kinds %}<option value="{{ kind.value }}"{% if kind.value == default_queue_kind %} selected{% endif %}>{{ kind.value | capitalize }}</option>{% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="field-row cols-2">
+          <div class="field">
+            <label for="sqd-room">Room or counter</label>
+            <input type="text" id="sqd-room" name="room_label" maxlength="60" data-empty="null">
+          </div>
+          <div class="field">
+            <label for="sqd-prefix">Ticket prefix</label>
+            <input type="text" id="sqd-prefix" name="ticket_prefix" required maxlength="4" value="A">
+          </div>
+        </div>
+        <div class="field-row cols-2">
+          <div class="field">
+            <label for="sqd-minutes">Usual minutes per patient</label>
+            <input type="number" id="sqd-minutes" name="expected_service_minutes" data-type="number" min="1" required value="10">
+          </div>
+          <div class="field">
+            <label for="sqd-order">Position</label>
+            <input type="number" id="sqd-order" name="display_order" data-type="number" min="0" max="999" required value="{{ queues | length }}">
+          </div>
+        </div>
+        <div class="field-row cols-2">
+          <div class="field">
+            <label for="sqd-capacity">Most patients a day (optional)</label>
+            <input type="number" id="sqd-capacity" name="max_daily_capacity" data-type="number" min="1">
+          </div>
+          <div class="field">
+            <label for="sqd-recall">Minutes before a recall (optional)</label>
+            <input type="number" id="sqd-recall" name="recall_timeout_minutes" data-type="number" min="1">
+          </div>
+        </div>
+        <div class="field">
+          <label class="check"><input type="checkbox" name="allows_remote_join" checked> Patients may join from their phones</label>
+        </div>
+        <div class="field">
+          <label class="check"><input type="checkbox" name="is_active" checked> Open to new patients</label>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn">Save</button>
+          <span class="msg" data-api-msg aria-live="polite"></span>
+        </div>
+      </form>
+      <div class="danger-zone" data-show-when="active" data-api-scope>
+        <p class="hint">Deactivating stops new patients joining this queue. Its tickets and history are kept, and you can bring it back.</p>
+        <button type="button" class="btn btn-danger btn-sm" data-api-template="/api/v1/sites/{{ site.id }}/queues/{id}" data-method="DELETE" data-confirm-template="Deactivate {name}? New patients can no longer join it; its tickets are kept.">Deactivate this queue</button>
+        <span class="msg" data-api-msg aria-live="polite"></span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
