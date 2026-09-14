@@ -1,4 +1,4 @@
-{% extends "layouts/dashboard.html" %}
+{% extends "dashboard/base.html" %}
 
 {# The waiting-room board's settings (Issue 27). This page exists to make one decision hard to
    make by accident: what a screen in a public room says about a named person. Everything it shows
@@ -10,7 +10,7 @@
   <script src="/static/js/site-display-settings.js" defer></script>
 {% endblock %}
 
-{% block content %}
+{% block clinic_content %}
 <div class="page-head">
   <h1>Waiting-room screen</h1>
   <p class="lead">What the screen in the waiting room shows about the people waiting.</p>

@@ -126,3 +126,37 @@ def test_auth_disabled_shows_everything(seeded_db: Session) -> None:
     for key in all_destination_keys():
         assert nav.visible(key) is True
     assert nav.can("rbac", "delete") is True
+
+
+# ── clinic dashboard (Issue 48) ──────────────────────────────────────────────────────────
+
+
+def test_every_clinic_destination_names_its_site_and_has_its_own_shortcut() -> None:
+    """A clinic screen's link carries ``{site_id}``, and no two screens share a keyboard key."""
+    from src.core.nav_registry import SITE_ID_PLACEHOLDER, site_destinations
+
+    clinic = site_destinations()
+    assert [dest.key for dest in clinic] == ["board", "room", "clinic_settings"]
+    assert all(dest.href.startswith("/dashboard/sites/{site_id}/") for dest in clinic)
+    shortcuts = [dest.shortcut for dest in clinic]
+    assert None not in shortcuts
+    assert len(set(shortcuts)) == len(shortcuts)
+    # "c" opens the clinic switcher and "g" is the leader key: no screen may take either.
+    assert not {"c", "g"} & set(shortcuts)
+    assert clinic[0].href_at("abc") == "/dashboard/sites/abc/board"
+    assert SITE_ID_PLACEHOLDER not in destination("rbac").href_at("abc")
+
+
+def test_a_clinic_page_path_resolves_to_its_destination_whichever_clinic_it_names() -> (
+    None
+):
+    """The simulator's path target: ``{site_id}`` matches one segment, and only one."""
+    from src.core.nav_registry import destination_for_path
+
+    assert destination_for_path("/dashboard/sites/0199-a/board").key == "board"
+    assert destination_for_path("/dashboard/sites/0199-b/settings/display").key == (
+        "clinic_settings"
+    )
+    assert destination_for_path("/dashboard/sites/board") is None
+    assert destination_for_path("/admin/rbac/roles/receptionist").key == "rbac"
+    assert destination_for_path("/admin/rbac-archive") is None

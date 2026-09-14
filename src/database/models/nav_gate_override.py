@@ -35,8 +35,9 @@ class NavGateOverride(Base):
             "(verb IS NULL) != (action IS NULL)",
             name="nav_gate_overrides_verb_xor_action",
         ),
+        # Every ``GrantScope`` tier (migration 0025 added ``assigned``, Issue 48).
         CheckConstraint(
-            "scope in ('business', 'own')",
+            "scope in ('assigned', 'business', 'own')",
             name="ck_nav_gate_overrides_scope",
         ),
     )

@@ -211,9 +211,21 @@ def test_only_layouts_extend_base_and_every_page_extends_a_layout() -> None:
     assert {name for name, parent in extends.items() if parent == "base.html"} == set(
         LAYOUTS
     )
-    assert {parent for name, parent in extends.items() if name not in LAYOUTS} <= set(
-        LAYOUTS
-    )
+
+    def reaches_a_layout(name: str) -> bool:
+        """Whether ``name``'s chain of parents arrives at a layout (a frame may sit between)."""
+        seen: set[str] = set()
+        while name not in LAYOUTS:
+            if name in seen or name not in extends:
+                return False
+            seen.add(name)
+            name = extends[name]
+        return True
+
+    # A frame such as dashboard/base.html (Issue 48) may stand between a page and its layout, but
+    # every chain still ends at one: nothing reaches base.html without a layout's frame.
+    stray = sorted(name for name in extends if not reaches_a_layout(name))
+    assert not stray, f"templates that never reach a layout: {stray}"
 
 
 def test_every_ticket_status_has_a_badge_with_a_known_tone() -> None:
@@ -240,3 +252,35 @@ def test_toast_trigger_is_the_header_ui_feedback_listens_for() -> None:
         encoding="utf-8"
     )
     assert f'addEventListener("{TOAST_EVENT}"' in listener
+
+
+def test_no_template_decides_anything_by_a_role_name() -> None:
+    """Navigation and buttons render from grants (Issue 48): no template decides by a role.
+
+    Reads only Jinja, never the text a person reads, so a page may still say "receptionist" in a
+    sentence, and the access console may still print a user's role. What fails is a **decision**
+    built from a role: a statement (``{% if %}``, ``{% for %}``) that reads a role at all, or any
+    expression that compares one (``user.role == …``, ``'clinic_manager' in roles``). That is how a
+    menu ends up disagreeing with the grant the route behind it checks.
+    """
+    from src.commons.enums import UserRole
+
+    role_values = {role.value for role in UserRole}
+    string_literal = re.compile(r"'([^']*)'|\"([^\"]*)\"")
+    # A person's role (``user.role``), a set of roles, or a bare ``role``; not ``role_labels`` (text to
+    # print) and not ``role.description``, which is the access console describing a role record.
+    role_identifier = re.compile(r"\.role\b|\broles\b|\brole\b(?!\s*\.)")
+    comparison = re.compile(r"==|!=|\bin\b")
+    offenders = []
+    for path in sorted(TEMPLATES.rglob("*.html")):
+        text = path.read_text(encoding="utf-8")
+        for match in re.finditer(r"{{.*?}}|{%.*?%}", text, flags=re.S):
+            tag = match.group(0)
+            literals = {a or b for a, b in string_literal.findall(tag)}
+            code = string_literal.sub("''", tag)
+            names_role = bool(role_identifier.search(code) or literals & role_values)
+            is_statement = tag.startswith("{%")
+            if names_role and (is_statement or comparison.search(code)):
+                line = text.count("\n", 0, match.start()) + 1
+                offenders.append(f"{path.relative_to(TEMPLATES)}:{line}: {tag[:80]}")
+    assert not offenders, "templates deciding by role:\n" + "\n".join(offenders)

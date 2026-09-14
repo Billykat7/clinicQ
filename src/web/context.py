@@ -122,7 +122,13 @@ def public_page_context(request: Request, **extra: Any) -> dict[str, Any]:
     return ctx
 
 
-def page_context(request: Request, db: Session, **extra: Any) -> dict[str, Any]:
+def page_context(
+    request: Request,
+    db: Session,
+    *,
+    nav: NavVisibility | None = None,
+    **extra: Any,
+) -> dict[str, Any]:
     """Build template context with registry-driven nav/action visibility and settings.
 
     Templates render from registry-backed handles rather than a per-resource boolean each (Issue
@@ -131,8 +137,18 @@ def page_context(request: Request, db: Session, **extra: Any) -> dict[str, Any]:
     buttons gated by a cumulative CRUD verb, and ``can_action(resource, action)`` (Issue #155) for
     the rarer button gated by a named action instead (``sign``, ``approve``, ...). Change a grant
     in the RBAC admin and all three follow, with no template edit.
+
+    ``nav`` is passed by a page that has already resolved visibility somewhere narrower than the
+    caller's account: a clinic page resolves it with the roles held **at that clinic** (Issue 48),
+    so its links and buttons follow the grant the clinic's API enforces.
+
+    ``clinic`` is the dashboard frame (:class:`~src.web.dashboard.shell.ClinicShell`). A clinic page
+    passes its own; any other page inside the signed-in shell (the account pages, a 403) gets the
+    one for the clinic the caller last worked in, so the rail's clinic links do not vanish when a
+    receptionist opens their profile.
     """
-    nav: NavVisibility = nav_visibility_for_request(db, request)
+    if nav is None:
+        nav = nav_visibility_for_request(db, request)
     ctx: dict[str, Any] = {
         "app_name": get_settings().app_name,
         "settings": get_settings(),
@@ -150,6 +166,8 @@ def page_context(request: Request, db: Session, **extra: Any) -> dict[str, Any]:
         "page_title": "",
     }
     ctx.update(extra)
+    if nav.show_icon_sidebar and "clinic" not in ctx:
+        ctx["clinic"] = remembered_clinic_shell(request, db)
     # Every page inside the signed-in shell carries a trail; a route that builds its own (the
     # full-detail pages, which name the record) has already put it in ``extra``. Public pages
     # never get the key at all, and the partial renders nothing without it.
@@ -158,6 +176,25 @@ def page_context(request: Request, db: Session, **extra: Any) -> dict[str, Any]:
             nav, ctx["active_nav"], ctx["page_title"], request.url.path
         )
     return ctx
+
+
+def remembered_clinic_shell(request: Request, db: Session) -> Any:
+    """The dashboard frame for the clinic the caller last worked in, or ``None`` (Issue 48).
+
+    ``None`` for an account that works at no clinic, and with auth disabled (there is no user to
+    ask). Imported lazily: the frame reads the sites module, which is further down the import graph
+    than this context builder every page uses.
+    """
+    from src.core.nav_visibility import peek_user_from_refresh_cookie
+    from src.web.dashboard.shell import build_shell, remembered_site_id, staff_sites
+
+    user = peek_user_from_refresh_cookie(db, request)
+    if user is None:
+        return None
+    sites = staff_sites(db, user)
+    site_id = remembered_site_id(request, sites)
+    site = next((candidate for candidate in sites if candidate.id == site_id), None)
+    return None if site is None else build_shell(db, user, site, sites)
 
 
 #: The resource whose READ grant gates the 403 page's "why was this refused?" affordance

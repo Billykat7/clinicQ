@@ -1,0 +1,100 @@
+{% extends "layouts/dashboard.html" %}
+{#- The clinic dashboard frame (Issue 48): every screen of one clinic renders inside it.
+
+    What it shows is resolved once, on the server, by src/web/dashboard/shell.py and handed in as
+    ``clinic``: the clinic, the other clinics this person works at, their name and their roles at
+    this clinic, and the screens their grants at this clinic open. Nothing here decides who may see
+    what; a link renders because ``clinic.links`` holds it, and it holds it because the nav registry
+    admitted the caller at this clinic.
+
+    Dense and information-first for the reception PC: one slim bar across the top (the clinic, its
+    screens, who is signed in), then the page. It fits 1366×768 with no horizontal scrolling.
+
+    Blocks:
+      clinic_actions  optional controls a page adds to the right of its title
+      clinic_content  the page itself -#}
+
+{% block styles %}
+  {{ super() }}
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+{% endblock %}
+
+{% block layout_head %}
+  {{ super() }}
+  <script src="/static/js/dashboard-shell.js" defer></script>
+{% endblock %}
+
+{% block body_class %}{{ super() }} layout-clinic{% endblock %}
+
+{% block content %}
+<header class="clinic-bar">
+  <div class="clinic-bar-site">
+    <span class="clinic-bar-eyebrow">Clinic</span>
+    {% if clinic.other_sites %}
+    {# A disclosure of plain links: switching is a navigation, so it works without script and keeps
+       the session. Each link reopens this screen at the other clinic (see shell.py). #}
+    <details class="site-switcher" data-site-switcher>
+      <summary class="site-switcher-toggle" aria-keyshortcuts="G C" data-shortcut="c">
+        <span class="clinic-bar-name">{{ clinic.site.name }}</span>
+        <span class="sr-only">: switch clinic</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      </summary>
+      <ul class="site-switcher-menu" aria-label="Other clinics you work at">
+        {% for other in clinic.other_sites %}
+        <li><a href="{{ other.href }}">{{ other.name }}</a></li>
+        {% endfor %}
+      </ul>
+    </details>
+    {% else %}
+    <span class="clinic-bar-name">{{ clinic.site.name }}</span>
+    {% endif %}
+  </div>
+
+  {% if clinic.links %}
+  <nav class="clinic-tabs" aria-label="{{ clinic.site.name }} screens">
+    {% for link in clinic.links %}
+    <a class="clinic-tab{% if link.active %} active{% endif %}" href="{{ link.href }}"{% if link.active %} aria-current="page"{% endif %}{% if link.shortcut %} data-shortcut="{{ link.shortcut }}" aria-keyshortcuts="G {{ link.shortcut | upper }}"{% endif %}>
+      {{ link.label }}{% if link.shortcut %}<kbd class="clinic-tab-key" aria-hidden="true">{{ link.shortcut }}</kbd>{% endif %}
+    </a>
+    {% endfor %}
+  </nav>
+  {% endif %}
+
+  <div class="clinic-bar-who">
+    <span class="clinic-bar-person">{{ clinic.display_name }}</span>
+    {% if clinic.role_labels %}<span class="clinic-bar-role">{{ clinic.role_labels | join(', ') | capitalize }}</span>{% endif %}
+  </div>
+  <button type="button" class="btn btn-sm btn-quiet clinic-bar-keys" data-shortcuts-open aria-haspopup="dialog" aria-keyshortcuts="Shift+Slash">
+    <kbd aria-hidden="true">?</kbd><span class="sr-only">Keyboard shortcuts</span>
+  </button>
+</header>
+
+<div class="clinic-page">
+  <div class="page-head clinic-page-head">
+    <div>
+      <h1>{{ page_title }}</h1>
+      {% include "partials/breadcrumbs.html" %}
+    </div>
+    {% block clinic_actions %}{% endblock %}
+  </div>
+  {% block clinic_content %}{% endblock %}
+</div>
+
+{# The shortcut list is rendered from the same links the bar shows, so it never names a screen this
+   person cannot open. Opened with ? and closed with Escape by dashboard-shell.js. #}
+<dialog class="shortcuts-dialog" id="shortcuts-dialog" aria-labelledby="shortcuts-title">
+  <h2 id="shortcuts-title">Keyboard shortcuts</h2>
+  <p class="hint">Press <kbd>g</kbd>, then the key. Shortcuts are off while you type in a field.</p>
+  <dl class="shortcuts-list">
+    {% for link in clinic.links if link.shortcut %}
+    <div><dt><kbd>g</kbd> <kbd>{{ link.shortcut }}</kbd></dt><dd>{{ link.label }}</dd></div>
+    {% endfor %}
+    {% if clinic.other_sites %}
+    <div><dt><kbd>g</kbd> <kbd>c</kbd></dt><dd>Switch clinic</dd></div>
+    {% endif %}
+    {% block clinic_shortcuts %}{% endblock %}
+    <div><dt><kbd>?</kbd></dt><dd>Show this list</dd></div>
+  </dl>
+  <form method="dialog"><button class="btn btn-sm" type="submit">Close</button></form>
+</dialog>
+{% endblock %}

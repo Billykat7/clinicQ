@@ -1,0 +1,27 @@
+{% extends "dashboard/base.html" %}
+{#- A clinician's room (Issue 48's frame; Issue 53 adds calling, transfers and visit notes).
+
+    Only the queues this person is assigned to at this clinic (Issue 28). Another room's queues are
+    never read for this page, so there is nothing here to hide. -#}
+{% from "components/empty_state.html" import empty_state %}
+
+{% block clinic_content %}
+{% if queues %}
+<ul class="queue-grid queue-grid--room" aria-label="Your queues at {{ clinic.site.name }}">
+  {% for queue in queues %}
+  <li class="queue-card{% if not queue.is_active %} is-inactive{% endif %}">
+    <div class="queue-card-head">
+      <h2 class="queue-card-name">{{ queue.name }}</h2>
+      {% if queue.room_label %}<span class="queue-card-room">{{ queue.room_label }}</span>{% endif %}
+    </div>
+    <dl class="queue-card-counts">
+      <div><dt>Waiting</dt><dd>{{ queue.waiting }}</dd></div>
+      <div><dt>With you</dt><dd>{{ queue.with_staff }}</dd></div>
+    </dl>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+{{ empty_state("You are not assigned to a room here", body="A clinic manager assigns rooms in the staff settings.") }}
+{% endif %}
+{% endblock %}

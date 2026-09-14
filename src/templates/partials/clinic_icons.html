@@ -1,0 +1,16 @@
+{#- The clinic destinations' rail icons (Issue 48), one per nav registry key.
+
+    Only the drawing lives here. Which icons render is decided by ``clinic.links``, which the nav
+    registry fills per caller and per clinic; an unknown key draws a plain square rather than failing,
+    so a destination added to the registry before its icon still renders a link. -#}
+{% macro clinic_icon(key) -%}
+{%- if key == 'board' -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="9.5" y="4" width="5" height="11" rx="1.5"/><rect x="16" y="4" width="5" height="7" rx="1.5"/></svg>
+{%- elif key == 'room' -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4a1 1 0 0 1 1-1h9l4 4v14"/><path d="M3 21h18"/><circle cx="12.5" cy="12.5" r=".8"/></svg>
+{%- elif key == 'clinic_settings' -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+{%- else -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
+{%- endif -%}
+{%- endmacro %}

@@ -19,6 +19,9 @@ from dataclasses import dataclass
 
 from src.commons.enums import GrantScope, PermissionVerb
 
+#: The path segment a clinic destination's ``href`` carries in place of the site id (Issue 48).
+SITE_ID_PLACEHOLDER = "{site_id}"
+
 
 @dataclass(frozen=True, slots=True)
 class NavDestination:
@@ -56,6 +59,24 @@ class NavDestination:
     # :meth:`src.core.nav_visibility.NavVisibility.visible`.
     scope: GrantScope = GrantScope.BUSINESS
     group: str | None = None
+    # The key that opens this destination from the keyboard, pressed after ``g`` (Issue 48). Read by
+    # ``dashboard-shell.js`` off the rendered link, so the shortcut and its entry in the help dialog
+    # come from this one declaration.
+    shortcut: str | None = None
+
+    @property
+    def site_scoped(self) -> bool:
+        """Whether this destination lives inside one clinic (its ``href`` names ``{site_id}``).
+
+        A clinic's screens are per site (Issue 48): the same staff member may be a receptionist at
+        one clinic and hold no role at another, so the destination's link, and the grant that
+        decides whether it renders, are both resolved **at a site**.
+        """
+        return SITE_ID_PLACEHOLDER in self.href
+
+    def href_at(self, site_id: str) -> str:
+        """The destination's link at ``site_id`` (the ``href`` itself for a site-less one)."""
+        return self.href.replace(SITE_ID_PLACEHOLDER, site_id)
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,6 +141,39 @@ NAV_DESTINATIONS: tuple[NavDestination, ...] = (
         resource="communications.alerts",
         verb=PermissionVerb.READ,
         group="communications",
+    ),
+    # The clinic dashboard (Issue 48): one clinic's screens, each at ``/dashboard/sites/{site_id}/…``
+    # and each gated on the grant its own API enforces, resolved with the roles the caller holds
+    # **at that clinic**. Which role sees which follows from the manifests' grants, never from a
+    # role name: the front desk is ``queues.tickets`` at ``assigned`` (a nurse's grant there is
+    # ``own``, so their board is their room), the room is ``visits.notes``, which only a clinician
+    # holds, and the settings are ``sites.settings:update``, which only a manager holds.
+    NavDestination(
+        key="board",
+        label="Front desk",
+        href="/dashboard/sites/{site_id}/board",
+        resource="queues.tickets",
+        verb=PermissionVerb.READ,
+        scope=GrantScope.ASSIGNED,
+        shortcut="b",
+    ),
+    NavDestination(
+        key="room",
+        label="My room",
+        href="/dashboard/sites/{site_id}/room",
+        resource="visits.notes",
+        verb=PermissionVerb.UPDATE,
+        scope=GrantScope.OWN,
+        shortcut="r",
+    ),
+    NavDestination(
+        key="clinic_settings",
+        label="Clinic settings",
+        href="/dashboard/sites/{site_id}/settings",
+        resource="sites.settings",
+        verb=PermissionVerb.UPDATE,
+        scope=GrantScope.ASSIGNED,
+        shortcut="s",
     ),
     NavDestination(
         key="widgets",
@@ -194,6 +248,21 @@ def all_destination_keys() -> tuple[str, ...]:
     return tuple(_DESTINATIONS_BY_KEY)
 
 
+def site_destinations() -> tuple[NavDestination, ...]:
+    """Every clinic destination, in registry order: the order the rail and a site's home use."""
+    return tuple(dest for dest in NAV_DESTINATIONS if dest.site_scoped)
+
+
+def _href_matches(href_segments: list[str], path_segments: list[str]) -> bool:
+    """Whether ``path_segments`` starts with ``href_segments``, a ``{site_id}`` matching any one."""
+    if len(path_segments) < len(href_segments):
+        return False
+    return all(
+        want in (got, SITE_ID_PLACEHOLDER)
+        for want, got in zip(href_segments, path_segments, strict=False)
+    )
+
+
 def destination_for_path(path: str) -> NavDestination | None:
     """Return the destination whose ``href`` best matches ``path``, or ``None`` (Issue #174, M29).
 
@@ -206,15 +275,19 @@ def destination_for_path(path: str) -> NavDestination | None:
     share a stem. Prefix matching is on whole segments (``/admin/leases`` never matches
     ``/admin/leases-archive``). Returns ``None`` for a path no destination declares, which the
     endpoint reports as an unresolvable target rather than guessing.
+
+    A clinic destination's ``{site_id}`` segment matches any one segment, so
+    ``/dashboard/sites/<id>/board`` resolves to ``board`` whichever clinic the ticket names.
     """
     normalized = "/" + path.strip().strip("/") if path.strip().strip("/") else "/"
+    path_segments = normalized.strip("/").split("/")
     best: NavDestination | None = None
     for dest in NAV_DESTINATIONS:
-        href = dest.href
-        if normalized == href:
+        href_segments = dest.href.strip("/").split("/")
+        if not _href_matches(href_segments, path_segments):
+            continue
+        if len(href_segments) == len(path_segments):
             return dest
-        if normalized.startswith(href.rstrip("/") + "/") and (
-            best is None or len(href) > len(best.href)
-        ):
+        if best is None or len(dest.href) > len(best.href):
             best = dest
     return best
