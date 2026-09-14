@@ -31,6 +31,7 @@ from src.commons.enums import (
     AssignmentScopeType,
     QueueKind,
     TicketSource,
+    TicketStatus,
     UserRole,
 )
 from src.commons.geo import Coordinates
@@ -320,3 +321,39 @@ class TicketFactory(Factory[Ticket]):
             moment=moment,
             **fields,
         )
+
+
+def status_path(target: TicketStatus) -> list[TicketStatus]:
+    """The shortest run of legal moves from ``waiting`` to ``target``, per the lifecycle's table.
+
+    Read from :data:`src.modules.queue.lifecycle.TRANSITIONS` rather than written out, so a change
+    to the table cannot leave a test driving a ticket along a path that is no longer legal.
+    """
+    from collections import deque
+
+    from src.modules.queue.lifecycle import TRANSITIONS
+
+    routes: dict[TicketStatus, list[TicketStatus]] = {TicketStatus.WAITING: []}
+    frontier = deque([TicketStatus.WAITING])
+    while frontier:
+        here = frontier.popleft()
+        for after in sorted(TRANSITIONS[here]):
+            if after not in routes:
+                routes[after] = [*routes[here], after]
+                frontier.append(after)
+    return routes[target]
+
+
+def drive_ticket_to(session: Session, ticket: Ticket, target: TicketStatus) -> Ticket:
+    """Move a waiting ticket to ``target`` through ``transition_ticket()``, as staff would.
+
+    The only way a test puts a ticket in a status: the model refuses a direct write (non-negotiable
+    2), and going through the lifecycle means every step is audited like a real one.
+    """
+    from src.commons.enums import ActorKind
+    from src.modules.queue.lifecycle import Actor, transition_ticket
+
+    actor = Actor(kind=ActorKind.STAFF, label="factory@clinicq.example")
+    for step in status_path(target):
+        ticket = transition_ticket(session, ticket.id, step, actor=actor)
+    return ticket

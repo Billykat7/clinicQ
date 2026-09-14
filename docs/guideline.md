@@ -23,7 +23,9 @@ state machine, which rejects illegal transitions with 409 and writes an audit ro
 **Why:** four consumers (the board, notifications, reports and the patient's screen) derive their
 behaviour from status. One direct write outside the machine and they disagree, silently.
 
-*Enforced by:* Issue 41 and its guard test.
+*Enforced by:* Issue 41: `tests/unit/queue/test_status_written_only_by_lifecycle.py` fails the build on a
+write in the source (an assignment, `setattr`, a bulk `update(Ticket)`, raw SQL), and the model refuses one
+at runtime (`DirectStatusWriteError`).
 
 ## 3. Every site-scoped query goes through the tenancy helper
 

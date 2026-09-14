@@ -18,6 +18,7 @@ order a queue is *called* in, and they change it in one ordering function, not h
 
 from collections.abc import Collection
 from datetime import date
+from typing import Final
 
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
@@ -25,6 +26,11 @@ from sqlalchemy.orm import Session
 from src.commons.enums import TICKET_ACTIVE_STATUSES, TicketStatus
 from src.core.site_scope import SiteAccess, scoped_select
 from src.database.models.ticket import Ticket
+
+#: The order a queue is called in, and so the order positions are counted in: by sequence, which is
+#: arrival order across every channel (non-negotiable 1). One definition, so the board, call next and
+#: a patient's position cannot disagree; a later issue that changes the order changes it here.
+CALL_ORDER: Final = (Ticket.sequence.asc(),)
 
 
 def board_select(
@@ -51,7 +57,7 @@ def board_select(
             Ticket.service_day == service_day,
             Ticket.status.in_(sorted(status.value for status in statuses)),
         )
-        .order_by(Ticket.sequence)
+        .order_by(*CALL_ORDER)
     )
 
 

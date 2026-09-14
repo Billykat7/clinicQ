@@ -93,12 +93,14 @@ open PRs; the daily-rebase rule in `CONTRIBUTING.md` covers the risk more cheapl
 
 Marking a draft ready for review starts a full run. Prose means the folders and files in
 `PROSE_PATHS` in `ci.yml`: the issue specs, milestones, release notes and runner notes under
-`docs/GITHUB/`, `docs/GITHUB/README.md`, `docs/PLAN/`, `docs/PRODUCT/`, `docs/PROJECTS/`,
+`docs/GITHUB/`, `docs/GITHUB/README.md`, `docs/PLAN/`, `docs/PROJECTS/`,
 `docs/DEMO/`, `docs/IDE/`, `README.md` and `CONTRIBUTING.md`. No test reads any of them, and
 `test_the_prose_only_fast_path_skips_nothing_a_test_reads` keeps it that way: if a test starts
 reading one, the fix is to drop that entry from `PROSE_PATHS`. That happened once already: Issue
 13's tests read the PR template, `labels.yml` and `docs/TEAM/WORKLOAD_SPLIT.md`, so
-`docs/GITHUB/PR/`, `docs/GITHUB/LABELS/` and `docs/TEAM/` left the list. `docs/SECURITY/` and
+`docs/GITHUB/PR/`, `docs/GITHUB/LABELS/` and `docs/TEAM/` left the list. It happened again in Issue
+41: the ticket lifecycle's state diagram in `docs/PRODUCT/03-booking-and-queue.md` is checked against
+the transition table, so `docs/PRODUCT/` left the list too. `docs/SECURITY/` and
 `docs/CICD/` are not prose either, because tests read them.
 
 The trigger itself is never path-filtered. A path filter would stop the workflow from starting at

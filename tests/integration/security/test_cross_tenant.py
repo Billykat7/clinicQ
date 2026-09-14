@@ -45,13 +45,23 @@ from src.database.models import AuditEvent, Base, User, UserRoleAssignment
 from src.database.schema import sqlite_schema_translate_map
 from src.database.session import get_db
 from src.main import create_app
-from tests.factories import FACTORY_STAFF_PASSWORD, SiteFactory, StaffFactory
+from tests.factories import (
+    FACTORY_STAFF_PASSWORD,
+    QueueFactory,
+    SiteFactory,
+    StaffFactory,
+)
 
 _SECRET = "cross-tenant-test-secret-min-32-characters"
 _SITE_A = "0199b0c0-0000-7000-8000-0000000000aa"
 _SITE_B = "0199b0c0-0000-7000-8000-0000000000bb"
 #: An id shaped exactly like a real one, belonging to nothing.
 _NOWHERE = "0199b0c0-0000-7000-8000-0000000000ff"
+#: One queue at each clinic, for the routes that name a queue (Issue 41).
+_QUEUE_AT = {
+    _SITE_A: "0199b0c0-0000-7000-8000-0000000000a1",
+    _SITE_B: "0199b0c0-0000-7000-8000-0000000000b1",
+}
 
 #: The site-scoped surfaces whose routes exist, and how to probe each one.
 #:
@@ -172,6 +182,15 @@ CASES: dict[str, dict[str, object]] = {
         "reader": "a@clinicq.example",
         "paths": lambda site, _row: (f"/api/v1/sites/{site}/tickets",),
     },
+    "queues.call": {
+        # Calling the next patient (Issue 41). The move is a POST; its read half, "who would be
+        # called next", is what a GET can probe. Each clinic has one queue with a known id.
+        "resource": "queues.call",
+        "reader": "a@clinicq.example",
+        "paths": lambda site, _row: (
+            f"/api/v1/sites/{site}/queues/{_QUEUE_AT.get(site, _NOWHERE)}/tickets/next",
+        ),
+    },
     "staffinvitation": {
         # Who has been invited to a clinic (Issue 22): the same grant as the staff list, so a
         # receptionist reads it, and another clinic's list is a 404 like everything else.
@@ -195,7 +214,6 @@ PENDING: dict[str, str] = {
         "live counts from the tickets themselves. A route that lists a clinic's snapshots must add "
         "a case here"
     ),
-    "queues.call": "call-next lands with Issue 42",
     "queues.tickets.priority": "the priority override lands with Issue 46",
 }
 
@@ -241,6 +259,7 @@ def clinics(monkeypatch: pytest.MonkeyPatch) -> Iterator[SimpleNamespace]:
         # 200" would be measuring a missing row rather than the guard.
         for site_id in (_SITE_A, _SITE_B):
             SiteFactory.create(db, id=site_id)
+            QueueFactory.create(db, site_id=site_id, id=_QUEUE_AT[site_id])
         for name, role, site in (
             ("a", UserRole.RECEPTIONIST, _SITE_A),
             ("b", UserRole.RECEPTIONIST, _SITE_B),
