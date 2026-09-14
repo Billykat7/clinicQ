@@ -44,6 +44,14 @@ flowchart TB
 Each queue card shows: current length, average wait so far today, oldest waiting ticket's wait time (a
 quick "is anyone stuck?" signal), and a big **Call Next** button.
 
+The board is **live**: a change made anywhere (a join from a phone, a call from a room) reaches it within
+a second or two over a server-sent events stream, which carries only "this queue changed" and never a
+patient's details. A queue whose longest wait has passed the clinic's threshold (45 minutes by default)
+turns red with "Someone has waited N min". The line above the board always says whether it is **Live**,
+**Reconnecting, data from HH:MM**, or **Updating every 5 seconds, data from HH:MM** when live updates are
+unavailable, so a frozen board never passes for a current one, and nothing on it takes focus from a
+receptionist in the middle of typing.
+
 Each card also holds its **waiting line** in call order. Staff move a visibly unwell patient forward
 by dragging them up the line or with the "Move forward" button beside them (the touch and keyboard
 way to do the same thing); either way a prompt asks for a reason from a fixed list and an optional
