@@ -184,6 +184,11 @@ geocoding_limiter = SlidingWindowRateLimiter()
 # the country tile by tile to copy the directory does. Keys are ``ip:`` and ``session:`` prefixed.
 discovery_search_limiter = SlidingWindowRateLimiter()
 
+# Module-global limiter for joining a queue (Issue 40): the abuse guards on the one join service.
+# Keys are ``phone:`` (every remote channel), ``ip:`` (the web path) and ``site:<id>:<day>`` (a
+# clinic's daily cap on remote joins), so one limiter counts all three budgets without collisions.
+queue_join_limiter = SlidingWindowRateLimiter()
+
 #: Every module-global limiter, so a test (or a reconfiguration) can reach them all without
 #: naming each one and silently missing the next one added.
 ALL_LIMITERS: tuple[SlidingWindowRateLimiter, ...] = (
@@ -194,6 +199,7 @@ ALL_LIMITERS: tuple[SlidingWindowRateLimiter, ...] = (
     signed_link_limiter,
     geocoding_limiter,
     discovery_search_limiter,
+    queue_join_limiter,
 )
 
 

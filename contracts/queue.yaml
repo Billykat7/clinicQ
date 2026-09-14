@@ -1,0 +1,462 @@
+# ClinicQ: the queue contract (Issue 40 starts it; Issue 47 completes it).
+#
+# Hand-written from src/modules/queue/router.py, so the web ticket page (Issue 68), the front-desk
+# board and walk-in form (Issues 49, 51) and the USSD and WhatsApp adapters (Issues 73, 75) can be
+# built against a stable document. Checked against the running application's /openapi.json in both
+# directions by tests/integration/contracts/test_openapi_contracts.py (the Issue 30 harness). This
+# contract owns every route whose path contains /tickets, wherever it hangs: under /sites (staff),
+# /clinics (a patient joining) or /patients/me (a patient's own).
+#
+# The rule behind every operation here is non-negotiable 1: one join service for every channel. The
+# web join and the walk-in are two routes onto the same function, which the USSD and WhatsApp
+# adapters call directly, and every ticket draws its number from one sequence per queue per
+# Johannesburg service day. The source is recorded, and never used to order the queue.
+#
+# Four conventions:
+#
+#   * a join that finds the patient already in the queue today answers 200 with created: false and
+#     the ticket they hold; a new ticket answers 201;
+#   * a refusal is 409 with a code queue.join.<reason> and a sentence a patient can be shown as it
+#     stands; rate limiting is 429 with Retry-After;
+#   * a staff route names a {site_id} and goes through the site guard: another clinic's id is the
+#     same 404 as an id that never existed;
+#   * every example is validated against the schema it claims to be an example of.
+
+openapi: 3.1.0
+
+info:
+  title: ClinicQ queue
+  version: "0.6.0"
+  description: |
+    Joining a queue and reading tickets.
+
+    **One queue, not two.** A remote join and a walk-in take their numbers from the same sequence,
+    in arrival order. `source` says which door a ticket came through; nothing orders by it.
+
+    **Numbers.** `number` is the queue's prefix and the day's sequence (`T043`), restarting at
+    Johannesburg midnight. `reference_code` is six characters with no `0`/`O` or `1`/`I`/`L`,
+    written in two groups (`K7M-4QP`) so it can be read aloud at the desk. It finds a ticket; it is
+    not a secret and never signs anybody in.
+
+    **Abuse guards** (remote joins only): per phone number across every channel
+    (`QUEUE_JOIN_RATE_LIMIT_PER_PHONE`, 6 an hour by default), per client address on the web
+    (`..._PER_IP`, 30 an hour) and per clinic per service day (`QUEUE_JOIN_SITE_DAILY_CAP`, 1500).
+    A walk-in issued at the desk is exempt from all three.
+
+    **Time.** Every datetime is ISO 8601 with an offset, in `Africa/Johannesburg` (`+02:00`);
+    `service_day` is the Johannesburg calendar date.
+
+servers:
+  - url: /api/v1
+    description: This deployment.
+
+tags:
+  - name: queue
+    description: Joining a queue from any channel, and the tickets that result.
+
+paths:
+  # ── A patient joins (Issue 40) ──────────────────────────────────────────────────────────
+  /clinics/{site_id}/queues/{queue_id}/tickets:
+    post:
+      tags: [queue]
+      operationId: queueJoin
+      summary: Join a queue as the signed-in patient
+      description: |
+        The clinic must be publicly listed; an unlisted clinic's queue is the same `404` as one that
+        does not exist. The patient's name is never copied onto the ticket: it stays on their own
+        record, which reaches a public screen only with their consent.
+      security: [{ bearerAuth: [] }, { sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/SiteId" }
+        - { $ref: "#/components/parameters/QueueId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JoinIn" }
+            example: { reason_text: "Repeat script", comment_consent: false }
+      responses:
+        "201":
+          description: A new ticket.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JoinOut" }
+              example:
+                ticket:
+                  id: 01a09cf1-951b-7278-a2be-5fe7590abe56
+                  site_id: 01a09c0b-ce1c-743e-b8ff-544bb4ac8774
+                  queue_id: 01a09c0b-ce5e-7037-8071-cd12f438bd3d
+                  number: T005
+                  reference_code: K7M-4QP
+                  source: web
+                  status: waiting
+                  service_day: "2026-09-14"
+                  joined_at: "2026-09-14T07:31:12+02:00"
+                  walk_in_name: null
+                created: true
+                waiting_ahead: 4
+                message: "You are T005."
+        "200":
+          description: The patient already held a ticket in this queue today; it is returned, and nothing new is issued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JoinOut" }
+              example:
+                ticket:
+                  id: 01a09cf1-951b-7278-a2be-5fe7590abe56
+                  site_id: 01a09c0b-ce1c-743e-b8ff-544bb4ac8774
+                  queue_id: 01a09c0b-ce5e-7037-8071-cd12f438bd3d
+                  number: T005
+                  reference_code: K7M-4QP
+                  source: web
+                  status: waiting
+                  service_day: "2026-09-14"
+                  joined_at: "2026-09-14T07:31:12+02:00"
+                  walk_in_name: null
+                created: false
+                waiting_ahead: 3
+                message: "You already hold T005 in this queue."
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: No such queue at a listed clinic.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "No such queue.", code: "http.not_found" }
+        "409": { $ref: "#/components/responses/JoinRefused" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "429":
+          description: Too many joins from this phone number or this address in the window.
+          headers:
+            Retry-After:
+              description: Seconds until the window has room again.
+              schema: { type: integer, minimum: 1 }
+              example: 3600
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "Too many joins in a short time. Please wait a while and try again.", code: "http.too_many_requests" }
+
+  # ── The front desk issues a walk-in (Issue 40) ──────────────────────────────────────────
+  /sites/{site_id}/queues/{queue_id}/tickets:
+    post:
+      tags: [queue]
+      operationId: queueIssueWalkIn
+      summary: Issue a walk-in ticket at the front desk
+      description: |
+        The same service and the same sequence as a remote join. `name` is what the desk calls the
+        patient by and is never shown on the public board. With a `phone`, the walk-in is that
+        patient's ticket, so a second walk-in for the same number answers `200` with the first.
+        Requires `queues.tickets` `update` at this clinic.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/SiteId" }
+        - { $ref: "#/components/parameters/QueueId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WalkInIn" }
+            example: { name: "Gogo M.", reason_text: null, comment_consent: false, phone: null }
+      responses:
+        "201":
+          description: A new walk-in ticket.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JoinOut" }
+              example:
+                ticket:
+                  id: 01a09cf1-9563-7512-aebc-6e2b4b0beb58
+                  site_id: 01a09c0b-ce1c-743e-b8ff-544bb4ac8774
+                  queue_id: 01a09c0b-ce5e-7037-8071-cd12f438bd3d
+                  number: T006
+                  reference_code: 5CU-CHK
+                  source: walk_in
+                  status: waiting
+                  service_day: "2026-09-14"
+                  joined_at: "2026-09-14T07:33:40+02:00"
+                  walk_in_name: "Gogo M."
+                created: true
+                waiting_ahead: 5
+                message: "You are T006."
+        "200":
+          description: The phone number given already holds a ticket in this queue today; it is returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JoinOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/SiteNotFound" }
+        "409": { $ref: "#/components/responses/JoinRefused" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  # ── Reading tickets (Issue 40) ──────────────────────────────────────────────────────────
+  /sites/{site_id}/tickets:
+    get:
+      tags: [queue]
+      operationId: queueSiteTickets
+      summary: The clinic's tickets still in today's queues
+      description: |
+        Every ticket not yet finished today (`waiting`, `called`, `recalled`, `in_progress`), queue by
+        queue in sequence order, or one queue's with `queue_id`. The reason for the visit is never in
+        a list. Requires `queues.tickets` `read` at this clinic.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/SiteId" }
+        - name: queue_id
+          in: query
+          required: false
+          description: Only this queue's tickets.
+          schema: { type: [string, "null"] }
+          example: 01a09c0b-ce5e-7037-8071-cd12f438bd3d
+      responses:
+        "200":
+          description: The day's open tickets.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TicketListOut" }
+              example:
+                site_id: 01a09c0b-ce1c-743e-b8ff-544bb4ac8774
+                service_day: "2026-09-14"
+                total: 2
+                items:
+                  - id: 01a09cf1-951b-7278-a2be-5fe7590abe56
+                    site_id: 01a09c0b-ce1c-743e-b8ff-544bb4ac8774
+                    queue_id: 01a09c0b-ce5e-7037-8071-cd12f438bd3d
+                    number: T005
+                    reference_code: K7M-4QP
+                    source: web
+                    status: waiting
+                    service_day: "2026-09-14"
+                    joined_at: "2026-09-14T07:31:12+02:00"
+                    walk_in_name: null
+                  - id: 01a09cf1-9563-7512-aebc-6e2b4b0beb58
+                    site_id: 01a09c0b-ce1c-743e-b8ff-544bb4ac8774
+                    queue_id: 01a09c0b-ce5e-7037-8071-cd12f438bd3d
+                    number: T006
+                    reference_code: 5CU-CHK
+                    source: walk_in
+                    status: waiting
+                    service_day: "2026-09-14"
+                    joined_at: "2026-09-14T07:33:40+02:00"
+                    walk_in_name: "Gogo M."
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/SiteNotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /patients/me/tickets:
+    get:
+      tags: [queue]
+      operationId: queueMyTickets
+      summary: The signed-in patient's tickets today
+      description: The patient's own tickets today, at any clinic, earliest first.
+      security: [{ bearerAuth: [] }, { sessionCookie: [] }]
+      responses:
+        "200":
+          description: Today's tickets, possibly none.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TicketOut" }
+              example:
+                - id: 01a09cf1-951b-7278-a2be-5fe7590abe56
+                  site_id: 01a09c0b-ce1c-743e-b8ff-544bb4ac8774
+                  queue_id: 01a09c0b-ce5e-7037-8071-cd12f438bd3d
+                  number: T005
+                  reference_code: K7M-4QP
+                  source: web
+                  status: waiting
+                  service_day: "2026-09-14"
+                  joined_at: "2026-09-14T07:31:12+02:00"
+                  walk_in_name: null
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: An access token from the staff or patient sign-in.
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: bk_clinicq_access
+      description: |
+        The browser session. An unsafe request must also echo the readable CSRF cookie
+        (`bk_clinicq_csrf`) in `X-CSRF-Token`.
+
+  parameters:
+    SiteId:
+      name: site_id
+      in: path
+      required: true
+      description: The clinic.
+      schema: { type: string }
+      example: 01a09c0b-ce1c-743e-b8ff-544bb4ac8774
+    QueueId:
+      name: queue_id
+      in: path
+      required: true
+      description: One of the clinic's queues.
+      schema: { type: string }
+      example: 01a09c0b-ce5e-7037-8071-cd12f438bd3d
+
+  responses:
+    Unauthenticated:
+      description: No session, or an expired one.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { detail: "Not authenticated" }
+    Forbidden:
+      description: Signed in, without the grant this route needs.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { detail: "Forbidden", code: "insufficient_permission" }
+    SiteNotFound:
+      description: Not a clinic this caller works at, or no such clinic or queue. The two are indistinguishable on purpose.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { detail: "Not found.", code: "http.not_found" }
+    Unprocessable:
+      description: A field failed validation.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ValidationError" }
+    JoinRefused:
+      description: |
+        The join was refused. `code` is `queue.join.` followed by a `JoinRefusal`, and `detail` is a
+        sentence a patient can be shown as it stands:
+
+        - `clinic_closed`: the clinic is closed now, closed for an announced reason, or not taking patients through ClinicQ;
+        - `queue_closed`: the queue is not taking patients at the moment;
+        - `walk_in_only`: the queue takes walk-ins only, and the join came from a phone;
+        - `queue_full`: the queue has issued its capacity for today;
+        - `site_daily_cap`: the clinic is taking no more joins by phone today.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { detail: "Hillbrow Community Health Centre is closed: Water outage", code: "queue.join.clinic_closed" }
+
+  schemas:
+    # ── Errors ────────────────────────────────────────────────────────────────────────────
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail: { type: string, description: A sentence a person can act on. }
+        code: { type: string, description: A stable machine-readable code, when the handler sets one. }
+        request_id: { type: string, description: This request's id, for correlating with the logs. }
+      example: { detail: "This queue takes walk-in patients only. Please join at the clinic's front desk.", code: "queue.join.walk_in_only" }
+    ValidationError:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: object
+                required: [loc, msg, type]
+                properties:
+                  loc: { type: array, items: { anyOf: [{ type: string }, { type: integer }] } }
+                  msg: { type: string }
+                  type: { type: string }
+      example:
+        detail:
+          - loc: [body, reason_text]
+            msg: "String should have at most 140 characters"
+            type: string_too_long
+
+    # ── Vocabularies ─────────────────────────────────────────────────────────────────────
+    TicketStatus:
+      type: string
+      description: Where a ticket is in its lifecycle. Written only by the lifecycle (Issue 41).
+      enum: [waiting, called, recalled, in_progress, done, no_show, cancelled, transferred]
+      example: waiting
+    TicketSource:
+      type: string
+      description: The door a ticket came through. Recorded for reporting; never used to order the queue.
+      enum: [web, ussd, whatsapp, walk_in]
+      example: walk_in
+    JoinRefusal:
+      type: string
+      description: Why a join was refused; the suffix of the error `code`.
+      enum: [clinic_closed, queue_closed, walk_in_only, queue_full, site_daily_cap, rate_limited]
+      example: queue_full
+
+    # ── Requests ─────────────────────────────────────────────────────────────────────────
+    JoinIn:
+      type: object
+      properties:
+        reason_text:
+          type: [string, "null"]
+          maxLength: 140
+          description: A short reason for the visit, optional. Trimmed; an empty one is none.
+        comment_consent:
+          type: boolean
+          default: false
+          description: Consent, for this visit only, to show the reason on the waiting-room board.
+      example: { reason_text: null, comment_consent: false }
+    WalkInIn:
+      type: object
+      properties:
+        name: { type: [string, "null"], maxLength: 80, description: "What the desk calls the patient by. Never on the public board." }
+        reason_text: { type: [string, "null"], maxLength: 140 }
+        comment_consent: { type: boolean, default: false }
+        phone:
+          type: [string, "null"]
+          maxLength: 20
+          description: Optional. Any South African form (`082 123 4567`, `+27821234567`); links the walk-in to that patient.
+      example: { name: null, reason_text: "Chest pain", comment_consent: true, phone: "082 123 4567" }
+
+    # ── Responses ────────────────────────────────────────────────────────────────────────
+    TicketOut:
+      type: object
+      required: [id, site_id, queue_id, number, reference_code, source, status, service_day, joined_at, walk_in_name]
+      properties:
+        id: { type: string }
+        site_id: { type: string }
+        queue_id: { type: string }
+        number: { type: string, pattern: "^[A-Z]{1,4}[0-9]{3,}$", description: "The prefix and the day's sequence." }
+        reference_code: { type: string, pattern: "^[2-9A-HJKMNP-Z]{3}-[2-9A-HJKMNP-Z]{3}$", description: "Six unambiguous characters in two groups." }
+        source: { $ref: "#/components/schemas/TicketSource" }
+        status: { $ref: "#/components/schemas/TicketStatus" }
+        service_day: { type: string, format: date }
+        joined_at: { type: string, format: date-time }
+        walk_in_name: { type: [string, "null"], description: "The desk's name for a walk-in; null for a phone join." }
+      example:
+        id: 01a09cf1-951b-7278-a2be-5fe7590abe56
+        site_id: 01a09c0b-ce1c-743e-b8ff-544bb4ac8774
+        queue_id: 01a09c0b-ce5e-7037-8071-cd12f438bd3d
+        number: T005
+        reference_code: K7M-4QP
+        source: ussd
+        status: waiting
+        service_day: "2026-09-14"
+        joined_at: "2026-09-14T07:31:12+02:00"
+        walk_in_name: null
+    JoinOut:
+      type: object
+      required: [ticket, created, waiting_ahead, message]
+      properties:
+        ticket: { $ref: "#/components/schemas/TicketOut" }
+        created: { type: boolean, description: "False when the patient already held this ticket." }
+        waiting_ahead: { type: integer, minimum: 0, description: "Waiting tickets ahead of this one now." }
+        message: { type: string, description: "A sentence for the patient." }
+    TicketListOut:
+      type: object
+      required: [site_id, service_day, total, items]
+      properties:
+        site_id: { type: string }
+        service_day: { type: string, format: date }
+        total: { type: integer, minimum: 0 }
+        items: { type: array, items: { $ref: "#/components/schemas/TicketOut" } }

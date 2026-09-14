@@ -598,6 +598,29 @@ class TicketSource(StrEnum):
     WALK_IN = "walk_in"
 
 
+class JoinRefusal(StrEnum):
+    """Why a join was refused (Issue 40). The ``code`` suffix on the wire: ``queue.join.<value>``.
+
+    Every channel renders the same refusal, so a USSD menu, a WhatsApp reply and the web page can
+    each say it their own way while agreeing on what happened. The sentence a patient reads travels
+    with it; this is the machine-readable half.
+
+    - ``CLINIC_CLOSED``: the clinic is closed now, suspended, or not taking patients through ClinicQ.
+    - ``QUEUE_CLOSED``: this queue is deactivated or removed.
+    - ``WALK_IN_ONLY``: the queue takes walk-ins only, and the join came from a phone.
+    - ``QUEUE_FULL``: the queue has issued its daily capacity.
+    - ``SITE_DAILY_CAP``: the clinic has taken as many remote joins today as it allows.
+    - ``RATE_LIMITED``: too many joins from one number, or from one address on the web.
+    """
+
+    CLINIC_CLOSED = "clinic_closed"
+    QUEUE_CLOSED = "queue_closed"
+    WALK_IN_ONLY = "walk_in_only"
+    QUEUE_FULL = "queue_full"
+    SITE_DAILY_CAP = "site_daily_cap"
+    RATE_LIMITED = "rate_limited"
+
+
 class PatientChannel(StrEnum):
     """The channel a patient reached ClinicQ through (Issue 17).
 
@@ -1418,6 +1441,7 @@ class AuditEntityType(StrEnum):
     PATIENT_CONSENT = "patient_consent"
     SITE = "site"
     QUEUE = "queue"
+    TICKET = "ticket"
     CLINIC_SERVICE = "clinic_service"
     STAFF_INVITATION = "staff_invitation"
     AUDIT_LOG = "audit_log"
@@ -1443,6 +1467,7 @@ AUDIT_REDACTED_FIELDS: frozenset[str] = frozenset(
         "phone_e164",
         "whatsapp_id",
         "display_name",
+        "walk_in_name",
         "email",
         "first_name",
         "last_name",

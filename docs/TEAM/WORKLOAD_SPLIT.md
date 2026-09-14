@@ -95,7 +95,7 @@ ever empty: that is the whole design goal. Issue numbers in brackets.
 | **3** | 5–6 | M3 | ✅ done |
 | **4** | 7–8 | M3 · M4 | ✅ done — M3 closed, tag `v0.3.0` to cut |
 | **5** | 9–10 | M4 · M5 | ✅ done — M4 closed, tag `v0.4.0` to follow; M5 delivered with it |
-| **6** | 11–12 | M5 · M6 | 🚧 in progress — M5 delivered (issues 31–38, tag `v0.5.0` to follow); M6: tickets [39] delivered, join [40] and lifecycle [41] not yet |
+| **6** | 11–12 | M5 · M6 | 🚧 in progress — M5 delivered (issues 31–38, tag `v0.5.0` to follow); M6: tickets [39] and join [40] delivered, lifecycle [41] not yet |
 | **7** | 13–14 | M6 ⚠️ | 📋 planned |
 | **8** | 15–16 | M7 | 📋 planned |
 | **9** | 17–18 | M7 · M8 · M9 | 📋 planned |
@@ -107,7 +107,7 @@ ever empty: that is the whole design goal. Issue numbers in brackets.
 
 **5 of 14 sprints done** 🟩🟩🟩🟩⬜⬜⬜⬜⬜⬜ **36%**, carrying milestones M1–M5 (issues 1–38) and
 release notes `v0.1.0`–`v0.5.0`. Only `v0.2.0` is tagged so far; the others are still to cut. **Sprint 6 is under way, not
-done:** its M5 half is delivered (issues 31–38), its M6 half is under way (issue 39 of 39–41) — and by the rule below a
+done:** its M5 half is delivered (issues 31–38), its M6 half is under way (issues 39 and 40 of 39–41) — and by the rule below a
 sprint is ticked only when *every* issue its lanes deliver is closed.
 
 A sprint is **done** when every issue its lanes *deliver* is closed. That is marked by hand, not

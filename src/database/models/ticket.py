@@ -16,7 +16,7 @@ worth stating before the columns:
   midnight, not at UTC midnight (02:00 in Johannesburg), and the unique constraint and the board's
   index both read the column directly.
 * **A walk-in needs no patient.** ``patient_id`` is nullable, so a receptionist can issue a ticket to
-  somebody with no phone without inventing a placeholder patient row; ``display_name`` carries what
+  somebody with no phone without inventing a placeholder patient row; ``walk_in_name`` carries what
   the desk was told. ``ck_ticket_patient_or_walk_in`` makes the reverse impossible: a remote join
   (web, USSD, WhatsApp) always belongs to the patient whose number joined.
 * **``status`` is vocabulary here, not behaviour.** It is written only by ``transition_ticket()``
@@ -33,6 +33,7 @@ Datetimes are timezone-aware; business time is Africa/Johannesburg. ``reason_tex
 information and is redacted in every audit diff (``AUDIT_REDACTED_FIELDS``).
 """
 
+from collections.abc import Iterable
 from datetime import date, datetime
 
 from sqlalchemy import (
@@ -49,7 +50,12 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.commons.enums import DbSchema, TicketSource, TicketStatus
+from src.commons.enums import (
+    TICKET_ACTIVE_STATUSES,
+    DbSchema,
+    TicketSource,
+    TicketStatus,
+)
 from src.commons.ids import new_id
 from src.database.models.base import Base
 from src.database.models.mixins import TimestampMixin
@@ -64,10 +70,19 @@ MAX_REASON_LENGTH = 140
 REFERENCE_CODE_LENGTH = 6
 
 
-def _in_clause(column: str, values: type[TicketStatus] | type[TicketSource]) -> str:
+def _in_clause(
+    column: str,
+    values: type[TicketStatus] | type[TicketSource] | Iterable[TicketStatus],
+) -> str:
     """``column IN ('a', 'b')`` from an enum, sorted so the DDL string is stable across runs."""
     members = ", ".join(f"'{member.value}'" for member in sorted(values))
     return f"{column} IN ({members})"
+
+
+#: The rows ``uq_ticket_active_patient`` covers: a patient's tickets still in the day.
+_ACTIVE_PATIENT_TICKET = (
+    f"patient_id IS NOT NULL AND {_in_clause('status', TICKET_ACTIVE_STATUSES)}"
+)
 
 
 class TicketSequence(Base):
@@ -122,6 +137,11 @@ class Ticket(Base, TimestampMixin):
         CheckConstraint("sequence >= 1", name="sequence_positive"),
         CheckConstraint(_in_clause("status", TicketStatus), name="status"),
         CheckConstraint(_in_clause("source", TicketSource), name="source"),
+        # Only the desk names a ticket; a phone join is named by the patient's record (Issue 40).
+        CheckConstraint(
+            f"walk_in_name IS NULL OR source = '{TicketSource.WALK_IN.value}'",
+            name="walk_in_name",
+        ),
         # A walk-in may have no patient; a remote join never lacks one (the number that joined).
         CheckConstraint(
             f"patient_id IS NOT NULL OR source = '{TicketSource.WALK_IN.value}'",
@@ -147,6 +167,18 @@ class Ticket(Base, TimestampMixin):
         ),
         # A clinic's tickets on a day, across its queues: the per-site daily cap and the reports.
         Index("ix_clinicq_ticket_site_day", "site_id", "service_day"),
+        # One active ticket per patient per queue per day (Issue 40). ``join_queue()`` returns the
+        # existing ticket instead of issuing a second; this makes a race between two joins by the
+        # same patient end the same way, at the database.
+        Index(
+            "uq_ticket_active_patient",
+            "queue_id",
+            "service_day",
+            "patient_id",
+            unique=True,
+            postgresql_where=text(_ACTIVE_PATIENT_TICKET),
+            sqlite_where=text(_ACTIVE_PATIENT_TICKET),
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -178,8 +210,10 @@ class Ticket(Base, TimestampMixin):
     """Six unambiguous characters for finding the ticket at the desk. Not a secret."""
     source: Mapped[str] = mapped_column(String(16), nullable=False)
     """:class:`~src.commons.enums.TicketSource`. Recorded for reporting, never used for ordering."""
-    display_name: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    """What the desk or the patient gave as a name. Never on the board without consent (Issue 27)."""
+    walk_in_name: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    """What the front desk wrote down to call a walk-in by. Staff-facing only, and only on a walk-in
+    (``ck_ticket_walk_in_name``): a patient who joined by phone is named by their own record, which
+    reaches a public screen only through ``board_projection`` and their consent (Issue 21)."""
     reason_text: Mapped[str | None] = mapped_column(
         String(MAX_REASON_LENGTH), nullable=True
     )
