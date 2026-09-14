@@ -62,6 +62,11 @@ tests: `alembic upgrade head`, the RBAC seed and its `--check`. The deploy (Issu
 script inside the new image, so a migration or seed that breaks fails on the pull request, not
 during a release.
 
+After the parallel run, the integration shard runs one more step, **the 07:30 rush** (Issue 47), on
+its own. It asserts a latency budget, so the parallel run skips it: measured while every CPU is busy
+with other tests, it would measure the runner rather than the queue engine. It adds about 10–30
+seconds.
+
 Most tests still use the in-memory SQLite `session_factory` fixture by design (Issue 3: reach for the
 real database only for what PostgreSQL does and SQLite does not). CI never points the application
 at SQLite: every database URL it sets is a `postgresql://` URL, and the guard test checks that.
