@@ -13,7 +13,7 @@
 | **Depends on** | [Issue 21](../M3/ISSUE_21_consent_capture_withdrawal.md): Consent capture and withdrawal (display, notifications, board comment)<br>[Issue 27](../M4/ISSUE_27_display_privacy_settings.md): Display and privacy settings per site |
 | **Unblocks** | No other issue waits on this one. |
 
-> **Note:** The spec names A as owner; the sprint plan puts board privacy in D's lane (sprint 9). A is the safer owner for a guard-tested server rule; confirm before sprint 9.
+> **Note:** The spec names A as owner; the sprint plan puts board privacy in D's lane (sprint 9). **Settled by the pull request for this issue:** A owns the server rule and its guard tests (`src/modules/display/projection.py`), because a guard-tested server rule belongs with the backend lead. D builds the board against its payload (Issues 56, 57 and 60).
 
 ## Context
 

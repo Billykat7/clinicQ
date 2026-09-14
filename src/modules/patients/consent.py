@@ -217,16 +217,21 @@ def board_projection(
     ticket_number: str,
     display_mode: DisplayMode,
     comment: str | None = None,
+    visit_comment_consent: bool = False,
 ) -> BoardEntry:
     """What the board may show for this ticket: the number, and only what has been agreed to.
 
-    Two gates, both applied here so no caller can apply one and forget the other:
+    Three gates, all applied here so no caller can apply one and forget another:
 
     * the **site's display mode** (Issue 27): under ``NUMBER_ONLY`` a name is not in the result at
       all, so it cannot be hidden with CSS and cannot leak through a template;
-    * the **patient's consent** (:attr:`ConsentPurpose.DISPLAY_NAME`, and separately
-      :attr:`ConsentPurpose.DISPLAY_COMMENT` for the reason), read fresh, so a withdrawal takes
-      effect on the next render.
+    * the **patient's standing consent** (:attr:`ConsentPurpose.DISPLAY_NAME`, and separately
+      :attr:`ConsentPurpose.DISPLAY_COMMENT` for the reason), read fresh through
+      :func:`has_consent`, so a withdrawal takes effect on the next render;
+    * the **per-visit consent** for the reason (``visit_comment_consent``, the ticket's
+      ``comment_consent``, Issue 58): a reason beside a full name needs the patient to have agreed
+      *for this visit*, not only once, because a reason is a new piece of health information each
+      time (non-negotiable 4).
 
     A walk-in with no patient record shows a number, which is what the default mode shows anyway.
     Consent is only read when the mode could show something, so ``NUMBER_ONLY`` costs no query.
@@ -245,6 +250,7 @@ def board_projection(
         comment_consented=bool(
             name_consented
             and comment
+            and visit_comment_consent
             and display_mode is DisplayMode.FULL
             and has_consent(db, patient.id, ConsentPurpose.DISPLAY_COMMENT)
         ),
