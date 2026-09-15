@@ -44,7 +44,7 @@ from src.commons.enums import (
     TICKET_TERMINAL_STATUSES,
     AuditAction,
     AuditEntityType,
-    NotificationTemplate,
+    PatientEvent,
     TicketStatus,
     TransferPlacement,
     TransferReason,
@@ -53,12 +53,11 @@ from src.commons.exceptions import ConflictError, NotFoundError
 from src.commons.time import business_date, now_sast, stored_sast
 from src.core.audit import record_audit_event
 from src.core.site_scope import SiteAccess, scoped_select
-from src.database.models.patient import Patient
 from src.database.models.queue import Queue
 from src.database.models.site import Site
 from src.database.models.ticket import Ticket
 from src.database.models.visit import Visit
-from src.modules.notifications import service as notifications
+from src.modules.queue import notices
 from src.modules.queue.estimate import WaitEstimate
 from src.modules.queue.lifecycle import Actor, lock_ticket, transition_ticket
 from src.modules.queue.sequence import is_second_active_ticket, issue_ticket
@@ -153,27 +152,6 @@ def _issued_today(db: Session, queue: Queue, moment: datetime) -> int:
                 Ticket.status != TicketStatus.CANCELLED.value,
             )
         ).scalar_one()
-    )
-
-
-def _notify(db: Session, ticket: Ticket, target: Queue, wait: WaitEstimate) -> None:
-    """Tell the patient their new queue, number and wait, through the notification service."""
-    if ticket.patient_id is None:
-        return
-    patient = db.get(Patient, ticket.patient_id)
-    site = db.get(Site, ticket.site_id)
-    if patient is None or site is None:
-        return
-    notifications.send_sms(
-        db,
-        to=patient.phone_e164,
-        template=NotificationTemplate.TICKET_TRANSFERRED,
-        context={
-            "clinic": site.name,
-            "queue": target.name,
-            "number": ticket.number,
-            "wait": wait.label,
-        },
     )
 
 
@@ -277,7 +255,7 @@ def transfer_ticket(
     on_queue_changed(db, target)
     ahead = waiting_ahead(db, ticket)
     wait = estimates_for(db, [target], {target.id: ahead}, moment=moment)[target.id]
-    _notify(db, ticket, target, wait)
+    notices.tell(db, ticket, PatientEvent.TRANSFERRED, moment=moment, wait=wait.label)
     return TransferResult(
         from_ticket=moved_out, ticket=ticket, waiting_ahead=ahead, wait=wait
     )

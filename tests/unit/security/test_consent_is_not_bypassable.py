@@ -31,10 +31,10 @@ _PATIENTS = _SRC / "modules" / "patients"
 
 #: The functions that hand a message to a transport. Only the notification service may call them.
 _TRANSPORT_CALLS = frozenset(
-    {"deliver_smtp", "_deliver_sms_transport", "_deliver_email_transport"}
+    {"deliver_smtp", "_deliver_via_transport", "_deliver_email_transport"}
 )
 #: The send paths that must resolve preferences (and so consent) before they deliver.
-_SEND_PATHS = ("deliver_email", "send_sms", "attempt")
+_SEND_PATHS = ("deliver_email", "send_sms", "attempt", "notify")
 
 
 def _function(tree: ast.Module, name: str) -> ast.FunctionDef | ast.AsyncFunctionDef:
@@ -105,7 +105,7 @@ def test_the_guard_fails_on_a_send_path_that_skips_the_resolve() -> None:
     skipping = ast.parse(
         "def send_sms(db, to, template, context):\n"
         '    """Hand it straight to the gateway."""\n'
-        "    return _deliver_sms_transport(to=to, message=context, provider=provider)\n"
+        "    return _deliver_via_transport(transport, to=to, message=context)\n"
     )
     calls = _calls(_function(skipping, "send_sms"))
     assert "resolve" not in calls and _TRANSPORT_CALLS & calls

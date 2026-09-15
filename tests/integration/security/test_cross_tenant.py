@@ -246,6 +246,12 @@ CASES: dict[str, dict[str, object]] = {
 
 #: Site-scoped surfaces with no route yet: the issue that brings them must add a case here.
 PENDING: dict[str, str] = {
+    "notification": (
+        "a notification carries the clinic that sent it so its cost is reportable per clinic "
+        "(Issue 63), but no clinic-facing route reads the ledger: the delivery viewer is the "
+        "platform ``logs`` verb, and a patient's own messages reach them, not a clinic. The SMS cost "
+        "totals (Issue 65) or a report that lists a clinic's messages must add a case here"
+    ),
     "queuerequestkey": (
         "a request key carries its clinic so a key sent at one clinic is never replayed at another "
         "(Issue 50), but no route reads keys: the queue routes look one up only for the signed-in "

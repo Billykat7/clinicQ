@@ -20,25 +20,39 @@ originating domain rows, which may have since changed. ``subject`` is stored for
 has none). ``created_at`` / ``next_attempt_at`` / ``sent_at`` / ``delivered_at`` / ``failed_at``
 are in Africa/Johannesburg terms, the project's business timezone.
 
+**Patients (Issue 63).** A patient has no account and no email address, so a patient notification
+is addressed by ``patient_id`` and reaches them on whichever transport can: ``recipient`` is then the
+transport's own address (a phone number, a WhatsApp id, a push subscription id). ``event`` names what
+happened to their ticket, ``site_id`` which clinic sent it (so cost is reportable per clinic),
+``cost``/``cost_currency`` what the provider charged, ``dedupe_key`` makes one queue event one message
+however often it is replayed, and ``fallback_of_id`` links a row to the free transport that failed
+before it, so the ledger reads as the chain that was actually tried.
+
 No new RBAC resource is introduced: the admin status-query endpoint reuses the ``logs`` READ verb
 (operational data, like the S3 log viewer). Carries TimestampMixin (created_at/modified_at); as an
 append-only delivery ledger it takes neither the active nor the soft-delete mixin.
 """
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import JSON, DateTime, Index, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.commons.enums import NotificationStatus
+from src.commons.enums import DbSchema, NotificationStatus
 from src.database.models.base import Base
 from src.database.models.mixins import TimestampMixin
 
+SCHEMA = DbSchema.CLINICQ.value
+
+#: Room for ``<ticket id>:<event>:<moment>``, the longest key the queue builds.
+DEDUPE_KEY_LENGTH = 160
+
 
 class Notification(Base, TimestampMixin):
-    """One transactional message (email or SMS) and its delivery status."""
+    """One message (email, SMS, web push or WhatsApp) and its delivery status."""
 
     __tablename__ = "notification"
     __table_args__ = (
@@ -54,6 +68,10 @@ class Notification(Base, TimestampMixin):
             "ix_clinicq_notification_provider_message_id",
             "provider_message_id",
         ),
+        # A patient's messages, newest first (the ticket page, the preference gate, erasure).
+        Index("ix_clinicq_notification_patient_id", "patient_id", "created_at"),
+        # Cost and delivery rate per clinic per day (Issues 65, 71 and the M12 reports).
+        Index("ix_clinicq_notification_site_id", "site_id", "created_at"),
     )
 
     id: Mapped[str] = mapped_column(
@@ -65,15 +83,46 @@ class Notification(Base, TimestampMixin):
         String(10),
         nullable=False,
     )
-    """Delivery channel — one of :class:`NotificationChannel` (``email`` / ``sms``), stored as
-    text per the project's enum-as-text convention."""
+    """Delivery channel — one of :class:`NotificationChannel`, stored as text per the project's
+    enum-as-text convention."""
     template_key: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
     )
     """Which transactional template this message is — one of :class:`NotificationTemplate`."""
     recipient: Mapped[str] = mapped_column(String(255), nullable=False)
-    """Destination address — an email address (email) or an E.164 phone number (SMS)."""
+    """Destination address: an email address, an E.164 number (SMS), a WhatsApp id, or a push
+    subscription id (web push)."""
+    patient_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(f"{SCHEMA}.patient.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    """The patient this message is for (Issue 63); ``NULL`` for an account holder's message."""
+    site_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(f"{SCHEMA}.site.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    """The clinic on whose behalf it was sent, so its cost is reportable per clinic (Issue 63)."""
+    event: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    """What happened to the patient's ticket: one of :class:`~src.commons.enums.PatientEvent`."""
+    dedupe_key: Mapped[str | None] = mapped_column(
+        String(DEDUPE_KEY_LENGTH), nullable=True, unique=True
+    )
+    """One queue event, one message: a replay of the same event finds this row and sends nothing.
+    Only the first row of a fallback chain carries it."""
+    fallback_of_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(f"{SCHEMA}.notification.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    """The row on the transport tried before this one, when this row is its fallback (Issue 63)."""
+    cost: Mapped[Decimal | None] = mapped_column(Numeric(10, 4), nullable=True)
+    """What the provider charged for the message, in ``cost_currency``; ``0`` for a free transport,
+    ``NULL`` until a provider has accepted it."""
+    cost_currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    """ISO 4217 currency of ``cost`` (``ZAR``)."""
     subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
     """Email subject line; ``NULL`` for SMS, which has no subject."""
     status: Mapped[str] = mapped_column(

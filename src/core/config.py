@@ -20,6 +20,7 @@ from src.commons.enums import (
     GeocodingProvider,
     LogFormat,
     LogLevel,
+    NotificationDispatchMode,
     RateLimitBackendKind,
     S3LogPath,
     SmsProviderKind,
@@ -754,6 +755,47 @@ class Settings(BaseSettings):
         description=(
             "How often the notification retry sweep runs to re-attempt due failures "
             "(env: NOTIFICATION_RETRY_INTERVAL_MINUTES)."
+        ),
+    )
+
+    # Patient notifications (Issue 63): delivered after the queue's commit, never inside it.
+    notification_dispatch: NotificationDispatchMode = Field(
+        default=NotificationDispatchMode.BACKGROUND,
+        description=(
+            "When a patient notification is handed to its transport after the commit "
+            "(env: NOTIFICATION_DISPATCH). 'background' returns the request at once and delivers "
+            "on a worker pool; 'inline' delivers before the committing call returns."
+        ),
+    )
+
+    notification_dispatch_workers: int = Field(
+        default=4,
+        ge=1,
+        le=32,
+        description=(
+            "Worker threads delivering patient notifications in the background "
+            "(env: NOTIFICATION_DISPATCH_WORKERS)."
+        ),
+    )
+
+    notification_dispatch_grace_seconds: int = Field(
+        default=60,
+        ge=5,
+        le=3600,
+        description=(
+            "How long the retry sweep leaves a new patient notification to its post-commit "
+            "delivery before taking it over, so the two never send one message twice "
+            "(env: NOTIFICATION_DISPATCH_GRACE_SECONDS)."
+        ),
+    )
+
+    notification_cost_currency: str = Field(
+        default="ZAR",
+        min_length=3,
+        max_length=3,
+        description=(
+            "ISO 4217 currency every recorded notification cost is in "
+            "(env: NOTIFICATION_COST_CURRENCY)."
         ),
     )
 

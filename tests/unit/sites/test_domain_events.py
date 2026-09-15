@@ -161,3 +161,26 @@ def test_two_events_in_one_transaction_both_arrive(session: Session) -> None:
     session.commit()
 
     assert [event.reason for event in heard] == ["first", "second"]  # type: ignore[attr-defined]
+
+
+def test_a_rolled_back_savepoint_discards_only_what_was_published_inside_it(
+    session: Session,
+) -> None:
+    """Issue 63: the recall sweep moves each ticket in a savepoint and skips one staff moved first.
+
+    Before the fix, that skip threw away the events (and so the patient messages) of every ticket
+    the sweep had already moved in the same transaction.
+    """
+    heard: list[str] = []
+    subscribe(_Thing)(lambda event: heard.append(event.label))
+
+    session.add(Site(**_a_clinic()))
+    publish_after_commit(session, _Thing("before the savepoint"))
+    with pytest.raises(RuntimeError), session.begin_nested():
+        publish_after_commit(session, _Thing("inside the failed savepoint"))
+        raise RuntimeError("staff moved it first")
+    with session.begin_nested():
+        publish_after_commit(session, _Thing("inside a kept savepoint"))
+    session.commit()
+
+    assert heard == ["before the savepoint", "inside a kept savepoint"]

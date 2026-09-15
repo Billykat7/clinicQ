@@ -32,10 +32,10 @@ the no-show clock from the staff member's recall.
 **The timeout** is the queue's ``recall_timeout_minutes``, else the clinic's, else
 ``QUEUE_RECALL_TIMEOUT_MINUTES`` (5).
 
-**The message** is recorded in the notification ledger and sent through the configured SMS provider
-(the logging provider until M9 brings real delivery). It is gated by the patient's notification
-consent like every patient message (Issue 21), so a patient who has not agreed gets a
-``suppressed`` ledger row, not an SMS. A walk-in with no phone number has nobody to text: the board
+**The message** goes through the one notification call (:mod:`src.modules.queue.notices`, Issue 63):
+recorded in the ledger with the move and delivered after the sweep commits, on the patient's best
+transport. It is gated by the patient's notification consent like every patient message (Issue 21),
+so a patient who has not agreed gets a ``suppressed`` ledger row, not a message. A walk-in with no phone number has nobody to text: the board
 and the desk call them.
 """
 
@@ -46,28 +46,26 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.commons.enums import NotificationTemplate, TicketStatus
+from src.commons.enums import PatientEvent, TicketStatus
 from src.commons.exceptions import ConflictError
 from src.commons.time import now_sast, stored_sast
 from src.core.config import Settings, get_settings
-from src.database.models.patient import Patient
 from src.database.models.queue import Queue
 from src.database.models.site import Site
 from src.database.models.ticket import Ticket
-from src.modules.notifications import service as notifications
-from src.modules.notifications.sms import SmsProvider
+from src.modules.queue import notices
 from src.modules.queue.lifecycle import Actor, transition_ticket
 
 #: What each timed status becomes when its timeout passes, and the message that goes with it.
-_NEXT: dict[TicketStatus, tuple[TicketStatus, NotificationTemplate, str]] = {
+_NEXT: dict[TicketStatus, tuple[TicketStatus, PatientEvent, str]] = {
     TicketStatus.CALLED: (
         TicketStatus.RECALLED,
-        NotificationTemplate.TICKET_RECALLED,
+        PatientEvent.RECALLED,
         "recall timer",
     ),
     TicketStatus.RECALLED: (
         TicketStatus.NO_SHOW,
-        NotificationTemplate.TICKET_NO_SHOW,
+        PatientEvent.NO_SHOW,
         "no-show timer",
     ),
 }
@@ -142,44 +140,11 @@ def _due(db: Session, moment: datetime, default_minutes: int) -> Sequence[_Due]:
     return due
 
 
-def _notify(
-    db: Session,
-    ticket: Ticket,
-    template: NotificationTemplate,
-    minutes: int,
-    provider: SmsProvider | None,
-    moment: datetime,
-) -> None:
-    """Tell the patient, through the notification service (ledger, consent, provider)."""
-    if ticket.patient_id is None:
-        return  # a walk-in with no number: the board and the desk call them
-    patient = db.get(Patient, ticket.patient_id)
-    queue = db.get(Queue, ticket.queue_id)
-    site = db.get(Site, ticket.site_id)
-    if patient is None or queue is None or site is None:
-        return
-    notifications.send_sms(
-        db,
-        to=patient.phone_e164,
-        template=template,
-        context={
-            "number": ticket.number,
-            "clinic": site.name,
-            "queue": queue.name,
-            "room": queue.room_label,
-            "minutes": minutes,
-        },
-        provider=provider,
-        now=moment,
-    )
-
-
 def run_recall_timers(
     db: Session,
     *,
     moment: datetime | None = None,
     settings: Settings | None = None,
-    sms_provider: SmsProvider | None = None,
 ) -> RecallSweep:
     """Recall or mark a no-show every called ticket whose timeout has passed. The caller commits.
 
@@ -191,7 +156,6 @@ def run_recall_timers(
         moment: When the sweep runs (aware); ``None`` means now in Johannesburg. Tests pass a
             moment to advance the clock.
         settings: Settings; ``None`` reads the application's.
-        sms_provider: The SMS provider; ``None`` builds the configured one.
 
     Returns:
         The tickets recalled and the tickets marked no-show.
@@ -200,7 +164,7 @@ def run_recall_timers(
     moment = moment or now_sast()
     swept = RecallSweep()
     for due in _due(db, moment, cfg.queue_recall_timeout_minutes):
-        after, template, job = _NEXT[due.current]
+        after, event, job = _NEXT[due.current]
         try:
             with db.begin_nested():
                 ticket = transition_ticket(
@@ -217,5 +181,5 @@ def run_recall_timers(
         (swept.recalled if after is TicketStatus.RECALLED else swept.no_shows).append(
             ticket.id
         )
-        _notify(db, ticket, template, due.minutes, sms_provider, moment)
+        notices.tell(db, ticket, event, moment=moment, minutes=due.minutes)
     return swept

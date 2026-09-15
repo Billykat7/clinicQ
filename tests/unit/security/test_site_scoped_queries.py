@@ -142,9 +142,15 @@ _UNSCOPED_BY_DESIGN: dict[str, str] = {
         "clinic's timeout, to find the deadlines that have passed. A site filter would be the wrong "
         "narrowing, like the snapshot reconciliation's"
     ),
-    "modules/queue/timers.py::_notify": (
-        "reads the moved ticket's own patient, queue and clinic by id to word its message; the "
-        "ticket came from the sweep above and nothing else is reachable from here (Issue 43)"
+    "modules/queue/notices.py::tell": (
+        "reads the moved ticket's own queue and clinic by id to word the patient's message (Issues "
+        "43, 45, 63); the ticket came from the move that caused the message, already scoped by its "
+        "route or taken by the recall sweep, and nothing else is reachable from here"
+    ),
+    "modules/queue/notices.py::tell_next_in_line": (
+        "reads the first waiting ticket **in the moved ticket's own queue and day** to tell that "
+        "patient they are next (Issue 63); the queue id comes from the ticket the move already "
+        "scoped, never from a request"
     ),
     "modules/queue/cancellation.py::cancel_own_ticket": (
         "a patient cancelling **their own** ticket (Issue 44) holds no role at a clinic, so there is "
@@ -166,8 +172,33 @@ _UNSCOPED_BY_DESIGN: dict[str, str] = {
         "resolved through get_queue, to find the moved patient's place (Issue 45). It returns an "
         "order key, never a row"
     ),
-    "modules/queue/transfer.py::_notify": (
-        "reads the new ticket's own patient and clinic by id to word the transfer message (Issue 45)"
+    "modules/notifications/service.py::_by_dedupe_key": (
+        "the notification ledger (Issue 63) is platform operational data, not a clinic's records: finds the row one queue event already recorded, by its unique dedupe key, so a "
+        "replay sends nothing; the key is built by the move that caused the event"
+    ),
+    "modules/notifications/service.py::_tried_channels": (
+        "the notification ledger (Issue 63) is platform operational data, not a clinic's records: walks one message's own fallback chain by id, from a row the service is delivering"
+    ),
+    "modules/notifications/service.py::deliver_committed": (
+        "the notification ledger (Issue 63) is platform operational data, not a clinic's records: the post-commit delivery of one row by the id its own commit published; no caller, "
+        "no clinic, like the retry sweep"
+    ),
+    "modules/notifications/service.py::run_retry_sweep": (
+        "the notification ledger (Issue 63) is platform operational data, not a clinic's records: a scheduled system job that retries **every** due message on the platform, like the "
+        "recall timer sweep"
+    ),
+    "modules/notifications/service.py::record_delivery_status": (
+        "the notification ledger (Issue 63) is platform operational data, not a clinic's records: a provider's delivery receipt names its message by the provider's id; the provider "
+        "holds no role at any clinic"
+    ),
+    "modules/notifications/service.py::get_status": (
+        "the notification ledger (Issue 63) is platform operational data, not a clinic's records: the admin status query, gated by the platform ``logs`` READ verb, not a clinic role"
+    ),
+    "modules/notifications/service.py::list_notifications": (
+        "the notification ledger (Issue 63) is platform operational data, not a clinic's records: the admin delivery viewer, gated by the platform ``logs`` READ verb, not a clinic role"
+    ),
+    "modules/notifications/service.py::_safe_finalise": (
+        "the notification ledger (Issue 63) is platform operational data, not a clinic's records: the email path finishing the row it recorded a moment earlier, by that row's id"
     ),
     "modules/queue/priority.py::_key_ahead_of": (
         "reads the order key of the waiting ticket just ahead of the named one, **in that ticket's "

@@ -34,7 +34,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import event as sqlalchemy_event
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, SessionTransaction
 
 logger = logging.getLogger(__name__)
 
@@ -91,19 +91,36 @@ _PENDING_KEY = "clinicq_pending_domain_events"
 
 def _drain(session: Session) -> None:
     """Publish everything this session queued, now that its transaction has committed."""
-    for event in session.info.pop(_PENDING_KEY, []):
+    for _savepoint, event in session.info.pop(_PENDING_KEY, []):
         publish(event)
 
 
-def _discard(session: Session, _previous: object = None) -> None:
-    """Throw away what this session queued: the transaction rolled back, so nothing happened.
+def _inside(savepoint: SessionTransaction | None, ended: SessionTransaction) -> bool:
+    """Whether an event queued in ``savepoint`` was inside the transaction ``ended``."""
+    while savepoint is not None:
+        if savepoint is ended:
+            return True
+        savepoint = savepoint.parent
+    return False
 
-    Registered on ``after_soft_rollback`` as well as ``after_rollback``, which is why it takes the
-    extra argument that hook passes: ``after_rollback`` fires only when there was a real database
-    transaction to undo, and a caller that queued an event and then changed its mind before writing
-    anything must still not have it published by the *next* commit on the same session.
+
+def _discard(session: Session, previous: SessionTransaction) -> None:
+    """Throw away what a rollback undid: nothing it describes happened.
+
+    Registered on ``after_soft_rollback``, which fires for every rollback: a real one, a caller that
+    changed its mind before writing anything, and a **savepoint**. A rolled-back savepoint undoes only
+    what was queued inside it (Issue 63). The recall sweep moves each ticket in its own savepoint and
+    skips one that staff moved first, and before this distinction that skip threw away the events,
+    and so the messages, of every ticket the sweep had already moved. Any other rollback discards
+    everything the session queued.
     """
-    session.info.pop(_PENDING_KEY, None)
+    if not previous.nested:
+        session.info.pop(_PENDING_KEY, None)
+        return
+    pending: list[tuple[SessionTransaction | None, DomainEvent]] = session.info.get(
+        _PENDING_KEY, []
+    )
+    pending[:] = [item for item in pending if not _inside(item[0], previous)]
 
 
 def publish_after_commit(session: Session, event: DomainEvent) -> None:
@@ -119,11 +136,13 @@ def publish_after_commit(session: Session, event: DomainEvent) -> None:
     a clinic and lifts a stale closure in one go. The queue lives on ``Session.info``, so the two
     permanent listeners are all that is ever registered.
     """
-    pending: list[DomainEvent] = session.info.setdefault(_PENDING_KEY, [])
-    pending.append(event)
+    pending: list[tuple[SessionTransaction | None, DomainEvent]] = (
+        session.info.setdefault(_PENDING_KEY, [])
+    )
+    # Remember the innermost savepoint, so rolling that savepoint back discards only this event.
+    pending.append((session.get_nested_transaction(), event))
     if not sqlalchemy_event.contains(session, "after_commit", _drain):
         sqlalchemy_event.listen(session, "after_commit", _drain)
-        sqlalchemy_event.listen(session, "after_rollback", _discard)
         sqlalchemy_event.listen(session, "after_soft_rollback", _discard)
 
 

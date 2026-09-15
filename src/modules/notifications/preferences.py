@@ -181,7 +181,10 @@ def _quiet_until(preference: NotificationPreference, now: datetime) -> datetime 
 
 
 def _patient_consent_denies(
-    db: Session, recipient: str, template: NotificationTemplate
+    db: Session,
+    recipient: str,
+    template: NotificationTemplate,
+    patient_id: str | None = None,
 ) -> bool:
     """Whether this message needs a patient's consent and does not have it (Issue 21).
 
@@ -190,6 +193,9 @@ def _patient_consent_denies(
     skip it. A recipient who is not a patient (a staff email address, a number nobody has verified)
     is not consent-gated; a sign-in code is not either, because the patient asked for it by typing
     their number.
+
+    ``patient_id`` names the patient directly (Issue 63): a push subscription id or a WhatsApp id is
+    not a phone number, so a patient notification is checked by who it is for, not where it goes.
     """
     from src.commons.phone import InvalidPhoneNumberError
     from src.modules.patients import service as patients
@@ -198,6 +204,8 @@ def _patient_consent_denies(
     purpose = consent_required_for(template)
     if purpose is None:
         return False
+    if patient_id is not None:
+        return not has_consent(db, patient_id, purpose)
     try:
         patient = patients.find_patient(db, recipient)
     except InvalidPhoneNumberError:
@@ -214,6 +222,7 @@ def resolve(
     template: NotificationTemplate,
     channel: NotificationChannel,
     now: datetime | None = None,
+    patient_id: str | None = None,
 ) -> DeliveryDecision:
     """Decide how one send should be handled against the recipient's consent and preferences.
 
@@ -223,11 +232,15 @@ def resolve(
     in — a patient who has not agreed to be messaged is not "opted out of a category", they never
     opted in. Then the recipient's per-category channel choice, quiet hours (deferred, not dropped)
     and the rule that essential mail to an *account holder* is never dropped.
+
+    ``patient_id`` marks a patient notification (Issue 63): consent is checked for that patient, and
+    the account-holder preferences below do not apply, because a patient has no account. A patient's
+    own preferences (quiet hours, opt-outs) are Issue 67's, and they belong in this same function.
     """
     now = now or _now()
     category = notification_category_for(template)
     essential = is_essential_category(category)
-    if _patient_consent_denies(db, recipient_email, template):
+    if _patient_consent_denies(db, recipient_email, template, patient_id):
         logger.info(
             "Notification suppressed: no patient consent for %s (%s)",
             template.value,
@@ -238,6 +251,14 @@ def resolve(
             category=category,
             essential=essential,
             reason="no-patient-consent",
+        )
+    if patient_id is not None:
+        return DeliveryDecision(
+            outcome=DeliveryOutcome.SEND,
+            category=category,
+            essential=essential,
+            channel=channel,
+            reason="ok",
         )
     preference = load_preference(db, recipient_email)
     choice = chosen_channel(preference, category)

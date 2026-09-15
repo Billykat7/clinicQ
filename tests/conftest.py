@@ -15,12 +15,14 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from src.commons.enums import NotificationDispatchMode
 from src.commons.ids import new_id
 from src.core import security
 from src.core.rate_limit import reset_all_limiters
 from src.database.models import Base
 from src.database.schema import sqlite_schema_translate_map
 from src.main import create_app
+from src.modules.notifications import dispatch
 
 # The auth/RBAC suites are bcrypt-bound (dozens of password logins each). Hash at a low cost in
 # the test process only by overriding the work-factor lookup that ``hash_password`` uses — this
@@ -44,6 +46,19 @@ def _reset_rate_limiters() -> Generator[None]:
     reset_all_limiters()
     yield
     reset_all_limiters()
+
+
+@pytest.fixture(autouse=True)
+def _deliver_notifications_inline() -> Generator[None]:
+    """Deliver patient notifications on the committing thread in every test (Issue 63).
+
+    Production hands post-commit delivery to a worker pool, so a request returns the moment its
+    transaction commits. A test asserting what was sent needs the send to have happened by the next
+    line, and a worker thread sharing a test's single in-memory SQLite connection would race it. The
+    background mode has its own tests, which force it explicitly.
+    """
+    with dispatch.forced(NotificationDispatchMode.INLINE):
+        yield
 
 
 @pytest.fixture

@@ -37,6 +37,9 @@ from src.database.models.notification_preference import NotificationPreference
 # as a table to *drop*.
 from src.database.models.patient import Patient
 from src.database.models.patient_consent import PatientConsent, PatientConsentEvent
+from src.database.models.patient_notification_preference import (
+    PatientNotificationPreference,
+)
 from src.database.models.paystack_event import PaystackEvent
 from src.database.models.permission import Permission
 from src.database.models.permission_audit_log import PermissionAuditLog
@@ -107,6 +110,7 @@ __all__ = [
     "Patient",
     "PatientConsent",
     "PatientConsentEvent",
+    "PatientNotificationPreference",
     "PatientRecentArea",
     "PaystackEvent",
     "Permission",

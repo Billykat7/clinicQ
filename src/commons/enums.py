@@ -747,6 +747,22 @@ class JoinRefusal(StrEnum):
     RATE_LIMITED = "rate_limited"
 
 
+class PatientEvent(StrEnum):
+    """Something that happened to a patient's ticket that the patient is told about (Issue 63).
+
+    The queue engine names the event and nothing else: :func:`src.modules.notifications.service.notify`
+    turns it into a template, a transport and a ledger row. Each event has exactly one template
+    (:data:`PATIENT_EVENT_TEMPLATE`).
+    """
+
+    NEXT = "next"
+    CALLED = "called"
+    RECALLED = "recalled"
+    NO_SHOW = "no_show"
+    TRANSFERRED = "transferred"
+    CANCELLED = "cancelled"
+
+
 class PatientChannel(StrEnum):
     """The channel a patient reached ClinicQ through (Issue 17).
 
@@ -1270,10 +1286,40 @@ class PermissionAuditTargetType(StrEnum):
 
 
 class NotificationChannel(StrEnum):
-    """Delivery channel for a notification. Stored in ``notification.channel``."""
+    """Delivery channel for a notification. Stored in ``notification.channel``.
+
+    ``WEB_PUSH`` and ``WHATSAPP`` reach a patient for free and ``SMS`` costs money per message, so a
+    patient notification tries them in :data:`PATIENT_TRANSPORT_CHAIN` order (Issue 63). ``EMAIL``
+    is for account holders only: a patient has no email address on record.
+    """
 
     EMAIL = "email"
     SMS = "sms"
+    WEB_PUSH = "web_push"
+    WHATSAPP = "whatsapp"
+
+
+#: The fallback chain for a patient notification (Issue 63): free transports first, SMS last. A
+#: patient's preferred transport, when it can reach them, is tried before the chain.
+PATIENT_TRANSPORT_CHAIN: tuple[NotificationChannel, ...] = (
+    NotificationChannel.WEB_PUSH,
+    NotificationChannel.WHATSAPP,
+    NotificationChannel.SMS,
+)
+
+
+class NotificationDispatchMode(StrEnum):
+    """When a patient notification is handed to its transport after the commit (Issue 63).
+
+    ``BACKGROUND`` (the default) hands delivery to a small worker pool, so the request that called a
+    ticket returns as soon as its transaction commits, whatever a provider is doing. ``INLINE``
+    delivers on the committing thread before it returns: deterministic, for tests and scripts.
+    Either way the ledger row was written in the queue's own transaction, so a delivery that never
+    starts (a crash, a full pool) is picked up by the retry sweep.
+    """
+
+    BACKGROUND = "background"
+    INLINE = "inline"
 
 
 class NotificationStatus(StrEnum):
@@ -1286,8 +1332,8 @@ class NotificationStatus(StrEnum):
     ``FAILED`` — the last attempt failed transiently and the row is awaiting another try.
     ``DEAD`` — retries are exhausted (``attempts >= max_attempts``); the message is
     dead-lettered, never lost silently, so an operator can see it stopped.
-    ``SUPPRESSED`` — no transport was configured (development without SMTP/SMS), so nothing
-    was sent; recorded only when a ledger row already exists.
+    ``SUPPRESSED`` — deliberately not sent: the patient has not consented, the recipient opted
+    out, or no transport can reach them (Issue 63). ``last_error`` says which.
     """
 
     QUEUED = "queued"
@@ -1296,6 +1342,18 @@ class NotificationStatus(StrEnum):
     FAILED = "failed"
     DEAD = "dead"
     SUPPRESSED = "suppressed"
+
+
+#: Where a notification's story ends (Issue 63): nothing retries a row in one of these. ``SENT`` is
+#: terminal for the service; a delivery receipt may still refine it to ``DELIVERED``.
+NOTIFICATION_TERMINAL_STATUSES: frozenset[NotificationStatus] = frozenset(
+    {
+        NotificationStatus.SENT,
+        NotificationStatus.DELIVERED,
+        NotificationStatus.DEAD,
+        NotificationStatus.SUPPRESSED,
+    }
+)
 
 
 class NotificationTemplate(StrEnum):
@@ -1342,6 +1400,11 @@ class NotificationTemplate(StrEnum):
     TICKET_NO_SHOW = "ticket_no_show"
     # A patient moved on to the next queue of their visit (Issue 45): the new queue, number and wait.
     TICKET_TRANSFERRED = "ticket_transferred"
+    # A patient's own turn (Issue 63): the next patient is told they are next, the called patient to
+    # come in now, and a patient whose ticket the desk cancelled is told it was cancelled.
+    TICKET_NEXT = "ticket_next"
+    TICKET_CALLED = "ticket_called"
+    TICKET_CANCELLED = "ticket_cancelled"
     # Catch-all for a pre-rendered message with no dedicated key (kept small on purpose).
     GENERIC = "generic"
 
@@ -1445,6 +1508,9 @@ NOTIFICATION_TEMPLATE_CATEGORY: dict[NotificationTemplate, NotificationCategory]
     NotificationTemplate.TICKET_RECALLED: NotificationCategory.ACCOUNT,
     NotificationTemplate.TICKET_NO_SHOW: NotificationCategory.ACCOUNT,
     NotificationTemplate.TICKET_TRANSFERRED: NotificationCategory.ACCOUNT,
+    NotificationTemplate.TICKET_NEXT: NotificationCategory.ACCOUNT,
+    NotificationTemplate.TICKET_CALLED: NotificationCategory.ACCOUNT,
+    NotificationTemplate.TICKET_CANCELLED: NotificationCategory.ACCOUNT,
 }
 
 
@@ -1483,8 +1549,21 @@ NOTIFICATION_URGENT_TEMPLATES: frozenset[NotificationTemplate] = frozenset(
         NotificationTemplate.TICKET_RECALLED,
         NotificationTemplate.TICKET_NO_SHOW,
         NotificationTemplate.TICKET_TRANSFERRED,
+        # "You are next" and "please come in now" are the product's core promise (Issue 63).
+        NotificationTemplate.TICKET_NEXT,
+        NotificationTemplate.TICKET_CALLED,
     }
 )
+
+#: The template each patient event is delivered with (Issue 63). A test fails if an event lacks one.
+PATIENT_EVENT_TEMPLATE: dict[PatientEvent, NotificationTemplate] = {
+    PatientEvent.NEXT: NotificationTemplate.TICKET_NEXT,
+    PatientEvent.CALLED: NotificationTemplate.TICKET_CALLED,
+    PatientEvent.RECALLED: NotificationTemplate.TICKET_RECALLED,
+    PatientEvent.NO_SHOW: NotificationTemplate.TICKET_NO_SHOW,
+    PatientEvent.TRANSFERRED: NotificationTemplate.TICKET_TRANSFERRED,
+    PatientEvent.CANCELLED: NotificationTemplate.TICKET_CANCELLED,
+}
 
 #: Templates whose message *is* a secret, and the payload fields that carry it (Issue 17). The
 #: notification ledger keeps a row for each send, but never these fields' values: the row stores a

@@ -70,6 +70,7 @@ from src.commons.enums import (
     ActorKind,
     AuditAction,
     AuditEntityType,
+    PatientEvent,
     TicketStatus,
 )
 from src.commons.exceptions import ConflictError, NotFoundError
@@ -78,6 +79,7 @@ from src.core.audit import SYSTEM_ACTOR, record_audit_event
 from src.core.config import get_settings
 from src.database.models.queue import Queue
 from src.database.models.ticket import Ticket, status_write_permitted
+from src.modules.queue import notices
 from src.modules.queue.snapshot import on_queue_changed
 from src.modules.queue.tickets import CALL_ORDER
 from src.modules.queue.waits import record_visit
@@ -332,6 +334,20 @@ def transition_ticket(
             db,
             queue,
             called_number=ticket.number if requested in _CALLING else None,
+        )
+    # The patient hears about it after the commit, through the one notification call (Issue 63).
+    if requested is TicketStatus.CALLED:
+        notices.tell(
+            db,
+            ticket,
+            PatientEvent.CALLED,
+            moment=moment,
+            occurrence=moment.isoformat(),
+        )
+    if current is TicketStatus.WAITING:
+        # The line got shorter, so somebody may now be first in it.
+        notices.tell_next_in_line(
+            db, ticket.queue_id, ticket.service_day, moment=moment
         )
     return ticket
 

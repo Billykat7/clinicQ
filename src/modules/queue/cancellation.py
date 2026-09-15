@@ -43,11 +43,14 @@ from src.commons.enums import (
     ActorKind,
     CancellationReason,
     PatientChannel,
+    PatientEvent,
     TicketStatus,
 )
 from src.commons.exceptions import ConflictError, NotFoundError
+from src.commons.time import now_sast
 from src.core.site_scope import SiteAccess, scoped_select
 from src.database.models.ticket import Ticket
+from src.modules.queue import notices
 from src.modules.queue.lifecycle import Actor, lock_ticket, transition_ticket
 from src.modules.queue.tickets import behind
 
@@ -151,6 +154,9 @@ def cancel_ticket(
     moved.cancelled_via = channel.value
     moved.cancellation_reason = reason.value if reason is not None else None
     db.flush()
+    if actor.kind is not ActorKind.PATIENT:
+        # A patient who cancelled knows; one whose ticket the clinic cancelled must be told (Issue 63).
+        notices.tell(db, moved, PatientEvent.CANCELLED, moment=moment or now_sast())
     return CancelResult(ticket=moved, moved_up=_behind(db, moved))
 
 
