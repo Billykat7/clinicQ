@@ -14,6 +14,10 @@
 #   resource | role=<role> | key=<resource> | verb=<verb> | <allow|deny> | tier=<tier>
 #   surface  | role=<role> | key=<surface>  | path=<href> | <allow|deny> | tier=<tier>
 
+resource | role=admin | key=appointments | verb=create | deny | tier=own
+resource | role=admin | key=appointments | verb=delete | deny | tier=own
+resource | role=admin | key=appointments | verb=read | deny | tier=own
+resource | role=admin | key=appointments | verb=update | deny | tier=own
 resource | role=admin | key=audit | verb=create | deny | tier=business
 resource | role=admin | key=audit | verb=delete | deny | tier=business
 resource | role=admin | key=audit | verb=read | allow | tier=business
@@ -182,6 +186,10 @@ resource | role=admin | key=widgets.archive | verb=create | allow | tier=busines
 resource | role=admin | key=widgets.archive | verb=delete | allow | tier=business
 resource | role=admin | key=widgets.archive | verb=read | allow | tier=business
 resource | role=admin | key=widgets.archive | verb=update | allow | tier=business
+resource | role=clinic_manager | key=appointments | verb=create | allow | tier=assigned
+resource | role=clinic_manager | key=appointments | verb=delete | deny | tier=assigned
+resource | role=clinic_manager | key=appointments | verb=read | allow | tier=assigned
+resource | role=clinic_manager | key=appointments | verb=update | allow | tier=assigned
 resource | role=clinic_manager | key=audit | verb=create | deny | tier=own
 resource | role=clinic_manager | key=audit | verb=delete | deny | tier=own
 resource | role=clinic_manager | key=audit | verb=read | deny | tier=own
@@ -350,6 +358,10 @@ resource | role=clinic_manager | key=widgets.archive | verb=create | deny | tier
 resource | role=clinic_manager | key=widgets.archive | verb=delete | deny | tier=own
 resource | role=clinic_manager | key=widgets.archive | verb=read | deny | tier=own
 resource | role=clinic_manager | key=widgets.archive | verb=update | deny | tier=own
+resource | role=nurse_doctor | key=appointments | verb=create | deny | tier=assigned
+resource | role=nurse_doctor | key=appointments | verb=delete | deny | tier=assigned
+resource | role=nurse_doctor | key=appointments | verb=read | allow | tier=assigned
+resource | role=nurse_doctor | key=appointments | verb=update | deny | tier=assigned
 resource | role=nurse_doctor | key=audit | verb=create | deny | tier=own
 resource | role=nurse_doctor | key=audit | verb=delete | deny | tier=own
 resource | role=nurse_doctor | key=audit | verb=read | deny | tier=own
@@ -518,6 +530,10 @@ resource | role=nurse_doctor | key=widgets.archive | verb=create | deny | tier=o
 resource | role=nurse_doctor | key=widgets.archive | verb=delete | deny | tier=own
 resource | role=nurse_doctor | key=widgets.archive | verb=read | deny | tier=own
 resource | role=nurse_doctor | key=widgets.archive | verb=update | deny | tier=own
+resource | role=patient | key=appointments | verb=create | deny | tier=own
+resource | role=patient | key=appointments | verb=delete | deny | tier=own
+resource | role=patient | key=appointments | verb=read | deny | tier=own
+resource | role=patient | key=appointments | verb=update | deny | tier=own
 resource | role=patient | key=audit | verb=create | deny | tier=own
 resource | role=patient | key=audit | verb=delete | deny | tier=own
 resource | role=patient | key=audit | verb=read | deny | tier=own
@@ -686,6 +702,10 @@ resource | role=patient | key=widgets.archive | verb=create | deny | tier=own
 resource | role=patient | key=widgets.archive | verb=delete | deny | tier=own
 resource | role=patient | key=widgets.archive | verb=read | deny | tier=own
 resource | role=patient | key=widgets.archive | verb=update | deny | tier=own
+resource | role=platform_admin | key=appointments | verb=create | deny | tier=business
+resource | role=platform_admin | key=appointments | verb=delete | deny | tier=business
+resource | role=platform_admin | key=appointments | verb=read | allow | tier=business
+resource | role=platform_admin | key=appointments | verb=update | deny | tier=business
 resource | role=platform_admin | key=audit | verb=create | deny | tier=business
 resource | role=platform_admin | key=audit | verb=delete | deny | tier=business
 resource | role=platform_admin | key=audit | verb=read | allow | tier=business
@@ -854,6 +874,10 @@ resource | role=platform_admin | key=widgets.archive | verb=create | deny | tier
 resource | role=platform_admin | key=widgets.archive | verb=delete | deny | tier=own
 resource | role=platform_admin | key=widgets.archive | verb=read | deny | tier=own
 resource | role=platform_admin | key=widgets.archive | verb=update | deny | tier=own
+resource | role=receptionist | key=appointments | verb=create | deny | tier=assigned
+resource | role=receptionist | key=appointments | verb=delete | deny | tier=assigned
+resource | role=receptionist | key=appointments | verb=read | allow | tier=assigned
+resource | role=receptionist | key=appointments | verb=update | deny | tier=assigned
 resource | role=receptionist | key=audit | verb=create | deny | tier=own
 resource | role=receptionist | key=audit | verb=delete | deny | tier=own
 resource | role=receptionist | key=audit | verb=read | deny | tier=own
@@ -1022,6 +1046,10 @@ resource | role=receptionist | key=widgets.archive | verb=create | deny | tier=o
 resource | role=receptionist | key=widgets.archive | verb=delete | deny | tier=own
 resource | role=receptionist | key=widgets.archive | verb=read | deny | tier=own
 resource | role=receptionist | key=widgets.archive | verb=update | deny | tier=own
+resource | role=user | key=appointments | verb=create | deny | tier=own
+resource | role=user | key=appointments | verb=delete | deny | tier=own
+resource | role=user | key=appointments | verb=read | deny | tier=own
+resource | role=user | key=appointments | verb=update | deny | tier=own
 resource | role=user | key=audit | verb=create | deny | tier=own
 resource | role=user | key=audit | verb=delete | deny | tier=own
 resource | role=user | key=audit | verb=read | deny | tier=own

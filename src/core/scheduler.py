@@ -20,6 +20,9 @@ jobs in the application timezone. The kernel registers only the sweeps it owns:
   then mark them a no-show (see :func:`src.modules.queue.timers.run_recall_timers`). Open decision 1
   was settled for this sweep: an APScheduler job under the advisory lock, not an ``arq`` worker,
   because the deadlines live in the database and this module already gives single-runner sweeps.
+* the **appointment slot generation** (Issue 80), which rolls every listed clinic's bookable slots
+  forward to its booking horizon each night (see
+  :func:`src.modules.appointments.service.generate_published`).
 
 Your own sweeps are added the same way: a ``run_*`` function that takes the advisory lock, and one
 ``scheduler.add_job`` call in :func:`start_scheduler`.
@@ -56,6 +59,7 @@ from src.core import permission_usage
 from src.core.config import Settings, get_settings
 from src.core.s3_logging import APP_TIMEZONE
 from src.database.session import get_db_context
+from src.modules.appointments import service as appointments_service
 from src.modules.display import devices as display_devices
 from src.modules.documents import service as documents_service
 from src.modules.documents.storage import LocalObjectStorage
@@ -103,6 +107,9 @@ _QUEUE_REQUEST_KEY_LOCK_KEY: int = 554
 _DISPLAY_DEVICE_WATCH_LOCK_KEY: int = 661
 #: The delivery failure watch (Issue 71): one runner, so a failing transport is measured once per run.
 _NOTIFICATION_FAILURE_WATCH_LOCK_KEY: int = 771
+#: The appointment slot generation (Issue 80). Idempotent across instances (the unique slot start
+#: refuses a duplicate), so the lock only saves a second instance the work and the refused insert.
+_APPOINTMENT_SLOTS_LOCK_KEY: int = 880
 
 # ── job identifiers ──────────────────────────────────────────────────────────
 # So a restart replaces rather than duplicates each job.
@@ -116,6 +123,7 @@ _VISIT_NOTE_RETENTION_JOB_ID = "visit_note_retention_sweep"
 _QUEUE_REQUEST_KEY_JOB_ID = "queue_request_key_sweep"
 _DISPLAY_DEVICE_WATCH_JOB_ID = "display_device_watch"
 _NOTIFICATION_FAILURE_WATCH_JOB_ID = "notification_failure_watch"
+_APPOINTMENT_SLOTS_JOB_ID = "appointment_slot_generation"
 
 # Process-wide scheduler; created by :func:`start_scheduler`, stopped by :func:`shutdown_scheduler`.
 _scheduler: BackgroundScheduler | None = None
@@ -373,6 +381,28 @@ def run_display_device_watch(
         return result
 
 
+def run_appointment_slot_generation(*, moment: datetime | None = None) -> int:
+    """Roll every listed clinic's appointment slots forward to its horizon once; return how many were made.
+
+    Elects a single runner across instances via the advisory lock, then delegates to
+    :func:`src.modules.appointments.service.generate_published`. Idempotent: a second run the same
+    night creates nothing. Safe to call directly.
+    """
+    with (
+        get_db_context() as db,
+        _advisory_lock(db, _APPOINTMENT_SLOTS_LOCK_KEY) as acquired,
+    ):
+        if not acquired:
+            logger.debug(
+                "Appointment slot generation skipped: another instance holds the lock."
+            )
+            return 0
+        created = appointments_service.generate_published(db, moment=moment)
+        if created:
+            logger.info("Appointment slot generation created %d slot(s).", created)
+        return created
+
+
 def start_scheduler(settings: Settings | None = None) -> BackgroundScheduler | None:
     """Start the process-wide scheduler and register every enabled job.
 
@@ -498,6 +528,17 @@ def start_scheduler(settings: Settings | None = None) -> BackgroundScheduler | N
         # A missed minute is coalesced: the watch compares heartbeats with the time it runs, so one late
         # run alerts about everything several missed runs would have, and each silence once.
         misfire_grace_time=60,
+        coalesce=True,
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        run_appointment_slot_generation,
+        trigger=CronTrigger(hour=2, minute=30, timezone=APP_TIMEZONE),
+        id=_APPOINTMENT_SLOTS_JOB_ID,
+        name="Nightly appointment slot generation",
+        # A missed night is coalesced: generation reconciles each clinic's whole horizon, so one late
+        # run makes every slot the missed runs would have, and none twice.
+        misfire_grace_time=3600,
         coalesce=True,
         replace_existing=True,
     )

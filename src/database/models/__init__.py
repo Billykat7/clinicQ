@@ -10,6 +10,15 @@ from src.database.models.action import Action
 from src.database.models.alert import Alert
 from src.database.models.alert_draft import AlertDraft
 from src.database.models.alert_recipient import AlertRecipient
+from src.database.models.appointment_slot import (
+    Appointment,
+    AppointmentBlock,
+    AppointmentDayOverride,
+    AppointmentPolicy,
+    AppointmentSlot,
+    AppointmentTemplateWindow,
+    QueueCapacityDay,
+)
 from src.database.models.area import Area, AreaName, PatientRecentArea
 from src.database.models.audit_event import AuditEvent
 from src.database.models.base import Base, metadata
@@ -96,6 +105,12 @@ __all__ = [
     "Alert",
     "AlertDraft",
     "AlertRecipient",
+    "Appointment",
+    "AppointmentBlock",
+    "AppointmentDayOverride",
+    "AppointmentPolicy",
+    "AppointmentSlot",
+    "AppointmentTemplateWindow",
     "Area",
     "AreaName",
     "AuditEvent",
@@ -132,6 +147,7 @@ __all__ = [
     "PublicHoliday",
     "PushSubscription",
     "Queue",
+    "QueueCapacityDay",
     "QueueReorder",
     "QueueRequestKey",
     "RbacRole",

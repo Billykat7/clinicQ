@@ -242,6 +242,39 @@ CASES: dict[str, dict[str, object]] = {
         "reader": "a@clinicq.example",
         "paths": lambda site, _row: (f"/api/v1/sites/{site}/display-devices",),
     },
+    "appointments": {
+        # A clinic's appointment book (Issue 80): the front desk reads the day's bookable slots, and
+        # naming ``appointments`` covers the resource as well as the slot model's probe below.
+        "resource": "appointments",
+        "reader": "a@clinicq.example",
+        "paths": lambda site, _row: (
+            f"/api/v1/sites/{site}/appointments/availability",
+        ),
+    },
+    "appointmentslot": {
+        "resource": "appointments",
+        "reader": "a@clinicq.example",
+        "paths": lambda site, _row: (
+            f"/api/v1/sites/{site}/appointments/availability?include_unavailable=true",
+        ),
+    },
+    "appointmentpolicy": {
+        "resource": "appointments",
+        "reader": "a@clinicq.example",
+        "paths": lambda site, _row: (f"/api/v1/sites/{site}/appointments/policy",),
+    },
+    "appointmenttemplatewindow": {
+        "resource": "appointments",
+        "reader": "a@clinicq.example",
+        "paths": lambda site, _row: (
+            f"/api/v1/sites/{site}/appointments/queues/{_QUEUE_AT.get(site, _NOWHERE)}/template",
+        ),
+    },
+    "appointmentblock": {
+        "resource": "appointments",
+        "reader": "a@clinicq.example",
+        "paths": lambda site, _row: (f"/api/v1/sites/{site}/appointments/blocks",),
+    },
     "staffinvitation": {
         # Who has been invited to a clinic (Issue 22): the same grant as the staff list, so a
         # receptionist reads it, and another clinic's list is a 404 like everything else.
@@ -268,6 +301,16 @@ PENDING: dict[str, str] = {
         "a consent event records the clinic it was given at for provenance (Issue 21), but no "
         "clinic-facing route reads consent: a patient reads their own through their session. A "
         "route that lists a clinic's consent events must add a case here"
+    ),
+    "appointmentdayoverride": (
+        "one date's appointment windows (Issue 80) are only written, by PUT and DELETE on "
+        "/sites/{site_id}/appointments/queues/{queue_id}/days/{day}, which the site guard answers "
+        "404 for another clinic exactly as the template GET probed above; a route that reads a "
+        "clinic's overrides must add a case here"
+    ),
+    "appointment": (
+        "a booked place carries its clinic (Issue 80), but no route reads bookings yet: booking, "
+        "rescheduling and cancelling arrive with Issue 81, which must add a case here"
     ),
     "sitequeuesnapshot": (
         "a queue snapshot carries its clinic for the index discovery reads by (Issue 36), but no "

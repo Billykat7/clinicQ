@@ -55,9 +55,11 @@ itself when the time comes.
 
 ## Files touched
 
-- `src/modules/appointments/`
+- `src/modules/appointments/` (`schedule.py`, `capacity.py`, `availability.py`, `service.py`, `router.py`, `rbac_manifest.py`)
 - `src/database/models/appointment_slot.py`
-- `alembic/versions/NNNN_appointments.py`
+- `alembic/versions/0039_appointments.py`
+- `src/modules/queue/service.py` and `transfer.py` (the daily limit is checked through `appointments/capacity.py`)
+- `src/core/scheduler.py` (the nightly slot generation), `contracts/appointments.yaml`
 
 ---
 

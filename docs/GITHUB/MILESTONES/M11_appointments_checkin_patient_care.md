@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Status** | 📋 Planned |
-| **Progress** | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
+| **Status** | 🚧 In progress: appointment slots with one daily limit shared with walk-ins (80) delivered |
+| **Progress** | 🟩⬜⬜⬜⬜⬜⬜⬜⬜⬜ **12%** (1/8 issues) |
 | **Sprints** | 11–12 (weeks 21–24), semester 2. The sprint plan spreads its issues over sprints 8–12: some start early against stubs (see the table) |
 | **Release tag** | `v0.11.0` |
 | **Primary owner** | A, Backend Lead · C, Frontend/Patient |

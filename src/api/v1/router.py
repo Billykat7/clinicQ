@@ -14,6 +14,7 @@ from src.api.v1.routes.rbac_admin import router as rbac_admin_router
 from src.api.v1.routes.reference import router as reference_router
 from src.api.v1.routes.webhooks import router as webhooks_router
 from src.modules.alerts.router import router as alerts_router
+from src.modules.appointments.router import router as appointments_router
 from src.modules.audit.router import router as audit_router
 from src.modules.audit.router import site_router as site_audit_router
 from src.modules.discovery.router import router as discovery_router
@@ -64,3 +65,4 @@ api_v1_router.include_router(staff_invitations_router)
 api_v1_router.include_router(visits_router)
 api_v1_router.include_router(discovery_router)
 api_v1_router.include_router(display_router)
+api_v1_router.include_router(appointments_router)
