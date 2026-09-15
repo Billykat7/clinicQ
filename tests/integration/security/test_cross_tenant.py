@@ -77,6 +77,13 @@ _TICKET_AT: dict[str, str] = {}
 #: at Clinic A who may read it there, so "another clinic answers 404" is never confused with "this
 #: caller may not read this at all".
 CASES: dict[str, dict[str, object]] = {
+    "notification": {
+        # A clinic's SMS spend and cap (Issue 65), read from the ledger rows that carry its site_id.
+        # Clinic A's manager asks for clinic B's budget and gets the guard's 404.
+        "resource": "sites.settings",
+        "reader": "manager.a@clinicq.example",
+        "paths": lambda site, _row: (f"/api/v1/sites/{site}/sms-budget",),
+    },
     "auditevent": {
         # The clinic's own audit trail (Issue 20). The model carries ``site_id``, so the discovery
         # below finds it by its class name as well as by its resource key.
@@ -246,12 +253,6 @@ CASES: dict[str, dict[str, object]] = {
 
 #: Site-scoped surfaces with no route yet: the issue that brings them must add a case here.
 PENDING: dict[str, str] = {
-    "notification": (
-        "a notification carries the clinic that sent it so its cost is reportable per clinic "
-        "(Issue 63), but no clinic-facing route reads the ledger: the delivery viewer is the "
-        "platform ``logs`` verb, and a patient's own messages reach them, not a clinic. The SMS cost "
-        "totals (Issue 65) or a report that lists a clinic's messages must add a case here"
-    ),
     "queuerequestkey": (
         "a request key carries its clinic so a key sent at one clinic is never replayed at another "
         "(Issue 50), but no route reads keys: the queue routes look one up only for the signed-in "

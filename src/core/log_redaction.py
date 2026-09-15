@@ -59,6 +59,10 @@ _OTP = re.compile(
     r"passcode|pin|code)\b(\W+(?:[a-z]{1,8}\W+){0,3}?)\d{4,8}\b"
 )
 
+#: The secret in an SMS delivery-receipt callback path (Issue 65): the gateway cannot sign, so the URL
+#: carries it, and a request log line must not.
+_WEBHOOK_PATH_TOKEN = re.compile(r"(/webhooks/sms/[\w-]+/)[^/\s?\"']+")
+
 #: A JSON Web Token: three base64url segments, the first always starting ``eyJ`` (``{"``).
 _JWT = re.compile(r"\beyJ[\w-]{5,}\.[\w-]{5,}\.[\w-]*")
 #: An HTTP bearer credential, whatever its format.
@@ -82,6 +86,7 @@ _RECORD_ATTRS: Final = frozenset(vars(logging.makeLogRecord({}))) | {
 
 def redact(text: str) -> str:
     """Return ``text`` with phone numbers, OTPs and tokens masked."""
+    text = _WEBHOOK_PATH_TOKEN.sub(lambda m: f"{m.group(1)}{TOKEN_MASK}", text)
     text = _JWT.sub(TOKEN_MASK, text)
     text = _BEARER.sub(lambda m: f"{m.group(1)} {TOKEN_MASK}", text)
     text = _OTP.sub(lambda m: f"{m.group(1)}{m.group(2)}{OTP_MASK}", text)

@@ -54,9 +54,11 @@ cost log are part of the feature rather than an afterthought.
 
 ## Files touched
 
-- `src/modules/notifications/sms.py`
-- `src/modules/notifications/budget.py`
-- `src/api/v1/routes/webhooks.py`
+- `src/modules/notifications/sms.py`, `src/modules/notifications/sms_segments.py`
+- `src/modules/notifications/budget.py`, `src/modules/notifications/budget_router.py`
+- `src/api/v1/routes/webhooks.py`, `src/core/webhook_gateways/africastalking.py`
+- `alembic/versions/0034_sms_budget.py`
+- `docs/OPS/SMS_GATEWAY.md`
 - `tests/integration/notifications/test_sms_caps.py`
 
 ---

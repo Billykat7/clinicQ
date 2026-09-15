@@ -81,6 +81,9 @@ class Site(Base, TimestampMixin, ActiveMixin, SoftDeleteMixin):
         ),
         # A percentage of the screen's own volume (Issue 60).
         CheckConstraint("announce_volume BETWEEN 0 AND 100", name="announce_volume"),
+        CheckConstraint(
+            "sms_daily_cap IS NULL OR sms_daily_cap >= 0", name="sms_daily_cap"
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -202,6 +205,9 @@ class Site(Base, TimestampMixin, ActiveMixin, SoftDeleteMixin):
         server_default=SITE_DEFAULT_TRANSFER_PLACEMENT.value,
     )
     """:class:`~src.commons.enums.TransferPlacement`: where a transferred patient goes (Issue 45)."""
+    sms_daily_cap: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    """How many SMS this clinic may send in a Johannesburg day (Issue 65); ``NULL`` uses
+    ``SMS_SITE_DAILY_CAP``. Reaching it stops the clinic's SMS for the day and alerts the team."""
     recall_timeout_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     """The clinic's recall timeout in minutes for queues that set none (Issue 43). ``None`` uses the
     platform default (``QUEUE_RECALL_TIMEOUT_MINUTES``)."""

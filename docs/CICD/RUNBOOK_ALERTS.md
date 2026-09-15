@@ -60,6 +60,33 @@ back: …"* follows when it reports again.
    [KIOSK_SETUP.md](../OPS/KIOSK_SETUP.md), *When it does not work*.
 5. **Write in the channel** what you found. No need to silence anything: the "back" message ends it.
 
+## An SMS cap was reached
+
+*"💸 SMS cap reached: Zola Clinic has sent its 300 SMS for 2026-09-15…"* or *"💸 SMS cap reached for one
+patient (…)"*, from ClinicQ itself (Issue 65). It comes once per clinic, or once per patient, per day.
+Every SMS refused after it is on the delivery ledger as `suppressed` with the reason. Web push still goes
+out.
+
+1. **One clinic, late in a busy day:** the cap is doing its job. Ask the clinic manager whether they want a
+   higher cap for that clinic, and set it with `PUT /api/v1/sites/{site_id}/sms-budget`. Today's
+   count and spend are at `GET /api/v1/sites/{site_id}/sms-budget`.
+2. **Early in the day, or one patient:** suspect a loop. Look at the ledger for that clinic or patient
+   (`GET /api/v1/notifications?channel=sms`). If one ticket is producing message after message, turn the
+   kill switch on (below) and report it as a bug.
+3. **Several clinics at once:** turn the kill switch on first, then investigate
+   ([SMS_GATEWAY.md](../OPS/SMS_GATEWAY.md)).
+4. **Write in the channel** what you found and whether you changed a cap.
+
+## The SMS kill switch was flipped
+
+*"🛑 SMS kill switch ON: no SMS will be sent (by ops@…: reason)"* and later *"✅ SMS kill switch OFF…"*,
+from ClinicQ itself. Someone stopped every SMS on the platform, sign-in codes included.
+
+1. **Was it you, or agreed?** The message names who and why. If nobody in the channel expected it, ask
+   that person before turning it off.
+2. **While it is on,** patients get web push only, and patients signing in by phone get no code. Keep it on
+   no longer than needed: [SMS_GATEWAY.md](../OPS/SMS_GATEWAY.md) §4 says how to turn it off.
+
 ## Not alerts
 
 - *"⏸ not deployed: this environment is not provisioned yet"*: expected until its host exists.

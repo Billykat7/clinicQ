@@ -9,7 +9,7 @@ webhook posts.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, time
+from datetime import date, datetime, time
 from decimal import Decimal
 
 from pydantic import BaseModel, Field, model_validator
@@ -313,3 +313,44 @@ class PushUnsubscribeIn(BaseModel):
     """Which of the signed-in patient's browsers to stop notifying."""
 
     endpoint: str = Field(min_length=12, max_length=MAX_PUSH_ENDPOINT_LENGTH)
+
+
+# --- SMS budget and kill switch (Issue 65) --------------------------------------------------------
+
+
+class SmsKillSwitchOut(BaseModel):
+    """Whether every SMS is stopped, and who said so."""
+
+    enabled: bool
+    reason: str | None = None
+    changed_by: str | None = None
+    changed_at: datetime | None = None
+
+
+class SmsKillSwitchIn(BaseModel):
+    """Stop every SMS (``enabled: true``) or let them send again, with a reason for the team."""
+
+    enabled: bool
+    reason: str | None = Field(default=None, max_length=200)
+
+
+class SmsBudgetOut(BaseModel):
+    """A clinic's SMS today: its cap, what it has sent and what that cost (Issue 65)."""
+
+    site_id: str
+    day: date
+    cap: int = Field(ge=0)
+    own_cap: int | None = Field(
+        default=None,
+        description="The clinic's own cap; null uses the platform default.",
+    )
+    sent: int = Field(ge=0)
+    remaining: int = Field(ge=0)
+    spend: Decimal
+    currency: str
+
+
+class SmsBudgetIn(BaseModel):
+    """Set a clinic's own daily SMS cap, or ``null`` to use the platform default."""
+
+    daily_cap: int | None = Field(default=None, ge=0, le=100_000)

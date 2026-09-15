@@ -70,6 +70,11 @@ from src.database.models.site_payment_profile import (
     SitePaymentProfile,
 )
 from src.database.models.site_queue_snapshot import SiteQueueSnapshot
+from src.database.models.sms_budget import (
+    PlatformSwitchState,
+    SmsCapAlert,
+    SmsDeliveryEvent,
+)
 from src.database.models.staff_invitation import StaffInvitation
 from src.database.models.staff_queue_assignment import StaffQueueAssignment
 from src.database.models.stripe_event import StripeEvent
@@ -118,6 +123,7 @@ __all__ = [
     "PermissionAuditLog",
     "PermissionUsage",
     "PermissionUsageWindow",
+    "PlatformSwitchState",
     "PublicHoliday",
     "PushSubscription",
     "Queue",
@@ -136,6 +142,8 @@ __all__ = [
     "SitePaymentMedicalAid",
     "SitePaymentProfile",
     "SiteQueueSnapshot",
+    "SmsCapAlert",
+    "SmsDeliveryEvent",
     "SoftDeleteMixin",
     "StaffInvitation",
     "StaffQueueAssignment",

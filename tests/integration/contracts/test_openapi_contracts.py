@@ -95,6 +95,10 @@ CONTRACTS: tuple[Contract, ...] = (
         filename="sites.yaml",
         prefix="/api/v1/sites",
         excluded={
+            "/api/v1/sites/{site_id}/sms-budget": (
+                "a clinic's SMS spend and cap: it sits under this prefix but belongs to the "
+                "notifications module (Issue 65), whose contract Issue 71 writes"
+            ),
             "/api/v1/sites/{site_id}/audit/events": (
                 "a clinic's own audit trail: it sits under this prefix but belongs to the audit "
                 "module (Issue 20), and will be documented by that module's contract"

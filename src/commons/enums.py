@@ -1448,6 +1448,51 @@ class SmsProviderKind(StrEnum):
 
     LOGGING = "logging"
     FAKE = "fake"
+    AFRICAS_TALKING = "africas_talking"
+
+
+class SmsBlockReason(StrEnum):
+    """Why an SMS was not sent although a patient could be reached by one (Issue 65).
+
+    Recorded on the ledger row (``last_error``) and, for the caps, raised once per day as a team alert,
+    so a message that did not leave never does so silently.
+
+    - ``KILL_SWITCH``: an operator stopped every SMS (``PUT /notifications/sms/kill-switch``).
+    - ``SITE_DAILY_CAP``: the clinic has sent its day's allowance.
+    - ``PATIENT_DAILY_CAP``: this patient has been sent their day's allowance.
+    - ``TOO_LONG``: the message would be more than ``SMS_MAX_SEGMENTS`` billable parts.
+    """
+
+    KILL_SWITCH = "kill_switch"
+    SITE_DAILY_CAP = "site_daily_cap"
+    PATIENT_DAILY_CAP = "patient_daily_cap"
+    TOO_LONG = "too_long"
+
+
+class PlatformSwitch(StrEnum):
+    """A switch an operator flips at run time, stored in ``platform_switch`` (Issue 65).
+
+    Read from the database on every use, so turning one on takes effect on the next message, with no
+    deploy and no restart.
+
+    - ``SMS_KILL``: when on, no SMS leaves the platform.
+    """
+
+    SMS_KILL = "sms_kill"
+
+
+class SmsDeliveryState(StrEnum):
+    """What a delivery receipt says about one SMS (Issue 65), normalised across gateways.
+
+    - ``DELIVERED``: the phone received it. Terminal.
+    - ``FAILED``: it will not arrive (rejected, expired, the phone was unreachable). Terminal: the
+      message is not sent again automatically, because a second paid attempt rarely fares better.
+    - ``IN_TRANSIT``: accepted and on its way; nothing changes on the ledger.
+    """
+
+    DELIVERED = "delivered"
+    FAILED = "failed"
+    IN_TRANSIT = "in_transit"
 
 
 # --------------------------------------------------------------------------------------

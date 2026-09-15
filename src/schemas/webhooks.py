@@ -40,3 +40,18 @@ class PaystackWebhookAck(BaseModel):
     received: bool = True
     outcome: str
     event_id: str
+
+
+class SmsReceiptAck(BaseModel):
+    """The acknowledgement returned for an SMS delivery receipt (Issue 65).
+
+    ``outcome`` is ``processed`` (applied to its message), ``duplicate`` (a receipt already applied) or
+    ``ignored`` (no message on the ledger has that gateway id). ``event_id`` is
+    ``<provider>:<gateway message id>:<status>``.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    received: bool = True
+    outcome: str
+    event_id: str
