@@ -196,3 +196,26 @@ def test_only_the_waiting_room_board_may_autoplay_its_own_sound(
     for path in ("/health/live", "/displays", "/dashboard", "/api/v1/display-devices"):
         assert "autoplay=()" in permissions_policy_for(path), path
     assert "autoplay=()" in client.get("/health/live").headers["Permissions-Policy"]
+
+
+def test_only_the_discovery_page_may_ask_for_a_position(client: TestClient) -> None:
+    """The discovery page's "Use my location" (Issue 32) needs this origin allowed to ask; every other page keeps location off.
+
+    ``geolocation=()`` refused the discovery page before the patient was asked, so the button always fell back
+    to the suburb search. Only ``/discover`` itself is loosened, and nothing else on it.
+    """
+    policy = permissions_policy_for("/discover")
+    assert "geolocation=(self)" in policy and "geolocation=()" not in policy
+    for feature in ("camera=()", "microphone=()", "payment=()", "autoplay=()"):
+        assert feature in policy
+    for path in (
+        "/",
+        "/discover/results",
+        "/discover/clinics/hillbrow-chc",
+        "/discover/clinics/hillbrow-chc/join",
+        "/t/",
+        "/display",
+        "/dashboard",
+    ):
+        assert "geolocation=()" in permissions_policy_for(path), path
+    assert "geolocation=()" in client.get("/health/live").headers["Permissions-Policy"]

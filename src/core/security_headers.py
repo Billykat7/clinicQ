@@ -96,10 +96,26 @@ _BOARD_PERMISSIONS_POLICY = _PERMISSIONS_POLICY.replace(
 )
 
 
+#: The discovery page (Issue 32) is the one place that asks for a position: "Use my location" lists the clinics
+#: near the patient. ``geolocation=()`` refuses even this origin, so the browser answered "denied" before the
+#: patient was asked and the page fell back to the suburb search. On that page, and only there, this origin may
+#: ask; the browser still asks the patient first. Every other page, and every other feature, stays off.
+DISCOVER_PATH = "/discover"
+_DISCOVER_PERMISSIONS_POLICY = _PERMISSIONS_POLICY.replace(
+    "geolocation=()", "geolocation=(self)"
+)
+
+
 def permissions_policy_for(path: str) -> str:
-    """The Permissions-Policy for a request path: the board's allows its own autoplay, nothing else does."""
+    """The Permissions-Policy for a request path.
+
+    The board's pages may autoplay their own sound, and the discovery page may ask for a position. Nothing
+    else is loosened.
+    """
     if path == BOARD_PATH_PREFIX or path.startswith(BOARD_PATH_PREFIX + "/"):
         return _BOARD_PERMISSIONS_POLICY
+    if path == DISCOVER_PATH:
+        return _DISCOVER_PERMISSIONS_POLICY
     return _PERMISSIONS_POLICY
 
 
