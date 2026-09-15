@@ -186,6 +186,15 @@ class Settings(BaseSettings):
         description="S3 bucket for structured logs (env: AWS_S3_BUCKET)",
     )
 
+    aws_s3_create_bucket_if_missing: bool = Field(
+        default=False,
+        description=(
+            "Create AWS_S3_BUCKET in AWS_S3_REGION the first time the app writes to it, if it does "
+            "not exist yet (env: AWS_S3_CREATE_BUCKET_IF_MISSING). Needs s3:CreateBucket; a bucket "
+            "that exists but is not readable is never created over."
+        ),
+    )
+
     aws_s3_region: str = Field(
         default="af-south-1",
         validation_alias=AliasChoices("AWS_S3_REGION", "AWS_REGION"),

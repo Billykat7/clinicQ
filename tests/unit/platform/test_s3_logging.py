@@ -398,3 +398,166 @@ class _SyncThread:
         """Invoke the target immediately in the calling thread."""
         if callable(self._target):
             self._target(*self._args)
+
+
+# --- create the bucket when it is missing ---------------------------------------
+
+
+def _client_error(code: str, operation: str) -> Exception:
+    from botocore.exceptions import ClientError  # type: ignore[import-untyped]
+
+    return ClientError({"Error": {"Code": code, "Message": code}}, operation)
+
+
+@pytest.fixture
+def fresh_bucket_checks() -> object:
+    """Each test starts with no bucket checked in this process."""
+    s3_logging._ensured_buckets.clear()
+    yield
+    s3_logging._ensured_buckets.clear()
+
+
+def _creating_settings(
+    monkeypatch: pytest.MonkeyPatch, *, create: bool = True
+) -> Settings:
+    cfg = _settings(aws_s3_create_bucket_if_missing=create)
+    monkeypatch.setattr(s3_logging, "get_settings", lambda: cfg)
+    return cfg
+
+
+def test_create_bucket_if_missing_defaults_to_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Nothing is ever created unless AWS_S3_CREATE_BUCKET_IF_MISSING says so."""
+    monkeypatch.delenv("AWS_S3_CREATE_BUCKET_IF_MISSING", raising=False)
+    assert Settings(_env_file=None).aws_s3_create_bucket_if_missing is False
+    monkeypatch.setenv("AWS_S3_CREATE_BUCKET_IF_MISSING", "true")
+    assert Settings(_env_file=None).aws_s3_create_bucket_if_missing is True
+
+
+@pytest.mark.parametrize(
+    ("region", "configuration"),
+    [
+        ("us-east-1", None),
+        ("af-south-1", {"LocationConstraint": "af-south-1"}),
+    ],
+)
+def test_a_missing_bucket_is_created_in_the_region(
+    monkeypatch: pytest.MonkeyPatch,
+    fresh_bucket_checks: object,
+    region: str,
+    configuration: dict[str, str] | None,
+) -> None:
+    """HeadBucket 404 → CreateBucket, with a LocationConstraint everywhere but us-east-1."""
+    _creating_settings(monkeypatch)
+    client = MagicMock()
+    client.head_bucket.side_effect = _client_error("404", "HeadBucket")
+
+    s3_logging.ensure_bucket_exists(client, "btkplatform", region)
+
+    expected: dict[str, object] = {"Bucket": "btkplatform"}
+    if configuration is not None:
+        expected["CreateBucketConfiguration"] = configuration
+    client.create_bucket.assert_called_once_with(**expected)
+
+
+def test_an_existing_bucket_is_left_alone(
+    monkeypatch: pytest.MonkeyPatch, fresh_bucket_checks: object
+) -> None:
+    """HeadBucket succeeds → no create, and the check is not repeated in this process."""
+    _creating_settings(monkeypatch)
+    client = MagicMock()
+
+    s3_logging.ensure_bucket_exists(client, "btkplatform", "us-east-1")
+    s3_logging.ensure_bucket_exists(client, "btkplatform", "us-east-1")
+
+    client.head_bucket.assert_called_once_with(Bucket="btkplatform")
+    client.create_bucket.assert_not_called()
+
+
+def test_a_forbidden_bucket_is_never_created_over(
+    monkeypatch: pytest.MonkeyPatch,
+    fresh_bucket_checks: object,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """HeadBucket 403 means the name exists (someone else's, or unreadable): no create."""
+    _creating_settings(monkeypatch)
+    client = MagicMock()
+    client.head_bucket.side_effect = _client_error("403", "HeadBucket")
+
+    with caplog.at_level(logging.WARNING, logger=s3_logging.__name__):
+        s3_logging.ensure_bucket_exists(client, "btkplatform", "us-east-1")
+
+    client.create_bucket.assert_not_called()
+    assert "HeadBucket answered 403" in caplog.text
+
+
+def test_nothing_is_checked_when_the_setting_is_off(
+    monkeypatch: pytest.MonkeyPatch, fresh_bucket_checks: object
+) -> None:
+    """With the flag off the app never calls HeadBucket or CreateBucket."""
+    _creating_settings(monkeypatch, create=False)
+    client = MagicMock()
+
+    s3_logging.ensure_bucket_exists(client, "btkplatform", "us-east-1")
+
+    client.head_bucket.assert_not_called()
+    client.create_bucket.assert_not_called()
+
+
+def test_a_failed_create_never_raises_and_is_retried(
+    monkeypatch: pytest.MonkeyPatch,
+    fresh_bucket_checks: object,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A refused CreateBucket is logged, not raised, and the next write checks again."""
+    _creating_settings(monkeypatch)
+    client = MagicMock()
+    client.head_bucket.side_effect = _client_error("404", "HeadBucket")
+    client.create_bucket.side_effect = _client_error("AccessDenied", "CreateBucket")
+
+    with caplog.at_level(logging.WARNING, logger=s3_logging.__name__):
+        s3_logging.ensure_bucket_exists(client, "btkplatform", "us-east-1")
+        s3_logging.ensure_bucket_exists(client, "btkplatform", "us-east-1")
+
+    assert client.create_bucket.call_count == 2
+    assert "could not be created" in caplog.text
+
+
+def test_a_bucket_created_meanwhile_by_this_account_counts_as_created(
+    monkeypatch: pytest.MonkeyPatch, fresh_bucket_checks: object
+) -> None:
+    """Two processes racing to create: BucketAlreadyOwnedByYou is success, not a retry."""
+    _creating_settings(monkeypatch)
+    client = MagicMock()
+    client.head_bucket.side_effect = _client_error("404", "HeadBucket")
+    client.create_bucket.side_effect = _client_error(
+        "BucketAlreadyOwnedByYou", "CreateBucket"
+    )
+
+    s3_logging.ensure_bucket_exists(client, "btkplatform", "us-east-1")
+    s3_logging.ensure_bucket_exists(client, "btkplatform", "us-east-1")
+
+    client.create_bucket.assert_called_once()
+
+
+def test_the_handler_creates_the_bucket_before_its_first_upload(
+    monkeypatch: pytest.MonkeyPatch, fresh_bucket_checks: object
+) -> None:
+    """The log handler's first client checks the bucket, then puts the batch into it."""
+    _creating_settings(monkeypatch)
+    client = MagicMock()
+    client.head_bucket.side_effect = _client_error("404", "HeadBucket")
+    monkeypatch.setattr(s3_logging, "_create_s3_client", lambda *a, **k: client)
+
+    handler = S3LogHandler(bucket="btkplatform", region="us-east-1")
+    try:
+        dt = datetime(2026, 9, 15, 9, 0, 0, tzinfo=APP_TIMEZONE)
+        handler._upload(
+            "warning", [{"timestamp": dt.isoformat(), "log_type": "warning"}]
+        )
+    finally:
+        handler.close()
+
+    calls = [name for name, _args, _kwargs in client.method_calls]
+    assert calls == ["head_bucket", "create_bucket", "put_object"]

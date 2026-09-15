@@ -107,6 +107,43 @@ def test_probe_storage_degraded_when_client_unavailable(monkeypatch) -> None:  #
     health._storage_cache = None
 
 
+def test_probe_storage_creates_a_missing_bucket_before_writing(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """AWS_S3_CREATE_BUCKET_IF_MISSING on: the probe creates the bucket, then writes its sentinel."""
+    from unittest.mock import MagicMock
+
+    from botocore.exceptions import ClientError  # type: ignore[import-untyped]
+
+    import src.core.s3_logging as s3_logging
+
+    health._storage_cache = None
+    s3_logging._ensured_buckets.clear()
+    cfg = Settings(
+        _env_file=None,
+        aws_s3_logging_enabled=True,
+        aws_s3_bucket="btkplatform",
+        aws_s3_region="af-south-1",
+        aws_s3_create_bucket_if_missing=True,
+    )
+    client = MagicMock()
+    client.head_bucket.side_effect = ClientError(
+        {"Error": {"Code": "404", "Message": "Not Found"}}, "HeadBucket"
+    )
+    monkeypatch.setattr(s3_logging, "create_s3_probe_client", lambda: client)
+    monkeypatch.setattr(s3_logging, "get_settings", lambda: cfg)
+
+    assert probe_storage(cfg) is DependencyStatus.OK
+    client.create_bucket.assert_called_once_with(
+        Bucket="btkplatform",
+        CreateBucketConfiguration={"LocationConstraint": "af-south-1"},
+    )
+    assert (
+        client.put_object.call_args.kwargs["Key"]
+        == "clinicq/dev/logs/_readiness/probe.json"
+    )
+    health._storage_cache = None
+    s3_logging._ensured_buckets.clear()
+
+
 def test_probe_cert_none_when_path_unset() -> None:
     """No `TLS_CERT_PATH` configured → no cert block (None), never an error."""
     cfg = Settings(_env_file=None)

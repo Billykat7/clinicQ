@@ -41,5 +41,19 @@ rule can then expire logs per project (`clinicq/`) or across all of them.
 Keys without the slug (`dev/logs/...`) are not read by the viewer. They were written to the older
 per-project buckets (`btkcapetour`, `btkhomes`); nothing needs moving into `btkplatform`.
 
-The app does not create the bucket. Create `btkplatform` once, in the region every project's
-`AWS_S3_REGION` names, before turning `AWS_S3_LOGGING_ENABLED` on.
+## Creating the bucket
+
+With `AWS_S3_CREATE_BUCKET_IF_MISSING=true` the app creates `AWS_S3_BUCKET` in `AWS_S3_REGION` before its
+first write (the log handler's first upload, or the readiness probe), once per process:
+
+- `HeadBucket` answers 404: the bucket is created. `us-east-1` gets no `LocationConstraint`; every other
+  region does.
+- `HeadBucket` succeeds: nothing happens.
+- `HeadBucket` answers 403: the name exists but is someone else's, or not readable with these credentials.
+  Nothing is created, and a warning names the code.
+- `CreateBucket` fails (for example no `s3:CreateBucket`): a warning, never an error; the next write checks
+  again. `BucketAlreadyOwnedByYou` (another process won the race) counts as created.
+
+The setting is off by default. A bucket's region cannot be changed after it is created, so the first project
+to create `btkplatform` fixes its region for all of them: agree `AWS_S3_REGION` across the projects first.
+Give the credentials `s3:CreateBucket` only while the bucket is being created.
