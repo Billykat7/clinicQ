@@ -61,9 +61,11 @@ is read by whoever picks the phone up.
 
 - Apple allows web push only for a site the patient has **added to the Home Screen** and opened from there.
   Opening the ticket link in Safari is not enough.
-- Adding a site to the Home Screen as a web app needs the **web app manifest**, which arrives with the PWA
-  shell (Issue 69). Until that is merged, an iPhone cannot receive ClinicQ's web push, and iPhone patients
-  get SMS.
+- Adding a site to the Home Screen as a web app needs the **web app manifest**, which the PWA shell added
+  (Issue 69, [PATIENT_APP.md](PATIENT_APP.md)). WebKit documents a Home Screen web app as keeping its own
+  storage, apart from Safari's, so the app may open without the patient's sign-in or the ticket they followed
+  in Safari, and the push button is offered only to a signed-in patient on their own ticket. **Web push from
+  an iPhone Home Screen app has not been tried on a device**; until it has, plan on SMS for iPhone patients.
 - Adding to the Home Screen is a manual step in Safari's share menu. Many patients will not do it, so SMS
   stays the realistic channel for most iPhone users.
 - iOS decides when a notification is shown: Focus modes, Low Power Mode and notification summaries can hold

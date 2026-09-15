@@ -8,7 +8,8 @@
  *     heartbeat) has arrived for state.stale_after_seconds;
  *   - counts the wait range down between updates, so it stays a range and never looks exact;
  *   - makes "you are next" and "please come in now" unmissable: the alert, the page title, a vibration;
- *   - cancels in two taps for the ticket's own patient (the API decides who that is: cancel_url).
+ *   - cancels in two taps for the ticket's own patient (the API decides who that is: cancel_url);
+ *   - keeps every state it shows on the phone (patient-tickets.js), for the offline page (Issue 69).
  *
  * Every sentence is in the template; this file only chooses which block shows and fills in the values.
  * External file, no inline handlers, no eval: satisfies script-src 'self'.
@@ -112,6 +113,8 @@
     state = next;
     receivedAt = Date.now();
     lastHeard = receivedAt;
+    // Kept on the phone for the offline page and the installed app (Issue 69).
+    if (window.BKPTickets) window.BKPTickets.save(window.location.pathname, next);
 
     root.className = "tk tk-" + next.headline;
     root.setAttribute("data-headline", next.headline);

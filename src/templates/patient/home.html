@@ -1,0 +1,25 @@
+{% extends "layouts/patient.html" %}
+{#- Where the installed app opens (Issue 69), when no signed-in patient on this phone has an open ticket.
+
+    patient-home.js opens the last ticket this phone followed, if it is from today and has not ended. With
+    none, the page says how to get one. Nothing here asks to install anything. -#}
+
+{% block title %}Your ticket · {{ app_name }}{% endblock %}
+
+{% block head %}{% include "components/pwa_head.html" %}{% endblock %}
+
+{% block scripts %}
+  <script src="/static/js/patient-tickets.js" defer></script>
+  <script src="/static/js/patient-home.js" defer></script>
+  <script src="/static/js/pwa.js" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="stack" id="home">
+  <h1>No open ticket on this phone</h1>
+  <p class="lead" id="home-lead">
+    Join a clinic's queue and your ticket opens here, with your place in line.
+  </p>
+  <p><a class="btn" href="/discover">Find a clinic</a></p>
+</div>
+{% endblock %}

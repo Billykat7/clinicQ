@@ -12,13 +12,17 @@
 
 {% block title %}Ticket {{ ticket.number }} · {{ app_name }}{% endblock %}
 
+{% block head %}{% include "components/pwa_head.html" %}{% endblock %}
+
 {% block styles %}
   {{ super() }}
   <link rel="stylesheet" href="/static/css/ticket.css">
 {% endblock %}
 
 {% block scripts %}
+  <script src="/static/js/patient-tickets.js" defer></script>
   <script src="/static/js/ticket.js" defer></script>
+  <script src="/static/js/pwa.js" defer></script>
   {% if ticket.push_key %}<script src="/static/js/push.js" defer></script>{% endif %}
   {% if ticket.preferences_url %}<script src="/static/js/ticket-preferences.js" defer></script>{% endif %}
 {% endblock %}
@@ -99,6 +103,18 @@
     <p data-push-say="failed" hidden>This phone could not be set up for notifications. We will send you an SMS instead.</p>
     <p data-push-say="ios" hidden>On an iPhone, add this page to your Home Screen and open it from there to get notifications. Until then we will send you an SMS.</p>
     <p data-push-say="unsupported" hidden>This browser cannot show notifications, so we will send you an SMS instead.</p>
+  </div>
+  {% endif %}
+
+  {# Adding the app to the home screen (Issue 69): offered only to the patient who joined, on their own
+     ticket, and only once the browser says it can install. pwa.js shows the block; never on a shared link. #}
+  {% if ticket.offer_install %}
+  <div class="tk-install" id="tk-install" hidden>
+    <p class="tk-install-title">Keep your ticket one tap away</p>
+    <p>Add {{ app_name }} to your home screen. It opens straight to your ticket, and shows the last place in line it saw when there is no signal.</p>
+    <button type="button" class="btn btn-block" id="tk-install-yes">Add to home screen</button>
+    <p class="tk-hint" id="tk-install-ios" hidden>On an iPhone: tap the Share button, then Add to Home Screen.</p>
+    <button type="button" class="btn btn-quiet btn-block" id="tk-install-no">Not now</button>
   </div>
   {% endif %}
 
