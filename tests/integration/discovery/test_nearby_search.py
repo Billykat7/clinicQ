@@ -420,7 +420,7 @@ def five_hundred_clinics(migrated_engine: Engine) -> Iterator[Engine]:
 def test_the_query_uses_the_gist_index(five_hundred_clinics: Engine) -> None:
     """``EXPLAIN`` of the statement the service builds names the GiST index.
 
-    Unlike Issue 23's test over eleven clinics, the planner is **not** nudged here: with 500
+    Unlike Issue 23's test over the demo clinics, the planner is **not** nudged here: with 500
     analysed rows and the spec's 5 km radius the index is the cheaper plan, and it is chosen on its
     merits.
     The SQL is compiled from :func:`nearby_statement`, so a change to the service cannot leave this

@@ -117,7 +117,7 @@ def test_the_gist_index_exists_on_the_location_column(seeded: Engine) -> None:
 def test_the_radius_query_plan_actually_uses_the_gist_index(seeded: Engine) -> None:
     """The criterion that matters: ``EXPLAIN`` names the index, rather than a person assuming it.
 
-    ``enable_seqscan`` is turned off for this transaction on purpose. With eleven demo clinics a
+    ``enable_seqscan`` is turned off for this transaction on purpose. With a few dozen demo clinics a
     sequential scan is genuinely the cheaper plan, and the planner is right to choose it — what has
     to be proven here is that the index is **usable** for this predicate, which is exactly what a
     plan produced with the sequential scan priced out shows. Both settings are ``SET LOCAL``, so

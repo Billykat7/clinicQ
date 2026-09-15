@@ -195,7 +195,7 @@ def test_the_onboarding_path_starts_a_clinic_number_only(
 
 
 def test_the_seed_path_starts_a_clinic_number_only() -> None:
-    """The demo seed writes eleven clinics and chooses nothing about their boards.
+    """The demo seed writes its clinics and chooses nothing about their boards.
 
     Checked at the level the seed works at — the columns it sets — rather than by running it
     against PostgreSQL, which ``tests/integration/database/test_seed_dev_data.py`` already does.

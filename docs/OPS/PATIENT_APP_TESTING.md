@@ -66,7 +66,9 @@ From a working checkout ([QUICKSTART.md](../QUICKSTART.md), section 2):
    make run
    ```
 
-The demo world is eleven real clinics with their queues and opening hours. The walkthrough uses
+The demo world is twenty-six real clinics in Gauteng, KwaZulu-Natal and Cape Town, with their queues and
+opening hours. In Cape Town, search for Woodstock, Salt River, Delft or Khayelitsha, or use your location.
+The walkthrough uses
 **Hillbrow Community Health Centre** (`hillbrow-chc`, open 07:00 to 19:00) and its **General
 consultation** queue, which takes remote joins. Outside its hours a join is refused with the reason; pick
 a clinic whose page says **Open now**.
