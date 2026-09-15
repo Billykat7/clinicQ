@@ -59,12 +59,18 @@ from src.commons.time import business_date, now_sast
 from src.core.audit import record_audit_event
 from src.core.config import Settings, get_settings
 from src.core.rate_limit import queue_join_limiter
+from src.database.models.appointment_slot import Appointment
 from src.database.models.patient import Patient
 from src.database.models.queue import Queue
 from src.database.models.site import Site
 from src.database.models.ticket import Ticket
 from src.modules.appointments.call_forward import stated_travel
-from src.modules.appointments.capacity import day_is_over
+from src.modules.appointments.capacity import (
+    BookingAlreadyConvertedError,
+    day_is_over,
+    lock_day,
+    mark_converted,
+)
 from src.modules.discovery import analytics
 from src.modules.queue.estimate import WaitEstimate
 from src.modules.queue.sequence import is_second_active_ticket, issue_ticket
@@ -230,6 +236,7 @@ def join_queue(
     reason_text: str | None = None,
     comment_consent: bool = False,
     travel_minutes: int | None = None,
+    appointment: Appointment | None = None,
     client_ip: str | None = None,
     discovery_session: str | None = None,
     settings: Settings | None = None,
@@ -253,6 +260,11 @@ def join_queue(
         comment_consent: Per-visit consent, given now, to show the reason on the board.
         travel_minutes: The trip to the clinic the patient stated, for the virtual waiting room
             (Issue 86); kept only where the clinic runs one, and defaulted there when not stated.
+        appointment: The booking this join converts (Issue 81). The ticket is issued from the same counter,
+            in the same queue, as any other; the booking already passed the abuse guards and the clinic's
+            own appointment book, so neither those nor the walk-in-only rule are asked again. The booking
+            is marked converted in the same savepoint, and ``ticket.appointment_id`` is unique, so a booking
+            becomes one ticket however often this runs.
         client_ip: The caller's address; the per-address guard applies to the web path.
         discovery_session: The browser's discovery session, for the view-to-join analytics.
         settings: Settings; ``None`` reads the application's.
@@ -264,6 +276,8 @@ def join_queue(
     Raises:
         JoinRefusedError: The clinic or queue is closed, the queue is walk-in only or full, the
             clinic's daily cap is reached, or the caller is rate limited.
+        BookingAlreadyConvertedError: ``appointment`` is no longer booked (converted, cancelled or moved
+            by another transaction); nothing was issued.
         ValueError: A remote join with no patient, or a queue that belongs to another clinic.
             Both are programming errors in the caller, not a patient's mistake.
     """
@@ -289,7 +303,7 @@ def join_queue(
             gate.reason or QUEUE_CLOSED,
             next_open_at=gate.next_open_at,
         )
-    refusal = refusal_for(queue, source)
+    refusal = None if appointment is not None else refusal_for(queue, source)
     if refusal is not None:
         code = (
             JoinRefusal.WALK_IN_ONLY
@@ -299,7 +313,7 @@ def join_queue(
         raise JoinRefusedError(code, refusal)
 
     cap_key = None
-    if source in REMOTE_SOURCES and patient is not None:
+    if source in REMOTE_SOURCES and patient is not None and appointment is None:
         cap_key = _guard_abuse(
             site=site,
             source=source,
@@ -321,6 +335,12 @@ def join_queue(
                 comment_consent=comment_consent,
                 moment=moment,
             )
+            if appointment is not None:
+                # The booking hands its place to the ticket before the day is counted, so the two are
+                # never counted together. Order: counter, day, booking (see appointments.capacity).
+                lock_day(db, queue.id, service_day)
+                if not mark_converted(db, appointment, ticket, moment=moment):
+                    raise BookingAlreadyConvertedError
             if day_is_over(db, queue, service_day):
                 raise _QueueFullError
             ticket.travel_minutes = stated_travel(

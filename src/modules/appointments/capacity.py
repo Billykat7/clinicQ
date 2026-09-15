@@ -45,9 +45,10 @@ from typing import Final
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from src.commons.enums import AppointmentStatus, SlotRefusal, TicketStatus
+from src.commons.enums import AppointmentStatus, SlotRefusal, TicketSource, TicketStatus
 from src.commons.exceptions import ConflictError
 from src.commons.time import now_sast
 from src.database.models import (
@@ -56,6 +57,11 @@ from src.database.models import (
     Queue,
     QueueCapacityDay,
     Ticket,
+)
+from src.modules.queue.sequence import (
+    MAX_REFERENCE_ATTEMPTS,
+    ReferenceCodeExhaustedError,
+    new_reference_code,
 )
 
 #: What a patient is told for each reason a place cannot be taken.
@@ -71,6 +77,9 @@ REFUSAL_MESSAGES: Final[dict[SlotRefusal, str]] = {
         "That time is too soon to book. Please choose a later time, or join the queue."
     ),
     SlotRefusal.TOO_FAR: "That day is too far ahead to book yet. Please choose an earlier day.",
+    SlotRefusal.ALREADY_BOOKED: (
+        "You already have a booking in this queue on that day. Change that booking instead."
+    ),
 }
 
 
@@ -82,6 +91,16 @@ class SlotRefusedError(ConflictError):
             REFUSAL_MESSAGES[refusal], code=f"appointments.slot.{refusal.value}"
         )
         self.refusal = refusal
+
+
+class BookingAlreadyConvertedError(ConflictError):
+    """The booking a conversion was for is no longer booked: another run converted it, or it was changed."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "That booking is no longer waiting to become a ticket.",
+            code="appointments.booking.not_booked",
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,6 +197,8 @@ def claim_place(
     slot: AppointmentSlot,
     queue: Queue,
     patient_id: str,
+    source: TicketSource = TicketSource.WEB,
+    rescheduled_from_id: str | None = None,
     moment: datetime | None = None,
 ) -> Appointment:
     """Take one place in ``slot`` for a patient, or refuse. The caller commits.
@@ -193,19 +214,34 @@ def claim_place(
         slot: The slot, read by the caller through the site guard.
         queue: The slot's queue.
         patient_id: The patient the place is held for.
+        source: The channel the booking came through (Issue 81); its ticket will record the same.
+        rescheduled_from_id: The booking this one replaces, for a move to another time.
         moment: When the booking is made (aware); ``None`` means now.
 
     Returns:
         The flushed :class:`~src.database.models.Appointment`.
 
     Raises:
-        SlotRefusedError: ``DAY_FULL``, ``SLOT_FULL`` or ``WITHDRAWN``.
+        SlotRefusedError: ``ALREADY_BOOKED``, ``DAY_FULL``, ``SLOT_FULL`` or ``WITHDRAWN``.
         ValueError: The slot is not this queue's; a programming error in the caller.
     """
     if slot.queue_id != queue.id:
         raise ValueError("The slot does not belong to this queue.")
     moment = moment or now_sast()
     lock_day(db, queue.id, slot.service_day)
+    # One booking per patient per queue per day (Issue 81), checked under the day's lock so two
+    # simultaneous bookings by one patient cannot both pass.
+    if db.execute(
+        select(Appointment.id)
+        .join(AppointmentSlot, AppointmentSlot.id == Appointment.slot_id)
+        .where(
+            Appointment.patient_id == patient_id,
+            Appointment.status == AppointmentStatus.BOOKED.value,
+            AppointmentSlot.queue_id == queue.id,
+            AppointmentSlot.service_day == slot.service_day,
+        )
+    ).first():
+        raise SlotRefusedError(SlotRefusal.ALREADY_BOOKED)
     limit = queue.max_daily_capacity
     if limit is not None and day_usage(db, queue, slot.service_day).taken >= limit:
         raise SlotRefusedError(SlotRefusal.DAY_FULL)
@@ -226,24 +262,44 @@ def claim_place(
             if slot.withdrawn_at is not None
             else SlotRefusal.SLOT_FULL
         )
-    appointment = Appointment(
-        site_id=slot.site_id,
-        queue_id=queue.id,
-        slot_id=slot.id,
-        patient_id=patient_id,
-        status=AppointmentStatus.BOOKED.value,
-        booked_at=moment,
+    for _ in range(MAX_REFERENCE_ATTEMPTS):
+        appointment = Appointment(
+            site_id=slot.site_id,
+            queue_id=queue.id,
+            slot_id=slot.id,
+            patient_id=patient_id,
+            status=AppointmentStatus.BOOKED.value,
+            booked_at=moment,
+            reference=new_reference_code(),
+            source=source.value,
+            rescheduled_from_id=rescheduled_from_id,
+        )
+        try:
+            # A savepoint, so a colliding reference is redrawn without giving the place back.
+            with db.begin_nested():
+                db.add(appointment)
+        except IntegrityError as exc:
+            if "reference" not in str(exc.orig):
+                raise
+            continue
+        db.refresh(slot)
+        return appointment
+    raise ReferenceCodeExhaustedError(
+        f"No free booking reference after {MAX_REFERENCE_ATTEMPTS} attempts."
     )
-    db.add(appointment)
-    db.flush()
-    db.refresh(slot)
-    return appointment
 
 
 def release_place(
-    db: Session, appointment: Appointment, *, moment: datetime | None = None
+    db: Session,
+    appointment: Appointment,
+    *,
+    to: AppointmentStatus = AppointmentStatus.CANCELLED,
+    moment: datetime | None = None,
 ) -> bool:
-    """Give a booked place back: the booking is cancelled and the slot has the place free at once.
+    """Give a booked place back: the booking is cancelled (or moved) and the slot has the place free at once.
+
+    ``to`` is ``CANCELLED`` for a cancellation and ``RESCHEDULED`` when the booking moves to another time
+    (Issue 81); either way the place is free the moment this commits.
 
     Idempotent: releasing a booking that is not ``BOOKED`` changes nothing and returns ``False``. The
     status moves with a conditional ``UPDATE`` so two releases of one booking cannot both decrement
@@ -256,7 +312,7 @@ def release_place(
             Appointment.id == appointment.id,
             Appointment.status == AppointmentStatus.BOOKED.value,
         )
-        .values(status=AppointmentStatus.CANCELLED.value, cancelled_at=moment)
+        .values(status=to.value, cancelled_at=moment)
         .execution_options(synchronize_session=False)
     )
     if int(getattr(moved, "rowcount", 0) or 0) != 1:
@@ -269,4 +325,30 @@ def release_place(
     )
     db.flush()
     db.refresh(appointment)
+    return True
+
+
+def mark_converted(
+    db: Session, appointment: Appointment, ticket: Ticket, *, moment: datetime
+) -> bool:
+    """Hand a booked place to the ticket it becomes (Issue 81): once, by a conditional ``UPDATE``.
+
+    Called by the join service inside its savepoint, after the queue's counter and day are locked. The
+    booking stops counting against the day as the ticket starts, and ``ticket.appointment_id`` (unique)
+    names it. Returns ``False`` when the booking is no longer ``BOOKED``, and changes nothing.
+    """
+    moved = db.execute(
+        update(Appointment)
+        .where(
+            Appointment.id == appointment.id,
+            Appointment.status == AppointmentStatus.BOOKED.value,
+        )
+        .values(status=AppointmentStatus.CONVERTED.value, converted_at=moment)
+        .execution_options(synchronize_session=False)
+    )
+    if int(getattr(moved, "rowcount", 0) or 0) != 1:
+        return False
+    if ticket.appointment_id is None:
+        ticket.appointment_id = appointment.id
+    db.flush()
     return True

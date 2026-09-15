@@ -26,6 +26,9 @@ jobs in the application timezone. The kernel registers only the sweeps it owns:
 * the **feedback comment retention sweep** (Issue 87), which empties post-visit comments past their
   clinic's patient-text retention and keeps the scores (see
   :func:`src.modules.appointments.feedback.purge_expired_comments`); and
+* the **appointment conversion** (Issue 81), which turns each booking into a ticket through the join
+  service at its clinic's lead time, once, and lapses bookings whose day ended unconverted (see
+  :func:`src.modules.appointments.conversion.convert_due`); and
 * the **appointment slot generation** (Issue 80), which rolls every listed clinic's bookable slots
   forward to its booking horizon each night (see
   :func:`src.modules.appointments.service.generate_published`).
@@ -65,6 +68,7 @@ from src.core import permission_usage
 from src.core.config import Settings, get_settings
 from src.core.s3_logging import APP_TIMEZONE
 from src.database.session import get_db_context
+from src.modules.appointments import conversion as appointments_conversion
 from src.modules.appointments import feedback as appointments_feedback
 from src.modules.appointments import service as appointments_service
 from src.modules.appointments import virtual_waiting
@@ -118,6 +122,9 @@ _NOTIFICATION_FAILURE_WATCH_LOCK_KEY: int = 771
 #: The appointment slot generation (Issue 80). Idempotent across instances (the unique slot start
 #: refuses a duplicate), so the lock only saves a second instance the work and the refused insert.
 _APPOINTMENT_SLOTS_LOCK_KEY: int = 880
+#: The appointment conversion (Issue 81). One runner, though the booking's conditional move to ``converted``
+#: and ``uq_ticket_appointment`` keep a booking to one ticket even without the lock.
+_APPOINTMENT_CONVERSION_LOCK_KEY: int = 881
 #: The call-forward sweep (Issue 86). The lock keeps a slow run and the next from overlapping; the claim on
 #: ``leave_alert_at`` and the notification's dedupe key keep an alert to one even without it.
 _CALL_FORWARD_LOCK_KEY: int = 886
@@ -138,6 +145,7 @@ _QUEUE_REQUEST_KEY_JOB_ID = "queue_request_key_sweep"
 _DISPLAY_DEVICE_WATCH_JOB_ID = "display_device_watch"
 _NOTIFICATION_FAILURE_WATCH_JOB_ID = "notification_failure_watch"
 _APPOINTMENT_SLOTS_JOB_ID = "appointment_slot_generation"
+_APPOINTMENT_CONVERSION_JOB_ID = "appointment_conversion"
 _CALL_FORWARD_JOB_ID = "virtual_waiting_call_forward"
 _FEEDBACK_RETENTION_JOB_ID = "feedback_comment_retention_sweep"
 
@@ -440,6 +448,33 @@ def run_feedback_comment_retention_sweep(*, moment: datetime | None = None) -> i
         return purged
 
 
+def run_appointment_conversion(*, moment: datetime | None = None) -> int:
+    """Turn every due booking into a ticket once, and lapse the ones whose day has ended (Issue 81).
+
+    Elects a single runner across instances via the advisory lock, then delegates to
+    :func:`src.modules.appointments.conversion.convert_due`. Returns how many bookings became tickets. Safe to
+    call directly, and twice: a booking already converted is not converted again.
+    """
+    with (
+        get_db_context() as db,
+        _advisory_lock(db, _APPOINTMENT_CONVERSION_LOCK_KEY) as acquired,
+    ):
+        if not acquired:
+            logger.debug(
+                "Appointment conversion skipped: another instance holds the lock."
+            )
+            return 0
+        done = appointments_conversion.convert_due(db, moment=moment)
+        if done.converted or done.lapsed:
+            logger.info(
+                "Appointment conversion: %d converted, %d still waiting, %d lapsed.",
+                len(done.converted),
+                len(done.waiting),
+                len(done.lapsed),
+            )
+        return len(done.converted)
+
+
 def run_appointment_slot_generation(*, moment: datetime | None = None) -> int:
     """Roll every listed clinic's appointment slots forward to its horizon once; return how many were made.
 
@@ -613,6 +648,17 @@ def start_scheduler(settings: Settings | None = None) -> BackgroundScheduler | N
         # The same night as the visit notes (Issue 53), a quarter of an hour later. A missed night is
         # coalesced: the sweep empties whatever is past its expiry, so one late run catches up.
         misfire_grace_time=3600,
+        coalesce=True,
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        run_appointment_conversion,
+        trigger=IntervalTrigger(minutes=1, timezone=APP_TIMEZONE),
+        id=_APPOINTMENT_CONVERSION_JOB_ID,
+        name="Appointment conversion",
+        # A missed minute is coalesced: the sweep converts every booking due by the time it runs, so one late
+        # run converts what several missed runs would have, and none twice.
+        misfire_grace_time=60,
         coalesce=True,
         replace_existing=True,
     )

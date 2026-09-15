@@ -603,10 +603,19 @@ class AppointmentStatus(StrEnum):
 
     - ``BOOKED``: the patient holds a place in the slot, and it counts against the queue's day.
     - ``CANCELLED``: the place was given back; the slot and the day have it free again.
+    - ``RESCHEDULED``: moved to another slot (Issue 81): this place is free again, and the booking that
+      replaced it names this one.
+    - ``CONVERTED``: became a ticket in the queue (Issue 81). The ticket now holds the place; the booking no
+      longer counts against the day, so nothing is counted twice.
+    - ``LAPSED``: its service day ended before it could become a ticket (the clinic stayed closed); the
+      patient is told (Issue 81).
     """
 
     BOOKED = "booked"
     CANCELLED = "cancelled"
+    RESCHEDULED = "rescheduled"
+    CONVERTED = "converted"
+    LAPSED = "lapsed"
 
 
 class SlotRefusal(StrEnum):
@@ -619,6 +628,7 @@ class SlotRefusal(StrEnum):
     - ``CLOSED``: the clinic is closed at that time (a holiday, a closure, outside its hours).
     - ``TOO_SOON``: the slot starts sooner than the clinic's minimum lead time, or has started.
     - ``TOO_FAR``: the slot's day is past the clinic's booking horizon.
+    - ``ALREADY_BOOKED``: the patient already holds a booking in this queue on that day.
     """
 
     SLOT_FULL = "slot_full"
@@ -628,6 +638,8 @@ class SlotRefusal(StrEnum):
     CLOSED = "closed"
     TOO_SOON = "too_soon"
     TOO_FAR = "too_far"
+    #: The patient already holds a booking in this queue that day (Issue 81).
+    ALREADY_BOOKED = "already_booked"
 
 
 class FeedbackRequestStatus(StrEnum):
@@ -822,6 +834,10 @@ class PatientEvent(StrEnum):
     LEAVE_NOW = "leave_now"
     #: One question after a completed visit: how did it go? (Issue 87)
     FEEDBACK = "feedback"
+    #: An appointment booked or moved, with its reference and time (Issue 81).
+    BOOKED = "booked"
+    #: A booking whose day ended before it could become a ticket (Issue 81).
+    BOOKING_LAPSED = "booking_lapsed"
 
 
 class PatientChannel(StrEnum):
@@ -1496,6 +1512,8 @@ class NotificationTemplate(StrEnum):
     TICKET_CANCELLED = "ticket_cancelled"
     TICKET_LEAVE_NOW = "ticket_leave_now"
     TICKET_FEEDBACK = "ticket_feedback"
+    APPOINTMENT_BOOKED = "appointment_booked"
+    APPOINTMENT_LAPSED = "appointment_lapsed"
     # Catch-all for a pre-rendered message with no dedicated key (kept small on purpose).
     GENERIC = "generic"
 
@@ -1658,6 +1676,8 @@ NOTIFICATION_TEMPLATE_CATEGORY: dict[NotificationTemplate, NotificationCategory]
     NotificationTemplate.TICKET_CANCELLED: NotificationCategory.ACCOUNT,
     NotificationTemplate.TICKET_LEAVE_NOW: NotificationCategory.ACCOUNT,
     NotificationTemplate.TICKET_FEEDBACK: NotificationCategory.ACCOUNT,
+    NotificationTemplate.APPOINTMENT_BOOKED: NotificationCategory.ACCOUNT,
+    NotificationTemplate.APPOINTMENT_LAPSED: NotificationCategory.ACCOUNT,
 }
 
 
@@ -1726,6 +1746,8 @@ PATIENT_EVENT_TEMPLATE: dict[PatientEvent, NotificationTemplate] = {
     PatientEvent.CANCELLED: NotificationTemplate.TICKET_CANCELLED,
     PatientEvent.LEAVE_NOW: NotificationTemplate.TICKET_LEAVE_NOW,
     PatientEvent.FEEDBACK: NotificationTemplate.TICKET_FEEDBACK,
+    PatientEvent.BOOKED: NotificationTemplate.APPOINTMENT_BOOKED,
+    PatientEvent.BOOKING_LAPSED: NotificationTemplate.APPOINTMENT_LAPSED,
 }
 
 #: The patient messages quiet hours never hold back (Issue 67), and the whole of that exception: each says

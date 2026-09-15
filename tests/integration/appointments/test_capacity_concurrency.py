@@ -41,9 +41,16 @@ from src.commons.enums import (
     TicketSource,
 )
 from src.commons.time import business_date, now_sast
-from src.database.models import Appointment, AppointmentSlot, Queue, Site
+from src.database.models import (
+    Appointment,
+    AppointmentSlot,
+    Queue,
+    Site,
+    SiteOpeningHours,
+    Ticket,
+)
 from src.database.schema import apply_postgres_search_path
-from src.modules.appointments import capacity
+from src.modules.appointments import capacity, conversion
 from src.modules.queue.service import JoinRefusedError, join_queue
 from src.modules.sites.hours import OpeningSchedule, TimeSpan
 from tests.factories import PatientFactory, QueueFactory, SiteFactory
@@ -362,3 +369,53 @@ def _walk_in(world: SimpleNamespace) -> Callable[[Session], object]:
         return result.ticket.id
 
     return act
+
+
+def test_two_conversion_sweeps_at_once_make_one_ticket_per_booking(
+    world: SimpleNamespace,
+) -> None:
+    """Issue 81's main risk, without the advisory lock: two sweeps racing over five due bookings.
+
+    Each booking becomes exactly one ticket. The loser of each race finds the booking no longer booked (its
+    conditional update matches nothing), and ``uq_ticket_appointment`` stands behind that.
+    """
+    moment = now_sast().replace(microsecond=0)
+    with world.session() as db:
+        for weekday in range(7):
+            db.add(
+                SiteOpeningHours(
+                    site_id=world.site.id,
+                    weekday=weekday,
+                    opens_at=time(0),
+                    closes_at=time(0),
+                )
+            )
+        db.commit()
+    slot_id = _slot(world, capacity_=10, booked=5, days_ahead=0)
+    with world.session() as db:
+        slot = db.get(AppointmentSlot, slot_id)
+        assert slot is not None
+        # Due now: the slot starts within the lead time.
+        slot.starts_at = moment + timedelta(minutes=10)
+        slot.ends_at = moment + timedelta(minutes=25)
+        slot.service_day = business_date(moment)
+        db.commit()
+
+    def sweep(db: Session) -> int:
+        return len(conversion.convert_due(db, moment=moment).converted)
+
+    outcomes, seen = _race(world, [sweep, sweep])
+
+    logger.info("two sweeps: %s, contention %s", outcomes, seen)
+    assert not [o for o in outcomes if isinstance(o, BaseException)], outcomes
+    assert sum(o for o in outcomes if isinstance(o, int)) == 5
+    with world.session() as db:
+        tickets = db.execute(
+            select(func.count(Ticket.id)).where(Ticket.appointment_id.is_not(None))
+        ).scalar_one()
+        converted = db.execute(
+            select(func.count(Appointment.id)).where(
+                Appointment.status == AppointmentStatus.CONVERTED.value
+            )
+        ).scalar_one()
+    assert (tickets, converted) == (5, 5)

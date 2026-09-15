@@ -85,6 +85,9 @@ VARIABLES: Final[Mapping[NotificationTemplate, frozenset[str]]] = {
     NotificationTemplate.TICKET_CANCELLED: _TICKET_BLANKS,
     NotificationTemplate.TICKET_LEAVE_NOW: _TICKET_BLANKS | {"wait", "minutes"},
     NotificationTemplate.TICKET_FEEDBACK: _TICKET_BLANKS,
+    # A booking's reference is its {number}, and {when} its time (Issue 81).
+    NotificationTemplate.APPOINTMENT_BOOKED: _TICKET_BLANKS | {"when"},
+    NotificationTemplate.APPOINTMENT_LAPSED: _TICKET_BLANKS | {"when"},
 }
 #: What a web push may say, whatever the template: a lock screen is public (Issue 64).
 PUSH_VARIABLES: Final = frozenset({"number", "clinic"})
@@ -104,6 +107,7 @@ WORST_CASE: Final[Mapping[str, object]] = {
     # A recall's minutes are at most 60; a stated trip (Issue 86) at most MAX_TRAVEL_MINUTES.
     "minutes": 180,
     "wait": "~180–240 min (approximate)",
+    "when": "Wed 30 Sep 23:45",
 }
 #: What the editor's preview is rendered with: a plausible ticket, so the words read as a patient sees them.
 SAMPLE: Final[Mapping[str, object]] = {
@@ -113,6 +117,7 @@ SAMPLE: Final[Mapping[str, object]] = {
     "room": "Room 4",
     "minutes": 5,
     "wait": "~15–25 min",
+    "when": "Tue 6 Oct 10:30",
     "page_url": "/t/sample",
 }
 
@@ -191,6 +196,7 @@ def values(context: Mapping[str, Any], channel: NotificationChannel) -> dict[str
         "where": _fit(where, SMS_PLACE_CHARS) if sms else str(where),
         "minutes": str(context.get("minutes", "")),
         "wait": str(context.get("wait", "")),
+        "when": str(context.get("when", "")),
     }
 
 

@@ -125,12 +125,13 @@ CONTRACTS: tuple[Contract, ...] = (
         prefix="/api/v1",
         pattern=r"^/api/v1/(feedback/|sites/\{site_id\}/reports/feedback$)",
     ),
-    # A clinic's appointment book (Issue 80): it hangs under /sites, which cedes it by this pattern.
+    # A clinic's appointment book (Issue 80) and booking (Issue 81): under /sites, /clinics and /patients/me,
+    # which cede them by this pattern.
     Contract(
         name="appointments",
         filename="appointments.yaml",
         prefix="/api/v1",
-        pattern=r"^/api/v1/sites/\{site_id\}/appointments(/|$)",
+        pattern=r"^/api/v1/((sites|clinics)/\{site_id\}/appointments(/|$)|patients/me/appointments(/|$))",
     ),
 )
 

@@ -10,9 +10,11 @@ from datetime import date, datetime, time
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from src.commons.enums import SlotRefusal
+from src.commons.enums import AppointmentStatus, SlotRefusal, TicketSource
 from src.commons.time import stored_sast
 from src.database.models.appointment_slot import (
+    CONVERT_LEAD_RANGE,
+    DEFAULT_CONVERT_LEAD_MINUTES,
     MAX_HORIZON_DAYS,
     MAX_MIN_LEAD_MINUTES,
     MAX_SLOT_CAPACITY,
@@ -33,6 +35,12 @@ class PolicyIn(BaseModel):
 
     horizon_days: int = Field(ge=1, le=MAX_HORIZON_DAYS)
     min_lead_minutes: int = Field(ge=0, le=MAX_MIN_LEAD_MINUTES)
+    convert_lead_minutes: int = Field(
+        default=DEFAULT_CONVERT_LEAD_MINUTES,
+        ge=CONVERT_LEAD_RANGE[0],
+        le=CONVERT_LEAD_RANGE[1],
+    )
+    """How long before its time a booking becomes a ticket in the queue (Issue 81)."""
 
 
 class PolicyOut(PolicyIn):
@@ -225,3 +233,77 @@ class DayAvailabilityOut(BaseModel):
     as_of: datetime
     #: Only slots that can be booked (``refusal`` is ``None``), unless ``include_unavailable``.
     queues: list[QueueDayOut]
+
+
+# --------------------------------------------------------------------------------------
+# Booking (Issue 81)
+# --------------------------------------------------------------------------------------
+
+
+class PublicSlotOut(BaseModel):
+    """A bookable time as a patient sees it: when, and whether there is room. No counts of other patients."""
+
+    id: str
+    starts_at: datetime
+    ends_at: datetime
+    service_id: str | None
+
+
+class PublicQueueDayOut(BaseModel):
+    """One queue's bookable times on a day."""
+
+    queue_id: str
+    queue_name: str
+    slots: list[PublicSlotOut]
+
+
+class PublicDayOut(BaseModel):
+    """What a patient can book at a clinic on one service day."""
+
+    site_id: str
+    day: date
+    as_of: datetime
+    queues: list[PublicQueueDayOut]
+
+
+class BookIn(BaseModel):
+    """A booking: the time chosen."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    slot_id: str = Field(min_length=1, max_length=36)
+
+
+class RescheduleIn(BookIn):
+    """A move to another time at the same clinic."""
+
+
+class BookingOut(BaseModel):
+    """A booking as every channel confirms it."""
+
+    id: str
+    reference: str
+    """Read aloud as ``K7M-4QP``."""
+    status: AppointmentStatus
+    source: TicketSource
+    site_id: str
+    clinic: str
+    queue_id: str
+    queue_name: str
+    starts_at: datetime
+    ends_at: datetime
+    booked_at: datetime
+    converted_at: datetime | None
+    rescheduled_from_id: str | None
+    #: The ticket this booking became, once converted.
+    ticket_page_url: str | None
+    #: Whether the patient may still move or cancel it.
+    changeable: bool
+    message: str
+
+
+class BookingListOut(BaseModel):
+    """A patient's bookings from today on, or a clinic's on one day."""
+
+    total: int = Field(ge=0)
+    items: list[BookingOut]

@@ -23,7 +23,7 @@ of every front-door page and in the footer, opens `/t/`: the patient's open tick
 | Follow the ticket, message settings, cancel, push, install, offline, reception code | `/t/{token}` | Yes |
 | Get back to a ticket, or sign in to find one joined in another browser | **Your ticket** on the home page, or the installed app, both `/t/` | Yes |
 | Front desk: board, *Call next*, walk-ins, Find ticket | `/dashboard` | Yes |
-| **Book an appointment** for a time | | **Not built.** Appointments are M11 (Issues 80 and 81). Today a patient joins a queue that is running now |
+| **Book an appointment** for a time, move or cancel it | `/discover/clinics/{slug}/book` (a link on the join page) | Yes, once the clinic's manager has set appointment windows and generated slots (Issues 80, 81). The booking becomes a ticket about 30 minutes before the time |
 | Join by USSD or WhatsApp | | **Not built.** M10 |
 
 ## 1. Set up a local ClinicQ with demo data

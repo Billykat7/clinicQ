@@ -258,6 +258,12 @@ CASES: dict[str, dict[str, object]] = {
             f"/api/v1/sites/{site}/appointments/availability?include_unavailable=true",
         ),
     },
+    "appointment": {
+        # A clinic's bookings on a day (Issue 81): the front desk reads them; another clinic's are a 404.
+        "resource": "appointments",
+        "reader": "a@clinicq.example",
+        "paths": lambda site, _row: (f"/api/v1/sites/{site}/appointments/bookings",),
+    },
     "appointmentpolicy": {
         "resource": "appointments",
         "reader": "a@clinicq.example",
@@ -313,10 +319,6 @@ PENDING: dict[str, str] = {
         "/sites/{site_id}/appointments/queues/{queue_id}/days/{day}, which the site guard answers "
         "404 for another clinic exactly as the template GET probed above; a route that reads a "
         "clinic's overrides must add a case here"
-    ),
-    "appointment": (
-        "a booked place carries its clinic (Issue 80), but no route reads bookings yet: booking, "
-        "rescheduling and cancelling arrive with Issue 81, which must add a case here"
     ),
     "sitequeuesnapshot": (
         "a queue snapshot carries its clinic for the index discovery reads by (Issue 36), but no "

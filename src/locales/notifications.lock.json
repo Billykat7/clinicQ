@@ -1,4 +1,28 @@
 {
+  "en/appointment_booked/sms": {
+    "sha256": "d90ba443c2869fe72ffc2db438d4b5f4b732a4289db17dfc1dd9d3e5642ae39b",
+    "version": 1
+  },
+  "en/appointment_booked/web_push": {
+    "sha256": "bd57a02fb9c214d28053c7705a287e7391df4e4f8f703ebc53503ed1dc5eabe0",
+    "version": 1
+  },
+  "en/appointment_booked/whatsapp": {
+    "sha256": "d90ba443c2869fe72ffc2db438d4b5f4b732a4289db17dfc1dd9d3e5642ae39b",
+    "version": 1
+  },
+  "en/appointment_lapsed/sms": {
+    "sha256": "6ceb8f49db2831a802a1f40200a304420fa0dee1748bccb0631d97d80dc35ead",
+    "version": 1
+  },
+  "en/appointment_lapsed/web_push": {
+    "sha256": "b4edc58cb0730883c74e0f31e5ebbcc471eade137970d4ca69d3c8a00e5ef1e5",
+    "version": 1
+  },
+  "en/appointment_lapsed/whatsapp": {
+    "sha256": "6ceb8f49db2831a802a1f40200a304420fa0dee1748bccb0631d97d80dc35ead",
+    "version": 1
+  },
   "en/ticket_called/sms": {
     "sha256": "40931ca95a9c7ae9d26826d8ad3216d96ee29e1859adde105f1e54ce91a4d2a8",
     "version": 1
