@@ -26,6 +26,8 @@ jobs in the application timezone. The kernel registers only the sweeps it owns:
 * the **feedback comment retention sweep** (Issue 87), which empties post-visit comments past their
   clinic's patient-text retention and keeps the scores (see
   :func:`src.modules.appointments.feedback.purge_expired_comments`); and
+* the **appointment reminders** (Issue 82), a day and two hours before each booking, once each, answered by
+  reply (see :func:`src.modules.appointments.reminders.send_due`); and
 * the **appointment conversion** (Issue 81), which turns each booking into a ticket through the join
   service at its clinic's lead time, once, and lapses bookings whose day ended unconverted (see
   :func:`src.modules.appointments.conversion.convert_due`); and
@@ -70,6 +72,7 @@ from src.core.s3_logging import APP_TIMEZONE
 from src.database.session import get_db_context
 from src.modules.appointments import conversion as appointments_conversion
 from src.modules.appointments import feedback as appointments_feedback
+from src.modules.appointments import reminders as appointments_reminders
 from src.modules.appointments import service as appointments_service
 from src.modules.appointments import virtual_waiting
 from src.modules.display import devices as display_devices
@@ -125,6 +128,9 @@ _APPOINTMENT_SLOTS_LOCK_KEY: int = 880
 #: The appointment conversion (Issue 81). One runner, though the booking's conditional move to ``converted``
 #: and ``uq_ticket_appointment`` keep a booking to one ticket even without the lock.
 _APPOINTMENT_CONVERSION_LOCK_KEY: int = 881
+#: The appointment reminders (Issue 82). One runner, though each reminder's conditional claim and dedupe key keep it
+#: to one message even without the lock.
+_APPOINTMENT_REMINDERS_LOCK_KEY: int = 882
 #: The call-forward sweep (Issue 86). The lock keeps a slow run and the next from overlapping; the claim on
 #: ``leave_alert_at`` and the notification's dedupe key keep an alert to one even without it.
 _CALL_FORWARD_LOCK_KEY: int = 886
@@ -146,6 +152,7 @@ _DISPLAY_DEVICE_WATCH_JOB_ID = "display_device_watch"
 _NOTIFICATION_FAILURE_WATCH_JOB_ID = "notification_failure_watch"
 _APPOINTMENT_SLOTS_JOB_ID = "appointment_slot_generation"
 _APPOINTMENT_CONVERSION_JOB_ID = "appointment_conversion"
+_APPOINTMENT_REMINDERS_JOB_ID = "appointment_reminders"
 _CALL_FORWARD_JOB_ID = "virtual_waiting_call_forward"
 _FEEDBACK_RETENTION_JOB_ID = "feedback_comment_retention_sweep"
 
@@ -448,6 +455,33 @@ def run_feedback_comment_retention_sweep(*, moment: datetime | None = None) -> i
         return purged
 
 
+def run_appointment_reminders(*, moment: datetime | None = None) -> int:
+    """Send every appointment reminder whose window has come, once each; return how many (Issue 82).
+
+    Elects a single runner across instances via the advisory lock, then delegates to
+    :func:`src.modules.appointments.reminders.send_due`. Safe to call directly.
+    """
+    with (
+        get_db_context() as db,
+        _advisory_lock(db, _APPOINTMENT_REMINDERS_LOCK_KEY) as acquired,
+    ):
+        if not acquired:
+            logger.debug(
+                "Appointment reminders skipped: another instance holds the lock."
+            )
+            return 0
+        sent = appointments_reminders.send_due(db, moment=moment)
+        total = len(sent.day_before) + len(sent.two_hours)
+        if total:
+            logger.info(
+                "Appointment reminders: %d day-before, %d two-hour, %d skipped (checked in).",
+                len(sent.day_before),
+                len(sent.two_hours),
+                len(sent.checked_in),
+            )
+        return total
+
+
 def run_appointment_conversion(*, moment: datetime | None = None) -> int:
     """Turn every due booking into a ticket once, and lapse the ones whose day has ended (Issue 81).
 
@@ -648,6 +682,16 @@ def start_scheduler(settings: Settings | None = None) -> BackgroundScheduler | N
         # The same night as the visit notes (Issue 53), a quarter of an hour later. A missed night is
         # coalesced: the sweep empties whatever is past its expiry, so one late run catches up.
         misfire_grace_time=3600,
+        coalesce=True,
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        run_appointment_reminders,
+        trigger=IntervalTrigger(minutes=1, timezone=APP_TIMEZONE),
+        id=_APPOINTMENT_REMINDERS_JOB_ID,
+        name="Appointment reminders",
+        # A missed minute is coalesced: each reminder has a window of hours, so one late run sends it, once.
+        misfire_grace_time=60,
         coalesce=True,
         replace_existing=True,
     )

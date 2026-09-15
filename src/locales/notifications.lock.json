@@ -23,6 +23,30 @@
     "sha256": "6ceb8f49db2831a802a1f40200a304420fa0dee1748bccb0631d97d80dc35ead",
     "version": 1
   },
+  "en/appointment_reminder_24h/sms": {
+    "sha256": "652b94899d4c6b4203217ba2d5f4f4b991d1905a78b27dcfb16aff26fa7f3d6f",
+    "version": 1
+  },
+  "en/appointment_reminder_24h/web_push": {
+    "sha256": "e313142a587282cfd6a6977dbe3c5dfb6b9f3a7dd9fcf018c8b3a5d172752ff9",
+    "version": 1
+  },
+  "en/appointment_reminder_24h/whatsapp": {
+    "sha256": "652b94899d4c6b4203217ba2d5f4f4b991d1905a78b27dcfb16aff26fa7f3d6f",
+    "version": 1
+  },
+  "en/appointment_reminder_2h/sms": {
+    "sha256": "e124df66a6cabde1c9460f5f22e3ce077e7156cedddfc1de16331ce0e524e2a2",
+    "version": 1
+  },
+  "en/appointment_reminder_2h/web_push": {
+    "sha256": "a5de1e7f2a0c779213b0eea6c0b7484f1c5241cd893bb3edf08bee6fea916015",
+    "version": 1
+  },
+  "en/appointment_reminder_2h/whatsapp": {
+    "sha256": "e124df66a6cabde1c9460f5f22e3ce077e7156cedddfc1de16331ce0e524e2a2",
+    "version": 1
+  },
   "en/ticket_called/sms": {
     "sha256": "40931ca95a9c7ae9d26826d8ad3216d96ee29e1859adde105f1e54ce91a4d2a8",
     "version": 1

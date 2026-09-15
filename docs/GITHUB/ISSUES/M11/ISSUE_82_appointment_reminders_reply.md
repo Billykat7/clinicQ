@@ -54,9 +54,11 @@ given to someone else.
 
 ## Files touched
 
-- `src/modules/appointments/reminders.py`
-- `src/core/scheduler.py`
-- `tests/integration/appointments/test_reminders.py`
+- `src/modules/appointments/reminders.py` (the sweep, replies, the Issue 93 counts), `booking_router.py` (reply and report routes)
+- `alembic/versions/0043_reminders.py`, `src/core/scheduler.py` (lock 882)
+- `src/core/webhook_gateways/africastalking.py` (CONFIRM/CANCEL before STOP), `src/static/patient-sw.js` (Confirm/Cancel push buttons)
+- `src/modules/notifications/template_registry.py`, `src/locales/en/notifications.toml`, `transports/webpush.py`
+- `contracts/appointments.yaml`, `tests/integration/appointments/test_reminders.py`
 
 ---
 

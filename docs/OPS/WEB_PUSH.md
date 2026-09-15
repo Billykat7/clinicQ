@@ -47,6 +47,11 @@ A push says only the ticket number and the clinic's name, for example *Please co
 Zola Community Clinic.* The queue name, room, reason and patient name are never in it, because a lock screen
 is read by whoever picks the phone up.
 
+An appointment reminder (Issue 82) says only the booking reference and the clinic, and carries two buttons,
+**Confirm** and **Cancel**. Tapping one sends the answer from the service worker and opens nothing; tapping the
+notification itself still opens the page. A platform that does not show notification buttons (iOS Safari)
+shows the message without them, and the SMS reminder's CONFIRM/CANCEL reply works there instead.
+
 ## 3. What each platform does
 
 | Platform | Web push | Notes |

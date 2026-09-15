@@ -40,6 +40,8 @@ class RenderedMessage:
     """Where tapping the message opens (a web push), a path on this site."""
     tag: str | None = None
     """Messages with the same tag replace each other on the phone (a web push)."""
+    reply_url: str | None = None
+    """Where a web push's Confirm and Cancel buttons send the answer, without opening a page (Issue 82)."""
 
 
 class NotificationRead(BaseModel):

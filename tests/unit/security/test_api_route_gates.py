@@ -89,6 +89,10 @@ PUBLIC: dict[str, str] = {
         "the times a patient can book at a clinic (Issue 81), as public as the clinic's queues in discovery: only "
         "clinics a patient may be shown, only times with room, and nothing about any other patient"
     ),
+    "POST /api/v1/appointments/replies/{token}": (
+        "a reminder's own Confirm and Cancel buttons (Issue 82): a notification carries no session, and the token, 256 "
+        "random bits sent only in that patient's reminder, can confirm or cancel that one booking and nothing else"
+    ),
     "GET /api/v1/feedback/{token}": (
         "a post-visit question by its unguessable link (Issue 87): the patient has no account, and the link, "
         "256 random bits sent only to them, shows the question and whether it was answered, nothing about "

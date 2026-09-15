@@ -176,6 +176,24 @@ _UNSCOPED_BY_DESIGN: dict[str, str] = {
     "modules/appointments/conversion.py::_convert_onto_existing": (
         "the same system job reads, by id, the ticket join_queue returned for that patient in that queue"
     ),
+    "modules/appointments/reminders.py::send_due": (
+        "the reminder sweep (Issue 82) is a scheduled system job with no caller and no clinic: it reads every "
+        "booking still booked within the next day, to remind each booking's own patient"
+    ),
+    "modules/appointments/reminders.py::_checked_in": (
+        "the same system job asks whether that booking's own patient already holds a ticket in its queue that day"
+    ),
+    "modules/appointments/reminders.py::_remind": (
+        "the same system job reads the booking's own queue by id for the message's words"
+    ),
+    "modules/appointments/reminders.py::by_token": (
+        "a reminder's own reply button (Issue 82): the patient has no session in a notification, and the unguessable "
+        "token, sent only in their reminder, finds that one booking and nothing else"
+    ),
+    "modules/appointments/reminders.py::reply_by_phone": (
+        "an SMS reply to a reminder (Issue 82): the gateway names the sender's number, which finds the patient, and "
+        "only that patient's own soonest reminded booking is read, as STOP finds its patient"
+    ),
     "modules/appointments/feedback.py::request_after_visit": (
         "the done transition's hook (Issue 87): the ticket was already scoped by the move that ended the "
         "visit; it checks whether that visit (by id) was asked about and reads the ticket's own queue by id"

@@ -514,6 +514,72 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
+  /appointments/replies/{token}:
+    parameters:
+      - { name: token, in: path, required: true, schema: { type: string, minLength: 43, maxLength: 43 }, description: The reply secret sent only in that patient's reminder. }
+    post:
+      tags: [appointments]
+      operationId: appointmentsReply
+      summary: Confirm or cancel a booking from a reminder's own button
+      description: |
+        What a web push reminder's Confirm and Cancel buttons send (Issue 82), with no page and no sign-in. A cancellation
+        frees the time at once. A booking that has already become a ticket, or was cancelled, is unchanged
+        (`applied: false`). SMS replies (CONFIRM, CANCEL) arrive on the SMS inbound webhook instead.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BookingReplyIn" }
+            example: { reply: cancel }
+      responses:
+        "200":
+          description: What the reply did.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BookingReplyOut" }
+              example: { reply: cancel, applied: true, message: "Your booking is cancelled. The time is free for someone else." }
+        "404":
+          description: No such booking.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "No such booking.", code: appointments.reply.not_found }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/reports/reminders:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    get:
+      tags: [appointments]
+      operationId: appointmentsReminderReport
+      summary: Attendance with and without appointment reminders
+      description: |
+        `sites.reports:read`. For bookings whose time falls from `start` to `end` (30 days by default, at most 366), grouped
+        by how many reminders were sent (0, 1, 2): confirmations, cancellations by reply, attended (the ticket reached the
+        room) and no-shows. What Issue 93's no-show analysis reads.
+      parameters:
+        - { name: start, in: query, required: false, schema: { type: string, format: date } }
+        - { name: end, in: query, required: false, schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: The three groups.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReminderReportOut" }
+              example:
+                site_id: 0199b0c0-0000-7000-8000-0000000c1a01
+                start: "2026-08-18"
+                end: "2026-09-16"
+                groups:
+                  - { reminders: 0, bookings: 4, confirmed: 0, cancelled_by_reply: 0, attended: 2, no_show: 2 }
+                  - { reminders: 1, bookings: 6, confirmed: 3, cancelled_by_reply: 1, attended: 4, no_show: 1 }
+                  - { reminders: 2, bookings: 20, confirmed: 14, cancelled_by_reply: 3, attended: 16, no_show: 1 }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
 components:
   parameters:
     SiteId:
@@ -803,6 +869,9 @@ components:
         rescheduled_from_id: { type: [string, "null"] }
         ticket_page_url: { type: [string, "null"], description: The ticket page, once the booking has become a ticket. }
         changeable: { type: boolean }
+        reminded_24h_at: { type: [string, "null"], format: date-time }
+        reminded_2h_at: { type: [string, "null"], format: date-time }
+        confirmed_at: { type: [string, "null"], format: date-time }
         message: { type: string }
     BookingListOut:
       type: object
@@ -810,3 +879,34 @@ components:
       properties:
         total: { type: integer, minimum: 0 }
         items: { type: array, items: { $ref: "#/components/schemas/BookingOut" } }
+    BookingReplyIn:
+      type: object
+      additionalProperties: false
+      required: [reply]
+      properties:
+        reply: { type: string, enum: [confirm, cancel] }
+    BookingReplyOut:
+      type: object
+      required: [reply, applied, message]
+      properties:
+        reply: { type: string, enum: [confirm, cancel] }
+        applied: { type: boolean }
+        message: { type: string }
+    ReminderOutcomeOut:
+      type: object
+      required: [reminders, bookings, confirmed, cancelled_by_reply, attended, no_show]
+      properties:
+        reminders: { type: integer, minimum: 0, maximum: 2 }
+        bookings: { type: integer, minimum: 0 }
+        confirmed: { type: integer, minimum: 0 }
+        cancelled_by_reply: { type: integer, minimum: 0 }
+        attended: { type: integer, minimum: 0 }
+        no_show: { type: integer, minimum: 0 }
+    ReminderReportOut:
+      type: object
+      required: [site_id, start, end, groups]
+      properties:
+        site_id: { type: string }
+        start: { type: string, format: date }
+        end: { type: string, format: date }
+        groups: { type: array, items: { $ref: "#/components/schemas/ReminderOutcomeOut" } }

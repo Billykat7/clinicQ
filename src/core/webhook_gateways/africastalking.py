@@ -184,7 +184,26 @@ def process_reply(db: Session, reply: Reply) -> ProcessedReceipt:
     if db.get(SmsInboundEvent, reply.event_id) is not None:
         return ProcessedReceipt("duplicate", reply.event_id)
     moment = now_sast()
-    result = patient_preferences.apply_reply(db, reply.phone, reply.text, now=moment)
+    from src.commons.enums import BookingReply, BookingReplyChannel
+    from src.modules.appointments import reminders
+
+    # A reply to an appointment reminder comes first (Issue 82): CANCEL cancels a reminded booking, and only a
+    # patient with none open falls through to CANCEL's older meaning, STOP.
+    booking_reply = reminders.reply_by_phone(
+        db, reply.phone, reply.text, BookingReplyChannel.SMS, moment=moment
+    )
+    if booking_reply is not None:
+        answered, patient_id = booking_reply
+        result = patient_preferences.ReplyResult(
+            patient_preferences.ReplyOutcome.CONFIRMED
+            if answered is BookingReply.CONFIRM
+            else patient_preferences.ReplyOutcome.CANCELLED,
+            patient_id,
+        )
+    else:
+        result = patient_preferences.apply_reply(
+            db, reply.phone, reply.text, now=moment
+        )
     if result.outcome is patient_preferences.ReplyOutcome.IGNORED:
         # Not STOP or START: perhaps an answer to the post-visit question (Issue 87). A keyword wins.
         from src.commons.enums import FeedbackChannel

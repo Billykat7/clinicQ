@@ -10,29 +10,35 @@
 
 from __future__ import annotations
 
-from datetime import date
+from dataclasses import asdict
+from datetime import date, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from src.api.rbac_deps import require_patient
-from src.commons.enums import TicketSource
+from src.commons.enums import BookingReply, BookingReplyChannel, TicketSource
 from src.commons.exceptions import NotFoundError
 from src.commons.time import business_date, now_sast
 from src.core.site_scope import SiteAccess, require_site_access
 from src.database.models import Patient
 from src.database.session import get_db
-from src.modules.appointments import booking, service
+from src.modules.appointments import booking, reminders, service
 from src.modules.appointments.schemas import (
     BookIn,
     BookingListOut,
     BookingOut,
+    BookingReplyIn,
+    BookingReplyOut,
     PublicDayOut,
     PublicQueueDayOut,
     PublicSlotOut,
+    ReminderOutcomeOut,
+    ReminderReportOut,
     RescheduleIn,
 )
+from src.modules.discovery.analytics import DEFAULT_REPORT_DAYS, MAX_REPORT_DAYS
 from src.modules.sites.hours import published_schedules
 
 router = APIRouter(tags=["appointments"])
@@ -40,6 +46,9 @@ router = APIRouter(tags=["appointments"])
 DbSession = Annotated[Session, Depends(get_db)]
 PatientBooking = Annotated[Patient, Depends(require_patient("patients.self", "update"))]
 PatientReading = Annotated[Patient, Depends(require_patient("patients.self", "read"))]
+ReportsRead = Annotated[
+    SiteAccess, Depends(require_site_access("sites.reports", "read"))
+]
 AppointmentsRead = Annotated[
     SiteAccess, Depends(require_site_access("appointments", "read"))
 ]
@@ -194,4 +203,68 @@ def site_bookings(
     return BookingListOut(
         total=len(rows),
         items=[booking.booking_view(db, *row) for row in rows],
+    )
+
+
+@router.post(
+    "/appointments/replies/{token}",
+    response_model=BookingReplyOut,
+    operation_id="appointmentsReply",
+    summary="Confirm or cancel a booking from a reminder's own button",
+)
+def reply_by_button(
+    token: str, payload: BookingReplyIn, db: DbSession
+) -> BookingReplyOut:
+    """What a web push's Confirm and Cancel buttons send, with no page and no sign-in (Issue 82).
+
+    The token is the secret, sent only in that patient's reminder. A cancellation frees the time at once. Replying
+    to a booking that has already become a ticket, or was cancelled, changes nothing.
+    """
+    appointment = reminders.by_token(db, token)
+    applied = reminders.apply(
+        db, appointment, payload.reply, BookingReplyChannel.WEB_PUSH
+    )
+    db.commit()
+    return BookingReplyOut(
+        reply=payload.reply,
+        applied=applied,
+        message=(
+            "Thank you, your booking is confirmed."
+            if applied and payload.reply is BookingReply.CONFIRM
+            else "Your booking is cancelled. The time is free for someone else."
+            if applied
+            else "This booking can no longer be changed."
+        ),
+    )
+
+
+@router.get(
+    "/sites/{site_id}/reports/reminders",
+    response_model=ReminderReportOut,
+    operation_id="appointmentsReminderReport",
+    summary="Attendance with and without appointment reminders",
+)
+def reminder_report(
+    access: ReportsRead,
+    db: DbSession,
+    start: Annotated[date | None, Query()] = None,
+    end: Annotated[date | None, Query()] = None,
+) -> ReminderReportOut:
+    """Per number of reminders sent: bookings, confirmations, cancellations by reply, attendance and no-shows.
+
+    What Issue 93's no-show analysis reads. The last 30 days by default, at most 366.
+    """
+    last = end or business_date(now_sast())
+    first = start or last - timedelta(days=DEFAULT_REPORT_DAYS - 1)
+    if first > last or (last - first).days + 1 > MAX_REPORT_DAYS:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"The start must come before the end, and a report covers at most {MAX_REPORT_DAYS} days.",
+        )
+    groups = reminders.reminder_outcomes(db, access, start=first, end=last)
+    return ReminderReportOut(
+        site_id=access.site_id,
+        start=first,
+        end=last,
+        groups=[ReminderOutcomeOut(**asdict(group)) for group in groups],
     )
