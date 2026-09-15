@@ -3,6 +3,9 @@
 ClinicQ's ticket pages are also an installable web app (Issue 69). This page says what a patient gets, what
 each release does to an installed app, and what has and has not been checked.
 
+To walk the whole journey yourself, as a patient and as the front desk, see
+[PATIENT_APP_TESTING.md](PATIENT_APP_TESTING.md).
+
 ## 1. What a patient gets
 
 - **Installing.** After joining a queue, the patient's own ticket page offers **Add to home screen** once
