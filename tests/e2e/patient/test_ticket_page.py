@@ -143,8 +143,15 @@ def test_when_updates_stop_the_page_says_so_and_how_old_its_numbers_are(
         print(f"\nrouter dead: {state['live']!r}, {state['staleText']!r}")  # noqa: T201
 
         link.restore()
-        page.clock.run_for(20_000)  # a poll at refresh_seconds brings it back
-        _until(page, "() => document.getElementById('tk-stale').hidden", timeout=30)
+        # A poll every refresh_seconds brings it back. The page's clock is Playwright's, so keep moving
+        # it on: a poll sent on a connection the router reset fails, and the next one is due 15 s later.
+        deadline = time.monotonic() + 30
+        while not page.evaluate("() => document.getElementById('tk-stale').hidden"):
+            assert time.monotonic() < deadline, (
+                "the page did not come back after the router did"
+            )
+            page.clock.run_for(15_000)
+            time.sleep(0.5)
 
 
 def test_cancelling_takes_two_taps_and_says_so_and_a_shared_link_cannot(
