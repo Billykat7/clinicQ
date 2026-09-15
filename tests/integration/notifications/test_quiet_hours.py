@@ -73,16 +73,18 @@ def _sent(transports: dict[NotificationChannel, NoopTransport]) -> int:
 
 
 def _joined(desk: SimpleNamespace, queue: Queue | None = None) -> tuple[str, str, str]:
-    """A consenting patient's web ticket: ``(patient id, ticket id, page token)``."""
+    """A consenting patient's web ticket: ``(patient id, ticket id, page token)``. They agreed to messages and
+    to the post-visit question (Issue 87), so every event is the gate's to decide."""
     with desk.session() as db:
         client, patient_id = desk.patient()
-        record_consent(
-            db,
-            db.get_one(Patient, patient_id),
-            ConsentPurpose.NOTIFICATIONS,
-            granted=True,
-            channel=PatientChannel.WEB,
-        )
+        for purpose in (ConsentPurpose.NOTIFICATIONS, ConsentPurpose.FEEDBACK_SURVEY):
+            record_consent(
+                db,
+                db.get_one(Patient, patient_id),
+                purpose,
+                granted=True,
+                channel=PatientChannel.WEB,
+            )
         db.commit()
     answer = client.post(desk.join_path(queue or desk.triage), json={}).json()
     return patient_id, answer["ticket"]["id"], answer["page_url"].removeprefix("/t/")

@@ -29,7 +29,7 @@ never personal data (see the audit trail, Issue 20, for who did what).
 
 import logging
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any, Final
 
 #: What replaces each kind of secret. Named, so a reader of the log knows something was there.
@@ -93,6 +93,45 @@ def redact(text: str) -> str:
     for pattern in _PHONE_PATTERNS:
         text = pattern.sub(PHONE_MASK, text)
     return text
+
+
+#: Patient free text (Issue 87) is screened for two more shapes a person may type about themselves.
+EMAIL_MASK: Final = "[REDACTED:email]"
+ID_NUMBER_MASK: Final = "[REDACTED:id]"
+#: An e-mail address.
+_EMAIL = re.compile(r"(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)+(?!\w)")
+#: A South African ID number: 13 digits, possibly grouped (``8001015009087``, ``800101 5009 087``).
+_SA_ID_NUMBER = re.compile(r"(?<!\d)\d{6}[ ]?\d{4}[ ]?\d{3}(?!\d)")
+
+
+def screen_free_text(text: str) -> tuple[str, int]:
+    """Screen a patient's own words for personal information before anyone else reads them (Issue 87).
+
+    The logging layer's patterns (phone numbers, one-time codes, tokens) plus e-mail addresses and South
+    African ID numbers, which a patient writing about a visit might add. Returns the screened text and how
+    many pieces were removed. Like :func:`redact`, a backstop by pattern: a name is not recognised, which
+    is why comments are also kept only for the clinic's short retention window.
+    """
+    removed = 0
+
+    def masking(mask: str) -> Callable[[re.Match[str]], str]:
+        """A substitution that counts each piece it removes."""
+
+        def replace(_match: re.Match[str]) -> str:
+            nonlocal removed
+            removed += 1
+            return mask
+
+        return replace
+
+    text = _EMAIL.sub(masking(EMAIL_MASK), text)
+    text = _SA_ID_NUMBER.sub(masking(ID_NUMBER_MASK), text)
+    screened = redact(text)
+    removed += sum(
+        screened.count(mask) - text.count(mask)
+        for mask in (PHONE_MASK, OTP_MASK, TOKEN_MASK)
+    )
+    return screened, removed
 
 
 def _key_parts(key: str) -> set[str]:

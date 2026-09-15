@@ -53,6 +53,9 @@ def consent_required_for(template: NotificationTemplate) -> ConsentPurpose | Non
     """
     if template in CONSENT_EXEMPT_TEMPLATES:
         return None
+    # The post-visit question is its own purpose (Issue 87): "one short message after my visit".
+    if template is NotificationTemplate.TICKET_FEEDBACK:
+        return ConsentPurpose.FEEDBACK_SURVEY
     return ConsentPurpose.NOTIFICATIONS
 
 

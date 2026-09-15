@@ -185,6 +185,18 @@ def process_reply(db: Session, reply: Reply) -> ProcessedReceipt:
         return ProcessedReceipt("duplicate", reply.event_id)
     moment = now_sast()
     result = patient_preferences.apply_reply(db, reply.phone, reply.text, now=moment)
+    if result.outcome is patient_preferences.ReplyOutcome.IGNORED:
+        # Not STOP or START: perhaps an answer to the post-visit question (Issue 87). A keyword wins.
+        from src.commons.enums import FeedbackChannel
+        from src.modules.appointments import feedback
+
+        rated = feedback.answer_by_reply(
+            db, reply.phone, reply.text, channel=FeedbackChannel.SMS, moment=moment
+        )
+        if rated is not None:
+            result = patient_preferences.ReplyResult(
+                patient_preferences.ReplyOutcome.RATED, rated
+            )
     words = reply.text.strip().split()
     db.add(
         SmsInboundEvent(

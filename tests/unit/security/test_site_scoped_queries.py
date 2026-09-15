@@ -136,6 +136,22 @@ _UNSCOPED_BY_DESIGN: dict[str, str] = {
         "queue ids. It returns interval minutes and call hours, never a ticket or a patient "
         "(Issue 42)"
     ),
+    "modules/appointments/feedback.py::request_after_visit": (
+        "the done transition's hook (Issue 87): the ticket was already scoped by the move that ended the "
+        "visit; it checks whether that visit (by id) was asked about and reads the ticket's own queue by id"
+    ),
+    "modules/appointments/feedback.py::find_by_token": (
+        "a post-visit question opened by its link (Issue 87): the patient has no role and no account, and the "
+        "unguessable token, sent only to them, finds that one request and nothing else, like a ticket page"
+    ),
+    "modules/appointments/feedback.py::sent_for_ticket": (
+        "the question shown on the patient's own ticket page (Issue 87): the ticket was found by its page "
+        "token and the viewer is its patient; this reads that ticket's request by the ticket's id"
+    ),
+    "modules/appointments/feedback.py::answer_by_reply": (
+        "an SMS reply answering a post-visit question (Issue 87): the gateway names the sender's number, which "
+        "finds the patient, and only that patient's own newest open request is read, as STOP finds its patient"
+    ),
     "modules/appointments/virtual_waiting.py::_awaiting_alert": (
         "the call-forward sweep (Issue 86) is a scheduled system job with no caller and no clinic, like "
         "the recall timers: it reads today's waiting, travelling, not yet alerted tickets at every clinic "

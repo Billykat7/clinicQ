@@ -29,6 +29,7 @@ from src.database.models.document import Document
 from src.database.models.effective_role_permission import EffectiveRolePermission
 from src.database.models.esign_envelope import EsignEnvelope
 from src.database.models.esign_event import EsignEvent
+from src.database.models.feedback import VisitFeedback
 from src.database.models.in_app_notification import InAppNotification
 from src.database.models.message import Message
 from src.database.models.message_draft import MessageDraft
@@ -176,6 +177,7 @@ __all__ = [
     "User",
     "UserRoleAssignment",
     "Visit",
+    "VisitFeedback",
     "VisitNote",
     "WaitTimeSample",
     "Widget",

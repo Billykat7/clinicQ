@@ -146,6 +146,7 @@
     $("tk-cancel").hidden = !next.cancel_url;
     if (!next.cancel_url) $("tk-confirm").hidden = true;
     renderTravel(next.call_forward);
+    renderFeedback(next.feedback);
 
     announce(previous, next);
     tick();
@@ -171,6 +172,16 @@
     block.querySelector('[data-travel="now"]').hidden = !travel.due;
     block.querySelector('[data-travel="said"]').hidden = !travel.on_my_way_at;
     $("tk-on-my-way").hidden = !travel.on_my_way_url;
+  }
+
+  /** The post-visit question (Issue 87): offered by the server to the ticket's own patient once done. */
+  function renderFeedback(question) {
+    var block = $("tk-feedback");
+    if (!block) return;
+    block.hidden = !question;
+    if (!question) return;
+    $("tk-feedback-scores").hidden = !question.answer_url;
+    $("tk-feedback-thanks").hidden = !question.answered;
   }
 
   /** Once a second: the age of the data, the countdown, and whether the page is still live. */
@@ -403,6 +414,44 @@
         });
     });
   }
+
+  // ── How was your visit? (Issue 87) ────────────────────────────────────────────────────────
+
+  var scoreButtons = document.querySelectorAll("[data-feedback-score]");
+  var feedbackNote = $("tk-feedback-note");
+  Array.prototype.forEach.call(scoreButtons, function (button) {
+    button.addEventListener("click", function () {
+      var question = state.feedback;
+      if (!question || !question.answer_url) return;
+      Array.prototype.forEach.call(scoreButtons, function (b) { b.disabled = true; });
+      fetch(question.answer_url, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", Accept: "application/json", "X-CSRF-Token": csrfToken() },
+        body: JSON.stringify({ score: Number(button.getAttribute("data-feedback-score")) })
+      })
+        .then(function (response) {
+          return response.json().then(function (body) {
+            return { ok: response.ok, body: body };
+          });
+        })
+        .then(function (result) {
+          Array.prototype.forEach.call(scoreButtons, function (b) { b.disabled = false; });
+          feedbackNote.hidden = result.ok;
+          if (result.ok) {
+            state.feedback = result.body;
+            renderFeedback(result.body);
+          } else {
+            feedbackNote.textContent = (result.body && result.body.detail) || "That did not go through. Please try again.";
+          }
+        })
+        .catch(function () {
+          Array.prototype.forEach.call(scoreButtons, function (b) { b.disabled = false; });
+          feedbackNote.hidden = false;
+          feedbackNote.textContent = "No connection: your answer has not been sent. Try again when you have signal.";
+        });
+    });
+  });
 
   // ── Start ─────────────────────────────────────────────────────────────────────────────────
 

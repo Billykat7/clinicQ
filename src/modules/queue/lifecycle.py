@@ -79,6 +79,7 @@ from src.core.audit import SYSTEM_ACTOR, record_audit_event
 from src.core.config import get_settings
 from src.database.models.queue import Queue
 from src.database.models.ticket import Ticket, status_write_permitted
+from src.modules.appointments.feedback import request_after_visit
 from src.modules.queue import notices
 from src.modules.queue.snapshot import on_queue_changed
 from src.modules.queue.tickets import CALL_ORDER
@@ -314,6 +315,13 @@ def transition_ticket(
     if requested is TicketStatus.DONE:
         # The visit's sample commits with the move, so the next estimate already includes it.
         record_visit(db, ticket, moment=moment)
+        # One feedback question per completed visit (Issue 87): a visit is done once, on its last leg.
+        request_after_visit(
+            db,
+            ticket,
+            served_by=actor.user_id if actor.kind is ActorKind.STAFF else None,
+            moment=moment,
+        )
     record_audit_event(
         db,
         action=AuditAction.UPDATE,

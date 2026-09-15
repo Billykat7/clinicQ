@@ -55,6 +55,12 @@
         <label class="check-option"><input type="radio" name="notifications" value="yes"> Yes, message me</label>
         <label class="check-option"><input type="radio" name="notifications" value="no"> No, thank you</label>
       </fieldset>
+      {#- The post-visit question (Issue 87): its own consent, optional, no until the patient says yes. -#}
+      <fieldset class="join-choices">
+        <legend>{{ page.feedback_question }}</legend>
+        <label class="check-option"><input type="radio" name="feedback_survey" value="yes"> Yes, ask me</label>
+        <label class="check-option"><input type="radio" name="feedback_survey" value="no"> No, thank you</label>
+      </fieldset>
       <p class="clinic-hint">Saying no never affects your care or your place in the queue. You can change your
         answer at any time on <a href="/me/consent">your choices</a>.</p>
       <button class="btn btn-block" type="submit" id="join-consent-save">Continue</button>

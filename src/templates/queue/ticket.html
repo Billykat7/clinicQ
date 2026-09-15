@@ -91,6 +91,20 @@
     <p class="tk-note" id="tk-on-my-way-note" role="status" hidden></p>
   </section>
 
+  {# The post-visit question (Issue 87): only on the patient's own page once the visit is done and the question
+     was sent to them. One tap on a score answers; ticket.js sends it and shows the thank-you. #}
+  {% set fb = ticket.feedback %}
+  <section class="tk-travel tk-feedback" id="tk-feedback" aria-labelledby="tk-feedback-q" {% if not fb %}hidden{% endif %}>
+    <p class="tk-travel-lead" id="tk-feedback-q">{{ fb.question if fb else "How was your visit today?" }}</p>
+    <div class="fb-scores" id="tk-feedback-scores" role="group" aria-labelledby="tk-feedback-q" {% if not fb or not fb.answer_url %}hidden{% endif %}>
+      {% for score, label in [(5, "Very good"), (4, "Good"), (3, "Okay"), (2, "Poor"), (1, "Very poor")] %}
+      <button type="button" class="btn btn-block fb-score" data-feedback-score="{{ score }}">{{ score }}: {{ label }}</button>
+      {% endfor %}
+    </div>
+    <p class="tk-note" id="tk-feedback-thanks" {% if not fb or not fb.answered %}hidden{% endif %}>Thank you. Your answer helps the clinic.</p>
+    <p class="tk-note" id="tk-feedback-note" role="status" hidden></p>
+  </section>
+
   {# How old the data is, always visible; the warning when updates have stopped. #}
   <p class="tk-updated" id="tk-updated" aria-live="off">
     Updated <time id="tk-as-of" datetime="{{ ticket.as_of.isoformat() }}">{{ ticket.as_of.strftime("%H:%M:%S") }}</time><span id="tk-age"></span>
@@ -193,6 +207,7 @@
         <label class="tk-check"><input type="checkbox" value="transferred"> I move to another queue</label>
         <label class="tk-check"><input type="checkbox" value="cancelled"> The clinic cancels my ticket</label>
         <label class="tk-check"><input type="checkbox" value="leave_now"> It is time to leave for the clinic</label>
+        <label class="tk-check"><input type="checkbox" value="feedback"> After my visit, to ask how it went</label>
       </fieldset>
       <button type="submit" class="btn btn-block" id="tk-set-save">Save message settings</button>
       <p class="tk-note" id="tk-set-note" role="status" hidden></p>

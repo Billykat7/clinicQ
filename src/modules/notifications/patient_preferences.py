@@ -63,6 +63,8 @@ class ReplyOutcome(StrEnum):
 
     STOPPED = "stopped"
     RESTARTED = "restarted"
+    #: A digit from 1 to 5 answering the patient's open post-visit question (Issue 87).
+    RATED = "rated"
     IGNORED = "ignored"
 
 

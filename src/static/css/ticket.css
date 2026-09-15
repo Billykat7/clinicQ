@@ -188,3 +188,9 @@
 }
 .tk-install-title { font-weight: 700; }
 .tk-install .btn { min-height: var(--tap); }
+
+/* ── Post-visit question (Issue 87) ──────────────────────────── */
+.fb-question { font-size: var(--step-2); text-align: center; margin: var(--space-2) 0 var(--space-4); }
+.fb-comment { width: 100%; }
+.fb-scores { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
+.fb-score { min-height: var(--tap); }

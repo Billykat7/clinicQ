@@ -72,6 +72,10 @@
         return item.purpose === "notifications";
       })[0];
       choose("notifications", current && current.granted ? "yes" : "no");
+      var survey = ((answer.ok && answer.body.answers) || []).filter(function (item) {
+        return item.purpose === "feedback_survey";
+      })[0];
+      choose("feedback_survey", survey && survey.granted ? "yes" : "no");
       show("consent");
     });
   });
@@ -85,8 +89,18 @@
     }
     say("");
     busy(consentSave, true, "Saving…");
+    // The post-visit question (Issue 87) is saved alongside, only when it was answered.
+    var survey = checked(consentForm, "feedback_survey");
     signIn
       .call("PUT", "/api/v1/patients/me/consents/notifications", { granted: value === "yes" })
+      .then(function (answer) {
+        if (!answer.ok || !survey) return answer;
+        return signIn
+          .call("PUT", "/api/v1/patients/me/consents/feedback_survey", { granted: survey === "yes" })
+          .then(function (second) {
+            return second.ok ? answer : second;
+          });
+      })
       .then(function (answer) {
         busy(consentSave, false);
         if (answer.status === 401) return signInAgain();

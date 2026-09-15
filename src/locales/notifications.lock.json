@@ -23,6 +23,18 @@
     "sha256": "727aafdce6f349c8a6804e4d0cd782ff98359d2bcbd1e5429800bda90b2d9ec5",
     "version": 1
   },
+  "en/ticket_feedback/sms": {
+    "sha256": "530f4306cbb8f8c274768324f628e8115356304095a1b11e4ca22023f56c5e3d",
+    "version": 1
+  },
+  "en/ticket_feedback/web_push": {
+    "sha256": "2235d202159c6b29c7b01d2523036e069bf57410a57e66b739c234a6b03b160a",
+    "version": 1
+  },
+  "en/ticket_feedback/whatsapp": {
+    "sha256": "530f4306cbb8f8c274768324f628e8115356304095a1b11e4ca22023f56c5e3d",
+    "version": 1
+  },
   "en/ticket_leave_now/sms": {
     "sha256": "fdd19fa846b78704f1b86c8df304585b4b5388388d2669e46c3368a4a1224b20",
     "version": 1

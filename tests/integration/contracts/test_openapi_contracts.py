@@ -118,6 +118,13 @@ CONTRACTS: tuple[Contract, ...] = (
         prefix="/api/v1",
         pattern=r"^/api/v1/(notifications(/|$)|sites/\{site_id\}/sms-budget$|webhooks/sms/)",
     ),
+    # Post-visit feedback (Issue 87): the answer link, and a clinic's report, which cedes from /sites.
+    Contract(
+        name="feedback",
+        filename="feedback.yaml",
+        prefix="/api/v1",
+        pattern=r"^/api/v1/(feedback/|sites/\{site_id\}/reports/feedback$)",
+    ),
     # A clinic's appointment book (Issue 80): it hangs under /sites, which cedes it by this pattern.
     Contract(
         name="appointments",

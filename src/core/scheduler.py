@@ -23,6 +23,9 @@ jobs in the application timezone. The kernel registers only the sweeps it owns:
 * the **call-forward sweep** (Issue 86), which tells a patient waiting away from a clinic with a virtual
   waiting room when to leave, once, from the same estimate their ticket page shows (see
   :func:`src.modules.appointments.virtual_waiting.run_call_forward`); and
+* the **feedback comment retention sweep** (Issue 87), which empties post-visit comments past their
+  clinic's patient-text retention and keeps the scores (see
+  :func:`src.modules.appointments.feedback.purge_expired_comments`); and
 * the **appointment slot generation** (Issue 80), which rolls every listed clinic's bookable slots
   forward to its booking horizon each night (see
   :func:`src.modules.appointments.service.generate_published`).
@@ -62,6 +65,7 @@ from src.core import permission_usage
 from src.core.config import Settings, get_settings
 from src.core.s3_logging import APP_TIMEZONE
 from src.database.session import get_db_context
+from src.modules.appointments import feedback as appointments_feedback
 from src.modules.appointments import service as appointments_service
 from src.modules.appointments import virtual_waiting
 from src.modules.display import devices as display_devices
@@ -117,6 +121,9 @@ _APPOINTMENT_SLOTS_LOCK_KEY: int = 880
 #: The call-forward sweep (Issue 86). The lock keeps a slow run and the next from overlapping; the claim on
 #: ``leave_alert_at`` and the notification's dedupe key keep an alert to one even without it.
 _CALL_FORWARD_LOCK_KEY: int = 886
+#: The feedback comment retention sweep (Issue 87). Idempotent (it empties only comments past their expiry), so
+#: the lock only saves a second instance the work.
+_FEEDBACK_RETENTION_LOCK_KEY: int = 887
 
 # ── job identifiers ──────────────────────────────────────────────────────────
 # So a restart replaces rather than duplicates each job.
@@ -132,6 +139,7 @@ _DISPLAY_DEVICE_WATCH_JOB_ID = "display_device_watch"
 _NOTIFICATION_FAILURE_WATCH_JOB_ID = "notification_failure_watch"
 _APPOINTMENT_SLOTS_JOB_ID = "appointment_slot_generation"
 _CALL_FORWARD_JOB_ID = "virtual_waiting_call_forward"
+_FEEDBACK_RETENTION_JOB_ID = "feedback_comment_retention_sweep"
 
 # Process-wide scheduler; created by :func:`start_scheduler`, stopped by :func:`shutdown_scheduler`.
 _scheduler: BackgroundScheduler | None = None
@@ -408,6 +416,30 @@ def run_call_forward_sweep(*, moment: datetime | None = None) -> int:
         return told
 
 
+def run_feedback_comment_retention_sweep(*, moment: datetime | None = None) -> int:
+    """Empty the post-visit comments past their retention once; return how many (Issue 87).
+
+    Elects a single runner across instances via the advisory lock, then delegates to
+    :func:`src.modules.appointments.feedback.purge_expired_comments`, which records one audit line with the
+    count and never the words. Idempotent, so a missed night catches up. Safe to call directly.
+    """
+    with (
+        get_db_context() as db,
+        _advisory_lock(db, _FEEDBACK_RETENTION_LOCK_KEY) as acquired,
+    ):
+        if not acquired:
+            logger.debug(
+                "Feedback comment retention sweep skipped: another instance holds the lock."
+            )
+            return 0
+        purged = appointments_feedback.purge_expired_comments(db, moment=moment)
+        if purged:
+            logger.info(
+                "Feedback comment retention sweep emptied %d comment(s).", purged
+            )
+        return purged
+
+
 def run_appointment_slot_generation(*, moment: datetime | None = None) -> int:
     """Roll every listed clinic's appointment slots forward to its horizon once; return how many were made.
 
@@ -568,6 +600,19 @@ def start_scheduler(settings: Settings | None = None) -> BackgroundScheduler | N
         # A missed run is coalesced: the rule reads the estimate as it is when the sweep runs, so one late
         # run tells everyone several missed runs would have, and nobody twice.
         misfire_grace_time=cfg.virtual_waiting_sweep_seconds,
+        coalesce=True,
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        run_feedback_comment_retention_sweep,
+        trigger=CronTrigger(
+            hour=cfg.visit_note_retention_sweep_hour, minute=15, timezone=APP_TIMEZONE
+        ),
+        id=_FEEDBACK_RETENTION_JOB_ID,
+        name="Nightly feedback comment retention sweep",
+        # The same night as the visit notes (Issue 53), a quarter of an hour later. A missed night is
+        # coalesced: the sweep empties whatever is past its expiry, so one late run catches up.
+        misfire_grace_time=3600,
         coalesce=True,
         replace_existing=True,
     )

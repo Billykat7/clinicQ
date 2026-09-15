@@ -65,6 +65,9 @@ NO_STORE: Final = {"Cache-Control": "no-store"}
 
 #: The notifications question, word for word as every channel asks it (Issue 21).
 NOTIFICATIONS_QUESTION: Final = CONSENT_WORDING[ConsentPurpose.NOTIFICATIONS]
+#: The post-visit question's consent (Issue 87), asked beside the messages question, in the same words as
+#: every channel.
+FEEDBACK_QUESTION: Final = CONSENT_WORDING[ConsentPurpose.FEEDBACK_SURVEY]
 
 
 class JoinStep(StrEnum):
@@ -150,6 +153,7 @@ class JoinPage:
     queues: tuple[JoinQueueOption, ...]
     signed_in: bool
     notifications_question: str
+    feedback_question: str
     #: The signed-in patient's current answer; ``False`` when nobody is signed in or they never said yes.
     notifications_granted: bool
     reason_max_length: int
@@ -201,6 +205,7 @@ def join_page(
         queues=options if step is not JoinStep.UNAVAILABLE else (),
         signed_in=signed_in,
         notifications_question=NOTIFICATIONS_QUESTION,
+        feedback_question=FEEDBACK_QUESTION,
         notifications_granted=notifications_granted,
         reason_max_length=MAX_REASON_LENGTH,
         sign_in=sign_in_view(),

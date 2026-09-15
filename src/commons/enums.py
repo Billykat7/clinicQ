@@ -630,6 +630,31 @@ class SlotRefusal(StrEnum):
     TOO_FAR = "too_far"
 
 
+class FeedbackRequestStatus(StrEnum):
+    """Whether a post-visit feedback request reached the patient (Issue 87). Stored in ``visit_feedback``.
+
+    - ``SENT``: the notification service accepted it for delivery (it may wait for quiet hours to end).
+    - ``SUPPRESSED``: not sent: no consent to the survey, an opt-out, or the message muted. Not counted in
+      the response rate, and not answerable.
+    """
+
+    SENT = "sent"
+    SUPPRESSED = "suppressed"
+
+
+class FeedbackChannel(StrEnum):
+    """Where a post-visit feedback answer came from (Issue 87). Stored in ``visit_feedback.answered_via``.
+
+    - ``WEB``: a tap on the answer page or on the patient's own ticket page (web push opens the page).
+    - ``SMS``: a reply starting with a digit from 1 to 5.
+    - ``WHATSAPP``: the same reply on WhatsApp, once Issue 75's inbound adapter passes it on.
+    """
+
+    WEB = "web"
+    SMS = "sms"
+    WHATSAPP = "whatsapp"
+
+
 class EstimateConfidence(StrEnum):
     """How much a wait estimate can be trusted (Issue 42). Shown beside every range.
 
@@ -795,6 +820,8 @@ class PatientEvent(StrEnum):
     CANCELLED = "cancelled"
     #: The virtual waiting room's call-forward: leave now to arrive before your turn (Issue 86).
     LEAVE_NOW = "leave_now"
+    #: One question after a completed visit: how did it go? (Issue 87)
+    FEEDBACK = "feedback"
 
 
 class PatientChannel(StrEnum):
@@ -1468,6 +1495,7 @@ class NotificationTemplate(StrEnum):
     TICKET_CALLED = "ticket_called"
     TICKET_CANCELLED = "ticket_cancelled"
     TICKET_LEAVE_NOW = "ticket_leave_now"
+    TICKET_FEEDBACK = "ticket_feedback"
     # Catch-all for a pre-rendered message with no dedicated key (kept small on purpose).
     GENERIC = "generic"
 
@@ -1629,6 +1657,7 @@ NOTIFICATION_TEMPLATE_CATEGORY: dict[NotificationTemplate, NotificationCategory]
     NotificationTemplate.TICKET_CALLED: NotificationCategory.ACCOUNT,
     NotificationTemplate.TICKET_CANCELLED: NotificationCategory.ACCOUNT,
     NotificationTemplate.TICKET_LEAVE_NOW: NotificationCategory.ACCOUNT,
+    NotificationTemplate.TICKET_FEEDBACK: NotificationCategory.ACCOUNT,
 }
 
 
@@ -1696,6 +1725,7 @@ PATIENT_EVENT_TEMPLATE: dict[PatientEvent, NotificationTemplate] = {
     PatientEvent.TRANSFERRED: NotificationTemplate.TICKET_TRANSFERRED,
     PatientEvent.CANCELLED: NotificationTemplate.TICKET_CANCELLED,
     PatientEvent.LEAVE_NOW: NotificationTemplate.TICKET_LEAVE_NOW,
+    PatientEvent.FEEDBACK: NotificationTemplate.TICKET_FEEDBACK,
 }
 
 #: The patient messages quiet hours never hold back (Issue 67), and the whole of that exception: each says
@@ -1922,6 +1952,8 @@ class AuditEntityType(StrEnum):
     APPOINTMENT_SCHEDULE = "appointment_schedule"
     APPOINTMENT_BLOCK = "appointment_block"
     APPOINTMENT = "appointment"
+    #: A post-visit feedback answer, or the retention sweep emptying comments (Issue 87).
+    VISIT_FEEDBACK = "visit_feedback"
 
 
 # Field names whose values must never be written into an audit diff in the clear: encrypted or

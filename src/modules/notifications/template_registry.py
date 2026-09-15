@@ -84,6 +84,7 @@ VARIABLES: Final[Mapping[NotificationTemplate, frozenset[str]]] = {
     NotificationTemplate.TICKET_TRANSFERRED: _TICKET_BLANKS | {"wait"},
     NotificationTemplate.TICKET_CANCELLED: _TICKET_BLANKS,
     NotificationTemplate.TICKET_LEAVE_NOW: _TICKET_BLANKS | {"wait", "minutes"},
+    NotificationTemplate.TICKET_FEEDBACK: _TICKET_BLANKS,
 }
 #: What a web push may say, whatever the template: a lock screen is public (Issue 64).
 PUSH_VARIABLES: Final = frozenset({"number", "clinic"})
@@ -208,7 +209,8 @@ def render(
         text=body.format_map(filled),
         subject=subject.format_map(filled) if subject else None,
         link=page_url
-        if push and isinstance(page_url, str) and page_url.startswith("/t/")
+        # A ticket page, or a feedback answer page (Issue 87): never another site, never an id.
+        if push and isinstance(page_url, str) and page_url.startswith(("/t/", "/f/"))
         else None,
         tag=f"clinicq-ticket-{filled['number']}" if push else None,
     )
