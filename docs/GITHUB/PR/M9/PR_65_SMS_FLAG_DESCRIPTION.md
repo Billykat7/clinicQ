@@ -69,7 +69,7 @@ stops SMS at run time with no deploy, and only matters while the flag is on.
   - **the kill switch answer** carries `sms_enabled: false`.
 - [x] The notification, contract and unit suites with the flag on: **1418 passed**. Every existing SMS
   behaviour is unchanged.
-- [x] **The ticket page with SMS off**, on the development server ( unset) as the ticket's own
+- [x] **The ticket page with SMS off**, on the development server (`SMS_ENABLED` unset) as the ticket's own
   patient, after declining notifications. Before this change the page said "we will send you an SMS instead",
   which would no longer be true:
 
