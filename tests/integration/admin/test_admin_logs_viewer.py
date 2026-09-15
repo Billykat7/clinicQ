@@ -167,7 +167,7 @@ def _member(ctx: SimpleNamespace) -> None:
 
 def _log_key(level: str, path: str, name: str) -> str:
     """Build an Issue #7-layout object key for the fixed test day."""
-    return f"{_TEST_ENV}/logs/{level}/{path}/{_YEAR}/{_MONTH:02d}/{_DAY:02d}/{name}"
+    return f"clinicq/{_TEST_ENV}/logs/{level}/{path}/{_YEAR}/{_MONTH:02d}/{_DAY:02d}/{name}"
 
 
 def _mock_s3(
@@ -198,7 +198,12 @@ def _mock_s3(
     monkeypatch.setattr(
         s3_logs_query,
         "get_settings",
-        lambda: SimpleNamespace(aws_s3_bucket=bucket, s3_environment=_TEST_ENV),
+        lambda: SimpleNamespace(
+            aws_s3_bucket=bucket,
+            project_slug="clinicq",
+            s3_environment=_TEST_ENV,
+            s3_prefix=lambda kind: f"clinicq/{_TEST_ENV}/{kind}/",
+        ),
     )
     monkeypatch.setattr(s3_logs_query, "get_s3_logs_client", lambda: client)
     return client
@@ -323,7 +328,7 @@ def test_admin_object_read_rejects_key_outside_logs_prefix(
     make_admin_client: Callable[..., SimpleNamespace],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A key outside ``{env}/logs/`` is rejected with 400 and never hits S3."""
+    """A key outside ``{slug}/{env}/logs/`` is rejected with 400 and never hits S3."""
     ctx = make_admin_client()
     _admin(ctx)
     client = _mock_s3(monkeypatch)

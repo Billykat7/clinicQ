@@ -19,7 +19,8 @@ set -euo pipefail
 #                           encrypted to. Use BACKUP_AGE_RECIPIENTS_FILE for several.
 #   BACKUP_AGE_RECIPIENTS_FILE  File of age recipients, one per line (alt to above).
 #   BACKUP_DIR              Local staging dir. Default: <repo>/var/backups.
-#   BACKUP_S3_URI           Off-host destination, e.g. s3://btk-backups/clinicq/.
+#   BACKUP_S3_URI           Off-host destination, e.g. s3://btkplatform/clinicq/prod/backups/
+#                           (the shared bucket's {slug}/{env}/{type}/ layout, docs/OPS/S3_STORAGE.md).
 #                           When set, the encrypted dump is copied there with `aws s3 cp`.
 #   BACKUP_RETENTION_DAYS   Prune local dumps older than this. Default: 14.
 #                           (Off-host retention is enforced by the bucket lifecycle policy.)

@@ -2,7 +2,10 @@
 
 Uses the Issue #7 key layout::
 
-    {env}/logs/{log_type}/{api|web|worker}/{YYYY}/{MM}/{DD}/clinicq-{ccyymmdd}-{HHMMSS}.json
+    {slug}/{env}/logs/{log_type}/{api|web|worker}/{YYYY}/{MM}/{DD}/{slug}-{ccyymmdd}-{HHMMSS}.json
+
+The bucket is shared with sibling projects, so every listing and read stays under this project's
+``{slug}/{env}/logs/`` prefix.
 
 Server-side prefix listing plus an optional in-object keyword match; caps are
 enforced to avoid unbounded S3 scans (see module constants). Ported and adapted
@@ -46,6 +49,7 @@ _PATH_SEGMENTS = frozenset(p.value for p in S3LogPath)
 class ParsedS3LogKey:
     """Segments parsed from a well-formed Issue #7 log object key."""
 
+    project: str
     env: str
     level: str
     path: str
@@ -55,24 +59,30 @@ class ParsedS3LogKey:
 
 
 def parse_s3_log_object_key(key: str) -> ParsedS3LogKey | None:
-    """Parse ``{env}/logs/{log_type}/{path}/{YYYY}/{MM}/{DD}/filename`` into fields.
+    """Parse ``{slug}/{env}/logs/{log_type}/{path}/{YYYY}/{MM}/{DD}/filename`` into fields.
 
     Returns ``None`` if the key does not match the expected layout.
     """
     parts = key.split("/")
-    if len(parts) < 8:
+    if len(parts) < 9:
         return None
-    if parts[1] != "logs":
+    if parts[2] != "logs":
         return None
-    env, level, path_seg = parts[0], parts[2], parts[3]
+    project, env, level, path_seg = parts[0], parts[1], parts[3], parts[4]
     if path_seg not in _PATH_SEGMENTS:
         return None
     try:
-        year, month, day = int(parts[4]), int(parts[5]), int(parts[6])
+        year, month, day = int(parts[5]), int(parts[6]), int(parts[7])
     except ValueError:
         return None
     return ParsedS3LogKey(
-        env=env, level=level, path=path_seg, year=year, month=month, day=day
+        project=project,
+        env=env,
+        level=level,
+        path=path_seg,
+        year=year,
+        month=month,
+        day=day,
     )
 
 
@@ -112,6 +122,7 @@ def build_s3_log_list_item(
 def key_matches_filters(
     key: str,
     *,
+    project: str,
     env: str,
     level: S3LogListingLevel | None,
     path_filter: S3LogPath | None,
@@ -119,14 +130,14 @@ def key_matches_filters(
     month: int | None,
     day: int | None,
 ) -> bool:
-    """Return True if ``key`` matches env, optional level, optional path, and date parts.
+    """Return True if ``key`` matches project, env, optional level, optional path, and date parts.
 
     When ``level`` is None, any of info / warning / error is accepted.
     """
     parsed = parse_s3_log_object_key(key)
     if parsed is None:
         return False
-    if parsed.env != env:
+    if parsed.project != project or parsed.env != env:
         return False
     if parsed.level not in _LOG_TYPE_SEGMENTS:
         return False
@@ -141,10 +152,9 @@ def key_matches_filters(
     return day is None or parsed.day == day
 
 
-def _is_safe_logs_key(key: str, env: str) -> bool:
-    """Restrict GetObject to keys under the configured env logs prefix."""
-    prefix = f"{env}/logs/"
-    return key.startswith(prefix) and ".." not in key
+def _is_safe_logs_key(key: str, logs_prefix: str) -> bool:
+    """Restrict GetObject to keys under this project's env logs prefix (never a sibling's)."""
+    return key.startswith(logs_prefix) and ".." not in key
 
 
 def _encode_s3_logs_resume_cursor(last_examined_key: str) -> str:
@@ -226,7 +236,7 @@ def list_s3_application_logs(
     """
     cfg = get_settings()
     bucket = (cfg.aws_s3_bucket or "").strip()
-    env = cfg.s3_environment
+    logs_prefix = cfg.s3_prefix("logs")
     if not bucket:
         return [], None, "S3 bucket is not configured; log listing is unavailable."
 
@@ -235,10 +245,10 @@ def list_s3_application_logs(
         return [], None, "Could not create S3 client; log listing is unavailable."
 
     if level == S3LogListingLevel.ALL:
-        prefix = f"{env}/logs/"
+        prefix = logs_prefix
         level_for_match: S3LogListingLevel | None = None
     else:
-        prefix = f"{env}/logs/{level.value}/"
+        prefix = f"{logs_prefix}{level.value}/"
         level_for_match = level
     items: list[dict[str, Any]] = []
     incoming_aws_token, resume_after_key = _decode_s3_logs_continuation_token(
@@ -291,7 +301,8 @@ def list_s3_application_logs(
                 continue
             if not key_matches_filters(
                 key,
-                env=env,
+                project=cfg.project_slug,
+                env=cfg.s3_environment,
                 level=level_for_match,
                 path_filter=path_filter,
                 year=year,
@@ -488,16 +499,15 @@ def warm_logs_listing(
 
 
 def get_s3_log_object_text(key: str) -> tuple[str | None, str | None]:
-    """Fetch UTF-8 text for a log object key. Validates key is under ``{env}/logs/``.
+    """Fetch UTF-8 text for a log object key. Validates key is under ``{slug}/{env}/logs/``.
 
     Returns ``(text, error_message)``.
     """
     cfg = get_settings()
     bucket = (cfg.aws_s3_bucket or "").strip()
-    env = cfg.s3_environment
     if not bucket:
         return None, "S3 bucket is not configured."
-    if not _is_safe_logs_key(key, env):
+    if not _is_safe_logs_key(key, cfg.s3_prefix("logs")):
         return None, "Invalid log object key."
     client = get_s3_logs_client()
     if client is None:

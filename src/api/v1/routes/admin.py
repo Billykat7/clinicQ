@@ -76,7 +76,7 @@ class AdminLogsListOut(BaseModel):
     )
     prefix_used: str = Field(
         default="",
-        description="Server-side prefix passed to ListObjectsV2 (env/logs/level/).",
+        description="Server-side prefix passed to ListObjectsV2 (slug/env/logs/level/).",
     )
     items: list[S3LogObjectItem] = Field(default_factory=list)
     page_size: int = Field(
@@ -118,11 +118,12 @@ class AdminLogObjectOut(BaseModel):
     summary="List S3 application logs",
     description=(
         "Lists structured log objects under "
-        "``{env}/logs/{level}/{api|web|worker}/{YYYY}/{MM}/{DD}/``. "
+        "``{slug}/{env}/logs/{level}/{api|web|worker}/{YYYY}/{MM}/{DD}/``, where ``{slug}`` is "
+        "``PROJECT_SLUG``: the bucket is shared with sibling projects. "
         "Uses S3 prefix listing plus an optional in-object keyword match. "
         "Performance caps live in ``src.core.s3_logs_query`` (max keys per list, "
         "max GetObject calls when a keyword is set). "
-        "Example prefix for dev, error level: ``dev/logs/error/``. "
+        "Example prefix for dev, error level: ``clinicq/dev/logs/error/``. "
         "With date 2026-07-09, keys must include ``.../api/2026/07/09/``."
     ),
 )
@@ -131,7 +132,7 @@ async def admin_logs_list(
     level: Annotated[
         S3LogListingLevel,
         Query(
-            description="Log type: all ({env}/logs/), or the info / warning / error segment.",
+            description="Log type: all ({slug}/{env}/logs/), or the info / warning / error segment.",
         ),
     ] = S3LogListingLevel.ALL,
     path: Annotated[
@@ -203,11 +204,11 @@ async def admin_logs_list(
 
     cfg = get_settings()
     bucket = (cfg.aws_s3_bucket or "").strip()
-    env = cfg.s3_environment
+    logs_prefix = cfg.s3_prefix("logs")
     prefix_used = (
-        f"{env}/logs/"
+        logs_prefix
         if level == S3LogListingLevel.ALL
-        else f"{env}/logs/{level.value}/"
+        else f"{logs_prefix}{level.value}/"
     )
 
     limit = int(page_size.value)
@@ -245,7 +246,7 @@ async def admin_logs_list(
 async def admin_logs_object(
     _rbac: LogsReadDep,
     key: Annotated[
-        str, Query(min_length=1, description="S3 object key under {env}/logs/.")
+        str, Query(min_length=1, description="S3 object key under {slug}/{env}/logs/.")
     ],
 ) -> AdminLogObjectOut:
     """Return UTF-8 text for one log object (for the inline / JSON viewer)."""

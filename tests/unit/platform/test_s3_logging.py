@@ -62,14 +62,39 @@ def test_s3_key_uses_env_log_type_path_and_date_layout(
     """Key is ``{env}/logs/{log_type}/{path}/{YYYY}/{MM}/{DD}/clinicq-...json``."""
     dt = datetime(2026, 8, 3, 9, 5, 7, tzinfo=APP_TIMEZONE)
     key = _s3_key(S3LogType.ERROR.value, dt)
-    assert key == ("dev/logs/error/api/2026/08/03/clinicq-20260803-090507.json")
+    assert key == ("clinicq/dev/logs/error/api/2026/08/03/clinicq-20260803-090507.json")
 
 
 def test_s3_key_honours_explicit_path_segment(isolated_settings: Settings) -> None:
     """An explicit ``path_segment`` overrides the configured ``aws_s3_log_path``."""
     dt = datetime(2026, 12, 31, 23, 59, 1, tzinfo=APP_TIMEZONE)
     key = _s3_key(S3LogType.WARNING.value, dt, path_segment=S3LogPath.WEB.value)
-    assert key == ("dev/logs/warning/web/2026/12/31/clinicq-20261231-235901.json")
+    assert key == (
+        "clinicq/dev/logs/warning/web/2026/12/31/clinicq-20261231-235901.json"
+    )
+
+
+def test_s3_key_starts_with_the_project_slug(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The bucket is shared by sibling projects: the key and the file name carry PROJECT_SLUG."""
+    cfg = _settings(project_slug="umojanet")
+    monkeypatch.setattr(s3_logging, "get_settings", lambda: cfg)
+    dt = datetime(2026, 8, 3, 9, 5, 7, tzinfo=APP_TIMEZONE)
+    assert _s3_key(S3LogType.ERROR.value, dt) == (
+        "umojanet/dev/logs/error/api/2026/08/03/umojanet-20260803-090507.json"
+    )
+
+
+@pytest.mark.parametrize("slug", ["ClinicQ", "clinicq/dev", "", "-clinicq", "clinic q"])
+def test_project_slug_must_be_one_lowercase_key_segment(slug: str) -> None:
+    """A slug that would split or rename the key prefix is refused at load, naming the setting."""
+    with pytest.raises(ValueError, match="PROJECT_SLUG"):
+        _settings(project_slug=slug)
+
+
+def test_s3_prefix_is_slug_env_kind() -> None:
+    """``s3_prefix`` is the one place the ``{slug}/{env}/{kind}/`` prefix is built."""
+    assert _settings().s3_prefix("logs") == "clinicq/dev/logs/"
+    assert _settings(project_slug="maps").s3_prefix("docs") == "maps/dev/docs/"
 
 
 def test_s3_key_reflects_environment_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -80,7 +105,7 @@ def test_s3_key_reflects_environment_prefix(monkeypatch: pytest.MonkeyPatch) -> 
     )
     monkeypatch.setattr(s3_logging, "get_settings", lambda: cfg)
     dt = datetime(2026, 1, 2, 3, 4, 5, tzinfo=APP_TIMEZONE)
-    assert _s3_key(S3LogType.INFO.value, dt).startswith("prod/logs/info/api/")
+    assert _s3_key(S3LogType.INFO.value, dt).startswith("clinicq/prod/logs/info/api/")
 
 
 # --- level -> log_type mapping -------------------------------------------------
@@ -278,7 +303,7 @@ def test_upload_writes_ndjson_payload_with_content_type(
     assert kwargs["Bucket"] == "test-logs-bucket"
     assert kwargs["ContentType"] == "application/x-ndjson"
     assert kwargs["Key"] == (
-        "dev/logs/error/api/2026/08/03/clinicq-20260803-060000.json"
+        "clinicq/dev/logs/error/api/2026/08/03/clinicq-20260803-060000.json"
     )
     lines = kwargs["Body"].decode("utf-8").split("\n")
     assert len(lines) == 2

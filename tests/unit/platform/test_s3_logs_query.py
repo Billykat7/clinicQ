@@ -32,6 +32,16 @@ from src.core.s3_logs_query import (
 _RESUME_PREFIX = "bkclinicq_logs_v1:"
 
 
+def _fake_settings(bucket: str, env: str, slug: str = "clinicq") -> SimpleNamespace:
+    """The settings the query module reads: bucket, slug, env and the logs prefix they make."""
+    return SimpleNamespace(
+        aws_s3_bucket=bucket,
+        project_slug=slug,
+        s3_environment=env,
+        s3_prefix=lambda kind: f"{slug}/{env}/{kind}/",
+    )
+
+
 def _point_at_s3(
     monkeypatch: pytest.MonkeyPatch,
     client: object,
@@ -43,7 +53,7 @@ def _point_at_s3(
     monkeypatch.setattr(
         s3_logs_query,
         "get_settings",
-        lambda: SimpleNamespace(aws_s3_bucket=bucket, s3_environment=env),
+        lambda: _fake_settings(bucket, env),
     )
     monkeypatch.setattr(s3_logs_query, "get_s3_logs_client", lambda: client)
 
@@ -53,9 +63,10 @@ def _point_at_s3(
 
 def test_parse_s3_log_object_key_valid() -> None:
     """Parses a well-formed Issue #7 object key into its segments."""
-    key = "dev/logs/error/api/2026/08/03/clinicq-20260803-120000.json"
+    key = "clinicq/dev/logs/error/api/2026/08/03/clinicq-20260803-120000.json"
     p = parse_s3_log_object_key(key)
     assert p is not None
+    assert p.project == "clinicq"
     assert p.env == "dev"
     assert p.level == "error"
     assert p.path == "api"
@@ -66,12 +77,12 @@ def test_parse_s3_log_object_key_valid() -> None:
 
 def test_parse_s3_log_object_key_invalid_short() -> None:
     """Keys with too few path segments are rejected."""
-    assert parse_s3_log_object_key("dev/logs/error/api/2026") is None
+    assert parse_s3_log_object_key("clinicq/dev/logs/error/api/2026/08") is None
 
 
 def test_parse_s3_log_object_key_rejects_unknown_path_segment() -> None:
     """A path segment outside api / web / worker does not parse."""
-    key = "dev/logs/error/database/2026/08/03/clinicq-20260803-120000.json"
+    key = "clinicq/dev/logs/error/database/2026/08/03/clinicq-20260803-120000.json"
     assert parse_s3_log_object_key(key) is None
 
 
@@ -80,9 +91,10 @@ def test_parse_s3_log_object_key_rejects_unknown_path_segment() -> None:
 
 def test_key_matches_exact_day() -> None:
     """Level, path, and full date filters match; a wrong path is rejected."""
-    key = "prod/logs/warning/web/2025/12/01/clinicq-20251201-090000.json"
+    key = "clinicq/prod/logs/warning/web/2025/12/01/clinicq-20251201-090000.json"
     assert key_matches_filters(
         key,
+        project="clinicq",
         env="prod",
         level=S3LogListingLevel.WARNING,
         path_filter=S3LogPath.WEB,
@@ -92,6 +104,7 @@ def test_key_matches_exact_day() -> None:
     )
     assert not key_matches_filters(
         key,
+        project="clinicq",
         env="prod",
         level=S3LogListingLevel.WARNING,
         path_filter=S3LogPath.API,
@@ -103,9 +116,10 @@ def test_key_matches_exact_day() -> None:
 
 def test_key_matches_month_wildcard() -> None:
     """When day is None, any day within the month matches."""
-    key = "dev/logs/info/api/2026/03/15/clinicq-20260315-090000.json"
+    key = "clinicq/dev/logs/info/api/2026/03/15/clinicq-20260315-090000.json"
     assert key_matches_filters(
         key,
+        project="clinicq",
         env="dev",
         level=S3LogListingLevel.INFO,
         path_filter=None,
@@ -118,9 +132,10 @@ def test_key_matches_month_wildcard() -> None:
 def test_key_matches_any_level_when_level_unspecified() -> None:
     """When ``level`` is None (ALL listing), info / warning / error keys all match."""
     for seg in ("error", "warning", "info"):
-        key = f"dev/logs/{seg}/api/2026/03/15/clinicq-20260315-090000.json"
+        key = f"clinicq/dev/logs/{seg}/api/2026/03/15/clinicq-20260315-090000.json"
         assert key_matches_filters(
             key,
+            project="clinicq",
             env="dev",
             level=None,
             path_filter=S3LogPath.API,
@@ -130,11 +145,37 @@ def test_key_matches_any_level_when_level_unspecified() -> None:
         )
 
 
-def test_key_matches_rejects_wrong_env() -> None:
-    """A key from a different environment prefix never matches."""
-    key = "prod/logs/info/api/2026/03/15/clinicq-20260315-090000.json"
+def test_key_matches_rejects_a_sibling_projects_key() -> None:
+    """The bucket is shared: another project's key with the same env and date never matches."""
+    key = "properties/dev/logs/info/api/2026/03/15/properties-20260315-090000.json"
     assert not key_matches_filters(
         key,
+        project="clinicq",
+        env="dev",
+        level=None,
+        path_filter=None,
+        year=2026,
+        month=3,
+        day=15,
+    )
+
+
+def test_parse_s3_log_object_key_rejects_the_old_unprefixed_layout() -> None:
+    """A key written before the project slug led the layout does not parse."""
+    assert (
+        parse_s3_log_object_key(
+            "dev/logs/error/api/2026/08/03/clinicq-20260803-120000.json"
+        )
+        is None
+    )
+
+
+def test_key_matches_rejects_wrong_env() -> None:
+    """A key from a different environment prefix never matches."""
+    key = "clinicq/prod/logs/info/api/2026/03/15/clinicq-20260315-090000.json"
+    assert not key_matches_filters(
+        key,
+        project="clinicq",
         env="dev",
         level=None,
         path_filter=None,
@@ -149,7 +190,7 @@ def test_key_matches_rejects_wrong_env() -> None:
 
 def test_build_s3_log_list_item_parsed() -> None:
     """A listing row carries level, path, filename, and calendar date from the key."""
-    key = "dev/logs/warning/api/2026/04/06/clinicq-20260406-190946.json"
+    key = "clinicq/dev/logs/warning/api/2026/04/06/clinicq-20260406-190946.json"
     row = build_s3_log_list_item(key, 1024, "2026-04-06T19:09:46+02:00")
     assert row["file_name"] == "clinicq-20260406-190946.json"
     assert row["log_level"] == "warning"
@@ -173,7 +214,7 @@ def test_build_s3_log_list_item_unparsable_key() -> None:
 def test_get_s3_log_object_text_rejects_bad_prefix(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Keys outside ``{env}/logs/`` are rejected without ever calling S3."""
+    """Keys outside ``{slug}/{env}/logs/`` are rejected without ever calling S3."""
     client = MagicMock()
     _point_at_s3(monkeypatch, client)
     text, err = get_s3_log_object_text("other-bucket/evil/path")
@@ -182,13 +223,48 @@ def test_get_s3_log_object_text_rejects_bad_prefix(
     client.get_object.assert_not_called()
 
 
+def test_get_s3_log_object_text_refuses_a_sibling_projects_log(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A well-formed log key of another project in the shared bucket is never read."""
+    client = MagicMock()
+    _point_at_s3(monkeypatch, client)
+    text, err = get_s3_log_object_text(
+        "umojanet/dev/logs/info/api/2026/08/03/umojanet-20260803-090000.json"
+    )
+    assert text is None
+    assert err == "Invalid log object key."
+    client.get_object.assert_not_called()
+
+
+def test_list_prefixes_with_the_project_slug(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Listing asks S3 only for this project's objects: ``{slug}/{env}/logs/{level}/``."""
+    client = MagicMock()
+    client.list_objects_v2.return_value = {"Contents": [], "IsTruncated": False}
+    monkeypatch.setattr(
+        s3_logs_query, "get_settings", lambda: _fake_settings("shared", "prod", "maps")
+    )
+    monkeypatch.setattr(s3_logs_query, "get_s3_logs_client", lambda: client)
+    list_s3_application_logs(
+        level=S3LogListingLevel.ERROR,
+        path_filter=None,
+        year=2026,
+        month=8,
+        day=3,
+        keyword=None,
+        continuation_token=None,
+        page_size=10,
+    )
+    assert client.list_objects_v2.call_args.kwargs["Prefix"] == "maps/prod/logs/error/"
+
+
 def test_get_s3_log_object_text_rejects_traversal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A key containing ``..`` is rejected even under the logs prefix."""
     client = MagicMock()
     _point_at_s3(monkeypatch, client)
-    text, err = get_s3_log_object_text("dev/logs/../../secrets.json")
+    text, err = get_s3_log_object_text("clinicq/dev/logs/../../secrets.json")
     assert text is None
     assert err is not None
     client.get_object.assert_not_called()
@@ -201,7 +277,7 @@ def test_get_s3_log_object_text_reads_body(monkeypatch: pytest.MonkeyPatch) -> N
     client.get_object.return_value = {"Body": SimpleNamespace(read=lambda: body)}
     _point_at_s3(monkeypatch, client)
 
-    key = "dev/logs/info/api/2026/08/03/clinicq-20260803-090000.json"
+    key = "clinicq/dev/logs/info/api/2026/08/03/clinicq-20260803-090000.json"
     text, err = get_s3_log_object_text(key)
 
     assert err is None
@@ -216,7 +292,7 @@ def test_get_s3_log_object_text_bucket_not_configured(
     """With no bucket configured, the read fails cleanly without touching S3."""
     client = MagicMock()
     _point_at_s3(monkeypatch, client, bucket="")
-    text, err = get_s3_log_object_text("dev/logs/info/api/x.json")
+    text, err = get_s3_log_object_text("clinicq/dev/logs/info/api/x.json")
     assert text is None
     assert err is not None
     client.get_object.assert_not_called()
@@ -229,8 +305,8 @@ def test_list_keyword_filters_by_object_body(monkeypatch: pytest.MonkeyPatch) ->
     """A keyword is matched case-insensitively against each object body via GetObject."""
     lm = datetime(2026, 8, 3, 12, 0, 0, tzinfo=UTC)
     keys = [
-        "dev/logs/error/api/2026/08/03/hit.json",
-        "dev/logs/error/api/2026/08/03/miss.json",
+        "clinicq/dev/logs/error/api/2026/08/03/hit.json",
+        "clinicq/dev/logs/error/api/2026/08/03/miss.json",
     ]
     bodies = {
         keys[0]: b'{"message": "Database TIMEOUT while querying"}',
@@ -295,7 +371,10 @@ def test_list_s3_application_logs_resume_mid_batch(
     resumes within the same logical listing (``StartAfter``) instead of skipping keys
     via ``NextContinuationToken`` alone.
     """
-    keys = [f"dev/logs/info/api/2026/03/15/properties-{i:02d}.json" for i in range(15)]
+    keys = [
+        f"clinicq/dev/logs/info/api/2026/03/15/properties-{i:02d}.json"
+        for i in range(15)
+    ]
     lm = datetime(2026, 3, 15, 12, 0, 0, tzinfo=UTC)
 
     def list_impl(**kwargs: object) -> dict:
@@ -356,8 +435,12 @@ def test_list_s3_application_logs_aws_continuation_still_works(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The opaque S3 ``NextContinuationToken`` is followed across truncated pages."""
-    keys_page1 = [f"dev/logs/info/api/2026/03/15/p1-{i:02d}.json" for i in range(3)]
-    keys_page2 = [f"dev/logs/info/api/2026/03/15/p2-{i:02d}.json" for i in range(2)]
+    keys_page1 = [
+        f"clinicq/dev/logs/info/api/2026/03/15/p1-{i:02d}.json" for i in range(3)
+    ]
+    keys_page2 = [
+        f"clinicq/dev/logs/info/api/2026/03/15/p2-{i:02d}.json" for i in range(2)
+    ]
     lm = datetime(2026, 3, 15, 12, 0, 0, tzinfo=UTC)
 
     def list_impl(**kwargs: object) -> dict:

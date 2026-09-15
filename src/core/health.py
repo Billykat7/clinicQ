@@ -154,7 +154,7 @@ def _probe_storage_uncached(cfg: Settings) -> DependencyStatus:
         logger.warning("Readiness: S3 probe client unavailable")
         return DependencyStatus.DEGRADED
     try:
-        key = f"{cfg.s3_environment}/logs/_readiness/probe.json"
+        key = f"{cfg.s3_prefix('logs')}_readiness/probe.json"
         client.put_object(
             Bucket=(cfg.aws_s3_bucket or "").strip(),
             Key=key,
