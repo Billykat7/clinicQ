@@ -19,7 +19,7 @@ docs/
     ├── MILESTONES/               # M1 … M14, plus README.md: how to read a milestone
     ├── ISSUES/
     │   ├── README.md             # how to read and pick up an issue, where code goes, open decisions
-    │   ├── M1/  … M14/           # Issues 1–109
+    │   ├── M1/  … M14/           # Issues 1–109, and 197
     │   └── BACKLOG/              # deliberately parked, post-capstone
     ├── PR/                       # PR_<N>_DESCRIPTION.md per merged issue
     ├── RELEASES/                 # RELEASE_v<major>_<minor>_<patch>.md
@@ -44,12 +44,12 @@ docs/
 | **[M11: Appointments, Check-in & Patient Care](MILESTONES/M11_appointments_checkin_patient_care.md)** | Slots, booking, reminders, kiosk check-in, proxy booking, chronic, feedback | 80–87 | Backend Lead | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** 📋 planned |
 | **[M12: Reporting & Analytics](MILESTONES/M12_reporting_analytics.md)** | Stats worker, reports UI, KPIs, exports, district dashboard, no-show insight | 88–94 | Data & Research | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** 📋 planned |
 | **[M13: Security, Privacy & POPIA](MILESTONES/M13_security_privacy_compliance.md)** | Data map, retention, DSAR, hardening, encryption, audit chain, pen test, a11y | 95–101 | DevOps/QA | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** 📋 planned |
-| **[M14: Production, Pilot & Go-live](MILESTONES/M14_production_pilot_golive.md)** | Prod infra, backups, monitoring, load test, pilot kit, support, UAT, capstone | 102–109 | DevOps/QA + all | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** 📋 planned |
+| **[M14: Production, Pilot & Go-live](MILESTONES/M14_production_pilot_golive.md)** | Prod infra, shared S3 layout, backups, monitoring, load test, pilot kit, support, UAT, capstone | 102–109, 197 | DevOps/QA + all | 🟩⬜⬜⬜⬜⬜⬜⬜⬜⬜ **11%** 🚧 in progress |
 
-**Total: 109 tracked issues across M1–M14**, plus 6 parked
+**Total: 110 tracked issues across M1–M14**, plus 6 parked
 [backlog items](ISSUES/BACKLOG/).
 
-**Progress:** 🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜ **65%** (71/109 issues) closed · **9 of 14 milestones done**
+**Progress:** 🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜ **65%** (72/110 issues) closed · **9 of 14 milestones done**
 
 > ⚠️ **M6 is the critical path.** Six of the seven milestones after it are consumers of the queue
 > engine. Anything that delays M6 delays the whole second half of the project, see the
@@ -67,7 +67,8 @@ touching health data cannot skip.
 ## Conventions
 
 - **Issue numbers are sequential across milestones** (1 … 109) so `Closes #N` matches GitHub's
-  numbering when issues are created in order.
+  numbering when issues are created in order. An issue added later takes GitHub's next free number
+  (197, after the pull requests up to #196).
 - Branch: `Issue/<N>/<short-slug>`, e.g. `Issue/39/tickets-model-sequence`.
 - Commit messages start with the issue: `Issue 39: add concurrency-safe ticket sequence`.
 - PR description: `docs/GITHUB/PR/M<MS>/PR_<N>_DESCRIPTION.md`, ending with `Closes #N`.
@@ -121,8 +122,8 @@ the version number should say so honestly rather than flattering the project.
   a bug found in the queue engine during M7 is `v0.6.1`, not part of `v0.7.0`.
 - **Milestone order and tag order are the same.** Even where two milestones overlap in the calendar
   (M12 and M13 both run in sprint 12), the tags are cut in milestone order as each one's last issue closes.
-- **`v1.0.0` is the first official release** and it means exactly one thing: **issues 1–109 are all
-  closed.** It is not "the pilot went live" or "we demoed it"; those happen inside M14, under `v0.14.0`.
+- **`v1.0.0` is the first official release** and it means exactly one thing: **every tracked issue (1–109 and
+  197) is closed.** It is not "the pilot went live" or "we demoed it"; those happen inside M14, under `v0.14.0`.
 - After `v1.0.0`, normal semantic versioning applies: backlog features are `v1.1.0`+, fixes are
   `v1.0.1`+, and a breaking change is `v2.0.0`.
 
