@@ -21,6 +21,7 @@ from src.modules.display.router import router as display_router
 from src.modules.documents.esign_router import router as esign_router
 from src.modules.documents.router import router as documents_router
 from src.modules.messaging.router import router as messaging_router
+from src.modules.notifications.budget_router import router as sms_budget_router
 from src.modules.notifications.router import router as notifications_router
 from src.modules.patients.router import router as patients_router
 from src.modules.queue.router import router as queue_router
@@ -43,6 +44,7 @@ api_v1_router.include_router(site_audit_router)
 api_v1_router.include_router(webhooks_router)
 api_v1_router.include_router(reference_router)
 api_v1_router.include_router(notifications_router)
+api_v1_router.include_router(sms_budget_router)
 api_v1_router.include_router(messaging_router)
 api_v1_router.include_router(alerts_router)
 api_v1_router.include_router(documents_router)

@@ -196,6 +196,11 @@ _UNSCOPED_BY_DESIGN: dict[str, str] = {
         "the notification ledger (Issue 63) is platform operational data, not a clinic's records: the post-commit delivery of one row by the id its own commit published; no caller, "
         "no clinic, like the retry sweep"
     ),
+    "modules/notifications/service.py::apply_sms_receipt": (
+        "the notification ledger (Issue 63) is platform operational data, not a clinic's records: a "
+        "gateway's delivery receipt (Issue 65) names its SMS by the gateway's own message id, and the "
+        "gateway holds no role at any clinic"
+    ),
     "modules/notifications/service.py::run_retry_sweep": (
         "the notification ledger (Issue 63) is platform operational data, not a clinic's records: a scheduled system job that retries **every** due message on the platform, like the "
         "recall timer sweep"

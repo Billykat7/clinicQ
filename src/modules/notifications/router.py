@@ -46,6 +46,7 @@ from src.database.models.user import User
 from src.database.session import get_db
 from src.modules.notifications import (
     CENTRE_RESOURCE_KEY,
+    budget,
     center,
     preferences,
     service,
@@ -66,6 +67,8 @@ from src.modules.notifications.schemas import (
     PushSubscriptionIn,
     PushSubscriptionOut,
     PushUnsubscribeIn,
+    SmsKillSwitchIn,
+    SmsKillSwitchOut,
     WebPushKeyOut,
 )
 
@@ -276,6 +279,51 @@ def mark_notification_unread(
         ) from exc
     db.commit()
     return CenterMarkResult(unread_total=center.unread_total(db, user.id))
+
+
+# ---------------------------------------------------------------------------------------------------
+# The SMS kill switch (Issue 65): an operator stops every SMS at once, with no deploy.
+# ---------------------------------------------------------------------------------------------------
+
+LogsUpdateDep = Annotated[
+    None, Depends(require("logs", "update", scope=GrantScope.BUSINESS))
+]
+
+
+def _kill_switch_out(db: Session) -> SmsKillSwitchOut:
+    """The switch as it stands: off when nobody has ever flipped it."""
+    row = budget.sms_kill_switch(db)
+    if row is None:
+        return SmsKillSwitchOut(enabled=False)
+    return SmsKillSwitchOut(
+        enabled=row.enabled,
+        reason=row.reason,
+        changed_by=row.changed_by,
+        changed_at=row.changed_at,
+    )
+
+
+@router.get("/sms/kill-switch", response_model=SmsKillSwitchOut)
+def get_sms_kill_switch(_: LogsReadDep, db: DbSession) -> SmsKillSwitchOut:
+    """Whether every SMS is stopped (operators; ``logs`` READ)."""
+    return _kill_switch_out(db)
+
+
+@router.put("/sms/kill-switch", response_model=SmsKillSwitchOut)
+def set_sms_kill_switch(
+    payload: SmsKillSwitchIn, _: LogsUpdateDep, claims: CurrentUser, db: DbSession
+) -> SmsKillSwitchOut:
+    """Stop every SMS, or let them send again (operators; ``logs`` UPDATE). Takes effect on the next message.
+
+    The switch is read on every send, so no SMS is handed to the gateway after this commits: no deploy,
+    no restart. Flipping it posts a team alert naming who and why.
+    """
+    user = _resolve_user(db, claims)
+    budget.set_sms_kill_switch(
+        db, enabled=payload.enabled, reason=payload.reason, actor=user.email
+    )
+    db.commit()
+    return _kill_switch_out(db)
 
 
 # ---------------------------------------------------------------------------------------------------

@@ -20,7 +20,7 @@ Two rendering modes share this registry:
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Final
 
 from src.commons.enums import NotificationChannel, NotificationTemplate
 from src.core.config import get_settings
@@ -73,85 +73,91 @@ def _render_staff_invitation_sms(context: dict[str, Any]) -> RenderedMessage:
     )
 
 
-def _render_ticket_recalled_sms(context: dict[str, Any]) -> RenderedMessage:
-    """A called patient has not arrived and has been called once more (Issue 43).
+#: The longest a clinic, queue or room name may be inside a queue SMS (Issue 65), so every message fits one
+#: GSM segment (160 characters) whatever the clinic calls itself. A longer name is shortened with "...".
+SMS_CLINIC_CHARS: Final = 28
+SMS_PLACE_CHARS: Final = 18
 
-    Says what happened, where to go and what happens next, in one SMS. Expects ``number``,
-    ``clinic``, ``queue`` and ``minutes``; ``room`` when the queue has one.
-    """
-    app_name = get_settings().app_name
+
+def _fit(value: object, limit: int) -> str:
+    """``value`` as text, shortened to ``limit`` characters with a GSM-safe "..." when longer."""
+    text = " ".join(str(value).split())
+    return text if len(text) <= limit else text[: limit - 3].rstrip() + "..."
+
+
+def _ticket_words(context: dict[str, Any]) -> tuple[str, str, str, str]:
+    """The app's name, the ticket number, the clinic and where to go, each short enough for one segment."""
     where = context.get("room") or context["queue"]
+    return (
+        get_settings().app_name,
+        str(context["number"]),
+        _fit(context["clinic"], SMS_CLINIC_CHARS),
+        _fit(where, SMS_PLACE_CHARS),
+    )
+
+
+def _render_ticket_recalled_sms(context: dict[str, Any]) -> RenderedMessage:
+    """A called patient has not arrived and has been called once more (Issue 43): come now, or it is missed.
+
+    Expects ``number``, ``clinic``, ``queue`` and ``minutes``; ``room`` when the queue has one.
+    """
+    app_name, number, clinic, where = _ticket_words(context)
     return RenderedMessage(
         text=(
-            f"{app_name}: ticket {context['number']} at {context['clinic']} was called and you "
-            f"have not arrived. We have called you once more: please come to {where} now. "
-            f"If you are not there within {context['minutes']} minutes the ticket will be marked "
-            "missed."
+            f"{app_name}: ticket {number} at {clinic}: we called you once more. Come to {where} "
+            f"within {context['minutes']} minutes or it is marked missed."
         )
     )
 
 
 def _render_ticket_no_show_sms(context: dict[str, Any]) -> RenderedMessage:
     """A recalled patient still did not arrive: the ticket is closed, and how to join again (Issue 43)."""
-    app_name = get_settings().app_name
+    app_name, number, clinic, _ = _ticket_words(context)
     return RenderedMessage(
         text=(
-            f"{app_name}: ticket {context['number']} at {context['clinic']} was marked missed "
-            "because you did not arrive after being called twice. To join the queue again, use "
-            f"{app_name} on your phone, dial the {app_name} USSD code, or ask at the front desk."
+            f"{app_name}: ticket {number} at {clinic} was marked missed after 2 calls. To join the "
+            "queue again, ask at the front desk."
         )
     )
 
 
 def _render_ticket_transferred_sms(context: dict[str, Any]) -> RenderedMessage:
     """A patient moved on to the next queue of their visit (Issue 45): where, which number, how long."""
-    app_name = get_settings().app_name
+    app_name, number, clinic, _ = _ticket_words(context)
     return RenderedMessage(
         text=(
-            f"{app_name}: at {context['clinic']} you are now in the {context['queue']} queue as "
-            f"ticket {context['number']}. Expected wait {context['wait']}. You do not need to join "
-            "again."
+            f"{app_name}: at {clinic} you are now ticket {number} in "
+            f"{_fit(context['queue'], SMS_PLACE_CHARS)}. Wait {context['wait']}. No need to join again."
         )
     )
 
 
 def _render_ticket_next_sms(context: dict[str, Any]) -> RenderedMessage:
-    """The patient is first in line (Issue 63): time to be at the clinic, and where.
-
-    Expects ``number``, ``clinic`` and ``queue``; ``room`` when the queue has one.
-    """
-    app_name = get_settings().app_name
-    where = context.get("room") or context["queue"]
+    """The patient is first in line (Issue 63): time to be at the clinic, and where."""
+    app_name, number, clinic, where = _ticket_words(context)
     return RenderedMessage(
         subject="You are next",
-        text=(
-            f"{app_name}: ticket {context['number']} at {context['clinic']}, you are next. "
-            f"Please be ready at {where}."
-        ),
+        text=f"{app_name}: ticket {number} at {clinic}, you are next. Please be ready at {where}.",
     )
 
 
 def _render_ticket_called_sms(context: dict[str, Any]) -> RenderedMessage:
     """The patient has been called (Issue 63): come in now, and where to go."""
-    app_name = get_settings().app_name
-    where = context.get("room") or context["queue"]
+    app_name, number, clinic, where = _ticket_words(context)
     return RenderedMessage(
         subject="Please come in now",
-        text=(
-            f"{app_name}: ticket {context['number']}, please come in now to {where} at "
-            f"{context['clinic']}."
-        ),
+        text=f"{app_name}: ticket {number}, please come in now to {where} at {clinic}.",
     )
 
 
 def _render_ticket_cancelled_sms(context: dict[str, Any]) -> RenderedMessage:
     """The clinic cancelled the patient's ticket (Issue 63): say so, and how to join again."""
-    app_name = get_settings().app_name
+    app_name, number, clinic, _ = _ticket_words(context)
     return RenderedMessage(
         subject="Ticket cancelled",
         text=(
-            f"{app_name}: ticket {context['number']} at {context['clinic']} was cancelled by the "
-            f"clinic. To join again, use {app_name} or ask at the front desk."
+            f"{app_name}: ticket {number} at {clinic} was cancelled by the clinic. To join again, "
+            "ask at the front desk."
         ),
     )
 
@@ -244,6 +250,11 @@ _RENDERERS: dict[tuple[NotificationChannel, NotificationTemplate], Renderer] = {
         for template in _PUSH_WORDS
     },
 }
+
+
+#: The languages the queue's messages are written in. Issue 66 adds language to this registry and Issue 77
+#: the other four; every SMS in every language listed here is checked to fit one segment.
+SMS_LANGUAGES: Final = ("en",)
 
 
 def prerendered_payload(

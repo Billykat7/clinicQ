@@ -719,13 +719,76 @@ class Settings(BaseSettings):
         description=(
             "SMS provider backing the SMS channel (env: SMS_PROVIDER). 'logging' logs and "
             "returns a synthetic id so the app runs without an SMS account; 'fake' is the "
-            "in-memory test double."
+            "in-memory test double; 'africas_talking' is the gateway (Issue 65)."
         ),
     )
 
     sms_from: str = Field(
         default="",
         description="Sender id / from-number for outbound SMS (env: SMS_FROM).",
+    )
+
+    # SMS gateway, cost caps and kill switch (Issue 65).
+    africas_talking_username: str = Field(
+        default="sandbox",
+        description=(
+            "Africa's Talking account username; 'sandbox' is the free test account "
+            "(env: AFRICAS_TALKING_USERNAME)."
+        ),
+    )
+
+    africas_talking_api_key: str = Field(
+        default="",
+        description=(
+            "Africa's Talking API key. A secret: server-side only, never logged "
+            "(env: AFRICAS_TALKING_API_KEY)."
+        ),
+    )
+
+    sms_sandbox: bool = Field(
+        default=True,
+        description=(
+            "Send through the gateway's sandbox, which delivers to its simulator and charges "
+            "nothing. True unless production turns it off (env: SMS_SANDBOX)."
+        ),
+    )
+
+    sms_site_daily_cap: int = Field(
+        default=300,
+        ge=0,
+        le=100_000,
+        description=(
+            "How many SMS one clinic may send in a Johannesburg day, unless the clinic has its "
+            "own cap (env: SMS_SITE_DAILY_CAP)."
+        ),
+    )
+
+    sms_patient_daily_cap: int = Field(
+        default=8,
+        ge=0,
+        le=1_000,
+        description=(
+            "How many queue SMS one patient may be sent in a Johannesburg day "
+            "(env: SMS_PATIENT_DAILY_CAP)."
+        ),
+    )
+
+    sms_max_segments: int = Field(
+        default=2,
+        ge=1,
+        le=10,
+        description=(
+            "The most billable parts one SMS may be split into; a longer message is refused, not "
+            "sent (env: SMS_MAX_SEGMENTS). Queue messages are written to fit one."
+        ),
+    )
+
+    sms_webhook_token: str = Field(
+        default="",
+        description=(
+            "Secret in the delivery-receipt callback URL registered with the gateway, which does "
+            "not sign its callbacks. Unset disables the receipt webhook (env: SMS_WEBHOOK_TOKEN)."
+        ),
     )
 
     notification_max_attempts: int = Field(
@@ -1562,6 +1625,28 @@ class Settings(BaseSettings):
                     "PAYSTACK_SECRET_KEY",
                     "A live Paystack secret key (sk_live_…) may only be used in production; use "
                     "a test key (sk_test_…) outside production.",
+                )
+            )
+        if (
+            self.sms_provider is SmsProviderKind.AFRICAS_TALKING
+            and not self.africas_talking_api_key
+        ):
+            problems.append(
+                ConfigProblem(
+                    "AFRICAS_TALKING_API_KEY",
+                    "AFRICAS_TALKING_API_KEY must be set when SMS_PROVIDER is africas_talking.",
+                )
+            )
+        if (
+            self.sms_provider is SmsProviderKind.AFRICAS_TALKING
+            and not self.sms_sandbox
+            and self.africas_talking_username == "sandbox"
+        ):
+            problems.append(
+                ConfigProblem(
+                    "AFRICAS_TALKING_USERNAME",
+                    "AFRICAS_TALKING_USERNAME is the sandbox account while SMS_SANDBOX is false: "
+                    "live sending needs the live account's username.",
                 )
             )
         vapid = (

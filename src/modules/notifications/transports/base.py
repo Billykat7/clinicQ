@@ -65,6 +65,8 @@ class TransportReceipt:
     provider: str
     provider_message_id: str
     cost: Decimal = FREE
+    currency: str | None = None
+    """The currency ``cost`` is in, when the provider said; ``None`` means ``NOTIFICATION_COST_CURRENCY``."""
 
 
 class Transport(ABC):

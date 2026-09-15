@@ -40,10 +40,11 @@ from src.commons.exceptions import (
     StripeSignatureError,
 )
 from src.core.config import Settings, get_settings
+from src.core.webhook_gateways import africastalking as sms_receipts
 from src.core.webhook_gateways import paystack as paystack_gateway
 from src.core.webhook_gateways import stripe as stripe_gateway
 from src.database.session import get_db
-from src.schemas.webhooks import PaystackWebhookAck, StripeWebhookAck
+from src.schemas.webhooks import PaystackWebhookAck, SmsReceiptAck, StripeWebhookAck
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
@@ -144,4 +145,45 @@ async def paystack_webhook(
         outcome=processed.outcome,
         event_id=processed.event_id,
     )
+    return JSONResponse(status_code=status.HTTP_200_OK, content=ack.model_dump())
+
+
+@router.post(
+    "/sms/africastalking/{token}",
+    response_model=SmsReceiptAck,
+    summary="SMS delivery receipt (Africa's Talking)",
+    operation_id="smsDeliveryReceipt",
+)
+async def sms_delivery_receipt(
+    token: str, db: DbSession, settings: SettingsDep, request: Request
+) -> JSONResponse:
+    """Receive, verify and idempotently apply an SMS delivery receipt (Issue 65).
+
+    The gateway does not sign callbacks, so the secret in the path (``SMS_WEBHOOK_TOKEN``) is checked in
+    constant time before the body is read; a wrong one is ``404``, like a path that does not exist, and the
+    webhook being off is ``503``. A body that is not a receipt is ``400``. Otherwise ``200`` with the
+    outcome, so the gateway stops retrying.
+    """
+    try:
+        sms_receipts.verify_token(token, settings)
+    except sms_receipts.SmsWebhookNotConfiguredError:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"detail": "SMS delivery receipts are not configured."},
+        )
+    except sms_receipts.SmsWebhookRefusedError:
+        logger.warning("sms.receipt.rejected", extra={"reason": "token"})
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND, content={"detail": "Not Found"}
+        )
+    payload = await request.body()
+    try:
+        receipt = sms_receipts.parse_receipt(payload)
+    except sms_receipts.SmsWebhookRefusedError as exc:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST, content={"detail": str(exc)}
+        )
+    processed = sms_receipts.process_receipt(db, receipt)
+    db.commit()
+    ack = SmsReceiptAck(outcome=processed.outcome, event_id=processed.event_id)
     return JSONResponse(status_code=status.HTTP_200_OK, content=ack.model_dump())

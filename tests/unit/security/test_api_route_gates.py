@@ -80,6 +80,11 @@ PUBLIC: dict[str, str] = {
     "POST /api/v1/esign/webhook": "verifies the provider's signature before anything else",
     "POST /api/v1/notifications/webhooks/delivery": "verifies the provider's shared secret",
     "GET /api/v1/reference/enums": "the public wire vocabulary (Issue 4)",
+    "POST /api/v1/webhooks/sms/africastalking/{token}": (
+        "SMS delivery receipts (Issue 65): the gateway calls back with no session and does not sign, so "
+        "a 256-bit secret in the registered callback URL is checked in constant time before the body is "
+        "read, a wrong one answering 404 like a path that does not exist; the log masks the secret"
+    ),
     "GET /api/v1/notifications/web-push/key": (
         "the VAPID public key a browser subscribes with (Issue 64): public by design, since it is in "
         "every subscription a browser makes, and a patient's phone needs it before it has a session to "

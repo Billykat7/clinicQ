@@ -44,6 +44,7 @@ from src.commons.enums import (
     NotificationStatus,
     NotificationTemplate,
     PatientEvent,
+    SmsDeliveryState,
     notification_category_for,
 )
 from src.core.config import get_settings
@@ -55,7 +56,7 @@ from src.database.models.patient_notification_preference import (
     PatientNotificationPreference,
 )
 from src.database.session import get_db_context
-from src.modules.notifications import dispatch, preferences, templates, webpush
+from src.modules.notifications import budget, dispatch, preferences, templates, webpush
 from src.modules.notifications.preferences import DeliveryDecision, DeliveryOutcome
 from src.modules.notifications.schemas import DeliveryReceipt, RenderedMessage
 from src.modules.notifications.sms import SmsProvider, build_sms_provider
@@ -195,11 +196,14 @@ def _apply_success(
     provider_message_id: str,
     now: datetime,
     cost: Decimal | None = None,
+    currency: str | None = None,
 ) -> None:
     """Mark a row ``sent``: record the provider, its message id and cost, and stop further retries."""
     if cost is not None:
         notification.cost = cost
-        notification.cost_currency = get_settings().notification_cost_currency
+        notification.cost_currency = (
+            currency or get_settings().notification_cost_currency
+        )
     notification.attempts += 1
     notification.status = NotificationStatus.SENT.value
     notification.provider = provider
@@ -311,6 +315,18 @@ def attempt(
         db.flush()
         return True
 
+    if channel is NotificationChannel.SMS:
+        # What SMS may cost (Issue 65): the kill switch, the clinic's and the patient's daily caps.
+        blocked = budget.check_sms(db, notification, now=now)
+        if blocked is not None:
+            notification.status = NotificationStatus.SUPPRESSED.value
+            notification.last_error = f"SMS not sent: {blocked.value}"
+            notification.next_attempt_at = None
+            logger.warning(
+                "Notification %s: SMS not sent (%s).", notification.id, blocked.value
+            )
+            db.flush()
+            return False
     transports = active_transports(sms_provider=provider)
     transport = transports.get(channel)
     patient = (
@@ -347,6 +363,7 @@ def attempt(
         provider_message_id=receipt.provider_message_id,
         now=now,
         cost=receipt.cost,
+        currency=receipt.currency,
     )
     if channel is NotificationChannel.WEB_PUSH:
         webpush.mark_sent(db, notification.recipient, now=now)
@@ -832,6 +849,47 @@ def run_retry_sweep(
         if attempt(db, notification, provider=provider, now=now):
             delivered += 1
     return delivered
+
+
+def apply_sms_receipt(
+    db: Session,
+    *,
+    provider_message_id: str,
+    state: SmsDeliveryState,
+    detail: str | None = None,
+    now: datetime | None = None,
+) -> Notification | None:
+    """Apply a gateway's delivery receipt to its SMS row; the row, or ``None`` for an unknown message (Issue 65).
+
+    ``delivered`` and ``failed`` are both terminal. A message the phone never received is not sent again
+    automatically: the gateway already charged for it, and a second paid attempt to an unreachable phone
+    rarely fares better. ``in_transit`` changes nothing. A receipt never moves a row backwards: a late
+    "buffered" after "delivered" is ignored.
+    """
+    notification = db.execute(
+        select(Notification).where(
+            Notification.provider_message_id == provider_message_id,
+            Notification.channel == NotificationChannel.SMS.value,
+        )
+    ).scalar_one_or_none()
+    if notification is None or state is SmsDeliveryState.IN_TRANSIT:
+        return notification
+    if notification.status == NotificationStatus.DELIVERED.value:
+        return notification
+    moment = now or _now()
+    if state is SmsDeliveryState.DELIVERED:
+        notification.status = NotificationStatus.DELIVERED.value
+        notification.delivered_at = moment
+        notification.last_error = None
+    else:
+        notification.status = NotificationStatus.DEAD.value
+        notification.failed_at = moment
+        notification.last_error = f"delivery failed: {detail or 'no reason given'}"[
+            :2000
+        ]
+    notification.next_attempt_at = None
+    db.flush()
+    return notification
 
 
 def record_delivery_status(db: Session, receipt: DeliveryReceipt) -> bool:
