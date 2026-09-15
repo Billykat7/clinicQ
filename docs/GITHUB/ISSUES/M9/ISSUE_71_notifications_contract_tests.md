@@ -53,9 +53,13 @@ that failure loud.
 
 ## Files touched
 
-- `contracts/notifications.yaml`
-- `tests/integration/notifications/test_notification_failures.py`
+- `contracts/notifications.yaml`, `tests/integration/contracts/test_notifications_contract.py`
+- `tests/integration/notifications/test_notification_failures.py`, `test_notification_replay.py`, `test_delivery_health.py`
 - `tests/integration/contracts/test_openapi_contracts.py`
+- `src/modules/notifications/service.py` (`attempt_or_record`), `src/modules/notifications/delivery_stats.py`
+- `alembic/versions/0037_notification_failure_alert.py`, `src/core/scheduler.py` (`notification_failure_watch`)
+- `src/templates/admin/notifications.html`, `src/static/js/admin-notification-health.js`
+- `docs/CICD/RUNBOOK_ALERTS.md`, `docs/GITHUB/RELEASES/RELEASE_v0_9_0.md`
 
 ---
 

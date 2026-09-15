@@ -87,6 +87,28 @@ from ClinicQ itself. Someone stopped every SMS on the platform, sign-in codes in
 2. **While it is on,** patients get web push only, and patients signing in by phone get no code. Keep it on
    no longer than needed: [SMS_GATEWAY.md](../OPS/SMS_GATEWAY.md) §4 says how to turn it off.
 
+## Notifications are failing
+
+*"📉 Notifications failing: 10 of 30 sms messages dead-lettered in the last 60 minutes (33%, the threshold is
+25%)…"*, from ClinicQ itself (Issue 71). One transport's messages are dying: at least
+`NOTIFICATION_FAILURE_ALERT_MIN_ATTEMPTS` (20) of them reached an outcome in the window
+(`NOTIFICATION_FAILURE_ALERT_WINDOW_MINUTES`, 60) and at least `NOTIFICATION_FAILURE_ALERT_RATE` (25%) were
+dead-lettered. It comes once per transport per window while the failures go on. Patients may not be hearing
+that they are next.
+
+1. **Look at the panel.** `/admin/notifications` shows delivery by transport; filter the list below it by that
+   channel and status `dead` and read the last error on a few rows.
+2. **Every row says the same thing** (`gateway unreachable`, `gateway answered HTTP 5xx`, a push service's
+   `5xx`): the provider is down or refusing us. Check its status page. For SMS, messages go on retrying with
+   backoff; if the provider is charging for failures, turn the SMS kill switch on (below). Web push falls back
+   to SMS by itself.
+3. **The errors name numbers or subscriptions** (`gateway refused the number`, a push `410`): addresses
+   are bad, not the provider. Those are dead-lettered at once and not retried; look for a bad batch of numbers
+   (an import, a form change) rather than an outage.
+4. **`unexpected error: …`**: a bug while preparing messages. Report it with a row id; the rows retry with
+   backoff and are dead-lettered at their budget, and nothing else in the sweep is held up.
+5. **Write in the channel** what you found. The alert stops by itself once the failure rate falls.
+
 ## Not alerts
 
 - *"⏸ not deployed: this environment is not provisioned yet"*: expected until its host exists.

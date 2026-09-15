@@ -14,7 +14,7 @@ Two endpoints, both operational rather than end-user facing:
 from __future__ import annotations
 
 import hmac
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import (
@@ -39,6 +39,7 @@ from src.commons.enums import (
     PreferenceSource,
 )
 from src.commons.exceptions import InAppNotificationNotFoundError
+from src.commons.time import now_sast
 from src.core.config import Settings, get_settings
 from src.core.s3_logging import APP_TIMEZONE
 from src.core.security import get_current_user, resolve_active_user
@@ -49,6 +50,7 @@ from src.modules.notifications import (
     CENTRE_RESOURCE_KEY,
     budget,
     center,
+    delivery_stats,
     patient_preferences,
     preferences,
     service,
@@ -61,7 +63,9 @@ from src.modules.notifications.schemas import (
     CenterMarkResult,
     CenterSummaryOut,
     CenterUnreadOut,
+    ChannelDeliveryStatsOut,
     DeliveryReceipt,
+    DeliveryStatsOut,
     NotificationListOut,
     NotificationPreferencesRead,
     NotificationPreferencesUpdate,
@@ -452,6 +456,47 @@ def unsubscribe_from_web_push(
     webpush.unsubscribe(db, patient.id, payload.endpoint)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/delivery-stats", response_model=DeliveryStatsOut)
+def get_delivery_stats(
+    db: DbSession,
+    _: LogsReadDep,
+    settings: Annotated[Settings, Depends(get_settings)],
+    hours: Annotated[
+        int,
+        Query(ge=1, le=168, description="How many hours back to count, up to a week."),
+    ] = 24,
+) -> DeliveryStatsOut:
+    """Sends, failures and cost per transport over the last ``hours`` (admin; ``logs`` READ).
+
+    The delivery-rate panel on the notifications page reads this. ``alerting`` marks a transport whose
+    failure rate crosses the threshold the alert watch uses.
+    """
+    until = now_sast()
+    since = until - timedelta(hours=hours)
+    return DeliveryStatsOut(
+        since=since,
+        until=until,
+        currency=settings.notification_cost_currency,
+        alert_rate=settings.notification_failure_alert_rate,
+        alert_min_attempts=settings.notification_failure_alert_min_attempts,
+        channels=[
+            ChannelDeliveryStatsOut(
+                channel=row.channel,
+                total=row.total,
+                sent=row.sent,
+                delivered=row.delivered,
+                failed=row.dead,
+                suppressed=row.suppressed,
+                waiting=row.waiting,
+                failure_rate=delivery_stats.failure_rate(row),
+                cost=f"{row.cost:.4f}",
+                alerting=delivery_stats.is_alerting(row, settings),
+            )
+            for row in delivery_stats.channel_stats(db, since=since, until=until)
+        ],
+    )
 
 
 @router.get("/{notification_id}", response_model=NotificationRead)

@@ -29,6 +29,7 @@ from src.database.models.message_thread import MessageThread
 from src.database.models.mixins import ActiveMixin, SoftDeleteMixin, TimestampMixin
 from src.database.models.nav_gate_override import NavGateOverride
 from src.database.models.notification import Notification
+from src.database.models.notification_failure_alert import NotificationFailureAlert
 from src.database.models.notification_preference import NotificationPreference
 from src.database.models.notification_template import NotificationTemplateVersion
 
@@ -114,6 +115,7 @@ __all__ = [
     "MessageThread",
     "NavGateOverride",
     "Notification",
+    "NotificationFailureAlert",
     "NotificationPreference",
     "NotificationTemplateVersion",
     "Patient",

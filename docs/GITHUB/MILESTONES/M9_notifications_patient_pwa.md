@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Status** | 🚧 In progress: the notification service, transports and delivery log (63), the patient ticket page (68), web push (64), the SMS gateway with cost caps (65), versioned templates with their editor (66; English only until Issue 77) patient preferences with quiet hours and STOP across every channel (67) the installable app with its offline last-known ticket (69) and the ticket QR and code with reception lookup (70) delivered |
-| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ **89%** (8/9 issues) |
+| **Status** | ✅ Done: issues 63–71 closed with the merge of the Issue 71 pull request, release note [`v0.9.0`](../RELEASES/RELEASE_v0_9_0.md), whose tag follows that merge. Three exit criteria are met; three are met in software and wait for people or later work: a real phone receiving "you are next" by push within 5 seconds and installing the app on Android (Issues 64, 69), and the other four languages' words (Issue 77) |
+| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (9/9 issues) |
 | **Sprints** | 9–10 (weeks 17–20), semester 2. The sprint plan spreads its issues over sprints 3–12: some start early against stubs and some are scheduled after this window, which moves the milestone's close (and its tag) to sprint 12 (see the table) |
 | **Release tag** | `v0.9.0` |
 | **Primary owner** | B, Integrations · C, Frontend/Patient |
@@ -103,12 +103,12 @@ flowchart LR
 
 ## Exit criteria
 
-- [ ] A patient receives a 'you're next' message within 5 seconds of Call Next on their preferred transport
-- [ ] The sender refuses to send outside quiet hours or after an opt-out, proven by tests
-- [ ] SMS spend per site per day is capped, and hitting the cap raises an alert rather than failing silently
-- [ ] The PWA installs to a home screen and shows the last known ticket position with no network
-- [ ] A failed send is retried with backoff and ends in the delivery log with a terminal status
-- [ ] Every template renders correctly in all supported languages with no truncation on a 160-character SMS
+- [ ] A patient receives a 'you're next' message within 5 seconds of Call Next on their preferred transport. **Partly (Issues 63, 64):** the message is recorded with the call and handed to the patient's preferred transport as soon as the call commits (web push encrypted and accepted by a local push service in tests, SMS through the gateway adapter), and a provider outage cannot hold the call. No real phone has received it; the Android check in `docs/OPS/WEB_PUSH.md` is still to do
+- [x] The sender refuses to send outside quiet hours or after an opt-out, proven by tests (quiet hours hold every message but the three "come now" ones, and an opt-out, by the ticket page or an SMS STOP reply, stops every channel, including messages already waiting, Issue 67)
+- [x] SMS spend per site per day is capped, and hitting the cap raises an alert rather than failing silently (per-clinic and per-patient daily caps, a kill switch, one team alert per cap per day, every refused message on the ledger as `suppressed`, Issue 65)
+- [ ] The PWA installs to a home screen and shows the last known ticket position with no network. **Partly (Issue 69):** with the network cut the app shows the last known place in line with its age, Lighthouse 11.7.1's PWA checks pass and Chromium reports no installability errors; installing on a real Android phone has not been done
+- [x] A failed send is retried with backoff and ends in the delivery log with a terminal status (a provider timeout, a provider error, a malformed number, a revoked push subscription and an unplanned error each end `dead` or fall back to a transport that sends, re-verified with the real adapters in Issue 71, which also added the delivery-rate panel and the failure-rate alert)
+- [ ] Every template renders correctly in all supported languages with no truncation on a 160-character SMS. **Partly (Issues 65, 66):** every English SMS fits one GSM 7-bit segment with the longest names the database allows, and registration refuses one that does not; the other four languages have no words until Issue 77
 
 ## Demo at the end of the milestone
 

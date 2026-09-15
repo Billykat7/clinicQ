@@ -383,6 +383,43 @@ def attempt(
     return True
 
 
+def attempt_or_record(
+    db: Session,
+    notification: Notification,
+    *,
+    provider: SmsProvider | None = None,
+    now: datetime | None = None,
+    context: dict | None = None,
+) -> bool:
+    """:func:`attempt`, with anything it did not plan for recorded on the row instead of raised (Issue 71).
+
+    :func:`attempt` records every transport failure, but an error before the transport is reached (a bug
+    rendering the message, a stored payload that no longer fits its template) would escape it: the row
+    would stay ``queued`` with no attempt counted, the sweep would meet the same error on every run, and
+    every row after it in the sweep would wait too. Here the attempt runs in a savepoint; if it raises,
+    its partial changes are undone and the error is recorded as a failed attempt, so the row retries with
+    backoff and is dead-lettered at its budget like any other failure. Every delivery path calls this.
+    """
+    moment = now or _now()
+    try:
+        with db.begin_nested():
+            return attempt(
+                db, notification, provider=provider, now=moment, context=context
+            )
+    except Exception as exc:
+        logger.exception(
+            "Notification %s: unexpected error while delivering; recorded as a failed attempt.",
+            notification.id,
+        )
+        _apply_failure(
+            notification,
+            error=f"unexpected error: {type(exc).__name__}: {exc}",
+            now=moment,
+        )
+        db.flush()
+        return False
+
+
 # --------------------------------------------------------------------------------------
 # Patient notifications (Issue 63): one call from the queue, a transport chosen per patient.
 # --------------------------------------------------------------------------------------
@@ -690,7 +727,7 @@ def _fall_back(
         failed.channel,
         channel.value,
     )
-    attempt(db, fallback, now=now)
+    attempt_or_record(db, fallback, now=now)
     return fallback
 
 
@@ -713,7 +750,7 @@ def deliver_committed(bind: Engine | Connection, notification_id: str) -> bool:
         ).scalar_one_or_none()
         if notification is None:
             return False
-        sent = attempt(db, notification)
+        sent = attempt_or_record(db, notification)
         db.commit()
         return sent
 
@@ -872,7 +909,7 @@ def send_sms(
     if decision.outcome is DeliveryOutcome.DEFER:
         # Queued for the retry sweep to deliver once quiet hours end.
         return notification
-    attempt(
+    attempt_or_record(
         db,
         notification,
         provider=provider,
@@ -926,7 +963,7 @@ def run_retry_sweep(
     )
     delivered = 0
     for notification in due:
-        if attempt(db, notification, provider=provider, now=now):
+        if attempt_or_record(db, notification, provider=provider, now=now):
             delivered += 1
     return delivered
 

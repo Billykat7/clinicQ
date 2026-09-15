@@ -190,6 +190,11 @@ _UNSCOPED_BY_DESIGN: dict[str, str] = {
         "resolved through get_queue, to find the moved patient's place (Issue 45). It returns an "
         "order key, never a row"
     ),
+    "modules/notifications/delivery_stats.py::channel_stats": (
+        "delivery health is platform-wide (Issue 71): a gateway outage fails every clinic's messages at once "
+        "and is one incident, so the operators' delivery panel and the failure-rate alert count the whole "
+        "ledger per transport; only callers with the platform `logs` grant (or the scheduler) reach it"
+    ),
     "modules/notifications/service.py::_by_dedupe_key": (
         "the notification ledger (Issue 63) is platform operational data, not a clinic's records: finds the row one queue event already recorded, by its unique dedupe key, so a "
         "replay sends nothing; the key is built by the move that caused the event"

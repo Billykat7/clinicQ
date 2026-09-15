@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-head">
   <h1>Notifications</h1>
-  <p class="lead">The delivery viewer for transactional email and SMS: who each message went to,
+  <p class="lead">The delivery viewer for every message ClinicQ sends (email, SMS, web push and WhatsApp): who each message went to,
   on which channel, which template, and where it stands (queued, sent, delivered, failed or
   dead-lettered) with the last failure reason. Read-only.</p>
   {% include "partials/breadcrumbs.html" %}
@@ -11,6 +11,41 @@
 
 {% set admin_tab_group = 'communications' %}
 {% include "partials/admin_group_tabs.html" %}
+
+{# ── Delivery health (Issue 71): sends, failures and cost per transport, and whether a transport is over the
+   failure rate that alerts the team. admin-notification-health.js fills it from the delivery-stats API. ── #}
+<section class="card nt-health" id="nt-health" data-url="/api/v1/notifications/delivery-stats" aria-labelledby="nt-health-title">
+  <div class="nt-health-head">
+    <h2 id="nt-health-title">Delivery by transport</h2>
+    <div class="field nt-health-window">
+      <label for="nt-health-hours">Window</label>
+      <select id="nt-health-hours">
+        <option value="1">Last hour</option>
+        <option value="24" selected>Last 24 hours</option>
+        <option value="168">Last 7 days</option>
+      </select>
+    </div>
+  </div>
+  <div class="table-wrap table-scroll">
+    <table class="data nt-health-table">
+      <thead>
+        <tr>
+          <th scope="col">Transport</th>
+          <th scope="col" class="num">Sent</th>
+          <th scope="col" class="num">Delivered</th>
+          <th scope="col" class="num">Failed</th>
+          <th scope="col" class="num">Not sent</th>
+          <th scope="col" class="num">Waiting</th>
+          <th scope="col" class="num">Failure rate</th>
+          <th scope="col" class="num">Cost</th>
+        </tr>
+      </thead>
+      <tbody id="nt-health-body"></tbody>
+    </table>
+  </div>
+  <p class="hint" id="nt-health-note">Failure rate is failed out of sent, delivered and failed. "Not sent" was held back on purpose: no consent, an opt-out, a cap or no address.</p>
+  <p class="msg msg-muted" id="nt-health-msg" role="status"></p>
+</section>
 
 {# ── Filters (full-width, collapsible; Issue 93) ── #}
 <div class="filter-bar" data-filter-key="notifications">
@@ -44,6 +79,8 @@
         <option value="">All channels</option>
         <option value="email">email</option>
         <option value="sms">sms</option>
+        <option value="web_push">web_push</option>
+        <option value="whatsapp">whatsapp</option>
       </select>
     </div>
   </div>
@@ -105,4 +142,5 @@
 {% block scripts %}
 <script src="/static/js/admin-crud.js" defer></script>
 <script src="/static/js/admin-notifications.js" defer></script>
+<script src="/static/js/admin-notification-health.js" defer></script>
 {% endblock %}

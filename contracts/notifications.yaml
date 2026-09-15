@@ -1,0 +1,1574 @@
+# ClinicQ: the notifications contract (Issue 71).
+#
+# Hand-written from src/modules/notifications/router.py, template_router.py and budget_router.py, and
+# the two SMS gateway callbacks in src/api/v1/routes/webhooks.py, so the patient PWA (Issues 64, 67,
+# 68), the operators' delivery viewer and template editor (Issues 65, 66) and the clinic manager's SMS
+# budget page can be built against a stable document. Checked against the running application's
+# /openapi.json in both directions by tests/integration/contracts/test_openapi_contracts.py (the
+# Issue 30 harness). This contract owns every route under /notifications, a clinic's
+# /sites/{site_id}/sms-budget and the /webhooks/sms/ gateway callbacks. The payment gateways' webhooks
+# (/webhooks/paystack, /webhooks/stripe) are not notification routes and are not in it.
+#
+# Every error response documented here is driven over real HTTP by
+# tests/integration/contracts/test_notifications_contract.py, which fails when this file documents an
+# error status that has no test case, and when a test case proves a status this file does not document.
+#
+# Four conventions:
+#
+#   * who may call a route is one of four doors, named on each operation: an operator (the `logs`
+#     grant at `business` tier), any signed-in account (their own preferences and notification centre),
+#     a signed-in patient (their own browsers' push subscriptions), or a secret held by the caller (a
+#     ticket page's link, a gateway's callback URL, a provider's shared secret);
+#   * a route naming {site_id} goes through the site guard: another clinic's id is the same 404 as an id
+#     that never existed;
+#   * a gateway callback never learns more than it needs: a wrong secret is the same 404 as a path that
+#     does not exist;
+#   * every example is validated against the schema it claims to be an example of.
+
+openapi: 3.1.0
+
+info:
+  title: ClinicQ notifications
+  version: "0.9.0"
+  description: |
+    Telling patients about their tickets, and the operators' view of what was sent.
+
+    **Delivery ledger.** Every message, on every transport, is one row with a `status`: `queued`,
+    `sent`, `delivered`, `failed` (due another try), `dead` (every attempt failed, or the address can
+    never work) or `suppressed` (deliberately not sent: no consent, an opt-out, a cap, the kill switch,
+    no address). A `failed` row is retried with backoff until its attempts run out, and is then `dead`.
+
+    **Transports.** `web_push`, `whatsapp` and `sms` for patients, `email` for account holders. A
+    patient is tried on their preferred transport first, then down the free-first chain; SMS is last
+    because it costs money, and is capped per clinic per day, per patient per day, and stopped for
+    everyone by the operators' kill switch.
+
+    **Authentication.** A staff session is an `Authorization: Bearer <access token>` header or the
+    cookies from `POST /api/v1/auth/password/login`; a patient's is their web session. Any unsafe
+    `/api/` request is refused with `403` by the CSRF middleware when a browser labels it
+    `Sec-Fetch-Site: cross-site`, or when it carries a session cookie and does not echo the CSRF cookie
+    in `X-CSRF-Token`. That refusal is documented on the routes that take a session; on the routes
+    authenticated by a secret it happens only to a caller that sends a session cookie it did not need.
+
+    **Errors.** The error envelope (`detail`, `code`, `request_id`) on every refusal except the SMS
+    gateway callbacks and the CSRF middleware, which answer `detail` alone. `code` is `http.<reason>`
+    for a refusal a handler raises (`http.not_found`), `request.invalid` for a request that failed
+    validation, and `insufficient_permission` for a missing grant.
+
+    **Time.** Every datetime is ISO 8601 with an offset, in `Africa/Johannesburg` (`+02:00`). Money is
+    a decimal string in `currency` (ISO 4217), never a float.
+
+servers:
+  - url: /api/v1
+    description: This deployment.
+
+tags:
+  - name: delivery
+    description: The delivery ledger, its dashboard numbers and the provider callbacks that move it.
+  - name: sms
+    description: SMS spend, caps and the kill switch.
+  - name: templates
+    description: What each patient message says, per transport and language, and changing it safely.
+  - name: patients
+    description: A patient's push subscriptions and message preferences.
+  - name: accounts
+    description: An account holder's own email and SMS preferences and in-app notification centre.
+
+paths:
+  # ── The delivery ledger (Issues 63, 71) ─────────────────────────────────────────────────
+  /notifications:
+    get:
+      tags: [delivery]
+      operationId: notificationsList
+      summary: The delivery ledger, newest first
+      description: |
+        The operators' delivery viewer: every message on every transport, optionally narrowed by
+        status, transport and recipient, paged with `offset` and `limit`. `total` counts the matches
+        before paging. Requires `logs` `read` at `business` tier.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Only messages in this delivery status.
+          schema: { $ref: "#/components/schemas/NotificationStatus" }
+          example: dead
+        - name: channel
+          in: query
+          required: false
+          description: Only messages on this transport.
+          schema: { $ref: "#/components/schemas/NotificationChannel" }
+          example: sms
+        - name: recipient
+          in: query
+          required: false
+          description: Case-insensitive match on the recipient's address.
+          schema: { type: string }
+          example: "+2782"
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        "200":
+          description: A page of messages and the match count.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationListOut" }
+              example:
+                total: 1
+                items:
+                  - id: 01a0a1c2-7d10-7c4e-9b1f-3e2d1c0b9a88
+                    channel: sms
+                    template_key: ticket_next
+                    recipient: "+27821234567"
+                    patient_id: 01a0a1b0-11aa-7f00-8c3d-6a5b4c3d2e1f
+                    site_id: 0199b0c0-0000-7000-8000-0000000c1a01
+                    event: next
+                    fallback_of_id: 01a0a1c2-7d0e-7a11-8d22-5f4e3d2c1b0a
+                    cost: "0.3000"
+                    cost_currency: ZAR
+                    template_version_id: null
+                    language: en
+                    subject: null
+                    status: dead
+                    provider: africas_talking
+                    provider_message_id: ATXid_4f1c9a
+                    attempts: 3
+                    max_attempts: 3
+                    last_error: "delivery failed: AbsentSubscriber"
+                    next_attempt_at: null
+                    sent_at: "2026-09-15T08:12:03+02:00"
+                    delivered_at: null
+                    failed_at: "2026-09-15T08:14:40+02:00"
+                    created_at: "2026-09-15T08:12:01+02:00"
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /notifications/{notification_id}:
+    get:
+      tags: [delivery]
+      operationId: notificationsGet
+      summary: One message's delivery status
+      description: |
+        The ledger row for one message, including the transport it fell back from (`fallback_of_id`)
+        and the exact template version it was rendered from. Requires `logs` `read` at `business`
+        tier.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - name: notification_id
+          in: path
+          required: true
+          description: A ledger row's id.
+          schema: { type: string }
+          example: 01a0a1c2-7d10-7c4e-9b1f-3e2d1c0b9a88
+      responses:
+        "200":
+          description: The message as the ledger records it.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationRead" }
+              example:
+                id: 01a0a1c2-7d10-7c4e-9b1f-3e2d1c0b9a88
+                channel: web_push
+                template_key: ticket_called
+                recipient: "https://fcm.googleapis.com/fcm/send/c1x"
+                patient_id: 01a0a1b0-11aa-7f00-8c3d-6a5b4c3d2e1f
+                site_id: 0199b0c0-0000-7000-8000-0000000c1a01
+                event: called
+                fallback_of_id: null
+                cost: null
+                cost_currency: null
+                template_version_id: 01a0a0f3-2b7c-7d55-a1e0-9c8b7a6f5e4d
+                language: en
+                subject: "It is your turn"
+                status: sent
+                provider: web_push
+                provider_message_id: null
+                attempts: 1
+                max_attempts: 3
+                last_error: null
+                next_attempt_at: null
+                sent_at: "2026-09-15T09:02:11+02:00"
+                delivered_at: null
+                failed_at: null
+                created_at: "2026-09-15T09:02:10+02:00"
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: No message has this id.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "Notification not found", code: "http.not_found" }
+
+  /notifications/delivery-stats:
+    get:
+      tags: [delivery]
+      operationId: notificationsDeliveryStats
+      summary: Sends, failures and cost per transport over a window
+      description: |
+        The numbers behind the delivery-rate panel: per transport, the messages created in the last
+        `hours`, counted by where each stands now, what they cost, and whether the transport's failure
+        rate crosses the threshold the alert watch uses. `failure_rate` is
+        `failed / (sent + delivered + failed)` and is `null` when nothing was attempted; a transport
+        with fewer than `alert_min_attempts` attempted messages never alerts. Every transport is listed,
+        in the same order, an idle one with zeros. Requires `logs` `read` at `business` tier.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - name: hours
+          in: query
+          required: false
+          description: How many hours back to count, up to a week.
+          schema: { type: integer, minimum: 1, maximum: 168, default: 24 }
+          example: 24
+      responses:
+        "200":
+          description: The window and each transport's counts.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeliveryStatsOut" }
+              example:
+                since: "2026-09-14T10:00:00+02:00"
+                until: "2026-09-15T10:00:00+02:00"
+                currency: ZAR
+                alert_rate: 0.25
+                alert_min_attempts: 20
+                channels:
+                  - { channel: email, total: 0, sent: 0, delivered: 0, failed: 0, suppressed: 0, waiting: 0, failure_rate: null, cost: "0.0000", alerting: false }
+                  - channel: sms
+                    total: 212
+                    sent: 14
+                    delivered: 160
+                    failed: 30
+                    suppressed: 6
+                    waiting: 2
+                    failure_rate: 0.1471
+                    cost: "61.2000"
+                    alerting: false
+                  - channel: web_push
+                    total: 540
+                    sent: 530
+                    delivered: 0
+                    failed: 4
+                    suppressed: 6
+                    waiting: 0
+                    failure_rate: 0.0075
+                    cost: "0.0000"
+                    alerting: false
+                  - { channel: whatsapp, total: 0, sent: 0, delivered: 0, failed: 0, suppressed: 0, waiting: 0, failure_rate: null, cost: "0.0000", alerting: false }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /notifications/webhooks/delivery:
+    post:
+      tags: [delivery]
+      operationId: notificationsDeliveryWebhook
+      summary: A provider's delivery-status callback
+      description: |
+        Advances the ledger row carrying `provider_message_id` to `delivered`, or records a bounce as
+        `failed` with its reason. A provider cannot present a session, so the call is authenticated by
+        the shared secret `NOTIFICATION_WEBHOOK_SECRET` in `X-Webhook-Secret`, compared in constant
+        time. While no secret is configured the route answers `404`, as if it did not exist.
+      security: [{ webhookSecret: [] }]
+      parameters:
+        - name: X-Webhook-Secret
+          in: header
+          required: true
+          description: The shared secret configured as `NOTIFICATION_WEBHOOK_SECRET`.
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeliveryReceipt" }
+            example: { provider_message_id: "msg-4f1c9a", delivered: false, detail: "Mailbox full" }
+      responses:
+        "204":
+          description: Applied to its row.
+        "401":
+          description: The secret is missing or wrong.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "Invalid webhook secret", code: "http.unauthorized" }
+        "404":
+          description: |
+            The webhook is not configured (no secret is set), or no ledger row carries this
+            `provider_message_id`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                off:
+                  value: { detail: "Not found", code: "http.not_found" }
+                unknown:
+                  value: { detail: "Unknown provider_message_id", code: "http.not_found" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  # ── SMS: the kill switch, a clinic's budget, the gateway's callbacks (Issue 65) ─────────
+  /notifications/sms/kill-switch:
+    get:
+      tags: [sms]
+      operationId: notificationsSmsKillSwitch
+      summary: Whether every SMS is stopped
+      description: Off (`enabled` false, the rest null) until somebody first flips it. Requires `logs` `read` at `business` tier.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: The switch as it stands.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SmsKillSwitchOut" }
+              example: { enabled: false, reason: null, changed_by: null, changed_at: null }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    put:
+      tags: [sms]
+      operationId: notificationsSetSmsKillSwitch
+      summary: Stop every SMS, or let them send again
+      description: |
+        The switch is read on every send, so no SMS is handed to the gateway after this commits: no
+        deploy and no restart. A message that would have gone by SMS is recorded `suppressed`, and a
+        free transport is still tried first. Flipping it posts a team alert naming who and why. Requires
+        `logs` `update` at `business` tier.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SmsKillSwitchIn" }
+            example: { enabled: true, reason: "gateway billing looks wrong" }
+      responses:
+        "200":
+          description: The switch after the change.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SmsKillSwitchOut" }
+              example: { enabled: true, reason: "gateway billing looks wrong", changed_by: "ops@clinicq.example", changed_at: "2026-09-15T10:41:02+02:00" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/sms-budget:
+    get:
+      tags: [sms]
+      operationId: notificationsSmsBudget
+      summary: A clinic's SMS on a day, its cap and what it cost
+      description: |
+        How many SMS the clinic has sent on a Johannesburg day, what they cost, and how many are left
+        under its cap (its own `own_cap`, or the platform default `SMS_SITE_DAILY_CAP` when that is
+        null). Requires `sites.settings` `read` at this clinic.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/SiteId" }
+        - name: day
+          in: query
+          required: false
+          description: A Johannesburg calendar day; today by default.
+          schema: { type: string, format: date }
+          example: "2026-09-15"
+      responses:
+        "200":
+          description: The budget for the day.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SmsBudgetOut" }
+              example: { site_id: 0199b0c0-0000-7000-8000-0000000c1a01, day: "2026-09-15", cap: 300, own_cap: null, sent: 42, remaining: 258, spend: "12.6000", currency: ZAR }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/SiteNotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    put:
+      tags: [sms]
+      operationId: notificationsSetSmsBudget
+      summary: Set a clinic's own daily SMS cap
+      description: |
+        `daily_cap` is the clinic's own cap for every day from now; `null` goes back to the platform
+        default. The change is audited with its before and after. Answers with today's budget. Requires
+        `sites.settings` `update` at this clinic.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/SiteId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SmsBudgetIn" }
+            example: { daily_cap: 120 }
+      responses:
+        "200":
+          description: Today's budget under the new cap.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SmsBudgetOut" }
+              example: { site_id: 0199b0c0-0000-7000-8000-0000000c1a01, day: "2026-09-15", cap: 120, own_cap: 120, sent: 42, remaining: 78, spend: "12.6000", currency: ZAR }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/SiteNotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /webhooks/sms/africastalking/{token}:
+    post:
+      tags: [sms]
+      operationId: notificationsSmsDeliveryReceipt
+      summary: An SMS delivery receipt from Africa's Talking
+      description: |
+        The gateway calls this, form-encoded, each time a message's delivery status changes. It does not
+        sign its callbacks, so the secret in the path (`SMS_WEBHOOK_TOKEN`) stands in for a signature and
+        is checked in constant time before the body is read. Each receipt is recorded once, keyed
+        `africas_talking:<id>:<status>`, so a retried receipt moves the ledger once: `Success` is
+        `delivered`; `Failed`, `Rejected`, `Expired` and `AbsentSubscriber` are `dead` with the reason;
+        anything else is in transit. After the secret and the body check, the answer is always `200`, so
+        the gateway stops retrying.
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/CallbackToken" }
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema: { $ref: "#/components/schemas/SmsReceiptForm" }
+            example: { id: ATXid_4f1c9a, status: Failed, phoneNumber: "+27821234567", networkCode: "65001", failureReason: AbsentSubscriber, retryCount: "0" }
+      responses:
+        "200":
+          description: |
+            Recorded. `outcome` is `processed` (applied to its message), `duplicate` (this receipt was
+            already applied) or `ignored` (no message on the ledger has that gateway id).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SmsReceiptAck" }
+              example: { received: true, outcome: processed, event_id: "africas_talking:ATXid_4f1c9a:Failed" }
+        "400":
+          description: The body is not a receipt (no `id` or `status`, or not UTF-8). Nothing is recorded.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "the body is not a receipt" }
+        "404": { $ref: "#/components/responses/CallbackRefused" }
+        "503":
+          description: The webhook is off (`SMS_WEBHOOK_TOKEN` is not set).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "SMS delivery receipts are not configured." }
+
+  /webhooks/sms/africastalking/{token}/inbound:
+    post:
+      tags: [sms]
+      operationId: notificationsSmsInboundMessage
+      summary: An SMS a patient sent to the service's number
+      description: |
+        Verified like the delivery receipts: the path's secret first, then the body, recorded once keyed
+        `africas_talking:<id>`. A reply starting `STOP` stops every message to that patient on every
+        transport at once, including any already waiting to be sent; `START` lets them send again. The
+        outcome is `stopped`, `restarted`, `ignored` (no keyword, or a number no patient has) or
+        `duplicate`.
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/CallbackToken" }
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema: { $ref: "#/components/schemas/SmsReplyForm" }
+            example: { id: ATXid_9c2e71, from: "+27821234567", text: "STOP" }
+      responses:
+        "200":
+          description: Recorded, with what the reply did.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SmsReceiptAck" }
+              example: { received: true, outcome: stopped, event_id: "africas_talking:ATXid_9c2e71" }
+        "400":
+          description: The body is not a message (no `id` or `from`, or not UTF-8). Nothing is recorded.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "the body is not a message" }
+        "404": { $ref: "#/components/responses/CallbackRefused" }
+        "503":
+          description: The webhook is off (`SMS_WEBHOOK_TOKEN` is not set).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "SMS replies are not configured." }
+
+  # ── Templates (Issue 66) ────────────────────────────────────────────────────────────────
+  /notifications/templates:
+    get:
+      tags: [templates]
+      operationId: notificationsTemplatesList
+      summary: Every patient message template, as it is sent now
+      description: |
+        One item per template, transport and written language: the newest stored version, or the
+        locale file's words when nobody has edited them (`source: builtin`, `id` null). Templates are
+        platform-wide, so this is an operator's view. Requires `logs` `read` at `business` tier.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: The written languages and every template in each.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateListOut" }
+              example:
+                languages: [en]
+                items:
+                  - id: null
+                    template: ticket_next
+                    channel: sms
+                    language: en
+                    version: 1
+                    subject: null
+                    body: "{app}: ticket {number} at {clinic}, you are next. Please come to {room}."
+                    source: builtin
+                    created_by: null
+                    reviewed_by: null
+                    created_at: null
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /notifications/templates/preview:
+    post:
+      tags: [templates]
+      operationId: notificationsTemplatePreview
+      summary: What a patient would receive for some words
+      description: |
+        Renders the words with a sample ticket exactly as the transport sends them (an SMS after its GSM
+        7-bit normalisation) and says whether they may be published. Words that break the variable
+        contract are a `200` with `valid: false` and the reason, not a refusal. For an SMS, `characters`
+        and `segments` count the sample message, and `worst_characters` and `worst_segments` the same
+        words with the longest clinic and room names the database allows, which is what must fit one
+        segment. Nothing is stored. Requires `logs` `read` at `business` tier.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TemplatePreviewIn" }
+            example: { template: ticket_transferred, channel: sms, language: en, body: "{app}: ticket {number} in {queue}. Wait {wait}." }
+      responses:
+        "200":
+          description: The rendered message and whether it may be published.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplatePreviewOut" }
+              examples:
+                valid:
+                  value: { valid: true, error: null, subject: null, text: "ClinicQ: ticket T005 in Triage. Wait ~15-25 min.", characters: 48, encoding: gsm7, segments: 1, worst_characters: 96, worst_segments: 1 }
+                refused:
+                  value: { valid: false, error: "The message must say the ticket number: add {number}.", subject: null, text: "", characters: null, encoding: null, segments: null, worst_characters: null, worst_segments: null }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/TemplateNotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /notifications/templates/versions/{version_id}:
+    get:
+      tags: [templates]
+      operationId: notificationsTemplateVersion
+      summary: One stored template version
+      description: The words a ledger row's `template_version_id` names, so any message sent can be reproduced. Requires `logs` `read` at `business` tier.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - name: version_id
+          in: path
+          required: true
+          description: A stored version's id.
+          schema: { type: string }
+          example: 01a0a0f3-2b7c-7d55-a1e0-9c8b7a6f5e4d
+      responses:
+        "200":
+          description: The version.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateVersionOut" }
+              example:
+                id: 01a0a0f3-2b7c-7d55-a1e0-9c8b7a6f5e4d
+                template: ticket_called
+                channel: sms
+                language: en
+                version: 2
+                subject: null
+                body: "{app}: ticket {number}, it is your turn. Go to {where} at {clinic} now."
+                source: edited
+                created_by: ops@clinicq.example
+                reviewed_by: null
+                created_at: "2026-09-14T15:20:44+02:00"
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: No stored version has this id.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "No such template version.", code: "http.not_found" }
+
+  /notifications/templates/{template}/{channel}/{language}:
+    get:
+      tags: [templates]
+      operationId: notificationsTemplate
+      summary: One template in one transport and language, with its history
+      description: |
+        What is sent now, the blanks the words may use, and every stored version, newest first. Requires
+        `logs` `read` at `business` tier.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/TemplateKey" }
+        - { $ref: "#/components/parameters/TemplateChannel" }
+        - { $ref: "#/components/parameters/TemplateLanguage" }
+      responses:
+        "200":
+          description: The template.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateKeyOut" }
+              example:
+                current:
+                  id: null
+                  template: ticket_called
+                  channel: sms
+                  language: en
+                  version: 1
+                  subject: null
+                  body: "{app}: ticket {number}, please go to {where} at {clinic} now."
+                  source: builtin
+                  created_by: null
+                  reviewed_by: null
+                  created_at: null
+                variables: [app, clinic, number, queue, room, where]
+                versions: []
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/TemplateNotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /notifications/templates/{template}/{channel}/{language}/versions:
+    post:
+      tags: [templates]
+      operationId: notificationsPublishTemplate
+      summary: Publish words as the next version
+      description: |
+        Patients receive the new words from the next message on; a message already rendered keeps the
+        version it names, including its retries. Refused with `422` and the reason when the words break
+        the variable contract: a blank the message does not have, no ticket number, a web push saying
+        more than the number and clinic, or an SMS longer than one segment with the longest names.
+        Requires `logs` `update` at `business` tier.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/TemplateKey" }
+        - { $ref: "#/components/parameters/TemplateChannel" }
+        - { $ref: "#/components/parameters/TemplateLanguage" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TemplateDraftIn" }
+            example: { body: "{app}: ticket {number}, it is your turn. Go to {where} at {clinic} now.", subject: null, reviewed_by: "Thandi M." }
+      responses:
+        "201":
+          description: The stored version.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateVersionOut" }
+              example:
+                id: 01a0a0f3-2b7c-7d55-a1e0-9c8b7a6f5e4d
+                template: ticket_called
+                channel: sms
+                language: en
+                version: 2
+                subject: null
+                body: "{app}: ticket {number}, it is your turn. Go to {where} at {clinic} now."
+                source: edited
+                created_by: ops@clinicq.example
+                reviewed_by: "Thandi M."
+                created_at: "2026-09-14T15:20:44+02:00"
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/TemplateNotFound" }
+        "422":
+          description: |
+            The words break the variable contract (`detail` is the reason, `code`
+            `http.unprocessable_content`), or a field or path segment failed validation
+            (`request.invalid`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationError" }
+              example: { detail: "{minuts} cannot be used in the message: it is not in the message's variables.", code: "http.unprocessable_content" }
+
+  # ── A patient's browsers (Issue 64) ─────────────────────────────────────────────────────
+  /notifications/web-push/key:
+    get:
+      tags: [patients]
+      operationId: notificationsWebPushKey
+      summary: The key a browser subscribes to web push with
+      description: |
+        Public: the VAPID public key is in every subscription a browser makes, and a patient's phone asks
+        for it before it has anything else. `enabled: false` and a null key while web push is not
+        configured, in which case the ticket page offers no button.
+      security: []
+      responses:
+        "200":
+          description: Whether web push is on, and the key.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WebPushKeyOut" }
+              example: { enabled: true, public_key: "BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM" }
+
+  /notifications/web-push/subscriptions:
+    post:
+      tags: [patients]
+      operationId: notificationsWebPushSubscribe
+      summary: Subscribe the signed-in patient's browser to web push
+      description: |
+        The body is what `PushSubscription.toJSON()` gives. Only a patient's own session may subscribe,
+        so a phone that was only sent a ticket link cannot sign itself up for someone else's messages.
+        The server will POST to `endpoint` later, so it must be a known push service host
+        (`WEB_PUSH_ALLOWED_HOSTS`, or a subdomain of one) over https, with no user info, no fragment and
+        no port but 443. Subscribing the same
+        browser again refreshes its keys, and a browser another patient subscribed moves to this one.
+        Requires `patients.self` `update`.
+      security: [{ patientSession: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PushSubscriptionIn" }
+            example:
+              endpoint: "https://fcm.googleapis.com/fcm/send/c1x"
+              expirationTime: null
+              keys:
+                p256dh: "BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM"
+                auth: "example-browser-auth"
+      responses:
+        "201":
+          description: A new subscription.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PushSubscriptionOut" }
+              example: { id: 01a0a2d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d, created: true }
+        "200":
+          description: This browser had already subscribed; its keys were refreshed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PushSubscriptionOut" }
+              example: { id: 01a0a2d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d, created: false }
+        "401": { $ref: "#/components/responses/PatientUnauthenticated" }
+        "403": { $ref: "#/components/responses/CsrfRefused" }
+        "409":
+          description: Web push is not configured on this deployment. Nothing is stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "Web push is not available.", code: "http.conflict" }
+        "422":
+          description: |
+            The endpoint is not a push service this deployment will call, or the keys are not a P-256
+            point and a 16-byte secret (`http.unprocessable_content`), or a field failed validation
+            (`request.invalid`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationError" }
+              example: { detail: "That is not a push service this clinic can send to.", code: "http.unprocessable_content" }
+    delete:
+      tags: [patients]
+      operationId: notificationsWebPushUnsubscribe
+      summary: Stop notifying one of the signed-in patient's browsers
+      description: '`204` whether or not that browser was subscribed, so a retry is harmless. Only the patient''s own subscription at the endpoint is removed. Requires `patients.self` `update`.'
+      security: [{ patientSession: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PushUnsubscribeIn" }
+            example: { endpoint: "https://fcm.googleapis.com/fcm/send/c1x" }
+      responses:
+        "204":
+          description: Not subscribed any more.
+        "401": { $ref: "#/components/responses/PatientUnauthenticated" }
+        "403": { $ref: "#/components/responses/CsrfRefused" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  # ── A patient's preferences, by their ticket page's link (Issue 67) ─────────────────────
+  /notifications/patient-preferences/{page_token}:
+    get:
+      tags: [patients]
+      operationId: notificationsPatientPreferences
+      summary: How and when the ticket's patient is told about it
+      description: |
+        The patient's preferences, which apply at every clinic. No sign-in: a patient has no account, so
+        the ticket page's unguessable link is the credential, and it finds the patient's preferences and
+        nothing else about them. `quiet_hours_exempt` names the messages quiet hours never hold back,
+        each of which says "come now"; an opt-out stops even those.
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/PageToken" }
+      responses:
+        "200":
+          description: The preferences, or the defaults when the patient never set any.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PatientPreferencesOut" }
+              example:
+                opted_out: false
+                opted_out_at: null
+                preferred_channel: null
+                language: null
+                quiet_hours_start: null
+                quiet_hours_end: null
+                muted_events: []
+                quiet_hours_exempt: [called, next, recalled]
+                languages: [en, zu, xh, af, st]
+        "404": { $ref: "#/components/responses/NoSuchTicketLink" }
+    put:
+      tags: [patients]
+      operationId: notificationsSetPatientPreferences
+      summary: Change the ticket's patient's preferences
+      description: |
+        A field left out is not changed; `null` clears it. The next message, on every transport, follows
+        the change. `opted_out: true` stops every message at once, including any already waiting to be
+        sent. Quiet hours are a start and an end, or neither, and may wrap past midnight.
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/PageToken" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PatientPreferencesIn" }
+            example: { preferred_channel: sms, language: zu, quiet_hours_start: "22:00:00", quiet_hours_end: "06:00:00", muted_events: [next] }
+      responses:
+        "200":
+          description: The preferences after the change.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PatientPreferencesOut" }
+              example:
+                opted_out: false
+                opted_out_at: null
+                preferred_channel: sms
+                language: zu
+                quiet_hours_start: "22:00:00"
+                quiet_hours_end: "06:00:00"
+                muted_events: [next]
+                quiet_hours_exempt: [called, next, recalled]
+                languages: [en, zu, xh, af, st]
+        "404": { $ref: "#/components/responses/NoSuchTicketLink" }
+        "422":
+          description: |
+            A transport a patient cannot prefer (only `web_push`, `whatsapp` and `sms`) or a language
+            messages are not written in (`http.unprocessable_content`, with the reason), or half a
+            quiet-hours window or a field this body does not have (`request.invalid`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationError" }
+              example: { detail: "Choose web push, WhatsApp or SMS.", code: "http.unprocessable_content" }
+
+  # ── An account holder's own preferences and notification centre (Issues 72, 113) ───────
+  /notifications/preferences:
+    get:
+      tags: [accounts]
+      operationId: notificationsMyPreferences
+      summary: The signed-in account's email and SMS preferences
+      description: Every category with its effective transport (defaults where unset), and quiet hours. Any signed-in account, for itself.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: The effective preferences.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationPreferencesRead" }
+              example:
+                categories:
+                  - { category: account, channel: email, essential: true }
+                  - { category: messages, channel: email, essential: false }
+                  - { category: marketing, channel: "off", essential: false }
+                quiet_hours_start: null
+                quiet_hours_end: null
+                timezone: Africa/Johannesburg
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    put:
+      tags: [accounts]
+      operationId: notificationsSetMyPreferences
+      summary: Change the signed-in account's email and SMS preferences
+      description: |
+        Partial: only the fields given change. An essential category set to `off` is coerced back to
+        `email`, so security and money messages always arrive somewhere. Quiet hours are set as a pair,
+        or cleared with `clear_quiet_hours`. Any signed-in account, for itself.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NotificationPreferencesUpdate" }
+            example: { channels: { messages: sms }, quiet_hours_start: "21:00:00", quiet_hours_end: "07:00:00", timezone: Africa/Johannesburg }
+      responses:
+        "200":
+          description: The effective preferences after the change.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationPreferencesRead" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/CsrfRefused" }
+        "422":
+          description: An unknown IANA timezone (`http.unprocessable_content`), half a quiet-hours pair or another invalid field (`request.invalid`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationError" }
+              example: { detail: "Unknown timezone: Mars/Olympus_Mons", code: "http.unprocessable_content" }
+
+  /notifications/center:
+    get:
+      tags: [accounts]
+      operationId: notificationsCenter
+      summary: The bell's payload for the signed-in account
+      description: |
+        The unread total (in-app notifications plus unread messages) and the most recent previews, newest
+        first, merged across both. Only ever the caller's own. Requires `communications.notifications`
+        `read`.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { name: limit, in: query, required: false, description: Most previews to return., schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+      responses:
+        "200":
+          description: The badge total and the previews.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CenterSummaryOut" }
+              example:
+                unread_total: 2
+                items:
+                  - id: 01a0a3e5-6f70-7b81-8c92-a3b4c5d6e7f8
+                    source: notification
+                    category: account
+                    title: "SMS kill switch ON"
+                    snippet: "ops@clinicq.example stopped every SMS: gateway billing looks wrong"
+                    created_at: "2026-09-15T10:41:02+02:00"
+                    read: false
+                    link: null
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /notifications/center/unread-count:
+    get:
+      tags: [accounts]
+      operationId: notificationsCenterUnreadCount
+      summary: The bell's badge total
+      description: The lightweight route the shell polls. Requires `communications.notifications` `read`.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: The caller's unread total.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CenterUnreadOut" }
+              example: { unread_total: 2 }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /notifications/center/read-all:
+    post:
+      tags: [accounts]
+      operationId: notificationsCenterReadAll
+      summary: Mark every in-app notification read
+      description: Only the caller's own. `changed` is how many moved. Requires `communications.notifications` `read`.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: The new badge total.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CenterMarkResult" }
+              example: { unread_total: 0, changed: 2 }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /notifications/center/{item_id}/read:
+    post:
+      tags: [accounts]
+      operationId: notificationsCenterMarkRead
+      summary: Mark one in-app notification read
+      description: Idempotent. Somebody else's notification is the same `404` as one that never existed. Requires `communications.notifications` `read`.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/CenterItemId" }
+      responses:
+        "200":
+          description: The new badge total.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CenterMarkResult" }
+              example: { unread_total: 1, changed: 1 }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/CenterItemNotFound" }
+
+  /notifications/center/{item_id}/unread:
+    post:
+      tags: [accounts]
+      operationId: notificationsCenterMarkUnread
+      summary: Mark one in-app notification unread
+      description: Idempotent. Somebody else's notification is the same `404` as one that never existed. Requires `communications.notifications` `read`.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/CenterItemId" }
+      responses:
+        "200":
+          description: The new badge total.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CenterMarkResult" }
+              example: { unread_total: 2, changed: 1 }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/CenterItemNotFound" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: An access token from the staff sign-in, or a patient's session token.
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: bk_clinicq_access_token
+      description: |
+        The staff browser session. An unsafe request must also echo the readable CSRF cookie
+        (`bk_clinicq_csrf`) in `X-CSRF-Token`.
+    patientSession:
+      type: apiKey
+      in: cookie
+      name: bk_clinicq_patient_session
+      description: |
+        A patient's browser session (Issue 17). An unsafe request must also echo the readable CSRF
+        cookie in `X-CSRF-Token`.
+    webhookSecret:
+      type: apiKey
+      in: header
+      name: X-Webhook-Secret
+      description: The provider's shared secret, `NOTIFICATION_WEBHOOK_SECRET`.
+
+  parameters:
+    SiteId:
+      name: site_id
+      in: path
+      required: true
+      description: |
+        The clinic. A clinic the caller holds no role at answers **404**, with the same body an id that
+        never existed gets.
+      schema: { type: string }
+      example: 0199b0c0-0000-7000-8000-0000000c1a01
+    CallbackToken:
+      name: token
+      in: path
+      required: true
+      description: |
+        The callback secret (`SMS_WEBHOOK_TOKEN`, 256 random bits) in the URL registered with the
+        gateway. The request log masks it.
+      schema: { type: string }
+      example: 6d0f3b1c9e2a47d8b5c4a3f2e1d0c9b8a7f6e5d4c3b
+    PageToken:
+      name: page_token
+      in: path
+      required: true
+      description: The ticket page's token, from `page_url` in the join answer (`/t/{page_token}`).
+      schema: { type: string }
+      example: 3q2X9vJp0kQy7W1mZ5nR8tB4cD6eF2gH0iJkLmNoPqR
+    CenterItemId:
+      name: item_id
+      in: path
+      required: true
+      description: One of the caller's in-app notifications.
+      schema: { type: string }
+      example: 01a0a3e5-6f70-7b81-8c92-a3b4c5d6e7f8
+    TemplateKey:
+      name: template
+      in: path
+      required: true
+      description: A patient message template. Any other template key is `404`; a value that is not a template at all is `422`.
+      schema: { $ref: "#/components/schemas/NotificationTemplate" }
+      example: ticket_called
+    TemplateChannel:
+      name: channel
+      in: path
+      required: true
+      description: A patient transport (`sms`, `whatsapp`, `web_push`); `email` is `404`.
+      schema: { $ref: "#/components/schemas/NotificationChannel" }
+      example: sms
+    TemplateLanguage:
+      name: language
+      in: path
+      required: true
+      description: A language code messages may be written in (`en`, `zu`, `xh`, `af`, `st`); any other is `404`.
+      schema: { type: string }
+      example: en
+
+  responses:
+    Unauthenticated:
+      description: No session, or an expired or deactivated one.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { detail: "Not authenticated", code: "http.unauthorized" }
+    PatientUnauthenticated:
+      description: No patient session, a staff token instead of one, or a session the patient has since signed out of.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { detail: "Not authenticated", code: "http.unauthorized" }
+    Forbidden:
+      description: |
+        Signed in, and the caller's grants do not admit this (`insufficient_permission`, with the resource
+        and verb it lacked). An unsafe request from a cookie session that does not echo the CSRF token is
+        refused with `403` too, without a `code` (see `CsrfRefused`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            detail: { message: "Insufficient permission for this action.", code: insufficient_permission, resource: logs, required_verb: read }
+            code: insufficient_permission
+    CsrfRefused:
+      description: |
+        A cookie-authenticated unsafe request that did not echo the CSRF cookie in `X-CSRF-Token`, or one a
+        browser labelled cross-site. Refused before the route runs; the body has no `code`.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { detail: "Invalid or missing CSRF token" }
+    SiteNotFound:
+      description: Not a clinic this caller works at, or no such clinic. The two are indistinguishable on purpose.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { detail: "Not found.", code: "http.not_found" }
+    CallbackRefused:
+      description: |
+        The token in the path is not the configured secret. The same `404` as a path that does not exist,
+        so the URL cannot be probed for; nothing is read or recorded.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { detail: "Not Found" }
+    TemplateNotFound:
+      description: |
+        The language is not one messages may be written in (`No such language.`), or the template and
+        transport are not a patient message (`No such template.`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { detail: "No such template.", code: "http.not_found" }
+    NoSuchTicketLink:
+      description: No ticket has this link, or the ticket is a walk-in with no patient behind it.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { detail: "No such ticket.", code: "http.not_found" }
+    CenterItemNotFound:
+      description: Not one of the caller's in-app notifications.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { detail: "No in-app notification 01a0a3e5-6f70-7b81-8c92-a3b4c5d6e7f8 for this user.", code: "http.not_found" }
+    Unprocessable:
+      description: A field, query parameter or path segment failed validation (`request.invalid`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ValidationError" }
+
+  schemas:
+    # ── Errors ────────────────────────────────────────────────────────────────────────────
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          description: A sentence a person can act on; for a missing grant, an object naming the resource and verb.
+          oneOf:
+            - type: string
+            - type: object
+        code: { type: string, description: A stable machine-readable code, when the handler sets one. }
+        request_id: { type: string, description: This request's id, for correlating with the logs. }
+      example: { detail: "Web push is not available.", code: "http.conflict", request_id: "7c9e6679-7425-40de-944b-e07fc1f90ae7" }
+    ValidationError:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: object
+                required: [loc, msg, type]
+                properties:
+                  loc: { type: array, items: { anyOf: [{ type: string }, { type: integer }] } }
+                  msg: { type: string }
+                  type: { type: string }
+        code: { type: string, description: "`request.invalid` for a field that failed validation; `http.unprocessable_content` for a reason the handler gives." }
+        request_id: { type: string }
+      example:
+        detail:
+          - loc: [query, hours]
+            msg: "Input should be less than or equal to 168"
+            type: less_than_equal
+        code: request.invalid
+
+    # ── Vocabularies ─────────────────────────────────────────────────────────────────────
+    NotificationChannel:
+      type: string
+      description: A transport. `email` is for account holders; patients are reached on the other three.
+      enum: [email, sms, web_push, whatsapp]
+      example: web_push
+    NotificationStatus:
+      type: string
+      description: |
+        Where a message stands. `queued` and `failed` have no outcome yet (`failed` is due another
+        try); `delivered`, `dead` and `suppressed` never change; `sent` moves on only when the
+        transport's delivery receipt arrives.
+      enum: [queued, sent, delivered, failed, dead, suppressed]
+      example: delivered
+    NotificationTemplate:
+      type: string
+      description: Which message. The `ticket_*` templates are patient messages and the only ones the editor edits.
+      enum: [account_activation, password_reset, email_change_verification, otp_sign_in, staff_invitation, application_acknowledgement, application_in_screening, application_accepted, application_rejected, application_withdrawn, lease_expiry_reminder, lease_termination_requested, lease_termination_confirmed, maintenance_request_received, maintenance_new_request, maintenance_work_scheduled, maintenance_completed, maintenance_approval_required, work_order_vendor_assignment, maintenance_manager_digest, new_message, ticket_recalled, ticket_no_show, ticket_transferred, ticket_next, ticket_called, ticket_cancelled, generic]
+      example: ticket_next
+    PatientEvent:
+      type: string
+      description: What happened to a patient's ticket that a message tells them about.
+      enum: [next, called, recalled, no_show, transferred, cancelled]
+      example: called
+    NotificationCategory:
+      type: string
+      description: An account holder's message category. `account` and `financial` are essential.
+      enum: [account, financial, applications, maintenance, messages, marketing]
+      example: messages
+    NotificationChannelPreference:
+      type: string
+      enum: [email, sms, "off"]
+      example: email
+    TemplateSource:
+      type: string
+      description: "`builtin` words come from the locale file; `edited` words were published through the editor."
+      enum: [builtin, edited]
+      example: edited
+
+    # ── The ledger ───────────────────────────────────────────────────────────────────────
+    NotificationRead:
+      type: object
+      required: [id, channel, template_key, recipient, status, attempts, max_attempts, created_at]
+      properties:
+        id: { type: string }
+        channel: { $ref: "#/components/schemas/NotificationChannel" }
+        template_key: { $ref: "#/components/schemas/NotificationTemplate" }
+        recipient: { type: string, description: "The address: an email, a number (SMS), a WhatsApp id or a push endpoint." }
+        patient_id: { type: [string, "null"], description: "The patient it is for; null for an account holder." }
+        site_id: { type: [string, "null"], description: The clinic that sent it. }
+        event:
+          description: What happened to the patient's ticket.
+          oneOf:
+            - { $ref: "#/components/schemas/PatientEvent" }
+            - { type: "null" }
+        fallback_of_id: { type: [string, "null"], description: The row on the transport that failed before this one. }
+        cost: { type: [string, "null"], pattern: "^-?[0-9]+(\\.[0-9]+)?$", description: "What the provider charged, a decimal string; null until sent." }
+        cost_currency: { type: [string, "null"], description: ISO 4217 currency of `cost`. }
+        template_version_id: { type: [string, "null"], description: The exact template version the message was rendered from. }
+        language: { type: [string, "null"] }
+        subject: { type: [string, "null"], description: "An email's subject or a web push's title." }
+        status: { $ref: "#/components/schemas/NotificationStatus" }
+        provider: { type: [string, "null"] }
+        provider_message_id: { type: [string, "null"], description: The provider's id, which its callbacks name. }
+        attempts: { type: integer, minimum: 0 }
+        max_attempts: { type: integer, minimum: 1 }
+        last_error: { type: [string, "null"] }
+        next_attempt_at: { type: [string, "null"], format: date-time }
+        sent_at: { type: [string, "null"], format: date-time }
+        delivered_at: { type: [string, "null"], format: date-time }
+        failed_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+    NotificationListOut:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/NotificationRead" } }
+        total: { type: integer, minimum: 0, description: Matches before paging. }
+    ChannelDeliveryStatsOut:
+      type: object
+      required: [channel, total, sent, delivered, failed, suppressed, waiting, failure_rate, cost, alerting]
+      properties:
+        channel: { $ref: "#/components/schemas/NotificationChannel" }
+        total: { type: integer, minimum: 0, description: Every message created in the window. }
+        sent: { type: integer, minimum: 0, description: "Accepted by the provider, not yet confirmed." }
+        delivered: { type: integer, minimum: 0, description: Confirmed by a delivery receipt. }
+        failed: { type: integer, minimum: 0, description: "Dead: every attempt failed, or the address can never work." }
+        suppressed: { type: integer, minimum: 0, description: "Deliberately not sent: no consent, an opt-out, a cap, no address." }
+        waiting: { type: integer, minimum: 0, description: "Queued, or failed and due another try." }
+        failure_rate: { type: [number, "null"], minimum: 0, maximum: 1 }
+        cost: { type: string, pattern: "^-?[0-9]+(\\.[0-9]+)?$", description: "What the provider charged for these messages." }
+        alerting: { type: boolean, description: Whether the failure rate crosses the alert threshold. }
+      example: { channel: whatsapp, total: 0, sent: 0, delivered: 0, failed: 0, suppressed: 0, waiting: 0, failure_rate: null, cost: "0.0000", alerting: false }
+    DeliveryStatsOut:
+      type: object
+      required: [since, until, currency, alert_rate, alert_min_attempts, channels]
+      properties:
+        since: { type: string, format: date-time }
+        until: { type: string, format: date-time }
+        currency: { type: string, description: ISO 4217 currency of every cost. }
+        alert_rate: { type: number, description: "The failure rate at or over which the team is alerted (`NOTIFICATION_FAILURE_ALERT_RATE`)." }
+        alert_min_attempts: { type: integer, description: The attempted messages a transport needs before it can alert. }
+        channels: { type: array, items: { $ref: "#/components/schemas/ChannelDeliveryStatsOut" } }
+    DeliveryReceipt:
+      type: object
+      required: [provider_message_id, delivered]
+      properties:
+        provider_message_id: { type: string, minLength: 1 }
+        delivered: { type: boolean, description: "True for a confirmed delivery; false for a bounce or failure." }
+        detail: { type: [string, "null"], maxLength: 1000, description: The provider's reason, recorded on a failure. }
+      example: { provider_message_id: "msg-4f1c9a", delivered: true }
+
+    # ── SMS ──────────────────────────────────────────────────────────────────────────────
+    SmsKillSwitchOut:
+      type: object
+      required: [enabled]
+      properties:
+        enabled: { type: boolean, description: True while every SMS is stopped. }
+        reason: { type: [string, "null"] }
+        changed_by: { type: [string, "null"], description: The email of whoever last flipped it. }
+        changed_at: { type: [string, "null"], format: date-time }
+    SmsKillSwitchIn:
+      type: object
+      required: [enabled]
+      properties:
+        enabled: { type: boolean }
+        reason: { type: [string, "null"], maxLength: 200, description: "For the team alert." }
+      example: { enabled: false, reason: "billing confirmed with the gateway" }
+    SmsBudgetOut:
+      type: object
+      required: [site_id, day, cap, sent, remaining, spend, currency]
+      properties:
+        site_id: { type: string }
+        day: { type: string, format: date }
+        cap: { type: integer, minimum: 0, description: The cap in force that day. }
+        own_cap: { type: [integer, "null"], description: "The clinic's own cap; null uses the platform default." }
+        sent: { type: integer, minimum: 0 }
+        remaining: { type: integer, minimum: 0 }
+        spend: { type: string, pattern: "^-?[0-9]+(\\.[0-9]+)?$", description: "What those SMS cost, a decimal string." }
+        currency: { type: string }
+    SmsBudgetIn:
+      type: object
+      properties:
+        daily_cap: { type: [integer, "null"], minimum: 0, maximum: 100000, default: null }
+      example: { daily_cap: null }
+    SmsReceiptForm:
+      type: object
+      description: "Africa's Talking's delivery report, form-encoded. Only `id` and `status` are required; `failureReason` is recorded."
+      required: [id, status]
+      properties:
+        id: { type: string, maxLength: 255 }
+        status: { type: string, maxLength: 40, description: "`Success`, `Failed`, `Rejected`, `Expired`, `AbsentSubscriber`, `Sent`, `Submitted`, `Buffered` and so on." }
+        phoneNumber: { type: string }
+        networkCode: { type: string }
+        failureReason: { type: string }
+        retryCount: { type: string }
+    SmsReplyForm:
+      type: object
+      description: "Africa's Talking's incoming message, form-encoded. Only the first 480 characters of `text` are read."
+      required: [id, from]
+      properties:
+        id: { type: string, maxLength: 255 }
+        from: { type: string, maxLength: 32 }
+        text: { type: string }
+    SmsReceiptAck:
+      type: object
+      required: [received, outcome, event_id]
+      additionalProperties: false
+      properties:
+        received: { type: boolean, const: true }
+        outcome: { type: string, enum: [processed, duplicate, ignored, stopped, restarted] }
+        event_id: { type: string, description: "The idempotency key: `africas_talking:<id>:<status>` for a receipt, `africas_talking:<id>` for a reply." }
+
+    # ── Templates ────────────────────────────────────────────────────────────────────────
+    TemplateVersionOut:
+      type: object
+      required: [template, channel, language, version, body, source]
+      properties:
+        id: { type: [string, "null"], description: "The stored version's id; null for the locale file's words not yet edited." }
+        template: { $ref: "#/components/schemas/NotificationTemplate" }
+        channel: { $ref: "#/components/schemas/NotificationChannel" }
+        language: { type: string }
+        version: { type: integer, minimum: 0 }
+        subject: { type: [string, "null"], description: "A web push's title; null for SMS and WhatsApp." }
+        body: { type: string }
+        source: { $ref: "#/components/schemas/TemplateSource" }
+        created_by: { type: [string, "null"] }
+        reviewed_by: { type: [string, "null"], description: "The fluent speaker who checked the words; null until someone has." }
+        created_at: { type: [string, "null"], format: date-time }
+    TemplateKeyOut:
+      type: object
+      required: [current, variables, versions]
+      properties:
+        current: { $ref: "#/components/schemas/TemplateVersionOut" }
+        variables: { type: array, items: { type: string }, description: The blanks the words may use, without braces. }
+        versions: { type: array, items: { $ref: "#/components/schemas/TemplateVersionOut" }, description: Every stored version, newest first. }
+    TemplateListOut:
+      type: object
+      required: [languages, items]
+      properties:
+        languages: { type: array, items: { type: string }, description: The languages with words written. }
+        items: { type: array, items: { $ref: "#/components/schemas/TemplateVersionOut" } }
+    TemplateDraftIn:
+      type: object
+      required: [body]
+      properties:
+        body: { type: string, minLength: 1, maxLength: 1000, description: "The words, with blanks in braces: `{number}`." }
+        subject: { type: [string, "null"], maxLength: 120 }
+        reviewed_by: { type: [string, "null"], maxLength: 200 }
+    TemplatePreviewIn:
+      type: object
+      required: [body, template, channel, language]
+      properties:
+        body: { type: string, minLength: 1, maxLength: 1000 }
+        subject: { type: [string, "null"], maxLength: 120 }
+        reviewed_by: { type: [string, "null"], maxLength: 200 }
+        template: { $ref: "#/components/schemas/NotificationTemplate" }
+        channel: { $ref: "#/components/schemas/NotificationChannel" }
+        language: { type: string, minLength: 2, maxLength: 5 }
+    TemplatePreviewOut:
+      type: object
+      required: [valid]
+      properties:
+        valid: { type: boolean }
+        error: { type: [string, "null"], description: "Why the words may not be published." }
+        subject: { type: [string, "null"] }
+        text: { type: string, default: "" }
+        characters: { type: [integer, "null"] }
+        encoding: { type: [string, "null"], enum: [gsm7, ucs2, null] }
+        segments: { type: [integer, "null"] }
+        worst_characters: { type: [integer, "null"] }
+        worst_segments: { type: [integer, "null"] }
+
+    # ── A patient's browsers and preferences ─────────────────────────────────────────────
+    WebPushKeyOut:
+      type: object
+      required: [enabled]
+      properties:
+        enabled: { type: boolean }
+        public_key: { type: [string, "null"], description: "The VAPID application server key, base64url; null while web push is off." }
+      example: { enabled: false, public_key: null }
+    PushSubscriptionIn:
+      type: object
+      required: [endpoint, keys]
+      properties:
+        endpoint: { type: string, minLength: 12, maxLength: 2048 }
+        keys:
+          type: object
+          required: [p256dh, auth]
+          properties:
+            p256dh: { type: string, minLength: 80, maxLength: 128 }
+            auth: { type: string, minLength: 16, maxLength: 48 }
+        expirationTime: { type: [integer, "null"], minimum: 0, description: "When the browser says the subscription expires, epoch milliseconds; usually null." }
+    PushSubscriptionOut:
+      type: object
+      required: [id, created]
+      properties:
+        id: { type: string }
+        created: { type: boolean, description: False when this browser had already subscribed. }
+    PushUnsubscribeIn:
+      type: object
+      required: [endpoint]
+      properties:
+        endpoint: { type: string, minLength: 12, maxLength: 2048 }
+    PatientPreferencesOut:
+      type: object
+      required: [opted_out, muted_events, quiet_hours_exempt, languages]
+      properties:
+        opted_out: { type: boolean, description: "True when the patient stopped every message, on every transport." }
+        opted_out_at: { type: [string, "null"], format: date-time }
+        preferred_channel:
+          oneOf:
+            - { $ref: "#/components/schemas/NotificationChannel" }
+            - { type: "null" }
+        language: { type: [string, "null"] }
+        quiet_hours_start: { type: [string, "null"], format: time }
+        quiet_hours_end: { type: [string, "null"], format: time }
+        muted_events: { type: array, items: { $ref: "#/components/schemas/PatientEvent" } }
+        quiet_hours_exempt: { type: array, items: { $ref: "#/components/schemas/PatientEvent" }, description: "The messages quiet hours never hold back." }
+        languages: { type: array, items: { type: string }, description: The languages a patient may choose. }
+    PatientPreferencesIn:
+      type: object
+      additionalProperties: false
+      description: A field left out is not changed; `null` clears it.
+      properties:
+        opted_out: { type: [boolean, "null"] }
+        preferred_channel:
+          oneOf:
+            - { $ref: "#/components/schemas/NotificationChannel" }
+            - { type: "null" }
+        language: { type: [string, "null"], minLength: 2, maxLength: 5 }
+        quiet_hours_start: { type: [string, "null"], format: time }
+        quiet_hours_end: { type: [string, "null"], format: time }
+        muted_events:
+          oneOf:
+            - { type: array, items: { $ref: "#/components/schemas/PatientEvent" } }
+            - { type: "null" }
+      example: { opted_out: true }
+
+    # ── An account holder's preferences and notification centre ──────────────────────────
+    CategoryPreference:
+      type: object
+      required: [category, channel, essential]
+      properties:
+        category: { $ref: "#/components/schemas/NotificationCategory" }
+        channel: { $ref: "#/components/schemas/NotificationChannelPreference" }
+        essential: { type: boolean, description: "An essential category cannot be turned off, only moved to another transport." }
+    NotificationPreferencesRead:
+      type: object
+      required: [categories, timezone]
+      properties:
+        categories: { type: array, items: { $ref: "#/components/schemas/CategoryPreference" } }
+        quiet_hours_start: { type: [string, "null"], format: time }
+        quiet_hours_end: { type: [string, "null"], format: time }
+        timezone: { type: string, description: The IANA timezone quiet hours are evaluated in. }
+    NotificationPreferencesUpdate:
+      type: object
+      properties:
+        channels:
+          type: [object, "null"]
+          description: Category to transport; unlisted categories keep theirs.
+          additionalProperties: { $ref: "#/components/schemas/NotificationChannelPreference" }
+        quiet_hours_start: { type: [string, "null"], format: time }
+        quiet_hours_end: { type: [string, "null"], format: time }
+        clear_quiet_hours: { type: boolean, default: false, description: Turns quiet hours off; wins over a start and end. }
+        timezone: { type: [string, "null"], maxLength: 64 }
+      example: { clear_quiet_hours: true }
+    CenterItemRead:
+      type: object
+      required: [id, source, category, title, snippet, read]
+      properties:
+        id: { type: string, description: "An in-app notification's id, or a message thread's." }
+        source: { type: string, enum: [notification, message] }
+        category: { $ref: "#/components/schemas/NotificationCategory" }
+        title: { type: string }
+        snippet: { type: string, description: A trimmed preview of the body. }
+        created_at: { type: [string, "null"], format: date-time }
+        read: { type: boolean }
+        link: { type: [string, "null"], description: Where opening the item goes, when it has a deep link. }
+    CenterSummaryOut:
+      type: object
+      required: [unread_total, items]
+      properties:
+        unread_total: { type: integer, minimum: 0 }
+        items: { type: array, items: { $ref: "#/components/schemas/CenterItemRead" } }
+    CenterUnreadOut:
+      type: object
+      required: [unread_total]
+      properties:
+        unread_total: { type: integer, minimum: 0, description: Unread in-app notifications plus unread messages. }
+    CenterMarkResult:
+      type: object
+      required: [unread_total]
+      properties:
+        unread_total: { type: integer, minimum: 0, description: The caller's badge total after the change. }
+        changed: { type: integer, minimum: 0, default: 1, description: "How many items changed: 1, or the count for mark-all." }

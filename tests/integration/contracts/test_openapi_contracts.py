@@ -95,10 +95,6 @@ CONTRACTS: tuple[Contract, ...] = (
         filename="sites.yaml",
         prefix="/api/v1/sites",
         excluded={
-            "/api/v1/sites/{site_id}/sms-budget": (
-                "a clinic's SMS spend and cap: it sits under this prefix but belongs to the "
-                "notifications module (Issue 65), whose contract Issue 71 writes"
-            ),
             "/api/v1/sites/{site_id}/audit/events": (
                 "a clinic's own audit trail: it sits under this prefix but belongs to the audit "
                 "module (Issue 20), and will be documented by that module's contract"
@@ -112,6 +108,14 @@ CONTRACTS: tuple[Contract, ...] = (
         filename="queue.yaml",
         prefix="/api/v1",
         pattern=r"/(tickets|visits)(/|$)",
+    ),
+    # Every notification route, a clinic's SMS budget (which cedes from the sites prefix) and the SMS
+    # gateway's callbacks; the payment gateways' webhooks are not notification routes (Issue 71).
+    Contract(
+        name="notifications",
+        filename="notifications.yaml",
+        prefix="/api/v1",
+        pattern=r"^/api/v1/(notifications(/|$)|sites/\{site_id\}/sms-budget$|webhooks/sms/)",
     ),
 )
 
@@ -411,6 +415,44 @@ def test_a_ticket_route_belongs_to_the_queue_contract_wherever_it_hangs() -> Non
         assert owners == ["queue"], (path, owners)
     assert by_name["sites"].owns("/api/v1/sites/{site_id}/queues")
     assert not by_name["queue"].owns("/api/v1/sites/{site_id}/queues")
+
+
+def test_a_notification_route_belongs_to_the_notifications_contract() -> None:
+    """Issue 71: the SMS budget cedes from the sites prefix, and only the SMS gateway's webhooks move.
+
+    The payment gateways' webhooks share ``/webhooks`` but are not notification routes, so the
+    notifications contract must not claim them.
+    """
+    for path in (
+        "/api/v1/notifications",
+        "/api/v1/notifications/{notification_id}",
+        "/api/v1/notifications/templates/{template}/{channel}/{language}/versions",
+        "/api/v1/sites/{site_id}/sms-budget",
+        "/api/v1/webhooks/sms/africastalking/{token}",
+        "/api/v1/webhooks/sms/africastalking/{token}/inbound",
+    ):
+        owners = [contract.name for contract in CONTRACTS if contract.owns(path)]
+        assert owners == ["notifications"], (path, owners)
+    for path in (
+        "/api/v1/webhooks/paystack",
+        "/api/v1/webhooks/stripe",
+        "/api/v1/sites/{site_id}/sms-budget/history",
+        "/api/v1/notifications-archive",
+    ):
+        owners = [contract.name for contract in CONTRACTS if contract.owns(path)]
+        assert "notifications" not in owners, (path, owners)
+
+
+def test_no_route_the_application_serves_has_two_contracts(
+    openapi: dict[str, Any],
+) -> None:
+    """Two patterned contracts on one prefix could both claim a route; neither may."""
+    doubled = {
+        path: owners
+        for path in openapi["paths"]
+        if len(owners := [c.name for c in CONTRACTS if c.owns(path)]) > 1
+    }
+    assert doubled == {}
 
 
 def test_the_example_check_fails_on_an_example_its_schema_refuses() -> None:
