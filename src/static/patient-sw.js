@@ -84,21 +84,36 @@ self.addEventListener("message", function (event) {
   }
 });
 
-function withinLimit(promise, ms) {
-  return new Promise(function (resolve, reject) {
-    var timer = setTimeout(function () {
-      reject(new Error("timeout"));
-    }, ms);
-    promise.then(
-      function (value) {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      function (err) {
-        clearTimeout(timer);
-        reject(err);
-      }
-    );
+/**
+ * fetch, abandoned after ms: the request is aborted, not just ignored. On a network that swallows packets a
+ * request can hang for minutes, and requests left hanging fill the browser's few connections to the server,
+ * so that nothing gets through even once the network is back.
+ */
+function fetchWithin(request, ms) {
+  var controller = new AbortController();
+  var timer = setTimeout(function () {
+    controller.abort();
+  }, ms);
+  return fetch(request, { signal: controller.signal }).then(
+    function (response) {
+      clearTimeout(timer);
+      return response;
+    },
+    function (err) {
+      clearTimeout(timer);
+      throw err;
+    }
+  );
+}
+
+/** A navigation, copied so it can carry an abort signal (a navigate-mode request cannot take one). */
+function navigationRequest(request) {
+  return new Request(request.url, {
+    method: "GET",
+    headers: request.headers,
+    credentials: "same-origin",
+    redirect: "manual",
+    cache: "no-store"
   });
 }
 
@@ -113,7 +128,7 @@ function offlinePage() {
 function fromShell(request) {
   return caches.open(SHELL_CACHE).then(function (cache) {
     return cache.match(request, { ignoreSearch: true }).then(function (kept) {
-      var fresh = fetch(request)
+      var fresh = fetchWithin(request.url, NAVIGATION_LIMIT_MS)
         .then(function (response) {
           if (response && response.ok) return cache.put(request, response.clone()).then(function () { return response; });
           return response;
@@ -134,7 +149,7 @@ self.addEventListener("fetch", function (event) {
 
   if (request.mode === "navigate" && url.pathname.indexOf(SCOPE_PATH) === 0) {
     event.respondWith(
-      withinLimit(fetch(request), NAVIGATION_LIMIT_MS).catch(function () {
+      fetchWithin(navigationRequest(request), NAVIGATION_LIMIT_MS).catch(function () {
         return offlinePage();
       })
     );
