@@ -1657,6 +1657,37 @@ PATIENT_EVENT_TEMPLATE: dict[PatientEvent, NotificationTemplate] = {
     PatientEvent.CANCELLED: NotificationTemplate.TICKET_CANCELLED,
 }
 
+#: The patient messages quiet hours never hold back (Issue 67), and the whole of that exception: each says
+#: "come now" about a visit happening at this moment (you are next, please come in, you were called again),
+#: and held until morning it would be worthless. Everything else a patient is told (a cancellation, a
+#: transfer, a missed ticket) waits for the end of their quiet hours. An opt-out stops these too.
+PATIENT_QUIET_HOURS_EXEMPT: frozenset[NotificationTemplate] = frozenset(
+    {
+        NotificationTemplate.TICKET_NEXT,
+        NotificationTemplate.TICKET_CALLED,
+        NotificationTemplate.TICKET_RECALLED,
+    }
+)
+
+
+class PreferenceSource(StrEnum):
+    """Where a patient changed their notification preferences (Issue 67)."""
+
+    TICKET_PAGE = "ticket_page"
+    SMS_REPLY = "sms_reply"
+    USSD = "ussd"
+    WHATSAPP = "whatsapp"
+
+
+#: The words a patient replies with to stop, or restart, every message (Issue 67). Compared on the reply's
+#: first word, upper-cased, so "stop", "Stop please" and "STOP" all count.
+SMS_STOP_KEYWORDS: frozenset[str] = frozenset(
+    {"STOP", "STOPALL", "UNSUBSCRIBE", "END", "QUIT", "CANCEL", "OPTOUT"}
+)
+SMS_START_KEYWORDS: frozenset[str] = frozenset(
+    {"START", "UNSTOP", "SUBSCRIBE", "OPTIN"}
+)
+
 #: Templates whose message *is* a secret, and the payload fields that carry it (Issue 17). The
 #: notification ledger keeps a row for each send, but never these fields' values: the row stores a
 #: placeholder, the message is rendered from the real value in memory and handed to the transport

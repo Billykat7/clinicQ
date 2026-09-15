@@ -175,4 +175,9 @@ def page_state(
         next_page_url=page_url_for(next_leg) if next_leg is not None else None,
         push_key=settings.web_push_vapid_public_key if offer_push else None,
         push_subscribe_url=PUSH_SUBSCRIBE_URL if offer_push else None,
+        preferences_url=(
+            f"/api/v1/notifications/patient-preferences/{ticket.page_token}"
+            if ticket.patient_id and ticket.page_token
+            else None
+        ),
     )

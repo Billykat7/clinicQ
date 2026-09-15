@@ -138,3 +138,64 @@ def process_receipt(db: Session, receipt: Receipt) -> ProcessedReceipt:
     return ProcessedReceipt(
         "processed" if row is not None else "ignored", receipt.event_id
     )
+
+
+# --- Replies (Issue 67) -------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class Reply:
+    """One SMS a patient sent to the service's number, parsed."""
+
+    message_id: str
+    phone: str
+    text: str
+
+    @property
+    def event_id(self) -> str:
+        """The idempotency key."""
+        return f"{PROVIDER}:{self.message_id}"
+
+
+def parse_reply(payload: bytes) -> Reply:
+    """Read a form-encoded incoming message: ``id``, ``from``, ``text``.
+
+    Raises:
+        SmsWebhookRefusedError: No ``id`` or ``from``.
+    """
+    try:
+        fields = parse_qs(payload.decode("utf-8"), keep_blank_values=True)
+    except UnicodeDecodeError as exc:
+        raise SmsWebhookRefusedError("the body is not a message") from exc
+    message_id = (fields.get("id") or [""])[0].strip()
+    phone = (fields.get("from") or [""])[0].strip()
+    if not message_id or not phone or len(message_id) > 255 or len(phone) > 32:
+        raise SmsWebhookRefusedError("the body is not a message")
+    return Reply(
+        message_id=message_id, phone=phone, text=(fields.get("text") or [""])[0][:480]
+    )
+
+
+def process_reply(db: Session, reply: Reply) -> ProcessedReceipt:
+    """Record the reply once and apply its keyword. The caller commits."""
+    from src.database.models.sms_budget import SmsInboundEvent
+    from src.modules.notifications import patient_preferences
+
+    if db.get(SmsInboundEvent, reply.event_id) is not None:
+        return ProcessedReceipt("duplicate", reply.event_id)
+    moment = now_sast()
+    result = patient_preferences.apply_reply(db, reply.phone, reply.text, now=moment)
+    words = reply.text.strip().split()
+    db.add(
+        SmsInboundEvent(
+            id=reply.event_id,
+            provider=PROVIDER,
+            keyword=words[0].upper()[:16]
+            if words and result.outcome.value != "ignored"
+            else None,
+            outcome=result.outcome.value,
+            patient_id=result.patient_id,
+            received_at=moment,
+        )
+    )
+    return ProcessedReceipt(result.outcome.value, reply.event_id)

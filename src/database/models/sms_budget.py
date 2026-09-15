@@ -78,3 +78,25 @@ class SmsDeliveryEvent(Base):
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
+
+
+class SmsInboundEvent(Base):
+    """One SMS a patient replied with, recorded before it is applied (Issue 67): a replay changes nothing twice.
+
+    Keeps the keyword and the patient it applied to, never the number or the rest of the text.
+    """
+
+    __tablename__ = "sms_inbound_event"
+
+    id: Mapped[str] = mapped_column(String(320), primary_key=True)
+    """``<provider>:<gateway message id>``."""
+    provider: Mapped[str] = mapped_column(String(30), nullable=False)
+    keyword: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    """The first word, when it was a keyword (``STOP``, ``START``); ``NULL`` otherwise."""
+    outcome: Mapped[str] = mapped_column(String(12), nullable=False)
+    """``stopped``, ``restarted`` or ``ignored``."""
+    patient_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    """The patient the reply applied to; ``NULL`` for a number no patient has."""
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )

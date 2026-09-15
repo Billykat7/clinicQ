@@ -149,13 +149,13 @@ is there from day one, which is exactly what the USSD and WhatsApp adapters cons
 | 6 | [**Queue Engine Core**](docs/GITHUB/MILESTONES/M6_queue_engine_core.md) ⚠️ critical path | 39–47 | 6–7 | `v0.6.0` | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (9/9 issues) |
 | 7 | [Clinic Dashboard](docs/GITHUB/MILESTONES/M7_clinic_dashboard.md) | 48–55 | 8–9 | `v0.7.0` | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (8/8 issues) |
 | 8 | [Display Monitor](docs/GITHUB/MILESTONES/M8_display_monitor.md) | 56–62 | 9 | `v0.8.0` | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (7/7 issues) |
-| 9 | [Notifications & Patient PWA](docs/GITHUB/MILESTONES/M9_notifications_patient_pwa.md) | 63–71 | 9–10 | `v0.9.0` | 🟩🟩🟩🟩🟩🟩⬜⬜⬜⬜ **56%** (5/9 issues) |
+| 9 | [Notifications & Patient PWA](docs/GITHUB/MILESTONES/M9_notifications_patient_pwa.md) | 63–71 | 9–10 | `v0.9.0` | 🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜ **67%** (6/9 issues) |
 | 10 | [USSD & WhatsApp Channels](docs/GITHUB/MILESTONES/M10_ussd_whatsapp_channels.md) | 72–79 | 10–11 | `v0.10.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
 | 11 | [Appointments & Check-in](docs/GITHUB/MILESTONES/M11_appointments_checkin_patient_care.md) | 80–87 | 11–12 | `v0.11.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
 | 12 | [Reporting & Analytics](docs/GITHUB/MILESTONES/M12_reporting_analytics.md) | 88–94 | 12 | `v0.12.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/7 issues) |
 | 13 | [Security, Privacy & POPIA](docs/GITHUB/MILESTONES/M13_security_privacy_compliance.md) | 95–101 | 12–13 | `v0.13.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/7 issues) |
 | 14 | [Production, Pilot & Go-live](docs/GITHUB/MILESTONES/M14_production_pilot_golive.md) | 102–109 | 13–14 | `v0.14.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
-| ⭐ | **First official release:** every issue 1–109 closed | - | end of 14 | **`v1.0.0`** | 🟩🟩🟩🟩🟩🟩⬜⬜⬜⬜ **61%** (67/109 issues) |
+| ⭐ | **First official release:** every issue 1–109 closed | - | end of 14 | **`v1.0.0`** | 🟩🟩🟩🟩🟩🟩⬜⬜⬜⬜ **62%** (68/109 issues) |
 
 ## Team
 
@@ -210,7 +210,7 @@ Full detail: [engineering non-negotiables](docs/guideline.md) and
 
 ## Status
 
-**Phase:** building. **Sprints 1–5 of 14 complete**, sprints 6 to 11 under way (semester 2). **67 of 109
+**Phase:** building. **Sprints 1–5 of 14 complete**, sprints 6 to 11 under way (semester 2). **68 of 109
 issues closed**. `v0.2.0` is the only tag cut so far; the notes for `v0.1.0` and `v0.3.0`–`v0.8.0` are
 written and their tags are still to cut, in order. M6, the queue engine, is done: one fair sequence per
 queue joined from every channel, a strict lifecycle, honest wait ranges, recall and no-show timers,
@@ -244,7 +244,8 @@ by web push, encrypted so only their phone can read the ticket number and clinic
 (issue 64), and SMS goes through a sandbox-first gateway whose per-clinic and per-patient daily caps and kill switch
 stop the spend and alert the team, with every message fitted to one segment and its cost recorded (issue 65), and every message's words are a numbered version in a per-language registry with an
 editor that refuses a broken template before it is published, each send naming the version it used (issue 66, English
-only until the translations land).
+only until the translations land), and a patient sets quiet hours, mutes a message or stops them all from the ticket page's link
+with no account, while an SMS STOP reply stops every channel at once and only "come now" messages cross quiet hours (issue 67).
 
 - [x] Idea finalised (**ClinicQ**, selected from the shortlist)
 - [x] Requirements gathered ([product docs](docs/PRODUCT/README.md))

@@ -75,6 +75,7 @@ from src.database.models.sms_budget import (
     PlatformSwitchState,
     SmsCapAlert,
     SmsDeliveryEvent,
+    SmsInboundEvent,
 )
 from src.database.models.staff_invitation import StaffInvitation
 from src.database.models.staff_queue_assignment import StaffQueueAssignment
@@ -146,6 +147,7 @@ __all__ = [
     "SiteQueueSnapshot",
     "SmsCapAlert",
     "SmsDeliveryEvent",
+    "SmsInboundEvent",
     "SoftDeleteMixin",
     "StaffInvitation",
     "StaffQueueAssignment",

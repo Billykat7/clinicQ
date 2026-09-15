@@ -1287,6 +1287,9 @@ components:
         stream_url: { type: [string, "null"], description: "The live stream; null once the ticket is finished." }
         cancel_url: { type: [string, "null"], description: "Only for the ticket's own signed-in patient, while waiting." }
         next_page_url: { type: [string, "null"], description: "The page of the ticket a transfer issued." }
+        push_key: { type: [string, "null"], description: "The VAPID key to subscribe this browser with (Issue 64); only for the ticket's own signed-in patient." }
+        push_subscribe_url: { type: [string, "null"], description: "Where that subscription is sent; set exactly when push_key is." }
+        preferences_url: { type: [string, "null"], description: "The patient's message preferences by this link (Issue 67); null for a walk-in with no patient." }
     PriorityReason:
       type: string
       description: Why a patient was moved forward. Required for every override; never free text.

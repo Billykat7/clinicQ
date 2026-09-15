@@ -276,7 +276,7 @@
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(link).then(
         function () {
-          sayShared("Link copied. Anyone with it can follow this ticket, but not cancel it.");
+          sayShared("Link copied. Anyone with it can follow this ticket and change how you are told, but not cancel it.");
         },
         function () {
           sayShared(link);

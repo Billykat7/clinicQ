@@ -36,6 +36,7 @@ from src.commons.enums import (
     NotificationChannel,
     NotificationStatus,
     PermissionVerb,
+    PreferenceSource,
 )
 from src.commons.exceptions import InAppNotificationNotFoundError
 from src.core.config import Settings, get_settings
@@ -48,6 +49,7 @@ from src.modules.notifications import (
     CENTRE_RESOURCE_KEY,
     budget,
     center,
+    patient_preferences,
     preferences,
     service,
     webpush,
@@ -64,6 +66,8 @@ from src.modules.notifications.schemas import (
     NotificationPreferencesRead,
     NotificationPreferencesUpdate,
     NotificationRead,
+    PatientPreferencesIn,
+    PatientPreferencesOut,
     PushSubscriptionIn,
     PushSubscriptionOut,
     PushUnsubscribeIn,
@@ -279,6 +283,53 @@ def mark_notification_unread(
         ) from exc
     db.commit()
     return CenterMarkResult(unread_total=center.unread_total(db, user.id))
+
+
+# ---------------------------------------------------------------------------------------------------
+# A patient's preferences, by their ticket page's link (Issue 67): no account.
+# ---------------------------------------------------------------------------------------------------
+
+
+def _patient_for_link(db: Session, page_token: str) -> str:
+    """The patient a ticket page link belongs to, or 404 (an unknown link, or a walk-in with no patient)."""
+    from src.modules.queue.ticket_page import find_by_page_token
+
+    ticket = find_by_page_token(db, page_token)
+    if ticket is None or ticket.patient_id is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="No such ticket.")
+    return ticket.patient_id
+
+
+@router.get("/patient-preferences/{page_token}", response_model=PatientPreferencesOut)
+def get_patient_preferences(page_token: str, db: DbSession) -> PatientPreferencesOut:
+    """How and when the ticket's patient is told about it: their preferences, for every clinic.
+
+    Reached by the ticket page's unguessable link, because a patient has no account. The link finds the
+    patient's preferences and nothing else about them.
+    """
+    return patient_preferences.read(db, _patient_for_link(db, page_token))
+
+
+@router.put("/patient-preferences/{page_token}", response_model=PatientPreferencesOut)
+def update_patient_preferences(
+    page_token: str, payload: PatientPreferencesIn, db: DbSession
+) -> PatientPreferencesOut:
+    """Change the ticket's patient's preferences; the next message, on every channel, follows them.
+
+    ``opted_out: true`` stops every message at once, including any already waiting to be sent. ``422`` for a
+    channel a patient cannot prefer, a language messages are not written in, or half a quiet-hours window.
+    """
+    patient_id = _patient_for_link(db, page_token)
+    try:
+        out = patient_preferences.update(
+            db, patient_id, payload, source=PreferenceSource.TICKET_PAGE
+        )
+    except patient_preferences.PreferenceError as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+    db.commit()
+    return out
 
 
 # ---------------------------------------------------------------------------------------------------

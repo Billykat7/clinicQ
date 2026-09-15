@@ -20,6 +20,7 @@
 {% block scripts %}
   <script src="/static/js/ticket.js" defer></script>
   {% if ticket.push_key %}<script src="/static/js/push.js" defer></script>{% endif %}
+  {% if ticket.preferences_url %}<script src="/static/js/ticket-preferences.js" defer></script>{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -111,6 +112,52 @@
     </div>
   </div>
   <p class="tk-note" id="tk-cancel-note" role="status" hidden></p>
+
+  {# Message settings (Issue 67): by this link, no account. ticket-preferences.js loads and saves them. #}
+  {% if ticket.preferences_url %}
+  <details class="tk-settings" id="tk-settings" data-url="{{ ticket.preferences_url }}">
+    <summary>Message settings</summary>
+    <form class="tk-settings-form" id="tk-settings-form">
+      <label class="tk-check"><input type="checkbox" id="tk-set-stop"> Stop all messages about my tickets</label>
+      <p class="tk-hint">Replying STOP to any of our SMS does the same, for every channel.</p>
+      <label for="tk-set-channel">Tell me first by</label>
+      <select id="tk-set-channel">
+        <option value="">Cheapest that reaches me</option>
+        <option value="web_push">Notification on this phone</option>
+        <option value="whatsapp">WhatsApp</option>
+        <option value="sms">SMS</option>
+      </select>
+      <label for="tk-set-language">Language</label>
+      <select id="tk-set-language">
+        <option value="">The clinic's language</option>
+        <option value="en">English</option>
+        <option value="zu">isiZulu</option>
+        <option value="xh">isiXhosa</option>
+        <option value="af">Afrikaans</option>
+        <option value="st">Sesotho</option>
+      </select>
+      <fieldset class="tk-quiet">
+        <legend>Quiet hours</legend>
+        <label for="tk-set-quiet-start">From</label>
+        <input type="time" id="tk-set-quiet-start">
+        <label for="tk-set-quiet-end">To</label>
+        <input type="time" id="tk-set-quiet-end">
+        <p class="tk-hint">Messages wait until quiet hours end, except "you are next", "please come in now" and being called again.</p>
+      </fieldset>
+      <fieldset class="tk-mute">
+        <legend>Do not tell me when</legend>
+        <label class="tk-check"><input type="checkbox" value="next"> I am next</label>
+        <label class="tk-check"><input type="checkbox" value="called"> I am called</label>
+        <label class="tk-check"><input type="checkbox" value="recalled"> I am called again</label>
+        <label class="tk-check"><input type="checkbox" value="no_show"> My ticket is marked missed</label>
+        <label class="tk-check"><input type="checkbox" value="transferred"> I move to another queue</label>
+        <label class="tk-check"><input type="checkbox" value="cancelled"> The clinic cancels my ticket</label>
+      </fieldset>
+      <button type="submit" class="btn btn-block" id="tk-set-save">Save message settings</button>
+      <p class="tk-note" id="tk-set-note" role="status" hidden></p>
+    </form>
+  </details>
+  {% endif %}
 
   <p class="tk-ref">Reference at the desk: <b data-fill="reference_code">{{ ticket.reference_code }}</b></p>
 </div>
