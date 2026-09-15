@@ -69,6 +69,13 @@ stops SMS at run time with no deploy, and only matters while the flag is on.
   - **the kill switch answer** carries `sms_enabled: false`.
 - [x] The notification, contract and unit suites with the flag on: **1418 passed**. Every existing SMS
   behaviour is unchanged.
+- [x] **The ticket page with SMS off**, on the development server ( unset) as the ticket's own
+  patient, after declining notifications. Before this change the page said "we will send you an SMS instead",
+  which would no longer be true:
+
+  | Push declined, SMS switched off (360 px) |
+  |---|
+  | ![The ticket page saying notifications are off and to keep the page open to see the turn](https://github.com/Billykat7/clinicQ/blob/e29ac9895c5595b598e889b1302e955295748efe/docs/GITHUB/PR/M9/assets/pr65-sms-flag/push-declined-sms-off.png?raw=true) |
 
 ## Risk and rollback
 
