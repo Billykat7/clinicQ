@@ -80,6 +80,12 @@ PUBLIC: dict[str, str] = {
     "POST /api/v1/esign/webhook": "verifies the provider's signature before anything else",
     "POST /api/v1/notifications/webhooks/delivery": "verifies the provider's shared secret",
     "GET /api/v1/reference/enums": "the public wire vocabulary (Issue 4)",
+    "GET /api/v1/tickets/{page_token}": (
+        "the patient's ticket page (Issue 68): the link is the credential, 256 random bits that are "
+        "never an id, and it opens one ticket's number, clinic and place in line to whoever holds it, "
+        "so a patient can share it with family. Nothing about the patient is in it, and cancelling "
+        "still needs the patient's own session on the cancel route"
+    ),
     "POST /api/v1/patients/otp/request": "patient sign-in: asks for a code (Issue 17)",
     "POST /api/v1/patients/otp/verify": "patient sign-in: proves the code (Issue 17)",
     "GET /api/v1/staff/invitations/preview": (

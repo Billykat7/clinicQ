@@ -113,6 +113,31 @@ def get_current_patient(
     return patient
 
 
+def signed_in_patient_id(request: Request, db: Session) -> str | None:
+    """The id of the patient whose own session made this request, or ``None``. Never raises.
+
+    For a page anyone with a link may open (the ticket page, Issue 68) that offers more to the ticket's
+    own patient: the same checks as :func:`get_current_patient`, answering "nobody" instead of 401.
+    """
+    scheme, _, token = request.headers.get("Authorization", "").partition(" ")
+    bearer = (
+        HTTPAuthorizationCredentials(scheme=scheme, credentials=token.strip())
+        if scheme.lower() == "bearer" and token.strip()
+        else None
+    )
+    claims = _claims(request, bearer)
+    if claims is None:
+        return None
+    patient = db.execute(
+        select(Patient).where(Patient.id == str(claims.get("sub") or ""))
+    ).scalar_one_or_none()
+    if patient is None or patient.is_deleted:
+        return None
+    if claims.get("ver") != patient.session_version:
+        return None
+    return patient.id
+
+
 #: The signed-in patient, for a route signature: ``patient: CurrentPatient``.
 CurrentPatient = Annotated[Patient, Depends(get_current_patient)]
 

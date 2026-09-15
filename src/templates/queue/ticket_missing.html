@@ -1,0 +1,16 @@
+{% extends "layouts/patient.html" %}
+{#- A ticket page link that finds nothing (Issue 68). The same page whatever the reason, so a link cannot
+    be probed for: a mistyped address, a link cut short, or a ticket issued before ticket pages existed. -#}
+
+{% block title %}Ticket not found · {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="stack">
+  <h1>Ticket not found</h1>
+  <p class="lead">
+    This link does not open a ticket. Check that the whole link was copied, or ask at the front desk:
+    they can find your ticket by its number.
+  </p>
+  <p><a class="btn" href="/discover">Find a clinic</a></p>
+</div>
+{% endblock %}

@@ -1,0 +1,102 @@
+{% extends "layouts/patient.html" %}
+{#- The patient's ticket page (Issue 68): the screen someone looks at while deciding whether to leave the house.
+
+    One job: make "how much longer?" unambiguous, honest and live. The look is the phone on the landing
+    page (web/index.html): the number is the largest thing on the screen, the wait is always a range.
+
+    Every sentence the page can say is written here, once, in a block for each headline
+    (TicketPageHeadline); ticket.js shows the block that matches the latest state and fills in the
+    numbers. The page is rendered with its first state, so on a slow connection the number and the
+    place in line show before the script has loaded. The state is also embedded as JSON for the script:
+    a data block, not a script, so the content security policy allows it. No inline handlers. -#}
+
+{% block title %}Ticket {{ ticket.number }} · {{ app_name }}{% endblock %}
+
+{% block styles %}
+  {{ super() }}
+  <link rel="stylesheet" href="/static/css/ticket.css">
+{% endblock %}
+
+{% block scripts %}
+  <script src="/static/js/ticket.js" defer></script>
+{% endblock %}
+
+{% block content %}
+{% set where = ticket.queue.room or ticket.queue.name %}
+<div class="tk tk-{{ ticket.headline.value }}" id="tk" data-api-url="{{ api_url }}" data-headline="{{ ticket.headline.value }}">
+  <script type="application/json" id="tk-state">{{ state_json | tojson }}</script>
+
+  {# The alert for the two moments that matter most. role="alert" is read out as soon as it appears. #}
+  <div class="tk-alert" id="tk-alert" role="alert" {% if ticket.headline.value not in ("next", "called") %}hidden{% endif %}>
+    <p class="tk-alert-title" data-when="next" {% if ticket.headline.value != "next" %}hidden{% endif %}>You are next</p>
+    <p class="tk-alert-body" data-when="next" {% if ticket.headline.value != "next" %}hidden{% endif %}>
+      Please be ready at <b data-fill="where">{{ where }}</b>. If you are not at the clinic yet, go now.
+    </p>
+    <p class="tk-alert-title" data-when="called" {% if ticket.headline.value != "called" %}hidden{% endif %}>Please come in now</p>
+    <p class="tk-alert-body" data-when="called" {% if ticket.headline.value != "called" %}hidden{% endif %}>
+      Go to <b data-fill="where">{{ where }}</b>.
+    </p>
+  </div>
+
+  <section class="tk-card" aria-labelledby="tk-number">
+    <div class="tk-head">
+      <b>Your ticket</b>
+      <span class="tk-live" id="tk-live" data-live="true">Live</span>
+    </div>
+    <p class="tk-lbl"><span data-fill="clinic">{{ ticket.clinic.name }}</span>: <span data-fill="queue">{{ ticket.queue.name }}</span></p>
+    <h1 class="tk-no" id="tk-number" data-fill="number">{{ ticket.number }}</h1>
+
+    <div class="tk-status">
+      <div data-when="waiting next" {% if ticket.headline.value not in ("waiting", "next") %}hidden{% endif %}>
+        <p class="tk-pos">You are number <b data-fill="position">{{ ticket.position or "" }}</b> in line</p>
+        <p class="tk-ahead" data-when-ahead {% if not ticket.waiting_ahead %}hidden{% endif %}>
+          <span data-fill="ahead">{{ ticket.waiting_ahead or 0 }}</span> <span data-fill="ahead-noun">{{ "person" if ticket.waiting_ahead == 1 else "people" }}</span> ahead of you
+        </p>
+        <p class="tk-eta">Estimated wait <b data-fill="wait">{{ ticket.wait.label if ticket.wait else "" }}</b></p>
+      </div>
+      <p class="tk-pos" data-when="called" {% if ticket.headline.value != "called" %}hidden{% endif %}>Called to <b data-fill="where">{{ where }}</b></p>
+      <p class="tk-pos" data-when="in_progress" {% if ticket.headline.value != "in_progress" %}hidden{% endif %}>You are being seen.</p>
+      <p class="tk-pos" data-when="done" {% if ticket.headline.value != "done" %}hidden{% endif %}>Your visit is finished. Thank you for waiting with us.</p>
+      <p class="tk-pos" data-when="cancelled" {% if ticket.headline.value != "cancelled" %}hidden{% endif %}>This ticket was cancelled and is no longer in the queue.</p>
+      <p class="tk-pos" data-when="missed" {% if ticket.headline.value != "missed" %}hidden{% endif %}>
+        This ticket was marked missed: you did not arrive after being called twice. To join again, use
+        {{ app_name }} or ask at the front desk.
+      </p>
+      <p class="tk-pos" data-when="transferred" {% if ticket.headline.value != "transferred" %}hidden{% endif %}>
+        Your visit continues in another queue.
+        <a class="tk-next-link" data-fill-href="next_page_url" href="{{ ticket.next_page_url or '#' }}" {% if not ticket.next_page_url %}hidden{% endif %}>Follow your new ticket</a>
+      </p>
+    </div>
+  </section>
+
+  {# How old the data is, always visible; the warning when updates have stopped. #}
+  <p class="tk-updated" id="tk-updated" aria-live="off">
+    Updated <time id="tk-as-of" datetime="{{ ticket.as_of.isoformat() }}">{{ ticket.as_of.strftime("%H:%M:%S") }}</time><span id="tk-age"></span>
+  </p>
+  <p class="tk-stale" id="tk-stale" role="status" hidden>
+    Not live: this is how things stood <b id="tk-stale-age"></b> ago. Trying to reconnect.
+  </p>
+
+  <div class="tk-actions">
+    <a class="btn btn-quiet btn-block" href="{{ ticket.clinic.directions_url }}" target="_blank" rel="noopener noreferrer">Directions to the clinic</a>
+    {% if ticket.clinic.call_url %}
+      <a class="btn btn-quiet btn-block" href="{{ ticket.clinic.call_url }}">Call the clinic</a>
+    {% endif %}
+    <button type="button" class="btn btn-quiet btn-block" id="tk-share">Share this ticket</button>
+    <p class="tk-note" id="tk-share-note" role="status" hidden></p>
+  </div>
+
+  {# Cancelling: two taps. Offered only to the ticket's own patient while they are waiting. #}
+  <div class="tk-cancel" id="tk-cancel" {% if not ticket.cancel_url %}hidden{% endif %}>
+    <button type="button" class="btn btn-quiet btn-block tk-cancel-start" id="tk-cancel-start">Cancel my ticket</button>
+    <div class="tk-confirm" id="tk-confirm" hidden>
+      <p class="tk-confirm-q">Give up your place? Ticket <b data-fill="number">{{ ticket.number }}</b> will leave the queue and cannot be brought back.</p>
+      <button type="button" class="btn btn-danger btn-block" id="tk-cancel-yes">Yes, cancel my ticket</button>
+      <button type="button" class="btn btn-quiet btn-block" id="tk-cancel-no">No, keep my place</button>
+    </div>
+  </div>
+  <p class="tk-note" id="tk-cancel-note" role="status" hidden></p>
+
+  <p class="tk-ref">Reference at the desk: <b data-fill="reference_code">{{ ticket.reference_code }}</b></p>
+</div>
+{% endblock %}

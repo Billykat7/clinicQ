@@ -142,6 +142,19 @@ _UNSCOPED_BY_DESIGN: dict[str, str] = {
         "clinic's timeout, to find the deadlines that have passed. A site filter would be the wrong "
         "narrowing, like the snapshot reconciliation's"
     ),
+    "modules/queue/ticket_page.py::find_by_page_token": (
+        "the ticket page (Issue 68) is opened by its unguessable link, by someone who holds no role "
+        "at any clinic and may have no account at all: the token (256 random bits, unique) finds the "
+        "one ticket, as a device secret finds its box (Issue 61)"
+    ),
+    "modules/queue/ticket_page.py::page_state": (
+        "reads the found ticket's own queue and clinic by id to show where the patient is; the ticket "
+        "came from find_by_page_token and nothing else is reachable from here (Issue 68)"
+    ),
+    "modules/queue/ticket_page.py::_next_leg": (
+        "reads the ticket a transfer issued **from the found ticket**, by its transferred_from_id, so "
+        "the family following along can follow the visit (Issue 68)"
+    ),
     "modules/queue/notices.py::tell": (
         "reads the moved ticket's own queue and clinic by id to word the patient's message (Issues "
         "43, 45, 63); the ticket came from the move that caused the message, already scoped by its "

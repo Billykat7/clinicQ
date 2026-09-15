@@ -184,3 +184,23 @@ def test_a_rolled_back_savepoint_discards_only_what_was_published_inside_it(
     session.commit()
 
     assert heard == ["before the savepoint", "inside a kept savepoint"]
+
+
+def test_releasing_a_savepoint_publishes_nothing_until_the_real_commit(
+    session: Session,
+) -> None:
+    """Issue 68: SQLAlchemy fires ``after_commit`` on a savepoint release, before the data is visible.
+
+    The notification service writes its row in a savepoint inside a queue move, so every call used to
+    publish the move's events early, and a ticket page's stream read the ticket before the call.
+    """
+    heard: list[str] = []
+    subscribe(_Thing)(lambda event: heard.append(event.label))
+
+    session.add(Site(**_a_clinic()))
+    publish_after_commit(session, _Thing("the move"))
+    with session.begin_nested():
+        session.add(Site(**_a_clinic()))
+    assert heard == []  # released, not committed
+    session.commit()
+    assert heard == ["the move"]

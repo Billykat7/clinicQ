@@ -90,7 +90,16 @@ _PENDING_KEY = "clinicq_pending_domain_events"
 
 
 def _drain(session: Session) -> None:
-    """Publish everything this session queued, now that its transaction has committed."""
+    """Publish everything this session queued, now that its transaction has committed.
+
+    SQLAlchemy also fires ``after_commit`` when a **savepoint is released**, while the real transaction
+    is still open. Publishing then would tell a subscriber about a change nobody else can see yet, and
+    one the transaction may still roll back: a ticket page's stream read the ticket before its call was
+    committed and showed the old place in line (found in Issue 68). So a release publishes nothing; the
+    outermost commit publishes everything.
+    """
+    if session.in_nested_transaction():
+        return
     for _savepoint, event in session.info.pop(_PENDING_KEY, []):
         publish(event)
 
