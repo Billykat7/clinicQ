@@ -9,12 +9,15 @@ week.
 | [`sites.yaml`](sites.yaml) | Clinics, hours, queues, services, display settings, staff, onboarding, payment profile, analytics switch and conversion report | [30](../docs/GITHUB/ISSUES/M4/ISSUE_30_sites_openapi_contract_tests.md) |
 | [`discovery.yaml`](discovery.yaml) | The nearby search, place-name typeahead, recent areas, one clinic's profile, the search rate limit | [38](../docs/GITHUB/ISSUES/M5/ISSUE_38_discovery_analytics_contract.md) |
 | [`queue.yaml`](queue.yaml) | Every `/tickets` route wherever it hangs: a patient's join, the front desk's walk-in, the clinic's and a patient's tickets, the join refusals and abuse guards | [40](../docs/GITHUB/ISSUES/M6/ISSUE_40_join_queue_service_api.md), completed by [47](../docs/GITHUB/ISSUES/M6/ISSUE_47_queue_contract_concurrency_tests.md) |
+| [`notifications.yaml`](notifications.yaml) | Every `/notifications` route: the delivery ledger and its dashboard numbers, the provider callbacks, the SMS kill switch, templates, a patient's push subscriptions and preferences, an account's preferences and notification centre; a clinic's `/sites/{site_id}/sms-budget` and the SMS gateway's `/webhooks/sms/` callbacks | [71](../docs/GITHUB/ISSUES/M9/ISSUE_71_notifications_contract_tests.md) |
 
-Notifications (71), channels (79) and reporting (94) each add their own file here and one
-`Contract(...)` entry to `tests/integration/contracts/test_openapi_contracts.py`. Nothing else about
+Channels (79) and reporting (94) each add their own file here and one `Contract(...)` entry to
+`tests/integration/contracts/test_openapi_contracts.py`, as notifications (71) did. Nothing else about
 the harness changes. A contract that owns a **resource** spread over several prefixes (the queue
 contract owns every `/tickets` route) gives its entry a `pattern`; the prefix contracts then cede
-those routes to it automatically, so every route has exactly one contract.
+those routes to it automatically, so every route has exactly one contract. The notifications contract
+does the same for a clinic's SMS budget, which hangs under `/sites`, and its error responses are driven
+over real HTTP by `tests/integration/contracts/test_notifications_contract.py`.
 
 ## The rules
 

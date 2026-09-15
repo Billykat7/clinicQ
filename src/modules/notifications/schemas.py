@@ -103,6 +103,51 @@ class NotificationRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ChannelDeliveryStatsOut(BaseModel):
+    """One transport's messages in the window, by where each stands (Issue 71)."""
+
+    channel: NotificationChannel
+    total: int = Field(ge=0, description="Every message created in the window.")
+    sent: int = Field(ge=0, description="Accepted by the provider, not yet confirmed.")
+    delivered: int = Field(ge=0, description="Confirmed by a delivery receipt.")
+    failed: int = Field(
+        ge=0,
+        description="Dead-lettered: every attempt failed, or the address can never work.",
+    )
+    suppressed: int = Field(
+        ge=0,
+        description="Deliberately not sent: no consent, an opt-out, a cap, no address.",
+    )
+    waiting: int = Field(ge=0, description="Queued, or failed and due another try.")
+    failure_rate: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+        description="failed / (sent + delivered + failed); null when nothing was attempted.",
+    )
+    cost: str = Field(
+        description="What the provider charged for these messages, as a decimal string."
+    )
+    alerting: bool = Field(
+        description="Whether the failure rate crosses the alert threshold."
+    )
+
+
+class DeliveryStatsOut(BaseModel):
+    """Delivery rate, failures and cost per transport over a window (Issue 71, ``logs`` READ)."""
+
+    since: datetime
+    until: datetime
+    currency: str = Field(description="ISO 4217 currency of every cost.")
+    alert_rate: float = Field(
+        description="The failure rate at or over which the team is alerted."
+    )
+    alert_min_attempts: int = Field(
+        description="The attempted messages a transport needs before it can alert."
+    )
+    channels: list[ChannelDeliveryStatsOut]
+
+
 class NotificationListOut(BaseModel):
     """Paginated notification listing for the delivery viewer (Issue #87, ``logs`` READ)."""
 

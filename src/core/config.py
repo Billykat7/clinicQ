@@ -852,6 +852,48 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Delivery health (Issue 71): the watch that tells the team when a transport's messages are failing.
+    notification_failure_alert_rate: float = Field(
+        default=0.25,
+        gt=0,
+        le=1,
+        description=(
+            "The share of a transport's attempted messages (sent, delivered or dead) that may be "
+            "dead-lettered in the alert window before the team is alerted "
+            "(env: NOTIFICATION_FAILURE_ALERT_RATE)."
+        ),
+    )
+
+    notification_failure_alert_min_attempts: int = Field(
+        default=20,
+        ge=1,
+        le=100000,
+        description=(
+            "How many attempted messages a transport needs in the window before its failure rate "
+            "can alert, so two failures out of three at night are not an incident "
+            "(env: NOTIFICATION_FAILURE_ALERT_MIN_ATTEMPTS)."
+        ),
+    )
+
+    notification_failure_alert_window_minutes: int = Field(
+        default=60,
+        ge=5,
+        le=1440,
+        description=(
+            "The window the failure rate is measured over, and the most often one transport can "
+            "alert (env: NOTIFICATION_FAILURE_ALERT_WINDOW_MINUTES)."
+        ),
+    )
+
+    notification_failure_watch_minutes: int = Field(
+        default=5,
+        ge=1,
+        le=60,
+        description=(
+            "How often the delivery failure watch runs (env: NOTIFICATION_FAILURE_WATCH_MINUTES)."
+        ),
+    )
+
     notification_cost_currency: str = Field(
         default="ZAR",
         min_length=3,

@@ -51,6 +51,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from src.commons.enums import NotificationChannel
 from src.core import permission_usage
 from src.core.config import Settings, get_settings
 from src.core.s3_logging import APP_TIMEZONE
@@ -58,6 +59,7 @@ from src.database.session import get_db_context
 from src.modules.display import devices as display_devices
 from src.modules.documents import service as documents_service
 from src.modules.documents.storage import LocalObjectStorage
+from src.modules.notifications import delivery_stats
 from src.modules.notifications import service as notifications_service
 from src.modules.queue import request_keys
 from src.modules.queue import snapshot as queue_snapshot
@@ -99,6 +101,8 @@ _QUEUE_REQUEST_KEY_LOCK_KEY: int = 554
 # Stable 64-bit key for the display device watch (Issue 61). The lock is what keeps a silent board to
 # one alert when several instances run the watch in the same minute.
 _DISPLAY_DEVICE_WATCH_LOCK_KEY: int = 661
+#: The delivery failure watch (Issue 71): one runner, so a failing transport is measured once per run.
+_NOTIFICATION_FAILURE_WATCH_LOCK_KEY: int = 771
 
 # ── job identifiers ──────────────────────────────────────────────────────────
 # So a restart replaces rather than duplicates each job.
@@ -111,6 +115,7 @@ _RECALL_TIMERS_JOB_ID = "queue_recall_timers"
 _VISIT_NOTE_RETENTION_JOB_ID = "visit_note_retention_sweep"
 _QUEUE_REQUEST_KEY_JOB_ID = "queue_request_key_sweep"
 _DISPLAY_DEVICE_WATCH_JOB_ID = "display_device_watch"
+_NOTIFICATION_FAILURE_WATCH_JOB_ID = "notification_failure_watch"
 
 # Process-wide scheduler; created by :func:`start_scheduler`, stopped by :func:`shutdown_scheduler`.
 _scheduler: BackgroundScheduler | None = None
@@ -164,6 +169,26 @@ def run_notification_retry_sweep(settings: Settings | None = None) -> int:
         if delivered:
             logger.info("Notification retry sweep delivered %d message(s).", delivered)
         return delivered
+
+
+def run_notification_failure_watch(
+    *, moment: datetime | None = None, settings: Settings | None = None
+) -> list[NotificationChannel]:
+    """Alert the team when a transport's delivery failure rate crosses its threshold, once per window (Issue 71).
+
+    Elects a single runner across instances via the advisory lock, then delegates to
+    :func:`src.modules.notifications.delivery_stats.watch_failures`. Safe to call directly.
+    """
+    with (
+        get_db_context() as db,
+        _advisory_lock(db, _NOTIFICATION_FAILURE_WATCH_LOCK_KEY) as acquired,
+    ):
+        if not acquired:
+            logger.debug(
+                "Notification failure watch skipped: another instance holds the lock."
+            )
+            return []
+        return delivery_stats.watch_failures(db, now=moment, settings=settings)
 
 
 def run_document_retention_sweep(settings: Settings | None = None) -> int:
@@ -373,6 +398,19 @@ def start_scheduler(settings: Settings | None = None) -> BackgroundScheduler | N
         # A missed run is coalesced into a single catch-up run; the sweep is idempotent (it only
         # ever re-attempts rows still due and stops at the attempt budget), so a catch-up is safe.
         misfire_grace_time=cfg.notification_retry_interval_minutes * 60,
+        coalesce=True,
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        run_notification_failure_watch,
+        trigger=IntervalTrigger(
+            minutes=cfg.notification_failure_watch_minutes, timezone=APP_TIMEZONE
+        ),
+        id=_NOTIFICATION_FAILURE_WATCH_JOB_ID,
+        name="Notification failure watch",
+        # A missed run is coalesced: the watch measures the window ending when it runs, and alerts once
+        # per window, so a late run alerts no more than an on-time one would.
+        misfire_grace_time=cfg.notification_failure_watch_minutes * 60,
         coalesce=True,
         replace_existing=True,
     )
