@@ -8,6 +8,11 @@ The one place transactional email and SMS are delivered from (Issue #67). Every 
   on failure, ``failed`` (re-raising :class:`EmailDeliveryError` so existing callers behave exactly
   as before). Recording is best-effort: a ledger write must never take mail delivery down.
 * :func:`send_sms` sends through the pluggable SMS provider, recording the row the same way.
+* :func:`notify` is the one function the queue engine calls to tell a **patient** something about
+  their ticket (Issue 63). It writes the ledger row inside the caller's transaction and delivers it
+  only after that transaction commits (:mod:`src.modules.notifications.dispatch`), on the first
+  transport that can reach the patient: their preferred one, then free transports, then SMS. A
+  provider outage can therefore neither hold nor roll back the queue move that caused the message.
 * :func:`run_retry_sweep` (driven by ``src.core.scheduler``) re-attempts rows that are due with
   exponential backoff and dead-letters them once the attempt budget is spent — so a failed send is
   retried and eventually parked in ``dead``, never lost silently.
@@ -21,26 +26,47 @@ All timestamps are Africa/Johannesburg (the business timezone).
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from datetime import datetime, timedelta
+from decimal import Decimal
+from functools import partial
+from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import Connection, Engine, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.commons.enums import (
     NOTIFICATION_SECRET_FIELDS,
+    PATIENT_EVENT_TEMPLATE,
+    PATIENT_TRANSPORT_CHAIN,
     NotificationChannel,
     NotificationStatus,
     NotificationTemplate,
+    PatientEvent,
     notification_category_for,
 )
 from src.core.config import get_settings
+from src.core.domain_events import subscribe
 from src.core.s3_logging import APP_TIMEZONE
 from src.database.models.notification import Notification
+from src.database.models.patient import Patient
+from src.database.models.patient_notification_preference import (
+    PatientNotificationPreference,
+)
 from src.database.session import get_db_context
-from src.modules.notifications import preferences, templates
+from src.modules.notifications import dispatch, preferences, templates
 from src.modules.notifications.preferences import DeliveryDecision, DeliveryOutcome
 from src.modules.notifications.schemas import DeliveryReceipt, RenderedMessage
 from src.modules.notifications.sms import SmsProvider, build_sms_provider
+from src.modules.notifications.transports import (
+    PatientAddresses,
+    PermanentTransportError,
+    Transport,
+    TransportReceipt,
+    TransportSet,
+    active_transports,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -110,11 +136,15 @@ def _deliver_email_transport(
     )
 
 
-def _deliver_sms_transport(
-    *, to: str, message: RenderedMessage, provider: SmsProvider
-) -> str:
-    """Hand one SMS to the provider and return its provider-side message id."""
-    return provider.send(to=to, text=message.text, sender=get_settings().sms_from)
+def _deliver_via_transport(
+    transport: Transport, *, to: str, message: RenderedMessage
+) -> TransportReceipt:
+    """Hand one message to a transport adapter (SMS, web push, WhatsApp) and return its receipt.
+
+    The only call to :meth:`Transport.send` in the application. It is private to this module and
+    reached only from :func:`attempt`, after the send-time gate has answered.
+    """
+    return transport.send(to=to, message=message)
 
 
 # --------------------------------------------------------------------------------------
@@ -159,8 +189,12 @@ def _apply_success(
     provider: str,
     provider_message_id: str,
     now: datetime,
+    cost: Decimal | None = None,
 ) -> None:
-    """Mark a row ``sent``: record the provider, its message id, and stop further retries."""
+    """Mark a row ``sent``: record the provider, its message id and cost, and stop further retries."""
+    if cost is not None:
+        notification.cost = cost
+        notification.cost_currency = get_settings().notification_cost_currency
     notification.attempts += 1
     notification.status = NotificationStatus.SENT.value
     notification.provider = provider
@@ -170,12 +204,18 @@ def _apply_success(
     notification.last_error = None
 
 
-def _apply_failure(notification: Notification, *, error: str, now: datetime) -> None:
-    """Record a failed attempt: dead-letter when the budget is spent, else schedule a backoff retry."""
+def _apply_failure(
+    notification: Notification, *, error: str, now: datetime, permanent: bool = False
+) -> None:
+    """Record a failed attempt: dead-letter when the budget is spent, else schedule a backoff retry.
+
+    A ``permanent`` failure (an address that can never work) dead-letters at once: retrying it
+    would only repeat the failure and delay the fallback.
+    """
     notification.attempts += 1
     notification.failed_at = now
     notification.last_error = error[:2000]
-    if notification.attempts >= notification.max_attempts:
+    if permanent or notification.attempts >= notification.max_attempts:
         notification.status = NotificationStatus.DEAD.value
         notification.next_attempt_at = None
         logger.error(
@@ -197,7 +237,7 @@ def attempt(
     db: Session,
     notification: Notification,
     *,
-    provider: SmsProvider,
+    provider: SmsProvider | None = None,
     now: datetime | None = None,
     context: dict | None = None,
 ) -> bool:
@@ -206,10 +246,12 @@ def attempt(
     Re-renders the message from the row's stored payload (so a queued row is deliverable without
     the originating domain objects), hands it to the right transport, and applies success or a
     failure/backoff/dead-letter transition. Never raises for a transport failure — the outcome is
-    recorded on the row.
+    recorded on the row. A patient row whose transport has failed for good falls back to the next
+    transport in its chain (:func:`_fall_back`).
 
     ``context`` renders from values the row does not hold: a secret-bearing message (a one-time
     code) is stored with a placeholder and delivered, once, from the real value in memory.
+    ``provider`` is the SMS provider to use; ``None`` uses the active transports.
 
     The recipient's consent and preferences are resolved **again** here, because a row can sit in
     the queue: a patient who withdrew while a message was deferred or waiting for a retry does not
@@ -226,6 +268,7 @@ def attempt(
         template=template,
         channel=channel,
         now=now,
+        patient_id=notification.patient_id,
     )
     if decision.outcome is DeliveryOutcome.SUPPRESS:
         notification.status = NotificationStatus.SUPPRESSED.value
@@ -239,8 +282,8 @@ def attempt(
         db.flush()
         return False
     message = templates.render(channel, template, context or notification.payload)
-    try:
-        if channel is NotificationChannel.EMAIL:
+    if channel is NotificationChannel.EMAIL:
+        try:
             message_id = _deliver_email_transport(
                 to=notification.recipient,
                 message=message,
@@ -248,23 +291,324 @@ def attempt(
                     notification.recipient, notification_category_for(template)
                 ),
             )
-            provider_label = _EMAIL_PROVIDER
-        else:
-            message_id = _deliver_sms_transport(
-                to=notification.recipient, message=message, provider=provider
-            )
-            provider_label = provider.kind.value
-    except Exception as exc:  # every transport error is recorded on the row, not raised
-        # EmailDeliveryError and SmsSendError both land here; the row captures the reason and the
-        # backoff/dead-letter decision so the sweep can act on it.
-        _apply_failure(notification, error=str(exc), now=now)
+        except (
+            Exception
+        ) as exc:  # every transport error is recorded on the row, not raised
+            _apply_failure(notification, error=str(exc), now=now)
+            db.flush()
+            return False
+        _apply_success(
+            notification,
+            provider=_EMAIL_PROVIDER,
+            provider_message_id=message_id,
+            now=now,
+        )
         db.flush()
+        return True
+
+    transports = active_transports(sms_provider=provider)
+    transport = transports.get(channel)
+    try:
+        if transport is None:
+            raise PermanentTransportError(f"no {channel.value} transport is configured")
+        receipt = _deliver_via_transport(
+            transport, to=notification.recipient, message=message
+        )
+    except Exception as exc:  # every transport error is recorded on the row, not raised
+        # SmsSendError, TransportError and anything a provider SDK raises all land here; the row
+        # captures the reason and the backoff/dead-letter decision so the sweep can act on it.
+        _apply_failure(
+            notification,
+            error=str(exc) or type(exc).__name__,
+            now=now,
+            permanent=isinstance(exc, PermanentTransportError),
+        )
+        db.flush()
+        if notification.status == NotificationStatus.DEAD.value:
+            _fall_back(db, notification, transports=transports, now=now)
         return False
     _apply_success(
-        notification, provider=provider_label, provider_message_id=message_id, now=now
+        notification,
+        provider=receipt.provider,
+        provider_message_id=receipt.provider_message_id,
+        now=now,
+        cost=receipt.cost,
     )
     db.flush()
     return True
+
+
+# --------------------------------------------------------------------------------------
+# Patient notifications (Issue 63): one call from the queue, a transport chosen per patient.
+# --------------------------------------------------------------------------------------
+
+
+def _addresses(db: Session, patient: Patient) -> PatientAddresses:
+    """Every way the service knows to reach ``patient``.
+
+    Push subscriptions are Issue 64's; until they exist a patient has none.
+    """
+    return PatientAddresses(
+        patient_id=patient.id,
+        phone_e164=patient.phone_e164,
+        whatsapp_id=patient.whatsapp_id,
+    )
+
+
+def preferred_channel(db: Session, patient_id: str) -> NotificationChannel | None:
+    """The transport the patient chose to be reached on first, or ``None`` when they never chose."""
+    preference = db.get(PatientNotificationPreference, patient_id)
+    if preference is None or preference.preferred_channel is None:
+        return None
+    return NotificationChannel(preference.preferred_channel)
+
+
+def plan_transports(
+    addresses: PatientAddresses,
+    transports: TransportSet,
+    *,
+    preferred: NotificationChannel | None = None,
+    exclude: frozenset[NotificationChannel] = frozenset(),
+) -> list[tuple[NotificationChannel, str]]:
+    """The transports that can reach this patient, in the order to try them, with each address.
+
+    The patient's ``preferred`` transport comes first when it can reach them. The rest follow the
+    chain with every free transport ahead of every paid one, so SMS, which costs money, is always
+    last. A transport with no address for the patient (no subscription, not configured) is left
+    out rather than tried and failed. ``exclude`` removes the transports a fallback already tried.
+    """
+    chain = [channel for channel in PATIENT_TRANSPORT_CHAIN if channel in transports]
+    chain.sort(key=lambda channel: not transports[channel].free)  # stable: free first
+    if preferred is not None and preferred in chain:
+        chain.remove(preferred)
+        chain.insert(0, preferred)
+    plan: list[tuple[NotificationChannel, str]] = []
+    for channel in chain:
+        if channel in exclude:
+            continue
+        address = transports[channel].address_for(addresses)
+        if address:
+            plan.append((channel, address))
+    return plan
+
+
+def _attempt_budget(remaining_after: int) -> int:
+    """How many attempts a transport gets: one when another transport can take over, else the full budget.
+
+    A "you are next" message that waits through five backed-off retries on web push is a message
+    that did not arrive, so a transport with a fallback behind it gets a single attempt and the
+    fallback is tried at once. The last transport in the chain retries with backoff as before.
+    """
+    return 1 if remaining_after > 0 else get_settings().notification_max_attempts
+
+
+def _by_dedupe_key(db: Session, dedupe_key: str) -> Notification | None:
+    """The row already recorded for this queue event, if there is one."""
+    return db.execute(
+        select(Notification).where(Notification.dedupe_key == dedupe_key)
+    ).scalar_one_or_none()
+
+
+def notify(
+    db: Session,
+    *,
+    patient_id: str,
+    event: PatientEvent,
+    context: Mapping[str, Any],
+    site_id: str | None = None,
+    dedupe_key: str | None = None,
+    now: datetime | None = None,
+) -> Notification | None:
+    """Tell a patient that something happened to their ticket. The one call the queue engine makes.
+
+    Writes the ledger row **in the caller's transaction** and returns it; delivery happens only
+    after that transaction commits, so a provider can neither delay nor roll back the move that
+    caused the message, and a move that rolls back sends nothing. The caller knows no transport:
+    this function picks one with :func:`plan_transports` (the patient's preference, then free
+    transports, then SMS) and checks consent through the send-time gate first.
+
+    Args:
+        db: The caller's session. Nothing is committed here.
+        patient_id: The patient to tell.
+        event: What happened (:class:`~src.commons.enums.PatientEvent`); it selects the template.
+        context: What the template needs (``number``, ``clinic``, ``queue``, ``room``, …), stored on
+            the row so a retry renders the same message.
+        site_id: The clinic sending it, so its cost is reportable per clinic.
+        dedupe_key: One queue event, one message: a second call with the same key returns the row
+            the first recorded and sends nothing.
+        now: When (aware); ``None`` means now in Johannesburg.
+
+    Returns:
+        The ledger row (``queued``, or ``suppressed`` when consent or reach says no), or ``None``
+        when there is no such patient.
+    """
+    if dedupe_key is not None and (existing := _by_dedupe_key(db, dedupe_key)):
+        return existing
+    patient = db.get(Patient, patient_id)
+    if patient is None or patient.is_deleted:
+        return None
+    now = now or _now()
+    settings = get_settings()
+    template = PATIENT_EVENT_TEMPLATE[event]
+    plan = plan_transports(
+        _addresses(db, patient),
+        active_transports(),
+        preferred=preferred_channel(db, patient.id),
+    )
+    channel, address = (
+        plan[0] if plan else (NotificationChannel.SMS, patient.phone_e164)
+    )
+    decision = preferences.resolve(
+        db,
+        recipient_email=address,
+        template=template,
+        channel=channel,
+        now=now,
+        patient_id=patient.id,
+    )
+    notification = Notification(
+        channel=channel.value,
+        template_key=template.value,
+        recipient=address,
+        subject=None,
+        status=NotificationStatus.QUEUED.value,
+        payload=dict(context),
+        attempts=0,
+        max_attempts=_attempt_budget(len(plan) - 1),
+        patient_id=patient.id,
+        site_id=site_id,
+        event=event.value,
+        dedupe_key=dedupe_key,
+        # The post-commit delivery owns the row for this long; after it the sweep may take over.
+        next_attempt_at=now
+        + timedelta(seconds=settings.notification_dispatch_grace_seconds),
+    )
+    deliver_after_commit = False
+    if decision.outcome is DeliveryOutcome.SUPPRESS or not plan:
+        notification.status = NotificationStatus.SUPPRESSED.value
+        notification.last_error = (
+            f"suppressed by preference ({decision.reason})"
+            if decision.outcome is DeliveryOutcome.SUPPRESS
+            else "no transport can reach the patient"
+        )
+        notification.next_attempt_at = None
+    elif decision.outcome is DeliveryOutcome.DEFER:
+        notification.next_attempt_at = decision.defer_until
+    else:
+        deliver_after_commit = True
+    try:
+        # A savepoint, so a concurrent replay of the same event loses the unique key race cleanly
+        # without rolling back the caller's queue move.
+        with db.begin_nested():
+            db.add(notification)
+            db.flush()
+    except IntegrityError:
+        if dedupe_key is None:
+            raise
+        return _by_dedupe_key(db, dedupe_key)
+    if deliver_after_commit:
+        dispatch.after_commit(db, notification.id)
+    return notification
+
+
+def _tried_channels(
+    db: Session, notification: Notification
+) -> frozenset[NotificationChannel]:
+    """The transports this message has already been tried on: this row and every row it fell back from."""
+    tried: set[NotificationChannel] = set()
+    row: Notification | None = notification
+    while row is not None:
+        tried.add(NotificationChannel(row.channel))
+        row = db.get(Notification, row.fallback_of_id) if row.fallback_of_id else None
+    return frozenset(tried)
+
+
+def _fall_back(
+    db: Session,
+    failed: Notification,
+    *,
+    transports: TransportSet,
+    now: datetime,
+) -> Notification | None:
+    """Try the next transport for a patient row that has failed for good, and return its new row.
+
+    The failed row stays ``dead`` on the ledger; the new row names it in ``fallback_of_id``, so the
+    ledger reads as the chain that was actually tried. Returns ``None`` (and logs) when no untried
+    transport can reach the patient: the message is dead-lettered, never lost silently.
+    """
+    if failed.patient_id is None:
+        return None
+    patient = db.get(Patient, failed.patient_id)
+    if patient is None:
+        return None
+    plan = plan_transports(
+        _addresses(db, patient),
+        transports,
+        preferred=preferred_channel(db, patient.id),
+        exclude=_tried_channels(db, failed),
+    )
+    if not plan:
+        logger.error(
+            "Notification %s (%s) failed on every transport that can reach the patient.",
+            failed.id,
+            failed.event,
+        )
+        return None
+    channel, address = plan[0]
+    fallback = Notification(
+        channel=channel.value,
+        template_key=failed.template_key,
+        recipient=address,
+        subject=None,
+        status=NotificationStatus.QUEUED.value,
+        payload=dict(failed.payload),
+        attempts=0,
+        max_attempts=_attempt_budget(len(plan) - 1),
+        patient_id=failed.patient_id,
+        site_id=failed.site_id,
+        event=failed.event,
+        fallback_of_id=failed.id,
+    )
+    db.add(fallback)
+    db.flush()
+    logger.info(
+        "Notification %s falls back from %s to %s.",
+        failed.id,
+        failed.channel,
+        channel.value,
+    )
+    attempt(db, fallback, now=now)
+    return fallback
+
+
+def deliver_committed(bind: Engine | Connection, notification_id: str) -> bool:
+    """Deliver one committed patient notification in a session of its own. Returns True if sent.
+
+    Runs after the queue's commit (see :mod:`src.modules.notifications.dispatch`). The row is taken
+    ``FOR UPDATE SKIP LOCKED`` and only while it is still ``queued`` and untried, so the retry sweep
+    and this delivery can never both send it.
+    """
+    with Session(bind=bind, autoflush=False) as db:
+        notification = db.execute(
+            select(Notification)
+            .where(
+                Notification.id == notification_id,
+                Notification.status == NotificationStatus.QUEUED.value,
+                Notification.attempts == 0,
+            )
+            .with_for_update(skip_locked=True)
+        ).scalar_one_or_none()
+        if notification is None:
+            return False
+        sent = attempt(db, notification)
+        db.commit()
+        return sent
+
+
+@subscribe(dispatch.PatientNotificationQueued)
+def _deliver_after_commit(event: dispatch.PatientNotificationQueued) -> None:
+    """Hand a committed patient notification to the dispatcher: now, or on the worker pool."""
+    dispatch.submit(partial(deliver_committed, event.bind, event.notification_id))
 
 
 # --------------------------------------------------------------------------------------
@@ -445,7 +789,6 @@ def run_retry_sweep(
     than one instance (the caller elects a single runner via an advisory lock).
     """
     now = now or _now()
-    provider = provider or build_sms_provider()
     due = (
         db.execute(
             select(Notification)
@@ -461,6 +804,9 @@ def run_retry_sweep(
             )
             .order_by(Notification.next_attempt_at.asc().nulls_first())
             .limit(limit)
+            # A row a post-commit delivery (or another instance) is sending right now is skipped,
+            # never sent twice.
+            .with_for_update(skip_locked=True)
         )
         .scalars()
         .all()

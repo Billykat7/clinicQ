@@ -115,6 +115,67 @@ def _render_ticket_transferred_sms(context: dict[str, Any]) -> RenderedMessage:
     )
 
 
+def _render_ticket_next_sms(context: dict[str, Any]) -> RenderedMessage:
+    """The patient is first in line (Issue 63): time to be at the clinic, and where.
+
+    Expects ``number``, ``clinic`` and ``queue``; ``room`` when the queue has one.
+    """
+    app_name = get_settings().app_name
+    where = context.get("room") or context["queue"]
+    return RenderedMessage(
+        subject="You are next",
+        text=(
+            f"{app_name}: ticket {context['number']} at {context['clinic']}, you are next. "
+            f"Please be ready at {where}."
+        ),
+    )
+
+
+def _render_ticket_called_sms(context: dict[str, Any]) -> RenderedMessage:
+    """The patient has been called (Issue 63): come in now, and where to go."""
+    app_name = get_settings().app_name
+    where = context.get("room") or context["queue"]
+    return RenderedMessage(
+        subject="Please come in now",
+        text=(
+            f"{app_name}: ticket {context['number']}, please come in now to {where} at "
+            f"{context['clinic']}."
+        ),
+    )
+
+
+def _render_ticket_cancelled_sms(context: dict[str, Any]) -> RenderedMessage:
+    """The clinic cancelled the patient's ticket (Issue 63): say so, and how to join again."""
+    app_name = get_settings().app_name
+    return RenderedMessage(
+        subject="Ticket cancelled",
+        text=(
+            f"{app_name}: ticket {context['number']} at {context['clinic']} was cancelled by the "
+            f"clinic. To join again, use {app_name} or ask at the front desk."
+        ),
+    )
+
+
+#: The patient's ticket messages (Issues 43, 45, 63). Until Issue 66 writes a richer variant per
+#: channel, web push and WhatsApp carry the same words as the SMS, so a fallback never changes what
+#: the patient reads.
+_TICKET_RENDERERS: dict[NotificationTemplate, Renderer] = {
+    NotificationTemplate.TICKET_NEXT: _render_ticket_next_sms,
+    NotificationTemplate.TICKET_CALLED: _render_ticket_called_sms,
+    NotificationTemplate.TICKET_RECALLED: _render_ticket_recalled_sms,
+    NotificationTemplate.TICKET_NO_SHOW: _render_ticket_no_show_sms,
+    NotificationTemplate.TICKET_TRANSFERRED: _render_ticket_transferred_sms,
+    NotificationTemplate.TICKET_CANCELLED: _render_ticket_cancelled_sms,
+}
+
+#: The channels a patient notification can go out on.
+_PATIENT_CHANNELS = (
+    NotificationChannel.SMS,
+    NotificationChannel.WEB_PUSH,
+    NotificationChannel.WHATSAPP,
+)
+
+
 # Context renderers, keyed by (channel, template). New SMS templates (and any future
 # context-rendered email) are registered here — the single registry the issue calls for.
 _RENDERERS: dict[tuple[NotificationChannel, NotificationTemplate], Renderer] = {
@@ -124,18 +185,11 @@ _RENDERERS: dict[tuple[NotificationChannel, NotificationTemplate], Renderer] = {
         NotificationChannel.SMS,
         NotificationTemplate.STAFF_INVITATION,
     ): _render_staff_invitation_sms,
-    (
-        NotificationChannel.SMS,
-        NotificationTemplate.TICKET_RECALLED,
-    ): _render_ticket_recalled_sms,
-    (
-        NotificationChannel.SMS,
-        NotificationTemplate.TICKET_NO_SHOW,
-    ): _render_ticket_no_show_sms,
-    (
-        NotificationChannel.SMS,
-        NotificationTemplate.TICKET_TRANSFERRED,
-    ): _render_ticket_transferred_sms,
+    **{
+        (channel, template): renderer
+        for channel in _PATIENT_CHANNELS
+        for template, renderer in _TICKET_RENDERERS.items()
+    },
 }
 
 

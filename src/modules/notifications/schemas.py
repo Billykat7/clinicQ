@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, time
+from decimal import Decimal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -19,6 +20,7 @@ from src.commons.enums import (
     NotificationChannelPreference,
     NotificationStatus,
     NotificationTemplate,
+    PatientEvent,
 )
 
 
@@ -39,9 +41,28 @@ class NotificationRead(BaseModel):
     """Delivery status of one notification, returned by the admin status-query endpoint."""
 
     id: str = Field(description="Notification id.")
-    channel: NotificationChannel = Field(description="Delivery channel (email/sms).")
+    channel: NotificationChannel = Field(description="Delivery channel.")
     template_key: NotificationTemplate = Field(description="Which template was sent.")
-    recipient: str = Field(description="Destination address (email) or number (SMS).")
+    recipient: str = Field(
+        description="Destination address: email, number (SMS), WhatsApp id or push subscription."
+    )
+    patient_id: str | None = Field(
+        default=None, description="The patient it is for (null for an account holder)."
+    )
+    site_id: str | None = Field(default=None, description="The clinic that sent it.")
+    event: PatientEvent | None = Field(
+        default=None, description="What happened to the patient's ticket."
+    )
+    fallback_of_id: str | None = Field(
+        default=None,
+        description="The row on the transport that failed before this one.",
+    )
+    cost: Decimal | None = Field(
+        default=None, description="What the provider charged (null until sent)."
+    )
+    cost_currency: str | None = Field(
+        default=None, description="ISO 4217 currency of cost."
+    )
     subject: str | None = Field(default=None, description="Email subject (SMS: null).")
     status: NotificationStatus = Field(description="Current delivery state.")
     provider: str | None = Field(default=None, description="Provider that handled it.")

@@ -30,8 +30,8 @@ and a delivery log, not a `send_sms()` call scattered through the queue code.
 
 - `notify(patient, event, context)` service selecting a transport from patient preference and availability
 - Transport adapter interface with implementations for web push, SMS and WhatsApp, plus a no-op for tests
-- `notification_log`: patient, event, transport, provider message id, status, cost, timestamps
-- Retry with exponential backoff and a terminal failure state, driven by `arq`
+- The delivery ledger (the existing `notification` table, not a second `notification_log`): patient, event, transport, provider message id, status, cost, timestamps
+- Retry with exponential backoff and a terminal failure state, driven by the APScheduler retry sweep (`src/core/scheduler.py`; [open decision 1](../README.md#open-decisions), not `arq`)
 - Transport fallback chain: free transports first, SMS last
 
 ## Out of scope
@@ -56,10 +56,11 @@ and a delivery log, not a `send_sms()` call scattered through the queue code.
 
 ## Files touched
 
-- `src/modules/notifications/service.py`
+- `src/modules/notifications/service.py`, `src/modules/notifications/dispatch.py`
 - `src/modules/notifications/transports/`
-- `src/database/models/notification.py`
-- `alembic/versions/NNNN_notification_patient_cost.py`
+- `src/modules/queue/notices.py` (the queue's one call)
+- `src/database/models/notification.py`, `src/database/models/patient_notification_preference.py`
+- `alembic/versions/0031_notification_patient_cost.py`
 
 ---
 

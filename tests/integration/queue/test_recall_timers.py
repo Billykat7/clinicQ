@@ -54,6 +54,8 @@ from src.database.models import (
 )
 from src.database.schema import apply_postgres_search_path
 from src.modules.notifications.sms import FakeSmsProvider
+from src.modules.notifications.transports import use_transports
+from src.modules.notifications.transports.sms import SmsTransport
 from src.modules.patients.consent import record_consent
 from src.modules.queue.lifecycle import Actor, call_next, transition_ticket
 from src.modules.queue.timers import run_recall_timers, timeout_minutes
@@ -91,10 +93,11 @@ def _called_ticket(
 
 
 def _sweep(db: Session, at: datetime, provider: FakeSmsProvider, **settings: object):
-    swept = run_recall_timers(
-        db, moment=at, settings=queue_settings(**settings), sms_provider=provider
-    )
-    db.commit()
+    # Messages are delivered after the sweep commits (Issue 63), so the provider is installed
+    # around the commit, not only around the sweep.
+    with use_transports(SmsTransport(provider)):
+        swept = run_recall_timers(db, moment=at, settings=queue_settings(**settings))
+        db.commit()
     return swept
 
 
@@ -223,7 +226,9 @@ def test_the_patient_is_told_at_both_steps_and_how_to_rejoin(
             .order_by(Notification.created_at)
         ).all()
 
+    # The call itself was a message too (Issue 63), sent before either sweep.
     assert [row.template_key for row in ledger] == [
+        NotificationTemplate.TICKET_CALLED.value,
         NotificationTemplate.TICKET_RECALLED.value,
         NotificationTemplate.TICKET_NO_SHOW.value,
     ]
@@ -249,12 +254,21 @@ def test_a_patient_who_has_not_agreed_to_messages_is_not_texted_but_the_ledger_s
         phone = db.get(Patient, ticket.patient_id).phone_e164
         db.commit()
         swept = _sweep(db, called + timedelta(minutes=6), provider)
-        statuses = db.scalars(
-            select(Notification.status).where(Notification.recipient == phone)
+        statuses = db.execute(
+            select(Notification.template_key, Notification.status)
+            .where(Notification.recipient == phone)
+            .order_by(Notification.created_at)
         ).all()
     assert swept.recalled == [ticket.id]
     assert provider.sent == []
-    assert statuses == [NotificationStatus.SUPPRESSED.value]
+    # The call and the recall are both recorded, and neither was sent (Issue 63 added the call's).
+    assert [tuple(row) for row in statuses] == [
+        (NotificationTemplate.TICKET_CALLED.value, NotificationStatus.SUPPRESSED.value),
+        (
+            NotificationTemplate.TICKET_RECALLED.value,
+            NotificationStatus.SUPPRESSED.value,
+        ),
+    ]
 
 
 def test_the_timeout_is_the_queues_then_the_clinics_then_the_default(
@@ -481,8 +495,10 @@ def test_timers_survive_a_restart_and_never_double_fire(
         ).all()
     assert ticket is not None and ticket.status == TicketStatus.NO_SHOW.value
     assert [row.diff["status"]["after"] for row in rows] == ["recalled", "no_show"]
+    # One message per move however many processes raced: the call (Issue 63), one recall, one no-show.
     assert sorted(messages) == sorted(
         [
+            NotificationTemplate.TICKET_CALLED.value,
             NotificationTemplate.TICKET_RECALLED.value,
             NotificationTemplate.TICKET_NO_SHOW.value,
         ]

@@ -164,7 +164,11 @@ def test_triage_to_doctor_to_pharmacy_is_one_visit_with_three_tickets(
             "P001 in Pharmacy: transferred from D001 in Doctor, reason next_step",
         ]
     )
-    assert messages == [NotificationTemplate.TICKET_TRANSFERRED.value] * 2
+    # Each transfer is one message; each call in between is one too (Issue 63).
+    assert sorted(messages) == sorted(
+        [NotificationTemplate.TICKET_TRANSFERRED.value] * 2
+        + [NotificationTemplate.TICKET_CALLED.value] * 3
+    )
 
 
 def test_a_transfer_into_an_inactive_queue_is_refused_and_changes_nothing(

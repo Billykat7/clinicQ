@@ -65,7 +65,6 @@ from src.commons.exceptions import ConflictError, NotFoundError, UnprocessableEr
 from src.commons.time import now_sast
 from src.database.models import AuditEvent, Base, Patient, Queue, Site, Ticket
 from src.database.schema import sqlite_schema_translate_map
-from src.modules.notifications.sms import FakeSmsProvider
 from src.modules.queue.cancellation import cancel_own_ticket, cancel_ticket
 from src.modules.queue.lifecycle import Actor, call_next, staff_move, undo_call
 from src.modules.queue.priority import override_priority
@@ -340,7 +339,6 @@ class QueueEngine(RuleBasedStateMachine):
                 self.db,
                 moment=now_sast() + timedelta(minutes=minutes),
                 settings=_SETTINGS,
-                sms_provider=FakeSmsProvider(),
             )
         )
 

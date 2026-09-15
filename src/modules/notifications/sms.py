@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from decimal import Decimal
 from uuid import uuid4
 
 from src.commons.enums import NotificationChannel, SmsProviderKind
@@ -29,6 +30,10 @@ class SmsSendError(Exception):
     Treated as transient by the notification service: the message is retried with backoff and
     dead-lettered only once the attempt budget is spent.
     """
+
+
+class SmsRecipientRejectedError(SmsSendError):
+    """The gateway refused the number itself (malformed, not a mobile, barred). Never retried."""
 
 
 class SmsProvider(ABC):
@@ -54,9 +59,14 @@ class SmsProvider(ABC):
             The provider's id for the accepted message.
 
         Raises:
+            SmsRecipientRejectedError: When the gateway refuses the number itself.
             SmsSendError: When the gateway rejects or fails to accept the message.
         """
         raise NotImplementedError
+
+    def cost_of(self, text: str) -> Decimal:
+        """What sending ``text`` costs (Issue 63). Nothing, for a provider that sends nothing."""
+        return Decimal("0")
 
 
 class LoggingSmsProvider(SmsProvider):
@@ -108,9 +118,15 @@ class FakeSmsProvider(SmsProvider):
     kind: SmsProviderKind = SmsProviderKind.FAKE
     sent: list[SentSms] = field(default_factory=list)
     fail_times: int = 0
+    #: Numbers the fake gateway refuses outright, as a real one refuses a malformed number.
+    rejected_numbers: frozenset[str] = frozenset()
+    #: What each accepted message costs, so cost recording is testable.
+    cost_per_message: Decimal = Decimal("0")
 
     def send(self, *, to: str, text: str, sender: str) -> str:
         """Record the message and return a fake id, or raise while ``fail_times`` remains."""
+        if to in self.rejected_numbers:
+            raise SmsRecipientRejectedError(f"FakeSmsProvider rejects {to}")
         if self.fail_times > 0:
             self.fail_times -= 1
             raise SmsSendError(f"FakeSmsProvider forced failure to {to}")
@@ -119,6 +135,10 @@ class FakeSmsProvider(SmsProvider):
             SentSms(to=to, text=text, sender=sender, message_id=message_id)
         )
         return message_id
+
+    def cost_of(self, text: str) -> Decimal:
+        """The configured per-message cost."""
+        return self.cost_per_message
 
 
 def build_sms_provider(settings: Settings | None = None) -> SmsProvider:
