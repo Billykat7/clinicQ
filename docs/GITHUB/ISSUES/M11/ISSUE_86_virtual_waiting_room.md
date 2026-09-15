@@ -53,9 +53,12 @@ into a genuinely usable instruction.
 
 ## Files touched
 
-- `src/modules/appointments/virtual_waiting.py`
-- `src/templates/queue/_travel_time.html`
-- `tests/integration/appointments/test_call_forward.py`
+- `src/modules/appointments/virtual_waiting.py` (the alert, the sweep, "On my way") and `call_forward.py` (the rule)
+- `src/modules/queue/waits.py` (`ticket_wait`, the one estimate the page and the alert share)
+- `src/templates/discover/join.html` (the travel question), `queue/ticket.html` and `static/js/ticket.js` (when to leave, On my way)
+- `src/templates/dashboard/_reorder.html` (reception's badge), `dashboard/settings_queues.html` (the switch)
+- `alembic/versions/0040_virtual_waiting_room.py`, `src/core/scheduler.py` (the call-forward sweep)
+- `tests/integration/appointments/test_call_forward.py`, `tests/unit/appointments/test_call_forward.py`
 
 ---
 

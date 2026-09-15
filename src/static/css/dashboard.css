@@ -273,6 +273,9 @@
 .line-number { font-weight: 700; font-variant-numeric: tabular-nums; }
 .line-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .line-priority { font-size: var(--step--2); }
+/* The virtual waiting room (Issue 86): sized like the priority badge beside it. */
+.line-travel { font-size: var(--step--2); text-align: center; }
+.line-travel-count { margin-inline-start: .35rem; font-size: var(--step--2); }
 .line-move {
   display: inline-grid;
   place-items: center;

@@ -145,9 +145,32 @@
 
     $("tk-cancel").hidden = !next.cancel_url;
     if (!next.cancel_url) $("tk-confirm").hidden = true;
+    renderTravel(next.call_forward);
 
     announce(previous, next);
     tick();
+  }
+
+  var leaveFormat = new Intl.DateTimeFormat("en-ZA", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Africa/Johannesburg"
+  });
+
+  /** The virtual waiting room block (Issue 86): the server decides when to leave; this only shows it. */
+  function renderTravel(travel) {
+    var block = $("tk-travel");
+    if (!block) return;
+    block.hidden = !travel;
+    if (!travel) return;
+    var leaveAt = travel.leave_at ? new Date(travel.leave_at) : null;
+    fill("leave_at", leaveAt && !isNaN(leaveAt.getTime()) ? leaveFormat.format(leaveAt) : "");
+    fill("travel_minutes", travel.travel_minutes);
+    block.querySelector('[data-travel="later"]').hidden = travel.due;
+    block.querySelector('[data-travel="now"]').hidden = !travel.due;
+    block.querySelector('[data-travel="said"]').hidden = !travel.on_my_way_at;
+    $("tk-on-my-way").hidden = !travel.on_my_way_url;
   }
 
   /** Once a second: the age of the data, the countdown, and whether the page is still live. */
@@ -343,6 +366,43 @@
         cancelNote.textContent = "No connection: the ticket is not cancelled yet. Try again when you have signal.";
       });
   });
+
+  // ── On my way (Issue 86) ──────────────────────────────────────────────────────────────────
+
+  var onMyWay = $("tk-on-my-way");
+  var onMyWayNote = $("tk-on-my-way-note");
+  if (onMyWay) {
+    onMyWay.addEventListener("click", function () {
+      var travel = state.call_forward;
+      if (!travel || !travel.on_my_way_url) return;
+      onMyWay.disabled = true;
+      fetch(travel.on_my_way_url, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", Accept: "application/json", "X-CSRF-Token": csrfToken() },
+        body: "{}"
+      })
+        .then(function (response) {
+          return response.json().then(function (body) {
+            return { ok: response.ok, body: body };
+          });
+        })
+        .then(function (result) {
+          onMyWay.disabled = false;
+          onMyWayNote.hidden = result.ok;
+          if (result.ok) {
+            poll();
+          } else {
+            onMyWayNote.textContent = (result.body && result.body.detail) || "That did not reach the clinic. Please try again.";
+          }
+        })
+        .catch(function () {
+          onMyWay.disabled = false;
+          onMyWayNote.hidden = false;
+          onMyWayNote.textContent = "No connection: the clinic has not been told yet. Try again when you have signal.";
+        });
+    });
+  }
 
   // ── Start ─────────────────────────────────────────────────────────────────────────────────
 

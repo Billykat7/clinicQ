@@ -1234,12 +1234,12 @@ components:
     NotificationTemplate:
       type: string
       description: Which message. The `ticket_*` templates are patient messages and the only ones the editor edits.
-      enum: [account_activation, password_reset, email_change_verification, otp_sign_in, staff_invitation, application_acknowledgement, application_in_screening, application_accepted, application_rejected, application_withdrawn, lease_expiry_reminder, lease_termination_requested, lease_termination_confirmed, maintenance_request_received, maintenance_new_request, maintenance_work_scheduled, maintenance_completed, maintenance_approval_required, work_order_vendor_assignment, maintenance_manager_digest, new_message, ticket_recalled, ticket_no_show, ticket_transferred, ticket_next, ticket_called, ticket_cancelled, generic]
+      enum: [account_activation, password_reset, email_change_verification, otp_sign_in, staff_invitation, application_acknowledgement, application_in_screening, application_accepted, application_rejected, application_withdrawn, lease_expiry_reminder, lease_termination_requested, lease_termination_confirmed, maintenance_request_received, maintenance_new_request, maintenance_work_scheduled, maintenance_completed, maintenance_approval_required, work_order_vendor_assignment, maintenance_manager_digest, new_message, ticket_recalled, ticket_no_show, ticket_transferred, ticket_next, ticket_called, ticket_cancelled, ticket_leave_now, generic]
       example: ticket_next
     PatientEvent:
       type: string
       description: What happened to a patient's ticket that a message tells them about.
-      enum: [next, called, recalled, no_show, transferred, cancelled]
+      enum: [next, called, recalled, no_show, transferred, cancelled, leave_now]
       example: called
     NotificationCategory:
       type: string

@@ -278,16 +278,17 @@ def test_quiet_hours_hold_a_non_urgent_message_and_let_you_are_next_through(
 
 
 @pytest.mark.parametrize("event", list(PatientEvent))
-def test_the_urgent_exception_is_exactly_the_three_come_now_messages(
+def test_the_urgent_exception_is_exactly_the_time_critical_messages(
     desk: SimpleNamespace,
     everywhere: dict[NotificationChannel, NoopTransport],
     event: PatientEvent,
 ) -> None:
-    """Narrowly defined: next, called and recalled go through quiet hours; every other event waits."""
+    """Narrowly defined: next, called, recalled and time to leave (Issue 86) cross quiet hours; the rest wait."""
     assert {template.value for template in PATIENT_QUIET_HOURS_EXEMPT} == {
         "ticket_next",
         "ticket_called",
         "ticket_recalled",
+        "ticket_leave_now",
     }
     patient_id, ticket_id, token = _joined(desk)
     _quiet_now(desk, token)
@@ -324,7 +325,7 @@ def test_preferences_are_editable_without_an_account_by_the_ticket_link(
 
     before = nobody.get(_preferences(desk, token)).json()
     assert before["opted_out"] is False and before["muted_events"] == []
-    assert before["quiet_hours_exempt"] == ["called", "next", "recalled"]
+    assert before["quiet_hours_exempt"] == ["called", "leave_now", "next", "recalled"]
     changed = nobody.put(
         _preferences(desk, token),
         json={

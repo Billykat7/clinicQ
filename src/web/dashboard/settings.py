@@ -46,6 +46,7 @@ from src.core.config import get_settings
 from src.core.nav_visibility import NavVisibility
 from src.core.rbac_language import role_label
 from src.database.session import get_db
+from src.modules.appointments.call_forward import VIRTUAL_WAITING_EXPLANATION
 from src.modules.display import devices as display_devices
 from src.modules.display.router import device_out
 from src.modules.patients.consent import display_preview
@@ -327,8 +328,27 @@ async def settings_queues(
         default_queue_kind=QueueIn.model_fields["kind"].default.value,
         filters=filters,
         status_choices=ACTIVE_FILTER_CHOICES,
+        # The virtual waiting room switch (Issue 86) sits with the queues it changes.
+        virtual_waiting=_virtual_waiting_view(db, site_id),
     )
     return render_clinic_page(request, opened, "dashboard/settings_queues.html")
+
+
+@dataclass(frozen=True, slots=True)
+class VirtualWaitingView:
+    """The virtual waiting room switch as the queues tab shows it."""
+
+    enabled: bool
+    explanation: str
+
+
+def _virtual_waiting_view(db: Session, site_id: str) -> VirtualWaitingView:
+    """The clinic's switch, read by id after the settings gate has admitted the caller to this clinic."""
+    site = service.get_site(db, site_id, site_ids=frozenset({site_id}))
+    return VirtualWaitingView(
+        enabled=bool(site and site.virtual_waiting_enabled),
+        explanation=VIRTUAL_WAITING_EXPLANATION,
+    )
 
 
 @router.get("/dashboard/sites/{site_id}/settings/services", response_class=HTMLResponse)

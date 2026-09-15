@@ -793,6 +793,8 @@ class PatientEvent(StrEnum):
     NO_SHOW = "no_show"
     TRANSFERRED = "transferred"
     CANCELLED = "cancelled"
+    #: The virtual waiting room's call-forward: leave now to arrive before your turn (Issue 86).
+    LEAVE_NOW = "leave_now"
 
 
 class PatientChannel(StrEnum):
@@ -1465,6 +1467,7 @@ class NotificationTemplate(StrEnum):
     TICKET_NEXT = "ticket_next"
     TICKET_CALLED = "ticket_called"
     TICKET_CANCELLED = "ticket_cancelled"
+    TICKET_LEAVE_NOW = "ticket_leave_now"
     # Catch-all for a pre-rendered message with no dedicated key (kept small on purpose).
     GENERIC = "generic"
 
@@ -1625,6 +1628,7 @@ NOTIFICATION_TEMPLATE_CATEGORY: dict[NotificationTemplate, NotificationCategory]
     NotificationTemplate.TICKET_NEXT: NotificationCategory.ACCOUNT,
     NotificationTemplate.TICKET_CALLED: NotificationCategory.ACCOUNT,
     NotificationTemplate.TICKET_CANCELLED: NotificationCategory.ACCOUNT,
+    NotificationTemplate.TICKET_LEAVE_NOW: NotificationCategory.ACCOUNT,
 }
 
 
@@ -1666,6 +1670,8 @@ NOTIFICATION_URGENT_TEMPLATES: frozenset[NotificationTemplate] = frozenset(
         # "You are next" and "please come in now" are the product's core promise (Issue 63).
         NotificationTemplate.TICKET_NEXT,
         NotificationTemplate.TICKET_CALLED,
+        # Timed to the patient's own trip, so a late one is a wasted one (Issue 86).
+        NotificationTemplate.TICKET_LEAVE_NOW,
     }
 )
 
@@ -1689,6 +1695,7 @@ PATIENT_EVENT_TEMPLATE: dict[PatientEvent, NotificationTemplate] = {
     PatientEvent.NO_SHOW: NotificationTemplate.TICKET_NO_SHOW,
     PatientEvent.TRANSFERRED: NotificationTemplate.TICKET_TRANSFERRED,
     PatientEvent.CANCELLED: NotificationTemplate.TICKET_CANCELLED,
+    PatientEvent.LEAVE_NOW: NotificationTemplate.TICKET_LEAVE_NOW,
 }
 
 #: The patient messages quiet hours never hold back (Issue 67), and the whole of that exception: each says
@@ -1700,6 +1707,8 @@ PATIENT_QUIET_HOURS_EXEMPT: frozenset[NotificationTemplate] = frozenset(
         NotificationTemplate.TICKET_NEXT,
         NotificationTemplate.TICKET_CALLED,
         NotificationTemplate.TICKET_RECALLED,
+        # "Time to leave" is timed to the trip: held back by quiet hours it would arrive too late (Issue 86).
+        NotificationTemplate.TICKET_LEAVE_NOW,
     }
 )
 

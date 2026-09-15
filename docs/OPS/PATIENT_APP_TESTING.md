@@ -159,8 +159,17 @@ online). The page shows **Not live** and the age of its data, then catches up.
   cancel, message settings, install box or push button: those belong to the patient who joined.
 - **Message settings.** Open **Message settings**: stop all messages, a preferred channel, language, quiet
   hours and which messages to skip. Save, then have reception call again. In quiet hours, "you are next",
-  "please come in now" and "called again" still come; the others are held. With **Stop all messages**, none
-  come.
+  "please come in now", "called again" and "time to leave" still come; the others are held. With **Stop all
+  messages**, none come.
+- **Wait away from the clinic** (Issue 86). As the manager, open **Settings → Queues** and tick **Let
+  patients who join by phone wait away from the clinic**, then save. The join page now asks **How long does
+  your trip to the clinic take?** (15 minutes if left alone). Join with **30 minutes**: the ticket page shows
+  "Leave by HH:MM for your 30-minute trip." Have reception call the line down; within 30 seconds of the
+  earliest likely turn coming within 40 minutes, the page says **Time to leave now** and `/dev/outbox` gets
+  `ticket A009 at …: time to leave. Your turn is in ~40–110 min and your trip is 30 min.` Press **On my
+  way**: the front desk's waiting line shows **On my way** beside the ticket (open **Waiting line** on the
+  queue card). Not pressing it changes nothing: the patient keeps their place until called. Untick the
+  setting and the join page stops asking.
 - **Notifications on this phone** (needs the VAPID keys from section 1). Press **Tell me on this phone when
   it is my turn** and allow notifications. Chrome allows web push on `localhost` and `https://` only, so
   use `localhost`, not a network address. When reception calls, the notification names only the ticket

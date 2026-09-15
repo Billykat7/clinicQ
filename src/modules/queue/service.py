@@ -63,13 +63,13 @@ from src.database.models.patient import Patient
 from src.database.models.queue import Queue
 from src.database.models.site import Site
 from src.database.models.ticket import Ticket
+from src.modules.appointments.call_forward import stated_travel
 from src.modules.appointments.capacity import day_is_over
 from src.modules.discovery import analytics
 from src.modules.queue.estimate import WaitEstimate
 from src.modules.queue.sequence import is_second_active_ticket, issue_ticket
 from src.modules.queue.snapshot import on_queue_changed
-from src.modules.queue.tickets import waiting_ahead
-from src.modules.queue.waits import estimates_for
+from src.modules.queue.waits import ticket_wait
 from src.modules.queues.service import (
     QUEUE_CLOSED,
     REMOTE_SOURCES,
@@ -140,8 +140,7 @@ def _result(
     db: Session, queue: Queue, ticket: Ticket, *, created: bool, moment: datetime
 ) -> JoinResult:
     """The answer to a join: the ticket, how many are ahead, and the wait that means."""
-    ahead = waiting_ahead(db, ticket)
-    estimate = estimates_for(db, [queue], {queue.id: ahead}, moment=moment)[queue.id]
+    ahead, estimate = ticket_wait(db, ticket, queue, moment=moment)
     return JoinResult(ticket, created=created, waiting_ahead=ahead, wait=estimate)
 
 
@@ -230,6 +229,7 @@ def join_queue(
     walk_in_name: str | None = None,
     reason_text: str | None = None,
     comment_consent: bool = False,
+    travel_minutes: int | None = None,
     client_ip: str | None = None,
     discovery_session: str | None = None,
     settings: Settings | None = None,
@@ -251,6 +251,8 @@ def join_queue(
         walk_in_name: What the desk wrote down to call a walk-in by (walk-ins only).
         reason_text: The optional short reason for the visit.
         comment_consent: Per-visit consent, given now, to show the reason on the board.
+        travel_minutes: The trip to the clinic the patient stated, for the virtual waiting room
+            (Issue 86); kept only where the clinic runs one, and defaulted there when not stated.
         client_ip: The caller's address; the per-address guard applies to the web path.
         discovery_session: The browser's discovery session, for the view-to-join analytics.
         settings: Settings; ``None`` reads the application's.
@@ -321,6 +323,11 @@ def join_queue(
             )
             if day_is_over(db, queue, service_day):
                 raise _QueueFullError
+            ticket.travel_minutes = stated_travel(
+                enabled=site.virtual_waiting_enabled,
+                source=source,
+                requested=travel_minutes,
+            )
     except _QueueFullError:
         raise JoinRefusedError(JoinRefusal.QUEUE_FULL, QUEUE_FULL) from None
     except IntegrityError as exc:
@@ -350,6 +357,7 @@ def join_queue(
             "status": ticket.status,
             "reason_text": ticket.reason_text,
             "comment_consent": ticket.comment_consent,
+            "travel_minutes": ticket.travel_minutes,
         },
         context=f"joined {queue.name} as {ticket.number} via {source.value}",
     )

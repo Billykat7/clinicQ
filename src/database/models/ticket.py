@@ -82,6 +82,9 @@ SCHEMA = DbSchema.CLINICQ.value
 MAX_REASON_LENGTH = 140
 #: Length of a ticket's reference code (see :mod:`src.modules.queue.sequence`).
 REFERENCE_CODE_LENGTH = 6
+#: The longest trip to the clinic a patient may state, in minutes (Issue 86). Three hours covers a
+#: rural taxi journey; past that the "time to leave" alert would arrive before the clinic opens.
+MAX_TRAVEL_MINUTES = 180
 
 #: Length of a ticket page token: ``secrets.token_urlsafe(32)``, 256 random bits (Issue 68).
 PAGE_TOKEN_LENGTH = 43
@@ -160,6 +163,11 @@ class Ticket(Base, TimestampMixin):
             f"(cancelled_via IS NULL AND cancellation_reason IS NULL) OR status = "
             f"'{TicketStatus.CANCELLED.value}'",
             name="cancellation_only_when_cancelled",
+        ),
+        # A stated trip to the clinic is minutes a person can travel in a day's clinic (Issue 86).
+        CheckConstraint(
+            f"travel_minutes IS NULL OR travel_minutes BETWEEN 0 AND {MAX_TRAVEL_MINUTES}",
+            name="travel_minutes_range",
         ),
         # Only the desk names a ticket; a phone join is named by the patient's record (Issue 40).
         CheckConstraint(
@@ -293,6 +301,17 @@ class Ticket(Base, TimestampMixin):
         DateTime(timezone=True), nullable=True
     )
     """When the ticket reached a terminal status (Africa/Johannesburg)."""
+    travel_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    """How long the patient said the trip to the clinic takes, for the virtual waiting room (Issue 86).
+    ``None`` when the clinic does not run one, or for a walk-in; ``0`` for a patient already there."""
+    leave_alert_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """When the patient was told it is time to leave (Issue 86). Set once; never costs the place."""
+    on_my_way_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """When the patient tapped "On my way" (Issue 86), shown to reception beside the ticket."""
     cancelled_via: Mapped[str | None] = mapped_column(String(16), nullable=True)
     """:class:`~src.commons.enums.PatientChannel` a cancellation came through (Issue 44)."""
     cancellation_reason: Mapped[str | None] = mapped_column(String(24), nullable=True)

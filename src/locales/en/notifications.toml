@@ -10,7 +10,8 @@
 #
 # Blanks: {app} the service's name · {number} the ticket number · {clinic} the clinic · {queue} the queue
 # · {room} the room, when the queue has one · {where} the room, else the queue · {minutes} minutes left
-# before a recall becomes a no-show · {wait} the expected wait, a range.
+# before a recall becomes a no-show, or the patient's stated trip in a time-to-leave alert · {wait} the
+# expected wait, a range.
 
 language = "en"
 reviewed_by = "Written in English by the team; no separate review"
@@ -92,3 +93,16 @@ body = "{app}: ticket {number} at {clinic} was cancelled by the clinic. To join 
 version = 1
 subject = "Ticket cancelled"
 body = "Ticket {number} at {clinic} was cancelled by the clinic."
+
+[ticket_leave_now.sms]
+version = 1
+body = "{app}: ticket {number} at {clinic}: time to leave. Your turn is in {wait} and your trip is {minutes} min."
+
+[ticket_leave_now.whatsapp]
+version = 1
+body = "{app}: ticket {number} at {clinic}: time to leave. Your turn is in {wait} and your trip is {minutes} min."
+
+[ticket_leave_now.web_push]
+version = 1
+subject = "Time to leave for the clinic"
+body = "Ticket {number} at {clinic}. Leave now to be there before your turn."

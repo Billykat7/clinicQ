@@ -42,6 +42,8 @@ from sqlalchemy.orm import Session
 from src.api.rbac_deps import require_patient
 from src.commons.enums import (
     ActorKind,
+    AuditAction,
+    AuditEntityType,
     ConsentPurpose,
     JoinRefusal,
     PatientChannel,
@@ -51,6 +53,7 @@ from src.commons.enums import (
 from src.commons.exceptions import NotFoundError
 from src.commons.phone import normalize_phone
 from src.commons.time import business_date, business_day_bounds, stored_sast
+from src.core.audit import record_audit_event
 from src.core.client_ip import resolve_client_ip
 from src.core.config import Settings, get_settings
 from src.core.rate_limit_deps import DISCOVERY_SESSION_COOKIE
@@ -65,6 +68,7 @@ from src.core.site_scope import (
 )
 from src.database.models import Patient, Queue, Site, Ticket, Visit
 from src.database.session import get_db
+from src.modules.appointments import virtual_waiting
 from src.modules.patients.consent import record_consent
 from src.modules.patients.service import get_or_create_patient
 from src.modules.patients.sessions import signed_in_patient_id
@@ -92,6 +96,7 @@ from src.modules.queue.schemas import (
     JoinIn,
     JoinOut,
     MyTicketOut,
+    OnMyWayOut,
     OverrideCountsOut,
     PriorityIn,
     PriorityOut,
@@ -228,6 +233,7 @@ def join_as_patient(
             actor=f"patient:{patient.id}",
             reason_text=payload.reason_text,
             comment_consent=payload.comment_consent,
+            travel_minutes=payload.travel_minutes,
             client_ip=resolve_client_ip(request, settings),
             discovery_session=request.cookies.get(DISCOVERY_SESSION_COOKIE),
             settings=settings,
@@ -236,6 +242,8 @@ def join_as_patient(
         if error.refusal is JoinRefusal.RATE_LIMITED:
             raise _too_many(error) from error
         raise
+    # A patient whose trip is already longer than the wait is told to leave now, not at the next sweep.
+    virtual_waiting.check_ticket(db, result.ticket)
     db.commit()
     return _answer(result, response)
 
@@ -444,6 +452,35 @@ def cancel_my_ticket(
     )
     db.commit()
     return _cancelled(result)
+
+
+@router.post(
+    "/patients/me/tickets/{ticket_id}/on-my-way",
+    response_model=OnMyWayOut,
+    operation_id="queueOnMyWay",
+    summary="Tell reception I am on my way",
+)
+def on_my_way(ticket_id: str, patient: PatientJoining, db: DbSession) -> OnMyWayOut:
+    """The virtual waiting room's acknowledgement (Issue 86): reception sees it beside the ticket.
+
+    Idempotent. 409 at a clinic without a virtual waiting room, or once the visit has begun or ended.
+    """
+    ticket, recorded = virtual_waiting.acknowledge(db, patient.id, ticket_id)
+    if recorded:
+        record_audit_event(
+            db,
+            action=AuditAction.UPDATE,
+            entity_type=AuditEntityType.TICKET,
+            entity_id=ticket.id,
+            actor=f"patient:{patient.id}",
+            site_id=ticket.site_id,
+            context=f"{ticket.number}: on my way",
+        )
+    db.commit()
+    return OnMyWayOut(
+        ticket=TicketOut.of(ticket),
+        message=f"Reception knows {ticket.number} is on the way.",
+    )
 
 
 @router.post(

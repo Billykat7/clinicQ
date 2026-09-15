@@ -20,6 +20,9 @@ jobs in the application timezone. The kernel registers only the sweeps it owns:
   then mark them a no-show (see :func:`src.modules.queue.timers.run_recall_timers`). Open decision 1
   was settled for this sweep: an APScheduler job under the advisory lock, not an ``arq`` worker,
   because the deadlines live in the database and this module already gives single-runner sweeps.
+* the **call-forward sweep** (Issue 86), which tells a patient waiting away from a clinic with a virtual
+  waiting room when to leave, once, from the same estimate their ticket page shows (see
+  :func:`src.modules.appointments.virtual_waiting.run_call_forward`); and
 * the **appointment slot generation** (Issue 80), which rolls every listed clinic's bookable slots
   forward to its booking horizon each night (see
   :func:`src.modules.appointments.service.generate_published`).
@@ -60,6 +63,7 @@ from src.core.config import Settings, get_settings
 from src.core.s3_logging import APP_TIMEZONE
 from src.database.session import get_db_context
 from src.modules.appointments import service as appointments_service
+from src.modules.appointments import virtual_waiting
 from src.modules.display import devices as display_devices
 from src.modules.documents import service as documents_service
 from src.modules.documents.storage import LocalObjectStorage
@@ -110,6 +114,9 @@ _NOTIFICATION_FAILURE_WATCH_LOCK_KEY: int = 771
 #: The appointment slot generation (Issue 80). Idempotent across instances (the unique slot start
 #: refuses a duplicate), so the lock only saves a second instance the work and the refused insert.
 _APPOINTMENT_SLOTS_LOCK_KEY: int = 880
+#: The call-forward sweep (Issue 86). The lock keeps a slow run and the next from overlapping; the claim on
+#: ``leave_alert_at`` and the notification's dedupe key keep an alert to one even without it.
+_CALL_FORWARD_LOCK_KEY: int = 886
 
 # ── job identifiers ──────────────────────────────────────────────────────────
 # So a restart replaces rather than duplicates each job.
@@ -124,6 +131,7 @@ _QUEUE_REQUEST_KEY_JOB_ID = "queue_request_key_sweep"
 _DISPLAY_DEVICE_WATCH_JOB_ID = "display_device_watch"
 _NOTIFICATION_FAILURE_WATCH_JOB_ID = "notification_failure_watch"
 _APPOINTMENT_SLOTS_JOB_ID = "appointment_slot_generation"
+_CALL_FORWARD_JOB_ID = "virtual_waiting_call_forward"
 
 # Process-wide scheduler; created by :func:`start_scheduler`, stopped by :func:`shutdown_scheduler`.
 _scheduler: BackgroundScheduler | None = None
@@ -381,6 +389,25 @@ def run_display_device_watch(
         return result
 
 
+def run_call_forward_sweep(*, moment: datetime | None = None) -> int:
+    """Tell every travelling patient whose time to leave has come, once; return how many were told (Issue 86).
+
+    Elects a single runner across instances via the advisory lock, then delegates to
+    :func:`src.modules.appointments.virtual_waiting.run_call_forward`. Safe to call directly.
+    """
+    with (
+        get_db_context() as db,
+        _advisory_lock(db, _CALL_FORWARD_LOCK_KEY) as acquired,
+    ):
+        if not acquired:
+            logger.debug("Call-forward sweep skipped: another instance holds the lock.")
+            return 0
+        told = virtual_waiting.run_call_forward(db, moment=moment)
+        if told:
+            logger.info("Call-forward sweep told %d patient(s) to leave.", told)
+        return told
+
+
 def run_appointment_slot_generation(*, moment: datetime | None = None) -> int:
     """Roll every listed clinic's appointment slots forward to its horizon once; return how many were made.
 
@@ -528,6 +555,19 @@ def start_scheduler(settings: Settings | None = None) -> BackgroundScheduler | N
         # A missed minute is coalesced: the watch compares heartbeats with the time it runs, so one late
         # run alerts about everything several missed runs would have, and each silence once.
         misfire_grace_time=60,
+        coalesce=True,
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        run_call_forward_sweep,
+        trigger=IntervalTrigger(
+            seconds=cfg.virtual_waiting_sweep_seconds, timezone=APP_TIMEZONE
+        ),
+        id=_CALL_FORWARD_JOB_ID,
+        name="Virtual waiting room call-forward",
+        # A missed run is coalesced: the rule reads the estimate as it is when the sweep runs, so one late
+        # run tells everyone several missed runs would have, and nobody twice.
+        misfire_grace_time=cfg.virtual_waiting_sweep_seconds,
         coalesce=True,
         replace_existing=True,
     )

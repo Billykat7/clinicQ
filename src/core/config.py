@@ -1613,6 +1613,16 @@ class Settings(BaseSettings):
             "(env: QUEUE_RECALL_SWEEP_SECONDS). A timeout fires at most this late."
         ),
     )
+    virtual_waiting_sweep_seconds: int = Field(
+        default=30,
+        ge=5,
+        le=300,
+        description=(
+            "How often the virtual waiting room checks whether a travelling patient should leave, in "
+            "seconds (env: VIRTUAL_WAITING_SWEEP_SECONDS). A time-to-leave alert is at most this late, "
+            "well inside its 10-minute arrival margin."
+        ),
+    )
 
     @property
     def database_url_async(self) -> str:

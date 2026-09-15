@@ -30,7 +30,10 @@ from src.core.config import get_settings
 from src.database.models.queue import Queue
 from src.database.models.site import Site
 from src.database.models.ticket import PAGE_TOKEN_LENGTH, Ticket
+from src.modules.appointments.call_forward import ON_THE_WAY_STATUSES, call_forward
+from src.modules.queue.estimate import WaitEstimate
 from src.modules.queue.schemas import (
+    CallForwardOut,
     TicketPageClinic,
     TicketPageOut,
     TicketPageQueue,
@@ -39,8 +42,7 @@ from src.modules.queue.schemas import (
 )
 from src.modules.queue.sequence import format_reference_code
 from src.modules.queue.ticket_codes import qr_for, spoken
-from src.modules.queue.tickets import waiting_ahead
-from src.modules.queue.waits import estimates_for
+from src.modules.queue.waits import ticket_wait
 
 #: What a page token looks like: nothing else is looked up.
 PAGE_TOKEN_SHAPE: Final = re.compile(rf"[A-Za-z0-9_-]{{{PAGE_TOKEN_LENGTH}}}")
@@ -142,11 +144,10 @@ def page_state(
     status = ticket.status_enum
     ahead: int | None = None
     wait: WaitOut | None = None
+    estimate: WaitEstimate | None = None
     if status is TicketStatus.WAITING:
-        ahead = waiting_ahead(db, ticket)
-        wait = WaitOut.of(
-            estimates_for(db, [queue], {queue.id: ahead}, moment=moment)[queue.id]
-        )
+        ahead, estimate = ticket_wait(db, ticket, queue, moment=moment)
+        wait = WaitOut.of(estimate)
         headline = TicketPageHeadline.NEXT if ahead == 0 else TicketPageHeadline.WAITING
     else:
         headline = _HEADLINE_BY_STATUS[status]
@@ -204,6 +205,44 @@ def page_state(
         preferences_url=(
             f"/api/v1/notifications/patient-preferences/{ticket.page_token}"
             if ticket.patient_id and ticket.page_token
+            else None
+        ),
+        call_forward=_call_forward(site, ticket, estimate, owner=owner, moment=moment),
+    )
+
+
+def _call_forward(
+    site: Site,
+    ticket: Ticket,
+    estimate: WaitEstimate | None,
+    *,
+    owner: bool,
+    moment: datetime,
+) -> CallForwardOut | None:
+    """The virtual waiting room block (Issue 86), from the very estimate the page shows as ``wait``.
+
+    Present for a travelling patient at a clinic that runs a virtual waiting room while they may still be
+    on their way. Once called, there is no "leave at": it is time to come in.
+    """
+    status = ticket.status_enum
+    if (
+        not site.virtual_waiting_enabled
+        or not ticket.travel_minutes
+        or status not in ON_THE_WAY_STATUSES
+    ):
+        return None
+    plan = call_forward(estimate, ticket.travel_minutes, moment) if estimate else None
+    return CallForwardOut(
+        travel_minutes=ticket.travel_minutes,
+        leave_at=plan.leave_at if plan else None,
+        due=plan.due if plan else True,
+        alerted_at=stored_sast(ticket.leave_alert_at)
+        if ticket.leave_alert_at
+        else None,
+        on_my_way_at=stored_sast(ticket.on_my_way_at) if ticket.on_my_way_at else None,
+        on_my_way_url=(
+            f"/api/v1/patients/me/tickets/{ticket.id}/on-my-way"
+            if owner and ticket.on_my_way_at is None
             else None
         ),
     )
