@@ -3,13 +3,22 @@
  *
  * The server has already sent a signed-in patient with an open ticket straight to it. Here, with no
  * sign-in, the most recent ticket patient-tickets.js kept is opened if it has not ended; otherwise the page
- * stays as it is, saying how to join a queue. Only a ticket link shape is ever opened.
+ * stays as it is, saying how to join a queue and offering the phone sign-in. Only a ticket link shape is
+ * ever opened.
  * External file, no inline handlers, no eval: satisfies script-src 'self'.
  */
 (function () {
   "use strict";
 
   var FINISHED = ["done", "cancelled", "missed", "transferred"];
+
+  // Signing in by phone (Issue 200) comes back here: the server then opens the patient's open ticket.
+  if (window.BKPSignIn) {
+    window.BKPSignIn.start(function () {
+      window.location.replace("/t/");
+    });
+  }
+
   var store = window.BKPTickets;
   if (!store) return;
 

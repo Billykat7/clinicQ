@@ -22,7 +22,9 @@ what opens it, so a patient can share it with the person driving them.
   files the offline page needs, :data:`PATIENT_SHELL`) written in. Web push (Issue 64) and the offline shell
   are one worker, separate from the waiting-room board's (Issue 62).
 * ``GET /t/`` is where the home-screen app opens (the manifest's ``start_url``): straight to the signed-in
-  patient's open ticket when there is one, otherwise a page that opens the last ticket this phone saw.
+  patient's open ticket when there is one, otherwise a page that opens the last ticket this phone saw, and
+  offers to sign in by phone (Issue 200). An iPhone Home Screen app keeps its own storage, apart from
+  Safari's, so a patient who joined in Safari signs in here, inside the app's scope, to find their ticket.
 * ``GET /t/offline`` is the page the worker shows in place of any ``/t/`` page the network cannot bring:
   the last known state of the ticket, kept on the phone, with how old it is.
 """
@@ -57,6 +59,7 @@ from src.modules.queue.ticket_page import (
     page_state,
 )
 from src.web.context import short_session
+from src.web.join import sign_in_view
 from src.web.routes import templates
 
 router = APIRouter(prefix="/t", include_in_schema=False)
@@ -152,7 +155,8 @@ def ticket_home(request: Request) -> Response:
     """Where the installed app opens: the signed-in patient's open ticket, or the page that finds the last one.
 
     Without a signed-in patient with an open ticket, ``patient-home.js`` opens the last unfinished ticket this
-    phone saw, and otherwise says how to join a queue.
+    phone saw, and otherwise says how to join a queue. Nobody signed in is offered the phone sign-in, which
+    comes back here once it succeeds.
     """
     with short_session(request) as db:
         patient_id = signed_in_patient_id(request, db)
@@ -162,7 +166,13 @@ def ticket_home(request: Request) -> Response:
             path, status_code=status.HTTP_303_SEE_OTHER, headers=NO_STORE
         )
     response = templates.TemplateResponse(
-        request, "patient/home.html", _page_context("Your ticket")
+        request,
+        "patient/home.html",
+        {
+            **_page_context("Your ticket"),
+            "signed_in": patient_id is not None,
+            "sign_in": sign_in_view(),
+        },
     )
     response.headers.update(NO_STORE)
     return response

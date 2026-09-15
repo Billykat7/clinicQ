@@ -1,0 +1,34 @@
+{#- Signing in with a phone number and a code (Issue 200): the join page and the installed app's start page.
+
+    Two steps, both driven by patient-sign-in.js over /api/v1/patients/otp/request and /otp/verify. The first
+    step shows unless `sign_in_hidden` is true. Every refusal is the API's own sentence, put in
+    #sign-in-error, which is announced. `sign_in` is a src.web.join.SignInView. -#}
+<section class="card sign-in-step" data-sign-in-step="phone" aria-labelledby="sign-in-phone-heading"{% if sign_in_hidden %} hidden{% endif %}>
+  <h2 id="sign-in-phone-heading" tabindex="-1">Sign in with your phone number</h2>
+  <p class="card-sub">We send you a code by SMS. {{ sign_in.phone_notice }}</p>
+  <form class="sign-in-form" id="sign-in-phone-form" data-invalid="{{ sign_in.invalid_phone }}" novalidate>
+    <label class="sign-in-label" for="sign-in-phone">Mobile number</label>
+    <input class="sign-in-input" id="sign-in-phone" name="phone" type="tel" inputmode="tel"
+           autocomplete="tel" maxlength="20" placeholder="082 123 4567" required>
+    <button class="btn btn-block" type="submit" id="sign-in-send">Send me a code</button>
+  </form>
+</section>
+
+<section class="card sign-in-step" data-sign-in-step="code" aria-labelledby="sign-in-code-heading" hidden>
+  <h2 id="sign-in-code-heading" tabindex="-1">Enter the code</h2>
+  <p class="card-sub" id="sign-in-sent"></p>
+  <form class="sign-in-form" id="sign-in-code-form" novalidate>
+    <label class="sign-in-label" for="sign-in-code">The {{ sign_in.code_length }}-digit code</label>
+    <input class="sign-in-input sign-in-code" id="sign-in-code" name="code" type="text" inputmode="numeric"
+           autocomplete="one-time-code" pattern="[0-9]*" maxlength="{{ sign_in.code_length }}"
+           data-length="{{ sign_in.code_length }}" required>
+    <button class="btn btn-block" type="submit" id="sign-in-verify">Sign in</button>
+  </form>
+  <div class="sign-in-again">
+    <button class="btn btn-quiet btn-block" type="button" id="sign-in-resend">Send a new code</button>
+    <button class="btn btn-quiet btn-block" type="button" id="sign-in-change">Use a different number</button>
+  </div>
+</section>
+
+<p class="sign-in-error" id="sign-in-error" role="alert" hidden></p>
+<p class="sign-in-note" id="sign-in-wait" aria-live="polite" hidden></p>

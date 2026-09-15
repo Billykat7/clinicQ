@@ -1,0 +1,93 @@
+{% extends "layouts/patient.html" %}
+{#- Joining a clinic's queue from the web (Issue 200): the page the clinic page's "Join the queue" opens.
+
+    Rendered by src.web.join.clinic_join from a JoinPage. Four steps, one visible at a time: the phone number
+    and the code (patient/_sign_in.html, patient-sign-in.js), the notifications question, then the queue.
+    patient-join.js moves between them over the JSON API and opens the ticket page. A signed-in patient
+    starts at the queue. When joining is not possible the page says why and has no form.
+
+    Built for 320 px: one column, full-width buttons, names allowed to wrap. -#}
+
+{% block title %}Join a queue · {{ page.name }} · {{ app_name }}{% endblock %}
+
+{% block styles %}
+  {{ super() }}
+  <link rel="stylesheet" href="/static/css/discover.css">
+{% endblock %}
+
+{% block scripts %}
+  {% if page.step != "unavailable" %}
+  <script src="/static/js/patient-sign-in.js" defer></script>
+  <script src="/static/js/patient-join.js" defer></script>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="stack discover join" id="join" data-site="{{ page.site_id }}" data-step="{{ page.step }}">
+  <p class="clinic-back"><a href="{{ page.clinic_href }}">Back to the clinic</a></p>
+
+  <header>
+    <h1>Join a queue</h1>
+    <p class="lead join-clinic">{{ page.name }}</p>
+  </header>
+
+  {% if page.step == "unavailable" %}
+  <section class="card" aria-labelledby="join-unavailable-heading">
+    <h2 id="join-unavailable-heading">You cannot join from your phone right now</h2>
+    <p id="join-unavailable-reason">{{ page.unavailable_reason }}</p>
+    <p><a class="btn btn-quiet btn-block" href="{{ page.clinic_href }}">See the clinic's hours and queues</a></p>
+  </section>
+  {% else %}
+  <noscript>
+    <p class="msg msg-error">This page needs JavaScript to sign you in. You can also join at the clinic's
+      front desk while it is open.</p>
+  </noscript>
+
+  {% with sign_in = page.sign_in, sign_in_hidden = page.step != "phone" %}
+    {% include "patient/_sign_in.html" %}
+  {% endwith %}
+
+  <section class="card join-step" data-join-step="consent" aria-labelledby="join-consent-heading" hidden>
+    <h2 id="join-consent-heading" tabindex="-1">Messages about your turn</h2>
+    <form class="sign-in-form" id="join-consent-form" novalidate>
+      <fieldset class="join-choices">
+        <legend>{{ page.notifications_question }}</legend>
+        <label class="check-option"><input type="radio" name="notifications" value="yes"> Yes, message me</label>
+        <label class="check-option"><input type="radio" name="notifications" value="no"> No, thank you</label>
+      </fieldset>
+      <p class="clinic-hint">Saying no never affects your care or your place in the queue. You can change your
+        answer at any time on <a href="/me/consent">your choices</a>.</p>
+      <button class="btn btn-block" type="submit" id="join-consent-save">Continue</button>
+    </form>
+  </section>
+
+  <section class="card join-step" data-join-step="queue" aria-labelledby="join-queue-heading"{% if page.step != "queue" %} hidden{% endif %}>
+    <h2 id="join-queue-heading" tabindex="-1">Choose a queue</h2>
+    <form class="sign-in-form" id="join-queue-form" novalidate>
+      <fieldset class="join-choices">
+        <legend class="sr-only">Queue</legend>
+        {% for queue in page.queues %}
+        <label class="check-option join-queue">
+          <input type="radio" name="queue" value="{{ queue.queue_id }}"{% if page.queues | length == 1 %} checked{% endif %}>
+          <span class="join-queue-text">
+            <span class="join-queue-name">{{ queue.name }}</span>
+            <span class="join-queue-figures">{{ queue.waiting_label }} · {{ queue.wait_label }}</span>
+          </span>
+        </label>
+        {% endfor %}
+      </fieldset>
+      <label class="sign-in-label" for="join-reason">Reason for your visit (optional)</label>
+      <textarea class="sign-in-input join-reason" id="join-reason" name="reason_text" rows="3"
+                maxlength="{{ page.reason_max_length }}"></textarea>
+      <p class="clinic-hint">The clinic's staff see this. It is never shown on the waiting-room screen.</p>
+      <button class="btn btn-block" type="submit" id="join-submit">Join the queue</button>
+    </form>
+    <p class="clinic-hint" id="join-messages"{% if not page.signed_in %} hidden{% endif %}>
+      <span id="join-messages-state">{% if page.notifications_granted %}We will message you about your turn.{% else %}We will not message you about your turn.{% endif %}</span>
+      <a href="/me/consent">Change this</a>.</p>
+  </section>
+
+  <p class="sign-in-error" id="join-error" role="alert" hidden></p>
+  {% endif %}
+</div>
+{% endblock %}
