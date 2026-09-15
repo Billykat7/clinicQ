@@ -33,10 +33,11 @@ folder, and each project's log viewer would list and open the other's.
 - Log writer, readiness sentinel and log viewer move to the new prefix
 - The log viewer never lists or reads another project's keys
 - A short ops page describing the shared layout and a per-project access policy
+- `AWS_S3_CREATE_BUCKET_IF_MISSING` (default off) creates the bucket before the first write when it does not exist
 
 ## Out of scope
 
-- Creating the bucket, IAM users and lifecycle rules in AWS.
+- IAM users, bucket policies and lifecycle rules in AWS.
 - Moving objects written under the old layout (they are in the old per-project buckets).
 - The same change in the sibling repositories.
 
@@ -47,6 +48,7 @@ folder, and each project's log viewer would list and open the other's.
 - [ ] The log viewer lists only under `clinicq/{env}/logs/` and refuses a sibling project's key without calling S3
 - [ ] `PROJECT_SLUG` with a capital, a slash, a space or a leading hyphen is refused at load, naming the setting
 - [ ] `.env.example` lists `PROJECT_SLUG`, and `docs/OPS/S3_STORAGE.md` describes the layout
+- [ ] With `AWS_S3_CREATE_BUCKET_IF_MISSING=true`, a missing bucket is created in `AWS_S3_REGION` before the first write; a 403 is never created over, and a failure never raises
 
 ## How to verify
 

@@ -103,6 +103,56 @@ def _create_s3_client(
     return boto3.client("s3", **kwargs)
 
 
+_ensured_buckets: set[str] = set()
+_ensured_buckets_lock = threading.Lock()
+
+
+def ensure_bucket_exists(client: Any, bucket: str, region: str) -> None:
+    """Create ``bucket`` when ``AWS_S3_CREATE_BUCKET_IF_MISSING`` is on and it does not exist.
+
+    Checked once per bucket per process, before the first write. ``HeadBucket`` answering 404 is
+    the only case that creates: a 403 means the bucket exists (someone else's, or not readable with
+    these credentials) and nothing is created over it. Never raises: a failure is logged and the
+    write that follows fails the usual non-fatal way.
+    """
+    if not get_settings().aws_s3_create_bucket_if_missing:
+        return
+    with _ensured_buckets_lock:
+        if bucket in _ensured_buckets:
+            return
+        _ensured_buckets.add(bucket)
+    log = logging.getLogger(__name__)
+    try:
+        from botocore.exceptions import ClientError  # type: ignore[import-untyped]
+
+        try:
+            client.head_bucket(Bucket=bucket)
+            return
+        except ClientError as exc:
+            code = str(exc.response.get("Error", {}).get("Code", ""))
+            if code not in {"404", "NoSuchBucket", "NotFound"}:
+                log.warning(
+                    "S3 bucket %s not created: HeadBucket answered %s", bucket, code
+                )
+                return
+        create_kwargs: dict[str, Any] = {"Bucket": bucket}
+        # us-east-1 is the one region that refuses an explicit LocationConstraint.
+        if region != "us-east-1":
+            create_kwargs["CreateBucketConfiguration"] = {"LocationConstraint": region}
+        try:
+            client.create_bucket(**create_kwargs)
+        except ClientError as exc:
+            code = str(exc.response.get("Error", {}).get("Code", ""))
+            if code != "BucketAlreadyOwnedByYou":
+                raise
+        log.warning("S3 bucket %s did not exist: created it in %s", bucket, region)
+    except Exception as exc:
+        # Forget the check so the next write tries again; writes fail non-fatally meanwhile.
+        with _ensured_buckets_lock:
+            _ensured_buckets.discard(bucket)
+        log.warning("S3 bucket %s could not be created: %s", bucket, exc)
+
+
 def create_s3_probe_client() -> Any | None:
     """Return a fast-fail S3 client for the readiness probe, or ``None``.
 
@@ -228,6 +278,7 @@ class S3LogHandler(logging.Handler):
             self._client = _create_s3_client(
                 self._region, verify_ssl=get_settings().aws_ssl_cert_enabled
             )
+            ensure_bucket_exists(self._client, self._bucket, self._region)
             return self._client
         except Exception:
             return None

@@ -147,16 +147,18 @@ def _probe_storage_uncached(cfg: Settings) -> DependencyStatus:
     access, so the probe overwrites one fixed sentinel key (no accumulation) under the
     log prefix, where any log-retention lifecycle rule will sweep it.
     """
-    from src.core.s3_logging import create_s3_probe_client
+    from src.core.s3_logging import create_s3_probe_client, ensure_bucket_exists
 
     client = create_s3_probe_client()
     if client is None:
         logger.warning("Readiness: S3 probe client unavailable")
         return DependencyStatus.DEGRADED
+    bucket = (cfg.aws_s3_bucket or "").strip()
+    ensure_bucket_exists(client, bucket, cfg.aws_s3_region or "af-south-1")
     try:
         key = f"{cfg.s3_prefix('logs')}_readiness/probe.json"
         client.put_object(
-            Bucket=(cfg.aws_s3_bucket or "").strip(),
+            Bucket=bucket,
             Key=key,
             Body=b'{"probe":"ok"}',
             ContentType="application/json",
