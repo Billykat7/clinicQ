@@ -121,6 +121,10 @@ _READERS: dict[str, Callable[[TestClient, str], tuple[Any, str]]] = {
     "/display": _no_board,
     "/display/pairing": _no_board,
     "/display/board-sw.js": _no_board,
+    # The check-in tablet (Issue 83): a board device is not a check-in device, so both answer it
+    # nothing; a check-in tablet is shown one number, its own, and never a board.
+    "/display/check-in": _no_board,
+    "/display/check-in/state": _no_board,
     "/display/{site_id}": _page,
     "/display/{site_id}/state": _state,
     "/display/{site_id}/stream": _stream,

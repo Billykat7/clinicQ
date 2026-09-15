@@ -47,6 +47,7 @@ from src.web.display import router as display_router
 from src.web.display_stream import router as display_stream_router
 from src.web.feedback import router as feedback_page_router
 from src.web.join import router as join_router
+from src.web.kiosk import router as kiosk_router
 from src.web.routes import router as web_router
 from src.web.ticket import router as ticket_router
 from src.web.ticket import worker_router as patient_worker_router
@@ -134,6 +135,8 @@ def create_app(settings_obj: Settings | None = None) -> FastAPI:
     app.include_router(join_router)
     app.include_router(book_router)
     # The waiting-room board (M8): public, read-only, fed only by the privacy projection (Issue 58).
+    # Before the board's routes: /display/check-in would otherwise be read as a clinic's id.
+    app.include_router(kiosk_router)
     app.include_router(display_router)
     app.include_router(display_stream_router)
     app.include_router(ticket_router)

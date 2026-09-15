@@ -313,6 +313,13 @@ class Ticket(Base, TimestampMixin):
     on_my_way_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    arrived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """When the patient said they are here, at the check-in tablet by the door (Issue 83).
+
+    A ticket is a place in the line whether or not anyone has arrived, so this changes no status and
+    costs nothing: it tells the front desk that the patient is in the building. Set once."""
     appointment_id: Mapped[str | None] = mapped_column(
         String(36),
         ForeignKey(f"{SCHEMA}.appointment.id", ondelete="SET NULL"),

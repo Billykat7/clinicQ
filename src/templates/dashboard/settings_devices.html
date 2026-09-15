@@ -21,6 +21,15 @@
           <input type="text" id="pair-code" name="pairing_code" required minlength="6" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text">
         </div>
         <div class="field">
+          <label for="pair-kind">What this device is</label>
+          <select id="pair-kind" name="kind">
+            {% for value, words in kind_words.items() %}
+            <option value="{{ value }}">{{ words }}</option>
+            {% endfor %}
+          </select>
+          <p class="hint">A check-in tablet stands at the door and takes patients' arrivals; it never shows the board.</p>
+        </div>
+        <div class="field">
           <label for="pair-label">Name for this screen (optional)</label>
           <input type="text" id="pair-label" name="label" maxlength="80" data-empty="null" placeholder="For example: TV by reception">
         </div>
@@ -38,6 +47,25 @@
       </div>
     </form>
   </section>
+  {% endif %}
+
+  {% if can_change %}
+  {#- Walk-ins at the door (Issue 83): one switch for the clinic, saved with
+      PUT /api/v1/sites/{id}/settings/kiosk, which records the change. -#}
+  <form class="card settings-form" id="kiosk-form" data-api="/api/v1/sites/{{ site.id }}/settings/kiosk" data-method="PUT">
+    <h2>Walk-ins at the check-in tablet</h2>
+    <div class="field">
+      <label class="check">
+        <input type="checkbox" id="kiosk-walk-ins" name="kiosk_walk_ins_enabled"{% if kiosk.enabled %} checked{% endif %}>
+        Let a patient with no booking take a number at the tablet
+      </label>
+      <p class="hint">{{ kiosk.explanation }}</p>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-sm">Save</button>
+      <span class="msg" data-api-msg aria-live="polite"></span>
+    </div>
+  </form>
   {% endif %}
 
   <form class="filter-bar" data-filter-key="settings-devices" method="get">
@@ -69,6 +97,7 @@
           <thead>
             <tr>
               <th data-sort-key="label">Screen</th>
+              <th data-sort-key="kind">What it is</th>
               <th data-sort-key="queues">Shows</th>
               <th data-sort-key="status">Status</th>
               <th data-sort-key="seen">Last heard from</th>
@@ -78,9 +107,10 @@
             {% for row in device_rows %}
             {% set words = status_words[row.status.value] %}
             <tr tabindex="0" data-record="{{ row.record | tojson | forceescape }}"
-                data-sort-label="{{ row.label }}" data-sort-queues="{{ row.queue_names | join(', ') }}"
+                data-sort-label="{{ row.label }}" data-sort-kind="{{ row.kind.value }}" data-sort-queues="{{ row.queue_names | join(', ') }}"
                 data-sort-status="{{ row.status.value }}" data-sort-seen="{{ row.last_seen_at.isoformat() if row.last_seen_at else '' }}">
               <td>{{ row.label }}</td>
+              <td>{{ kind_words[row.kind.value] }}</td>
               <td>{{ row.queue_names | join(', ') or 'Every open queue' }}</td>
               <td><span class="badge {{ words[1] }}">{{ words[0] }}</span></td>
               <td>{{ row.last_seen_at.strftime('%d %b %H:%M') if row.last_seen_at else '—' }}</td>

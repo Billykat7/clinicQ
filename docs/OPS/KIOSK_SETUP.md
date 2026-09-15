@@ -1,6 +1,8 @@
 # Setting up a waiting-room screen
 
-This guide turns a small computer and a TV into a waiting-room board. The box starts by itself, shows the
+This guide turns a small computer and a TV into a waiting-room board. The **check-in tablet at the door**
+(Issue 83) is set up the same way, and [Part D](#part-d-the-check-in-tablet-at-the-door-issue-83) says
+what differs. The box starts by itself, shows the
 board without anyone touching it, comes back after a power cut, and tells the team when it goes quiet. You
 prepare the box once, before it leaves for the clinic. At the clinic, nobody types an address or a
 password into it: the clinic manager types a six-character code into ClinicQ, and the board appears.
@@ -184,6 +186,40 @@ A small UPS ([07](../PRODUCT/07-devices-and-bom.md)) keeps it on through short c
 | The board went back to a code by itself | The screen was removed in **Display boards**. Pair it again. |
 | The screen goes black after some hours | The TV's sleep or eco timer (A3), or the operating system's screen blanking (A3). |
 | No chime or no voice | The TV's volume, and the `--autoplay-policy` flag in A5. In **Clinic settings → Waiting-room screen**, check *Announce each call aloud* and *Loudness of announcements*. A chime with no voice means the box has no voice for the clinic's language: see [BOARD_AUDIO.md](BOARD_AUDIO.md). |
+
+---
+
+## Part D: the check-in tablet at the door (Issue 83)
+
+The same start address, the same six-character code, and the same dashboard tab also set up the **tablet
+by the door**, where a patient says they have arrived instead of queueing at reception. It is prepared
+exactly like a board, with three differences:
+
+- **the device**: a 10-inch or larger tablet, or a small touchscreen on a stand at the door, rather than a
+  TV. It needs a touchscreen; a **USB or Bluetooth barcode scanner**, plugged in and set to send Enter
+  after each scan, makes checking in a single movement. Without one, patients type their phone number on
+  the screen's own keypad;
+- **the browser command**: the same kiosk-mode line as [A5](#a5-start-the-board-on-every-boot-and-again-if-it-ever-closes),
+  with the same start address `https://clinicq.example/display`. Add `--touch-events=enabled`, and leave
+  `--kiosk` on: it is what stops anybody browsing away from the check-in screen;
+- **the pairing**: in the dashboard's **Display boards** tab, under *What this device is*, choose
+  **Check-in tablet** before pressing *Pair*. The tablet then opens the check-in screen by itself, not a
+  board. A device paired as a board never shows the check-in screen, and the other way round; to change a
+  device's kind, remove it and pair it again.
+
+**What the tablet does.** A patient holds the QR on their ticket page or their booking up to the scanner,
+or types their reference or phone number. The screen answers with their number, its queue and room and how
+many people are ahead, and clears itself after 20 seconds. A booking becomes a ticket at that moment, in
+the same sequence as everyone else. It shows no name and lists nobody.
+
+**Walk-ins at the door.** Off by default. A manager who wants patients to take a number at the tablet
+switches on *Let a patient with no booking take a number at the tablet*, on the same tab. The tablet then
+shows the clinic's open queues as buttons.
+
+**When the network is down** the tablet says *This screen is offline. Please see reception.* and takes
+nothing, rather than seeming to work. It checks every 15 seconds and clears the message by itself when the
+clinic is reachable again. A tablet that is switched on with no network shows the browser's own error
+page: it keeps nothing offline, because a check-in that nobody recorded is worse than no check-in.
 
 ---
 

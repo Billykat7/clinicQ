@@ -151,11 +151,11 @@ is there from day one, which is exactly what the USSD and WhatsApp adapters cons
 | 8 | [Display Monitor](docs/GITHUB/MILESTONES/M8_display_monitor.md) | 56–62 | 9 | `v0.8.0` | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (7/7 issues) |
 | 9 | [Notifications & Patient PWA](docs/GITHUB/MILESTONES/M9_notifications_patient_pwa.md) | 63–71, 200 | 9–10 | `v0.9.0` | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (10/10 issues) |
 | 10 | [USSD & WhatsApp Channels](docs/GITHUB/MILESTONES/M10_ussd_whatsapp_channels.md) | 72–79 | 10–11 | `v0.10.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
-| 11 | [Appointments & Check-in](docs/GITHUB/MILESTONES/M11_appointments_checkin_patient_care.md) | 80–87 | 11–12 | `v0.11.0` | 🟩🟩🟩🟩🟩🟩⬜⬜⬜⬜ **62%** (5/8 issues) |
+| 11 | [Appointments & Check-in](docs/GITHUB/MILESTONES/M11_appointments_checkin_patient_care.md) | 80–87 | 11–12 | `v0.11.0` | 🟩🟩🟩🟩🟩🟩🟩🟩⬜⬜ **75%** (6/8 issues) |
 | 12 | [Reporting & Analytics](docs/GITHUB/MILESTONES/M12_reporting_analytics.md) | 88–94 | 12 | `v0.12.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/7 issues) |
 | 13 | [Security, Privacy & POPIA](docs/GITHUB/MILESTONES/M13_security_privacy_compliance.md) | 95–101 | 12–13 | `v0.13.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/7 issues) |
 | 14 | [Production, Pilot & Go-live](docs/GITHUB/MILESTONES/M14_production_pilot_golive.md) | 102–109, 197 | 13–14 | `v0.14.0` | 🟩⬜⬜⬜⬜⬜⬜⬜⬜⬜ **11%** (1/9 issues) |
-| ⭐ | **First official release:** every tracked issue closed | - | end of 14 | **`v1.0.0`** | 🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜ **70%** (78/111 issues) |
+| ⭐ | **First official release:** every tracked issue closed | - | end of 14 | **`v1.0.0`** | 🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜ **71%** (79/111 issues) |
 
 ## Team
 
@@ -210,7 +210,7 @@ Full detail: [engineering non-negotiables](docs/guideline.md) and
 
 ## Status
 
-**Phase:** building. **Sprints 1–5 of 14 complete**, sprints 6 to 12 under way (semester 2). **78 of 111
+**Phase:** building. **Sprints 1–5 of 14 complete**, sprints 6 to 12 under way (semester 2). **79 of 111
 issues closed**. `v0.2.0` is the only tag cut so far; the notes for `v0.1.0` and `v0.3.0`–`v0.9.0` are
 written and their tags are still to cut, in order. M6, the queue engine, is done: one fair sequence per
 queue joined from every channel, a strict lifecycle, honest wait ranges, recall and no-show timers,
@@ -266,7 +266,10 @@ counter as walk-ins, exactly once however often the sweep runs, with a late pati
 (issue 81), and a booked patient is reminded the day before and two hours before through the notification
 service, answers CONFIRM or CANCEL by SMS or with a button on the push notification without opening anything,
 a cancellation giving the time back in the same request, no reminder for a patient already in the queue, and
-each clinic's attendance counted by how many reminders were sent (issue 82).
+each clinic's attendance counted by how many reminders were sent (issue 82), and a tablet at the clinic's
+door, paired like a waiting-room screen, takes a patient's arrival from one scan, turning a booking into a
+ticket there and then, clearing itself after twenty seconds and saying "please see reception" rather than
+failing silently when the network is down (issue 83).
 
 - [x] Idea finalised (**ClinicQ**, selected from the shortlist)
 - [x] Requirements gathered ([product docs](docs/PRODUCT/README.md))

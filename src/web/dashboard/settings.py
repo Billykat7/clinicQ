@@ -33,6 +33,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from src.commons.enums import (
+    DisplayDeviceKind,
     DisplayDeviceStatus,
     PermissionVerb,
     QueueKind,
@@ -47,6 +48,7 @@ from src.core.nav_visibility import NavVisibility
 from src.core.rbac_language import role_label
 from src.database.session import get_db
 from src.modules.appointments.call_forward import VIRTUAL_WAITING_EXPLANATION
+from src.modules.appointments.checkin import KIOSK_WALK_INS_EXPLANATION
 from src.modules.display import devices as display_devices
 from src.modules.display.router import device_out
 from src.modules.patients.consent import display_preview
@@ -351,6 +353,23 @@ def _virtual_waiting_view(db: Session, site_id: str) -> VirtualWaitingView:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class KioskView:
+    """The check-in tablet's walk-in switch as the devices tab shows it (Issue 83)."""
+
+    enabled: bool
+    explanation: str
+
+
+def _kiosk_view(db: Session, site_id: str) -> KioskView:
+    """The clinic's switch, read by id after the settings gate has admitted the caller to this clinic."""
+    site = service.get_site(db, site_id, site_ids=frozenset({site_id}))
+    return KioskView(
+        enabled=bool(site and site.kiosk_walk_ins_enabled),
+        explanation=KIOSK_WALK_INS_EXPLANATION,
+    )
+
+
 @router.get("/dashboard/sites/{site_id}/settings/services", response_class=HTMLResponse)
 async def settings_services(
     site_id: str,
@@ -488,6 +507,7 @@ class DeviceRow:
     """One waiting-room screen as the clinic's list shows it (Issue 61)."""
 
     label: str
+    kind: DisplayDeviceKind
     status: DisplayDeviceStatus
     queue_names: tuple[str, ...]
     #: When it was last heard from, in Johannesburg; ``None`` if never.
@@ -495,6 +515,12 @@ class DeviceRow:
     #: The API's view of the screen, for the slideover's forms.
     record: dict[str, object]
 
+
+#: What each kind of paired device is called on the manager's screen (Issue 83).
+DEVICE_KIND_WORDS: Final = {
+    DisplayDeviceKind.BOARD: "Waiting-room board",
+    DisplayDeviceKind.CHECK_IN: "Check-in tablet",
+}
 
 #: What each screen status is called, and the badge it wears.
 DEVICE_STATUS_WORDS: Final = {
@@ -534,6 +560,7 @@ async def settings_devices(
         rows.append(
             DeviceRow(
                 label=device.label or "Unnamed screen",
+                kind=device.kind_enum,
                 status=out.status,
                 queue_names=tuple(
                     names[q] for q in (device.queue_ids or []) if q in names
@@ -552,6 +579,8 @@ async def settings_devices(
     opened.context.update(
         device_rows=rows,
         queues=queues,
+        kind_words={key.value: words for key, words in DEVICE_KIND_WORDS.items()},
+        kiosk=_kiosk_view(db, site_id),
         status_filter=status.value if status else "",
         status_words={key.value: words for key, words in DEVICE_STATUS_WORDS.items()},
         silent_minutes=get_settings().display_device_silent_minutes,

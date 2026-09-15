@@ -34,7 +34,7 @@ from typing import Final
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.commons.enums import DisplayDeviceStatus
+from src.commons.enums import DisplayDeviceKind, DisplayDeviceStatus
 from src.commons.time import now_sast, stored_sast, to_sast
 from src.core.config import Settings, get_settings
 from src.core.security import hash_refresh_token
@@ -227,10 +227,13 @@ def pair_device(
     *,
     code: str,
     label: str | None,
+    kind: DisplayDeviceKind = DisplayDeviceKind.BOARD,
     queue_ids: Collection[str] | None = None,
     moment: datetime | None = None,
 ) -> DisplayDevice:
-    """Bind the box showing ``code`` to the caller's clinic. The caller audits and commits.
+    """Bind the box showing ``code`` to the caller's clinic, as a board or a check-in tablet.
+
+    The caller audits and commits.
 
     Raises:
         PairingCodeNotFoundError: No box is waiting with that code.
@@ -241,6 +244,7 @@ def pair_device(
     device = _pending_by_code(db, normalised, now) if normalised else None
     if device is None:
         raise PairingCodeNotFoundError
+    device.kind = kind.value
     device.queue_ids = _clinic_queue_ids(db, access, queue_ids)
     device.site_id = access.site_id
     device.label = (label or "").strip()[:MAX_LABEL_LENGTH] or None

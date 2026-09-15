@@ -26,6 +26,7 @@ from src.api.rbac_deps import DbSession, require
 from src.commons.enums import (
     AuditAction,
     AuditEntityType,
+    DisplayDeviceKind,
     DisplayDeviceStatus,
     GrantScope,
 )
@@ -49,6 +50,12 @@ PlatformDirectory = Annotated[
 ]
 
 #: Said for a wrong, expired or used code alike, so the answer does not help anyone guess.
+#: How an audit row names each kind of device (Issue 83).
+_KIND_WORDS: dict[DisplayDeviceKind, str] = {
+    DisplayDeviceKind.BOARD: "display board",
+    DisplayDeviceKind.CHECK_IN: "check-in tablet",
+}
+
 CODE_NOT_FOUND = "No screen is waiting with that code. Check the code on the screen; if it has changed, type the new one."
 
 
@@ -57,6 +64,8 @@ class DisplayDevicePairIn(BaseModel):
 
     pairing_code: str = Field(min_length=6, max_length=12)
     label: str | None = Field(default=None, max_length=MAX_LABEL_LENGTH)
+    #: What the device is: the waiting-room board, or the check-in tablet at the door (Issue 83).
+    kind: DisplayDeviceKind = DisplayDeviceKind.BOARD
     #: The queues this screen shows; omitted or empty for all of the clinic's open queues.
     queue_ids: list[str] | None = None
 
@@ -74,6 +83,7 @@ class DisplayDeviceOut(BaseModel):
     id: str
     site_id: str | None
     label: str | None
+    kind: DisplayDeviceKind
     queue_ids: list[str] | None
     status: DisplayDeviceStatus
     paired_at: datetime | None
@@ -111,6 +121,7 @@ def device_out(device: DisplayDevice) -> DisplayDeviceOut:
         id=device.id,
         site_id=device.site_id,
         label=device.label,
+        kind=device.kind_enum,
         queue_ids=device.queue_ids,
         status=devices.status_of(device),
         paired_at=device.paired_at,
@@ -170,6 +181,7 @@ def pair(
             access,
             code=payload.pairing_code,
             label=payload.label,
+            kind=payload.kind,
             queue_ids=payload.queue_ids,
         )
     except devices.PairingCodeNotFoundError as exc:
@@ -184,7 +196,7 @@ def pair(
         request,
         access,
         device,
-        f"display board paired: {device.label or 'unnamed'}",
+        f"{_KIND_WORDS[device.kind_enum]} paired: {device.label or 'unnamed'}",
     )
     db.commit()
     return device_out(device)

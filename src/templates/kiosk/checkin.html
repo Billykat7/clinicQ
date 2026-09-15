@@ -1,0 +1,82 @@
+{% extends "layouts/board.html" %}
+{#- The check-in tablet by the clinic's door (Issue 83), on a paired device.
+
+    One screen, three ways to say "I am here": hold the QR to the scanner, type the six-character
+    reference, or type a phone number on the keypad. Nothing needs a keyboard, every target is the
+    width of a hand, and the answer clears itself after a few seconds so the next patient in the door
+    reads nothing about the last one.
+
+    Where the clinic allows it, the same screen starts a walk-in: one button per open queue.
+
+    No inline script or handler: the CSP allows script only from 'self', so everything the page does
+    is in checkin.js, reading these data- attributes. -#}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block styles %}
+  {{ super() }}
+  <link rel="stylesheet" href="/static/css/kiosk.css">
+{% endblock %}
+
+{% block body_class %}{{ super() }} kiosk-page{% endblock %}
+
+{% block content %}
+<div class="checkin"
+     data-arrivals-url="{{ arrivals_url }}"
+     data-walk-ins-url="{{ walk_ins_url }}"
+     data-state-url="{{ state_url }}"
+     data-clear-seconds="{{ clear_seconds }}"
+     data-ping-seconds="{{ ping_seconds }}"
+     data-offline-sentence="{{ offline_sentence }}">
+
+  <section class="checkin-idle" id="checkin-idle">
+    <h1 class="checkin-title">Check in at {{ clinic_name }}</h1>
+    <p class="checkin-lead">Hold the QR code on your phone up to the scanner.</p>
+    <p class="checkin-or">or</p>
+    <button class="checkin-big" type="button" id="checkin-start-phone">Type my phone number</button>
+    {% if walk_ins %}
+    <p class="checkin-or">or</p>
+    <p class="checkin-lead checkin-lead-small">No booking? Join a queue:</p>
+    <ul class="checkin-queues">
+      {% for queue in walk_ins %}
+      <li><button class="checkin-big checkin-queue" type="button" data-queue="{{ queue.id }}">{{ queue.name }}{% if queue.room %} · {{ queue.room }}{% endif %}</button></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    <label class="checkin-scan-label" for="checkin-scan">Scanned code</label>
+    <input class="checkin-scan" id="checkin-scan" type="text" autocomplete="off" inputmode="none" aria-label="Scanned code">
+  </section>
+
+  <section class="checkin-keypad" id="checkin-keypad" hidden aria-labelledby="checkin-keypad-heading">
+    <h2 class="checkin-title" id="checkin-keypad-heading">Type your phone number</h2>
+    <p class="checkin-entry" id="checkin-entry" aria-live="polite">&nbsp;</p>
+    <div class="checkin-keys">
+      {% for digit in ["1", "2", "3", "4", "5", "6", "7", "8", "9"] %}
+      <button class="checkin-key" type="button" data-digit="{{ digit }}">{{ digit }}</button>
+      {% endfor %}
+      <button class="checkin-key checkin-key-wide" type="button" id="checkin-back">Delete</button>
+      <button class="checkin-key" type="button" data-digit="0">0</button>
+      <button class="checkin-key checkin-key-go" type="button" id="checkin-go">Check in</button>
+    </div>
+    <button class="checkin-quiet" type="button" id="checkin-cancel">Start again</button>
+  </section>
+
+  <section class="checkin-answer" id="checkin-answer" hidden role="status">
+    <p class="checkin-number" id="checkin-number"></p>
+    <p class="checkin-where" id="checkin-where"></p>
+    <p class="checkin-ahead" id="checkin-ahead"></p>
+    <p class="checkin-lead checkin-lead-small">Please take a seat and watch the screen for your number.</p>
+  </section>
+
+  <section class="checkin-problem" id="checkin-problem" hidden role="alert">
+    <p class="checkin-problem-text" id="checkin-problem-text"></p>
+    <button class="checkin-quiet" type="button" id="checkin-problem-close">Start again</button>
+  </section>
+
+  <p class="checkin-offline" id="checkin-offline" hidden role="alert">{{ offline_sentence }}</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  <script src="/static/js/checkin.js" defer></script>
+{% endblock %}

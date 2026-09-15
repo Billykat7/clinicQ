@@ -176,6 +176,41 @@ _UNSCOPED_BY_DESIGN: dict[str, str] = {
     "modules/appointments/conversion.py::_convert_onto_existing": (
         "the same system job reads, by id, the ticket join_queue returned for that patient in that queue"
     ),
+    "modules/appointments/checkin.py::_today_ticket": (
+        "the check-in tablet (Issue 83) holds no session and no role: the narrowing is the clinic the device "
+        "is paired to (Issue 61), written into every read here, so another clinic's code is the same not found"
+    ),
+    "modules/appointments/checkin.py::_today_booking": (
+        "the same paired tablet, reading a booking of its own clinic today by the reference that was scanned"
+    ),
+    "modules/appointments/checkin.py::_patient_ticket": (
+        "the same paired tablet, reading the ticket of its own clinic today held by the patient whose phone "
+        "number was typed"
+    ),
+    "modules/appointments/checkin.py::_patient_booking": (
+        "the same paired tablet, reading that patient's own booking at its clinic today"
+    ),
+    "modules/appointments/checkin.py::_standing": (
+        "reads the checked-in ticket's own queue by id, for the number, room and how many are ahead; the "
+        "ticket was narrowed to the tablet's clinic by the read that found it"
+    ),
+    "modules/appointments/checkin.py::_arrive": (
+        "the same ticket's own queue by id, to tell the board that something changed"
+    ),
+    "modules/appointments/checkin.py::_check_in_booking": (
+        "the ticket the booking of this clinic was already converted onto, by the booking's own id"
+    ),
+    "modules/appointments/conversion.py::convert_one": (
+        "the same system job reads one booking's own clinic, queue and patient by id, to hand them to join_queue"
+    ),
+    "web/kiosk.py::_open_queues": (
+        "the check-in tablet's own idle screen (Issue 83) lists the open queues of the one clinic its device "
+        "is paired to, by that clinic's id; it is the same list the waiting-room board shows"
+    ),
+    "web/kiosk.py::walk_in": (
+        "the queue a patient pressed on that tablet, by id, checked against the device's own clinic before "
+        "anything is issued"
+    ),
     "modules/appointments/reminders.py::send_due": (
         "the reminder sweep (Issue 82) is a scheduled system job with no caller and no clinic: it reads every "
         "booking still booked within the next day, to remind each booking's own patient"
