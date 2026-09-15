@@ -106,7 +106,7 @@ class LogFormat(StrEnum):
 
 
 class S3LogPath(StrEnum):
-    """S3 log path segment (``api`` / ``web``) under ``{env}/logs/{log_type}/``."""
+    """S3 log path segment (``api`` / ``web``) under ``{slug}/{env}/logs/{log_type}/``."""
 
     API = "api"
     WEB = "web"
@@ -125,7 +125,7 @@ class S3LogListingLevel(StrEnum):
     """Log-browser filter for the admin S3 log listing API.
 
     ``INFO`` / ``WARNING`` / ``ERROR`` match the ``log_type`` segment under
-    ``{env}/logs/``. ``ALL`` is API-only: list with prefix ``{env}/logs/`` (all
+    ``{slug}/{env}/logs/``. ``ALL`` is API-only: list with prefix ``{slug}/{env}/logs/`` (all
     log types), so it is not itself a stored path segment.
     """
 

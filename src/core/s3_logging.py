@@ -2,7 +2,10 @@
 
 Buffers log records and uploads them to S3 as NDJSON under the key pattern::
 
-    {env}/logs/{log_type}/{api|web}/{YYYY}/{MM}/{DD}/clinicq-{ccyymmdd}-{HHMMSS}.json
+    {slug}/{env}/logs/{log_type}/{api|web}/{YYYY}/{MM}/{DD}/{slug}-{ccyymmdd}-{HHMMSS}.json
+
+``{slug}`` is ``PROJECT_SLUG`` (``clinicq``): one bucket is shared by the sibling projects, and
+each keeps its objects under its own name.
 
 A daemon thread flushes the buffer on a count (``max_events``) or time
 (``flush_interval_seconds``) trigger so request latency is never affected. Uploads
@@ -57,17 +60,19 @@ def _level_to_log_type(level: int) -> S3LogType:
 def _s3_key(log_type: str, dt: datetime, path_segment: str | None = None) -> str:
     """Build the S3 object key for a batch of records.
 
-    ``{env}/logs/{log_type}/{path}/{YYYY}/{MM}/{DD}/clinicq-{ccyymmdd}-{HHMMSS}.json``
+    ``{slug}/{env}/logs/{log_type}/{path}/{YYYY}/{MM}/{DD}/{slug}-{ccyymmdd}-{HHMMSS}.json``
     """
     cfg = get_settings()
-    env = cfg.s3_environment
     segment = path_segment or cfg.aws_s3_log_path.value
     yy = dt.strftime("%Y")
     mm = dt.strftime("%m")
     dd = dt.strftime("%d")
     ccyymmdd = dt.strftime("%Y%m%d")
     hhmmss = dt.strftime("%H%M%S")
-    return f"{env}/logs/{log_type}/{segment}/{yy}/{mm}/{dd}/clinicq-{ccyymmdd}-{hhmmss}.json"
+    return (
+        f"{cfg.s3_prefix('logs')}{log_type}/{segment}/{yy}/{mm}/{dd}/"
+        f"{cfg.project_slug}-{ccyymmdd}-{hhmmss}.json"
+    )
 
 
 def _create_s3_client(

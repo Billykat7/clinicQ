@@ -84,7 +84,7 @@ flowchart LR
 | [M11: Appointments, Check-in & Patient Care Extras](M11_appointments_checkin_patient_care.md) | Booked appointments, arrival check-in, booking for family members, chronic reminders, a virtual waiting room and post-visit feedback. | 11–12 | 80–87 | `v0.11.0` |
 | [M12: Reporting, Analytics & District Dashboards](M12_reporting_analytics.md) | The numbers a clinic manager takes to their district: wait times, no-shows, channel mix and busiest hours, all checked against hand calculations. | 12 | 88–94 | `v0.12.0` |
 | [M13: Security, Privacy & POPIA Compliance](M13_security_privacy_compliance.md) | Everything a system holding health information must prove before real patients use it: retention, access and erasure, encryption, a hardened surface and an independent test. | 12–13 | 95–101 | `v0.13.0` |
-| [M14: Production Readiness, Pilot & Go-live](M14_production_pilot_golive.md) | Production, backups, monitoring, a load test, a pilot kit and real clinic staff using ClinicQ for a full day, then the capstone submission. | 13–14 | 102–109 | `v0.14.0` |
+| [M14: Production Readiness, Pilot & Go-live](M14_production_pilot_golive.md) | Production, backups, monitoring, a load test, a pilot kit and real clinic staff using ClinicQ for a full day, then the capstone submission. | 13–14 | 102–109, 197 | `v0.14.0` |
 
 ---
 

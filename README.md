@@ -131,7 +131,7 @@ is there from day one, which is exactly what the USSD and WhatsApp adapters cons
 |----------|--------------|
 | **[Quickstart](docs/QUICKSTART.md)** | Set up on Windows, macOS or Linux; run the stack; branch, commit and raise a pull request |
 | **[Implementation plan](docs/PLAN/IMPLEMENTATION_PLAN.md)** | The whole project on one page: architecture, sequence, features added beyond the brief, how we'll know it works |
-| **[Milestones & issues](docs/GITHUB/README.md)** | 14 milestones, 109 tracked issues, conventions, release tags, pipeline strategy |
+| **[Milestones & issues](docs/GITHUB/README.md)** | 14 milestones, 110 tracked issues, conventions, release tags, pipeline strategy |
 | **[Workload split](docs/TEAM/WORKLOAD_SPLIT.md)** | Six roles, sprint-by-sprint lanes, **who blocks whom and what to do about it**, risk register |
 | **[Engineering non-negotiables](docs/guideline.md)** | Five rules enforced by guard tests |
 | **[Product docs](docs/PRODUCT/README.md)** | 14 numbered docs: discovery, queue, display, dashboard, channels, devices, topology, pricing, business plan, marketing, upscaling, tech, benchmark |
@@ -154,8 +154,8 @@ is there from day one, which is exactly what the USSD and WhatsApp adapters cons
 | 11 | [Appointments & Check-in](docs/GITHUB/MILESTONES/M11_appointments_checkin_patient_care.md) | 80–87 | 11–12 | `v0.11.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
 | 12 | [Reporting & Analytics](docs/GITHUB/MILESTONES/M12_reporting_analytics.md) | 88–94 | 12 | `v0.12.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/7 issues) |
 | 13 | [Security, Privacy & POPIA](docs/GITHUB/MILESTONES/M13_security_privacy_compliance.md) | 95–101 | 12–13 | `v0.13.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/7 issues) |
-| 14 | [Production, Pilot & Go-live](docs/GITHUB/MILESTONES/M14_production_pilot_golive.md) | 102–109 | 13–14 | `v0.14.0` | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** (0/8 issues) |
-| ⭐ | **First official release:** every issue 1–109 closed | - | end of 14 | **`v1.0.0`** | 🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜ **65%** (71/109 issues) |
+| 14 | [Production, Pilot & Go-live](docs/GITHUB/MILESTONES/M14_production_pilot_golive.md) | 102–109, 197 | 13–14 | `v0.14.0` | 🟩⬜⬜⬜⬜⬜⬜⬜⬜⬜ **11%** (1/9 issues) |
+| ⭐ | **First official release:** every tracked issue closed | - | end of 14 | **`v1.0.0`** | 🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜ **65%** (72/110 issues) |
 
 ## Team
 
@@ -210,7 +210,7 @@ Full detail: [engineering non-negotiables](docs/guideline.md) and
 
 ## Status
 
-**Phase:** building. **Sprints 1–5 of 14 complete**, sprints 6 to 11 under way (semester 2). **71 of 109
+**Phase:** building. **Sprints 1–5 of 14 complete**, sprints 6 to 11 under way (semester 2). **72 of 110
 issues closed**. `v0.2.0` is the only tag cut so far; the notes for `v0.1.0` and `v0.3.0`–`v0.9.0` are
 written and their tags are still to cut, in order. M6, the queue engine, is done: one fair sequence per
 queue joined from every channel, a strict lifecycle, honest wait ranges, recall and no-show timers,
@@ -254,7 +254,7 @@ team alert when a transport's failure rate crosses its threshold (issue 71).
 - [x] Idea finalised (**ClinicQ**, selected from the shortlist)
 - [x] Requirements gathered ([product docs](docs/PRODUCT/README.md))
 - [x] Architecture agreed ([implementation plan](docs/PLAN/IMPLEMENTATION_PLAN.md))
-- [x] Milestones and issues defined (14 milestones, 109 issues)
+- [x] Milestones and issues defined (14 milestones, 110 issues)
 - [x] Workload split and dependency analysis ([workload split](docs/TEAM/WORKLOAD_SPLIT.md))
 - [x] Repo structure set up (M1, `v0.1.0` to cut)
 - [x] CI/CD pipeline running (M2, `v0.2.0`)

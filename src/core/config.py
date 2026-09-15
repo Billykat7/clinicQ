@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, ClassVar, NamedTuple
@@ -162,6 +163,17 @@ class Settings(BaseSettings):
         description="PEM cert whose expiry is reported in /health (env: TLS_CERT_PATH; CERT_PATH accepted as alias). Unset → no cert block.",
     )
 
+    # One S3 bucket is shared by every sibling project (clinicq, properties, umojanet, maps, ...), so
+    # each object key starts with the project's slug: {bucket}/{slug}/{env}/{type}/...
+    project_slug: str = Field(
+        default="clinicq",
+        description=(
+            "This project's name in shared infrastructure, and the first segment of every S3 "
+            "object key: {slug}/{dev|uat|prod}/{logs|docs|...}/... (env: PROJECT_SLUG). Lowercase "
+            "letters, digits and hyphens."
+        ),
+    )
+
     # S3 structured logging (audit/troubleshooting). Console is always active; the
     # S3 handler is only attached when AWS_S3_LOGGING_ENABLED=true and a bucket is set.
     aws_s3_logging_enabled: bool = Field(
@@ -313,6 +325,16 @@ class Settings(BaseSettings):
     def normalise_log_level(cls, value: object) -> object:
         """Accept ``info`` as well as ``INFO``: the level was a free string before it was an enum."""
         return value.strip().upper() if isinstance(value, str) else value
+
+    @field_validator("project_slug")
+    @classmethod
+    def project_slug_is_one_key_segment(cls, value: str) -> str:
+        """The slug is one S3 key segment: a slash or a capital would file objects where no reader looks."""
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", value):
+            raise ValueError(
+                "PROJECT_SLUG must be lowercase letters, digits and hyphens, e.g. 'clinicq'"
+            )
+        return value
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -1619,6 +1641,13 @@ class Settings(BaseSettings):
             AppEnvironment.PRODUCTION: "prod",
         }
         return mapping.get(self.environment, "dev")
+
+    def s3_prefix(self, kind: str) -> str:
+        """Key prefix, with trailing slash, for this project's objects of one kind in the shared bucket.
+
+        ``s3_prefix("logs")`` in development is ``clinicq/dev/logs/``.
+        """
+        return f"{self.project_slug}/{self.s3_environment}/{kind}/"
 
     # ── The one validation path (Issues 1 and 12) ────────────────────────────────────────────
     #

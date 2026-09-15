@@ -5,7 +5,7 @@ source of truth: scope, context, acceptance criteria and how to check them live 
 thread. This page explains what each part of a spec means, the steps for picking one up, where the
 code goes in *this* repository, and the decisions and inconsistencies the team still has to settle.
 
-- **109 issues** in `M1/` … `M14/`, numbered 1–109 across the whole project.
+- **110 issues** in `M1/` … `M14/`: 1–109 planned up front, and 197 added to M14 when the projects moved to one shared S3 bucket.
 - **[Backlog](BACKLOG/)**: six ideas deliberately parked until after the capstone.
 - **[Milestones](../MILESTONES/README.md)**: what each group of issues delivers, and in which order.
 
@@ -318,6 +318,7 @@ affected spec carries a **Note** saying the same thing.
 | [107](M14/ISSUE_107_support_incident_sla.md) | Support process, incident runbooks and internal SLA | [M14](../MILESTONES/M14_production_pilot_golive.md) | E | 13 | 2 days | [104](M14/ISSUE_104_monitoring_alerting_status.md), [106](M14/ISSUE_106_pilot_rollout_kit.md) |
 | [108](M14/ISSUE_108_uat_clinic_staff.md) | User acceptance testing with clinic staff and remediation | [M14](../MILESTONES/M14_production_pilot_golive.md) | F | 14 | 4 days | [106](M14/ISSUE_106_pilot_rollout_kit.md), [107](M14/ISSUE_107_support_incident_sla.md) |
 | [109](M14/ISSUE_109_capstone_deliverables.md) | Capstone deliverables: demo script, video, report, poster, presentation | [M14](../MILESTONES/M14_production_pilot_golive.md) | F | 14 | 5 days | [100](M13/ISSUE_100_pen_test_remediation.md), [105](M14/ISSUE_105_load_soak_testing.md), [108](M14/ISSUE_108_uat_clinic_staff.md) |
+| [197](M14/ISSUE_197_shared_s3_bucket_keys.md) | Shared S3 bucket: put the project slug first in every key | [M14](../MILESTONES/M14_production_pilot_golive.md) | E | 13 | 1 day | nothing |
 
 ---
 
