@@ -15,7 +15,8 @@ each release does to an installed app, and what has and has not been checked.
 - **No signal.** Every state the ticket page shows is kept on the phone. When a `/t/` page cannot be reached
   (no answer within 10 seconds), the app shows the offline page: the ticket number, the place in line the
   phone last saw, when it was last updated and how long ago, counting up, and a clear "your place may have
-  moved since". It reloads into the live ticket as soon as the phone is back online.
+  moved since". It reloads into the live ticket when the phone is back online: on the browser's online
+  event, on "Try again", or by itself within 15 seconds of the server answering again.
 
 ## 2. What is stored on the phone, and how much
 
@@ -32,8 +33,8 @@ Nothing about the patient is kept: no name, no phone number.
 ## 3. What a release does to an installed app
 
 `/patient-sw.js` is served with the release's version (and commit, when the image sets `GIT_SHA`) written
-in, and is never cached by the browser. On every navigation the browser compares it, so the first launch
-after a deploy installs the new worker, which takes over at once, keeps the new release's shell and deletes
+in, and is never cached by the browser. Every page in the app asks the browser to check it on load (the
+browser's own checks are throttled), so the first launch after a deploy installs the new worker, which takes over at once, keeps the new release's shell and deletes
 the old one. Pages are always fetched from the network first, so the page itself is the new release on that
 same launch. Nobody has to clear anything.
 

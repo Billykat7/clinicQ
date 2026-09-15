@@ -65,13 +65,15 @@ waiting room. With this PR:
     (`ticket_page.active_page_for_patient`), otherwise `patient/home.html`, whose `patient-home.js` opens the
     last unfinished ticket the phone kept;
   - `GET /t/offline` is `patient/offline.html` with `ticket-offline.js`: the kept state for the link opened,
-    or the latest one, its update time and a running age, "Try again", and a reload when `online` fires;
+    or the latest one, its update time and a running age, "Try again", and a reload when `online` fires or
+    when its own check every 15 seconds gets an answer;
   - the ticket page gains the install box (`ticket.html`, `ticket.css`) and loads `patient-tickets.js` and
     `pwa.js`. `ticket.js` saves every state it renders.
 - **Kept tickets** (`src/static/js/patient-tickets.js`): `save`, `get`, `latest` and `all` over the
   `clinicq-patient-tickets` cache, one entry per link with its received time. Every save prunes to five
   entries, drops entries older than 18 hours, and accepts only ticket-link paths.
-- **The install offer** (`src/static/js/pwa.js`): it registers the worker, which asks the patient nothing.
+- **The install offer** (`src/static/js/pwa.js`): it registers the worker, which asks the patient nothing, and
+  calls `registration.update()` on every load.
   It always calls `preventDefault()` on `beforeinstallprompt`, and shows `#tk-install` only where the server
   rendered it. The button calls the held `prompt()`. "Not now" is remembered, nothing is offered in
   standalone mode, and iPhones get the Share-menu instruction.
@@ -89,6 +91,16 @@ screen, and the page reloads itself when the connection returns.
 when nothing is cached at runtime. The worker keeps exactly `PATIENT_SHELL`. An integration test renders the
 offline page and fails if it loads a file that is not on the list, and fetches every listed file, because one
 missing file would stop the worker installing, and with it web push.
+
+**Why every page asks for an update.** Chromium's own update check after a navigation is throttled, and
+deferred while the worker is handling requests. The browser test showed it: the new worker sometimes took
+longer than 30 seconds to arrive. `pwa.js` calls `registration.update()` on every load, so "the next launch"
+is a check, not a hope.
+
+**Why the offline page retries by itself.** A phone behind a dead router, or on a weak signal, never gets an
+`online` event, because as far as the browser knows it was online all along. In CI, the first request after
+the router came back failed on a connection it had reset. The offline page now asks for the page every 15
+seconds, with an 8-second limit, and reloads as soon as it gets an answer.
 
 **Why the version includes the commit.** A release tag alone would not change between two images built from
 different commits under the same version. Writing the commit in makes every image a new worker, so the next
@@ -120,6 +132,12 @@ launch installs it.
 - [x] `ruff check .`, `ruff format --check .` and `mypy src/` (298 files) clean.
 - [x] `TZ=UTC pytest tests/ -n auto` on the Docker PostgreSQL 18 and Redis, with browsers: **2227 passed,
   1 skipped, 9 xfailed, 0 failed**.
+- [x] **The first CI run's browser job failed** in `test_with_no_network_…`. The offline page appeared, but after
+  the router came back the page stayed offline for 40 seconds. Locally, the deploy test also failed once in
+  three runs, waiting for Chromium's own update check. Both are fixed in the product, not the test: the offline
+  page now checks by itself every 15 seconds, and every page asks for a worker update on load. After the fix,
+  `test_patient_app.py` passed three runs in a row, and `pytest tests/e2e` run serially as CI runs it:
+  **60 passed**.
 - [x] **How to verify, step 2 (airplane mode):** `test_with_no_network_the_last_known_place_shows_with_its_age`,
   a 320 px phone signed in as the patient, through a router the test can kill:
 

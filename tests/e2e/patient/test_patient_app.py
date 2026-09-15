@@ -144,11 +144,13 @@ def test_with_no_network_the_last_known_place_shows_with_its_age(
         )
 
         link.restore()
+        # Connections held while the router was down are reset, so the first request after it may fail
+        # too; the offline page keeps checking by itself until the live page loads.
         page.locator("#off-retry").click()
         _until(
             page,
             "() => document.getElementById('tk-live')?.textContent === 'Live'",
-            timeout=40,
+            timeout=75,
         )
         assert page.url.endswith(mine.path), (
             "back online, the app opens the live ticket"

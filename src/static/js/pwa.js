@@ -4,8 +4,9 @@
  *
  * Loaded by every page in the app's scope (/t/: the ticket page, the start page, the offline page).
  *
- *   - Registers /patient-sw.js for /t/. Registering asks the patient nothing. The browser then checks for a
- *     new worker on every navigation, which is how a new deploy reaches an installed app on its next launch.
+ *   - Registers /patient-sw.js for /t/, and asks it to check for a new version on every page load. Registering
+ *     asks the patient nothing. The browser's own checks are throttled and deferred while pages are busy, so
+ *     this explicit check is what makes a new deploy reach an installed app on its next launch.
  *   - Never lets the browser offer installation by itself: the browser's own banner could appear the first
  *     time anyone opens a link. Its offer is held back (beforeinstallprompt), and shown only through the
  *     ticket page's "Add to home screen" box, which the server renders only for the patient who joined, on
@@ -23,9 +24,15 @@
   var DISMISSED = "clinicq.install.dismissed";
 
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register(SW_URL, { scope: SW_SCOPE }).catch(function () {
-      /* no worker (a private window, an old browser): the pages still work online */
-    });
+    navigator.serviceWorker
+      .register(SW_URL, { scope: SW_SCOPE })
+      .then(function (registration) {
+        // A registration that already existed is not re-checked by register(): ask for the new release.
+        return registration.update();
+      })
+      .catch(function () {
+        /* no worker (a private window, an old browser), or offline: the pages still work online */
+      });
   }
 
   var installed =

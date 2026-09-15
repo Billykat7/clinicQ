@@ -6,8 +6,9 @@
  * patient-tickets.js: that ticket's, or else the most recent one this phone followed. The age counts up
  * every second from when the phone received it; nothing here suggests the numbers are current.
  *
- * When the network comes back ("online"), or "Try again" is pressed, the page reloads: the worker then
- * fetches the live page. External file, no inline handlers, no eval: satisfies script-src 'self'.
+ * When the network comes back the page reloads, and the worker then fetches the live page: on the browser's
+ * "online" event, on "Try again", and on its own every RETRY_MS, because a phone behind a dead router or on a
+ * flaky signal is never told it is back online. The check asks for the page itself, with a time limit. External file, no inline handlers, no eval: satisfies script-src 'self'.
  */
 (function () {
   "use strict";
@@ -74,6 +75,37 @@
     var kept = Number(root.getAttribute("data-kept-at"));
     if (kept) $("off-age").textContent = age(Date.now() - kept);
   }
+
+  var RETRY_MS = 15000;
+  var CHECK_LIMIT_MS = 8000;
+  var checking = false;
+
+  /** Whether the server answers now: then reload into the live page. At most one check at a time. */
+  function check() {
+    if (checking || typeof fetch !== "function") return;
+    checking = true;
+    var controller = typeof AbortController === "function" ? new AbortController() : null;
+    var timer = window.setTimeout(function () {
+      if (controller) controller.abort();
+    }, CHECK_LIMIT_MS);
+    fetch(window.location.pathname, {
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { Accept: "text/html" },
+      signal: controller ? controller.signal : undefined
+    })
+      .then(function (response) {
+        if (response.ok) window.location.reload();
+      })
+      .catch(function () {
+        /* still no network */
+      })
+      .then(function () {
+        window.clearTimeout(timer);
+        checking = false;
+      });
+  }
+  window.setInterval(check, RETRY_MS);
 
   function none() {
     $("off-none").hidden = false;
