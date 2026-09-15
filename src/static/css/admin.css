@@ -2160,3 +2160,18 @@ details.collapsible[open] > summary .chev { transform: rotate(180deg); }
 fieldset.field { margin: 0 0 1rem; padding: 0; border: 0; min-width: 0; }
 fieldset.field > legend { margin-bottom: .3rem; padding: 0; font-size: .85rem; color: var(--muted); }
 .check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: .45rem 1rem; }
+
+/* ── Patient message template editor (Issue 66) ─────────────────────────────── */
+
+/* What a patient receives, drawn as a message bubble so the words read as they will on a phone. */
+.preview-phone {
+  max-width: 22rem;
+  padding: .9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 18px 18px 18px 4px;
+  background: var(--bg-soft);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.preview-phone .preview-subject { margin: 0 0 .35rem; font-weight: 700; }
+.preview-phone .preview-text { margin: 0; }

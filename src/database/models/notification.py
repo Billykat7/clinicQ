@@ -118,6 +118,20 @@ class Notification(Base, TimestampMixin):
         nullable=True,
     )
     """The row on the transport tried before this one, when this row is its fallback (Issue 63)."""
+    template_version_id: Mapped[str | None] = mapped_column(
+        String(36),
+        # Named by hand: the convention's name would be 66 characters, past PostgreSQL's 63.
+        ForeignKey(
+            f"{SCHEMA}.notification_template_version.id",
+            ondelete="RESTRICT",
+            name="fk_notification_template_version_id",
+        ),
+        nullable=True,
+    )
+    """The exact words this message was rendered from (Issue 66): an immutable template version, so the
+    message can be reproduced later and a retry says what the first attempt said."""
+    language: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    """The language the message went out in (a :class:`~src.commons.enums.BoardLanguage` code)."""
     cost: Mapped[Decimal | None] = mapped_column(Numeric(10, 4), nullable=True)
     """What the provider charged for the message, in ``cost_currency``; ``0`` for a free transport,
     ``NULL`` until a provider has accepted it."""

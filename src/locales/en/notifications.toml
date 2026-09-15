@@ -1,0 +1,94 @@
+# What each patient message says, in English (Issue 66).
+#
+# One table per message template and channel. `body` (and `subject`, for web push) may use only the
+# blanks the message's variable contract allows (src/modules/notifications/template_registry.py), and an
+# SMS must fit one GSM 7-bit segment with the longest names the database allows. Both are checked when
+# the templates are registered, so a mistake fails the test suite, never a patient's message.
+#
+# Changing words means raising `version`: every version sent is kept, so a message can be reproduced
+# exactly later.
+#
+# Blanks: {app} the service's name · {number} the ticket number · {clinic} the clinic · {queue} the queue
+# · {room} the room, when the queue has one · {where} the room, else the queue · {minutes} minutes left
+# before a recall becomes a no-show · {wait} the expected wait, a range.
+
+language = "en"
+reviewed_by = "Written in English by the team; no separate review"
+
+[ticket_next.sms]
+version = 1
+body = "{app}: ticket {number} at {clinic}, you are next. Please be ready at {where}."
+
+[ticket_next.whatsapp]
+version = 1
+body = "{app}: ticket {number} at {clinic}, you are next. Please be ready at {where}."
+
+[ticket_next.web_push]
+version = 1
+subject = "You are next"
+body = "Ticket {number} at {clinic}. Please be ready."
+
+[ticket_called.sms]
+version = 1
+body = "{app}: ticket {number}, please come in now to {where} at {clinic}."
+
+[ticket_called.whatsapp]
+version = 1
+body = "{app}: ticket {number}, please come in now to {where} at {clinic}."
+
+[ticket_called.web_push]
+version = 1
+subject = "Please come in now"
+body = "Ticket {number} at {clinic}."
+
+[ticket_recalled.sms]
+version = 1
+body = "{app}: ticket {number} at {clinic}: we called you once more. Come to {where} within {minutes} minutes or it is marked missed."
+
+[ticket_recalled.whatsapp]
+version = 1
+body = "{app}: ticket {number} at {clinic}: we called you once more. Come to {where} within {minutes} minutes or it is marked missed."
+
+[ticket_recalled.web_push]
+version = 1
+subject = "You have been called again"
+body = "Ticket {number} at {clinic}. Please come in now."
+
+[ticket_no_show.sms]
+version = 1
+body = "{app}: ticket {number} at {clinic} was marked missed after 2 calls. To join the queue again, ask at the front desk."
+
+[ticket_no_show.whatsapp]
+version = 1
+body = "{app}: ticket {number} at {clinic} was marked missed after 2 calls. To join the queue again, ask at the front desk."
+
+[ticket_no_show.web_push]
+version = 1
+subject = "Ticket marked missed"
+body = "Ticket {number} at {clinic}. Ask at the front desk to join again."
+
+[ticket_transferred.sms]
+version = 1
+body = "{app}: at {clinic} you are now ticket {number} in {queue}. Wait {wait}. No need to join again."
+
+[ticket_transferred.whatsapp]
+version = 1
+body = "{app}: at {clinic} you are now ticket {number} in {queue}. Wait {wait}. No need to join again."
+
+[ticket_transferred.web_push]
+version = 1
+subject = "Your visit continues"
+body = "Ticket {number} at {clinic}. Open to see where to go."
+
+[ticket_cancelled.sms]
+version = 1
+body = "{app}: ticket {number} at {clinic} was cancelled by the clinic. To join again, ask at the front desk."
+
+[ticket_cancelled.whatsapp]
+version = 1
+body = "{app}: ticket {number} at {clinic} was cancelled by the clinic. To join again, ask at the front desk."
+
+[ticket_cancelled.web_push]
+version = 1
+subject = "Ticket cancelled"
+body = "Ticket {number} at {clinic} was cancelled by the clinic."

@@ -23,6 +23,9 @@ from src.modules.documents.router import router as documents_router
 from src.modules.messaging.router import router as messaging_router
 from src.modules.notifications.budget_router import router as sms_budget_router
 from src.modules.notifications.router import router as notifications_router
+from src.modules.notifications.template_router import (
+    router as notification_templates_router,
+)
 from src.modules.patients.router import router as patients_router
 from src.modules.queue.router import router as queue_router
 from src.modules.queues.router import router as queues_router
@@ -43,6 +46,8 @@ api_v1_router.include_router(audit_router)
 api_v1_router.include_router(site_audit_router)
 api_v1_router.include_router(webhooks_router)
 api_v1_router.include_router(reference_router)
+# Before the notifications router, whose GET /notifications/{notification_id} would read "templates" as an id.
+api_v1_router.include_router(notification_templates_router)
 api_v1_router.include_router(notifications_router)
 api_v1_router.include_router(sms_budget_router)
 api_v1_router.include_router(messaging_router)

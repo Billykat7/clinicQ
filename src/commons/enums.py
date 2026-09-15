@@ -1451,6 +1451,13 @@ class SmsProviderKind(StrEnum):
     AFRICAS_TALKING = "africas_talking"
 
 
+class TemplateSource(StrEnum):
+    """Where a notification template version came from (Issue 66)."""
+
+    BUILTIN = "builtin"
+    EDITED = "edited"
+
+
 class SmsBlockReason(StrEnum):
     """Why an SMS was not sent although a patient could be reached by one (Issue 65).
 
@@ -1627,6 +1634,18 @@ NOTIFICATION_URGENT_TEMPLATES: frozenset[NotificationTemplate] = frozenset(
         NotificationTemplate.TICKET_CALLED,
     }
 )
+
+#: The five languages patient messages are written in (Issue 66): English, isiZulu, isiXhosa, Afrikaans and
+#: Sesotho, as :class:`BoardLanguage` codes so a clinic's board language and a patient's message language
+#: are one vocabulary. English is the fallback for every message.
+NOTIFICATION_LANGUAGES: tuple[BoardLanguage, ...] = (
+    BoardLanguage.ENGLISH,
+    BoardLanguage.ISIZULU,
+    BoardLanguage.ISIXHOSA,
+    BoardLanguage.AFRIKAANS,
+    BoardLanguage.SESOTHO,
+)
+DEFAULT_NOTIFICATION_LANGUAGE: BoardLanguage = BoardLanguage.ENGLISH
 
 #: The template each patient event is delivered with (Issue 63). A test fails if an event lacks one.
 PATIENT_EVENT_TEMPLATE: dict[PatientEvent, NotificationTemplate] = {

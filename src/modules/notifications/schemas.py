@@ -21,6 +21,7 @@ from src.commons.enums import (
     NotificationStatus,
     NotificationTemplate,
     PatientEvent,
+    TemplateSource,
 )
 
 
@@ -66,6 +67,13 @@ class NotificationRead(BaseModel):
     )
     cost_currency: str | None = Field(
         default=None, description="ISO 4217 currency of cost."
+    )
+    template_version_id: str | None = Field(
+        default=None,
+        description="The exact template version the message was rendered from (Issue 66).",
+    )
+    language: str | None = Field(
+        default=None, description="The language it went out in."
     )
     subject: str | None = Field(default=None, description="Email subject (SMS: null).")
     status: NotificationStatus = Field(description="Current delivery state.")
@@ -354,3 +362,79 @@ class SmsBudgetIn(BaseModel):
     """Set a clinic's own daily SMS cap, or ``null`` to use the platform default."""
 
     daily_cap: int | None = Field(default=None, ge=0, le=100_000)
+
+
+# --- Template registry and editor (Issue 66) ---------------------------------------------------------
+
+
+class TemplateVersionOut(BaseModel):
+    """One version of one message template: its words and where they came from."""
+
+    id: str | None = Field(
+        default=None,
+        description="The stored version's id; null for a locale file version not yet sent.",
+    )
+    template: NotificationTemplate
+    channel: NotificationChannel
+    language: str
+    version: int
+    subject: str | None = None
+    body: str
+    source: TemplateSource
+    created_by: str | None = None
+    reviewed_by: str | None = Field(
+        default=None,
+        description="The fluent speaker who checked the words; null until someone has.",
+    )
+    created_at: datetime | None = None
+
+
+class TemplateKeyOut(BaseModel):
+    """A template in one channel and language: what is sent now, the blanks it may use, and its history."""
+
+    current: TemplateVersionOut
+    variables: list[str]
+    versions: list[TemplateVersionOut]
+
+
+class TemplateListOut(BaseModel):
+    """Every patient message template, per channel and language, as it is sent now."""
+
+    languages: list[str]
+    items: list[TemplateVersionOut]
+
+
+class TemplateDraftIn(BaseModel):
+    """Words to preview, or to publish as a new version."""
+
+    body: str = Field(min_length=1, max_length=1000)
+    subject: str | None = Field(default=None, max_length=120)
+    reviewed_by: str | None = Field(default=None, max_length=200)
+
+
+class TemplatePreviewIn(TemplateDraftIn):
+    """Words to preview for a template, channel and language."""
+
+    template: NotificationTemplate
+    channel: NotificationChannel
+    language: str = Field(min_length=2, max_length=5)
+
+
+class TemplatePreviewOut(BaseModel):
+    """Exactly what a patient would receive, and whether the words may be published.
+
+    ``text``/``subject`` are rendered from a sample ticket, as the channel sends them (an SMS after its
+    GSM 7-bit normalisation). For an SMS, ``characters``/``segments`` count that message, and
+    ``worst_characters``/``worst_segments`` the same words with the longest names the database allows,
+    which is what must fit one segment.
+    """
+
+    valid: bool
+    error: str | None = None
+    subject: str | None = None
+    text: str = ""
+    characters: int | None = None
+    encoding: str | None = None
+    segments: int | None = None
+    worst_characters: int | None = None
+    worst_segments: int | None = None

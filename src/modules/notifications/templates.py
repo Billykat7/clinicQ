@@ -20,10 +20,11 @@ Two rendering modes share this registry:
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Final
+from typing import Any
 
 from src.commons.enums import NotificationChannel, NotificationTemplate
 from src.core.config import get_settings
+from src.modules.notifications import template_registry
 from src.modules.notifications.schemas import RenderedMessage
 
 # Reserved payload keys carrying an already-rendered body (the passthrough mode above).
@@ -73,164 +74,6 @@ def _render_staff_invitation_sms(context: dict[str, Any]) -> RenderedMessage:
     )
 
 
-#: The longest a clinic, queue or room name may be inside a queue SMS (Issue 65), so every message fits one
-#: GSM segment (160 characters) whatever the clinic calls itself. A longer name is shortened with "...".
-SMS_CLINIC_CHARS: Final = 28
-SMS_PLACE_CHARS: Final = 18
-
-
-def _fit(value: object, limit: int) -> str:
-    """``value`` as text, shortened to ``limit`` characters with a GSM-safe "..." when longer."""
-    text = " ".join(str(value).split())
-    return text if len(text) <= limit else text[: limit - 3].rstrip() + "..."
-
-
-def _ticket_words(context: dict[str, Any]) -> tuple[str, str, str, str]:
-    """The app's name, the ticket number, the clinic and where to go, each short enough for one segment."""
-    where = context.get("room") or context["queue"]
-    return (
-        get_settings().app_name,
-        str(context["number"]),
-        _fit(context["clinic"], SMS_CLINIC_CHARS),
-        _fit(where, SMS_PLACE_CHARS),
-    )
-
-
-def _render_ticket_recalled_sms(context: dict[str, Any]) -> RenderedMessage:
-    """A called patient has not arrived and has been called once more (Issue 43): come now, or it is missed.
-
-    Expects ``number``, ``clinic``, ``queue`` and ``minutes``; ``room`` when the queue has one.
-    """
-    app_name, number, clinic, where = _ticket_words(context)
-    return RenderedMessage(
-        text=(
-            f"{app_name}: ticket {number} at {clinic}: we called you once more. Come to {where} "
-            f"within {context['minutes']} minutes or it is marked missed."
-        )
-    )
-
-
-def _render_ticket_no_show_sms(context: dict[str, Any]) -> RenderedMessage:
-    """A recalled patient still did not arrive: the ticket is closed, and how to join again (Issue 43)."""
-    app_name, number, clinic, _ = _ticket_words(context)
-    return RenderedMessage(
-        text=(
-            f"{app_name}: ticket {number} at {clinic} was marked missed after 2 calls. To join the "
-            "queue again, ask at the front desk."
-        )
-    )
-
-
-def _render_ticket_transferred_sms(context: dict[str, Any]) -> RenderedMessage:
-    """A patient moved on to the next queue of their visit (Issue 45): where, which number, how long."""
-    app_name, number, clinic, _ = _ticket_words(context)
-    return RenderedMessage(
-        text=(
-            f"{app_name}: at {clinic} you are now ticket {number} in "
-            f"{_fit(context['queue'], SMS_PLACE_CHARS)}. Wait {context['wait']}. No need to join again."
-        )
-    )
-
-
-def _render_ticket_next_sms(context: dict[str, Any]) -> RenderedMessage:
-    """The patient is first in line (Issue 63): time to be at the clinic, and where."""
-    app_name, number, clinic, where = _ticket_words(context)
-    return RenderedMessage(
-        subject="You are next",
-        text=f"{app_name}: ticket {number} at {clinic}, you are next. Please be ready at {where}.",
-    )
-
-
-def _render_ticket_called_sms(context: dict[str, Any]) -> RenderedMessage:
-    """The patient has been called (Issue 63): come in now, and where to go."""
-    app_name, number, clinic, where = _ticket_words(context)
-    return RenderedMessage(
-        subject="Please come in now",
-        text=f"{app_name}: ticket {number}, please come in now to {where} at {clinic}.",
-    )
-
-
-def _render_ticket_cancelled_sms(context: dict[str, Any]) -> RenderedMessage:
-    """The clinic cancelled the patient's ticket (Issue 63): say so, and how to join again."""
-    app_name, number, clinic, _ = _ticket_words(context)
-    return RenderedMessage(
-        subject="Ticket cancelled",
-        text=(
-            f"{app_name}: ticket {number} at {clinic} was cancelled by the clinic. To join again, "
-            "ask at the front desk."
-        ),
-    )
-
-
-#: The patient's ticket messages (Issues 43, 45, 63). Until Issue 66 writes a richer variant per
-#: channel, WhatsApp carries the same words as the SMS; web push says less (``_PUSH_WORDS``).
-_TICKET_RENDERERS: dict[NotificationTemplate, Renderer] = {
-    NotificationTemplate.TICKET_NEXT: _render_ticket_next_sms,
-    NotificationTemplate.TICKET_CALLED: _render_ticket_called_sms,
-    NotificationTemplate.TICKET_RECALLED: _render_ticket_recalled_sms,
-    NotificationTemplate.TICKET_NO_SHOW: _render_ticket_no_show_sms,
-    NotificationTemplate.TICKET_TRANSFERRED: _render_ticket_transferred_sms,
-    NotificationTemplate.TICKET_CANCELLED: _render_ticket_cancelled_sms,
-}
-
-#: What each ticket message says as a web push (Issue 64): a title, and a body naming the ticket number
-#: and the clinic, nothing else. A lock screen is read by whoever picks the phone up, so no queue name
-#: (a queue can be "HIV clinic"), room, reason or name. ``{number}`` and ``{clinic}`` are the only blanks.
-_PUSH_WORDS: dict[NotificationTemplate, tuple[str, str]] = {
-    NotificationTemplate.TICKET_NEXT: (
-        "You are next",
-        "Ticket {number} at {clinic}. Please be ready.",
-    ),
-    NotificationTemplate.TICKET_CALLED: (
-        "Please come in now",
-        "Ticket {number} at {clinic}.",
-    ),
-    NotificationTemplate.TICKET_RECALLED: (
-        "You have been called again",
-        "Ticket {number} at {clinic}. Please come in now.",
-    ),
-    NotificationTemplate.TICKET_NO_SHOW: (
-        "Ticket marked missed",
-        "Ticket {number} at {clinic}. Ask at the front desk to join again.",
-    ),
-    NotificationTemplate.TICKET_TRANSFERRED: (
-        "Your visit continues",
-        "Ticket {number} at {clinic}. Open to see where to go.",
-    ),
-    NotificationTemplate.TICKET_CANCELLED: (
-        "Ticket cancelled",
-        "Ticket {number} at {clinic} was cancelled by the clinic.",
-    ),
-}
-
-
-def _push_renderer(template: NotificationTemplate) -> Renderer:
-    """A web push renderer for ``template``: :data:`_PUSH_WORDS`, a link to the ticket page, a tag."""
-    title, body = _PUSH_WORDS[template]
-
-    def render_push(context: dict[str, Any]) -> RenderedMessage:
-        """Title and body from the number and clinic only; tapping opens the ticket's page."""
-        number, clinic = str(context["number"]), str(context["clinic"])
-        page_url = context.get("page_url")
-        return RenderedMessage(
-            subject=title,
-            text=body.format(number=number, clinic=clinic),
-            link=page_url
-            if isinstance(page_url, str) and page_url.startswith("/t/")
-            else None,
-            tag=f"clinicq-ticket-{number}",
-        )
-
-    return render_push
-
-
-#: The channels a patient notification can go out on with the SMS words. Web push has its own.
-_PATIENT_CHANNELS = (
-    NotificationChannel.SMS,
-    NotificationChannel.WHATSAPP,
-)
-
-
 # Context renderers, keyed by (channel, template). New SMS templates (and any future
 # context-rendered email) are registered here — the single registry the issue calls for.
 _RENDERERS: dict[tuple[NotificationChannel, NotificationTemplate], Renderer] = {
@@ -240,21 +83,7 @@ _RENDERERS: dict[tuple[NotificationChannel, NotificationTemplate], Renderer] = {
         NotificationChannel.SMS,
         NotificationTemplate.STAFF_INVITATION,
     ): _render_staff_invitation_sms,
-    **{
-        (channel, template): renderer
-        for channel in _PATIENT_CHANNELS
-        for template, renderer in _TICKET_RENDERERS.items()
-    },
-    **{
-        (NotificationChannel.WEB_PUSH, template): _push_renderer(template)
-        for template in _PUSH_WORDS
-    },
 }
-
-
-#: The languages the queue's messages are written in. Issue 66 adds language to this registry and Issue 77
-#: the other four; every SMS in every language listed here is checked to fit one segment.
-SMS_LANGUAGES: Final = ("en",)
 
 
 def prerendered_payload(
@@ -293,6 +122,13 @@ def render(
             text=str(context[_TEXT]),
             subject=context.get(_SUBJECT),
             html=context.get(_HTML),
+        )
+    if template in template_registry.PATIENT_TEMPLATES:
+        # A patient's ticket message (Issue 66): the locale file's current English words. The service sends
+        # the version it stored on the ledger row instead (template_registry.render_version).
+        text = template_registry.builtin_text(template, channel)
+        return template_registry.render(
+            template, channel, text.body, text.subject, context
         )
     renderer = _RENDERERS.get((channel, template))
     if renderer is None:

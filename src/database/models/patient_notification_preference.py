@@ -36,6 +36,9 @@ class PatientNotificationPreference(Base, TimestampMixin):
     """The patient. ``CASCADE``: a preference means nothing without its patient."""
     preferred_channel: Mapped[str | None] = mapped_column(String(10), nullable=True)
     """:class:`~src.commons.enums.NotificationChannel` to try first; ``NULL`` means the chain's order."""
+    language: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    """The language the patient reads messages in (Issue 66), one of
+    :data:`~src.commons.enums.NOTIFICATION_LANGUAGES`; ``NULL`` uses the clinic's board language."""
 
     def __repr__(self) -> str:
         """Concise identifier for logs and test failures."""

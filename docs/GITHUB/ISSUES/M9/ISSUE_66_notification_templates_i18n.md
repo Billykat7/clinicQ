@@ -55,9 +55,11 @@ their patients will receive.
 
 ## Files touched
 
-- `src/modules/notifications/templates.py`
-- `src/locales/`
-- `src/templates/admin/template_editor.html`
+- `src/modules/notifications/templates.py`, `src/modules/notifications/template_registry.py`
+- `src/modules/notifications/template_router.py`
+- `src/locales/` (`en/notifications.toml`, `notifications.lock.json`)
+- `alembic/versions/0035_notification_template_versions.py`
+- `src/templates/admin/template_editor.html`, `src/templates/admin/notification_templates.html`
 
 ---
 
