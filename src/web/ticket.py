@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Final
 
 from fastapi import APIRouter, Request, status
@@ -44,6 +45,20 @@ from src.web.context import short_session
 from src.web.routes import templates
 
 router = APIRouter(prefix="/t", include_in_schema=False)
+#: The patient service worker (Issue 64), served from the site's root so it may control ``/t/``.
+worker_router = APIRouter(include_in_schema=False)
+_WORKER = Path(__file__).resolve().parents[1] / "static" / "patient-sw.js"
+
+
+@worker_router.get("/patient-sw.js", name="patient_service_worker")
+def patient_service_worker() -> Response:
+    """The patient service worker. Never cached, so a new deploy is picked up on the next visit."""
+    return Response(
+        _WORKER.read_bytes(),
+        media_type="text/javascript",
+        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/t/"},
+    )
+
 
 #: The page's HTML is never cached: it carries the state it was rendered with.
 NO_STORE: Final = {"Cache-Control": "no-store"}

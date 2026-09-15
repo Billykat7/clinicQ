@@ -35,6 +35,10 @@ class RenderedMessage:
     text: str
     subject: str | None = None
     html: str | None = None
+    link: str | None = None
+    """Where tapping the message opens (a web push), a path on this site."""
+    tag: str | None = None
+    """Messages with the same tag replace each other on the phone (a web push)."""
 
 
 class NotificationRead(BaseModel):
@@ -257,3 +261,55 @@ class DeliveryReceipt(BaseModel):
         max_length=1000,
         description="Optional provider-supplied reason, recorded on a failure.",
     )
+
+
+# --- Web push (Issue 64) ---------------------------------------------------------------------------
+
+#: The longest endpoint a browser's push service hands out that the server accepts.
+MAX_PUSH_ENDPOINT_LENGTH = 2048
+
+
+class WebPushKeyOut(BaseModel):
+    """Whether web push is on, and the key a browser subscribes with."""
+
+    enabled: bool
+    public_key: str | None = Field(
+        default=None,
+        description="VAPID application server key, base64url; null while web push is off.",
+    )
+
+
+class PushSubscriptionKeys(BaseModel):
+    """The browser's keys, as ``PushSubscription.toJSON()`` gives them."""
+
+    p256dh: str = Field(min_length=80, max_length=128)
+    auth: str = Field(min_length=16, max_length=48)
+
+
+class PushSubscriptionIn(BaseModel):
+    """A browser's push subscription, as ``PushSubscription.toJSON()`` gives it."""
+
+    model_config = {"populate_by_name": True}
+
+    endpoint: str = Field(min_length=12, max_length=MAX_PUSH_ENDPOINT_LENGTH)
+    keys: PushSubscriptionKeys
+    expiration_time: int | None = Field(
+        default=None,
+        alias="expirationTime",
+        ge=0,
+        description="When the browser says the subscription expires, epoch milliseconds; usually null.",
+    )
+
+
+class PushSubscriptionOut(BaseModel):
+    """The stored subscription."""
+
+    id: str
+    created: bool
+    """False when this browser had already subscribed (its keys were refreshed)."""
+
+
+class PushUnsubscribeIn(BaseModel):
+    """Which of the signed-in patient's browsers to stop notifying."""
+
+    endpoint: str = Field(min_length=12, max_length=MAX_PUSH_ENDPOINT_LENGTH)

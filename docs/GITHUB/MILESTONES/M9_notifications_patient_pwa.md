@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Status** | 🚧 In progress: the notification service, transports and delivery log (63) and the patient ticket page (68) delivered |
-| **Progress** | 🟩🟩⬜⬜⬜⬜⬜⬜⬜⬜ **22%** (2/9 issues) |
+| **Status** | 🚧 In progress: the notification service, transports and delivery log (63), the patient ticket page (68) and web push (64) delivered |
+| **Progress** | 🟩🟩🟩⬜⬜⬜⬜⬜⬜⬜ **33%** (3/9 issues) |
 | **Sprints** | 9–10 (weeks 17–20), semester 2. The sprint plan spreads its issues over sprints 3–12: some start early against stubs and some are scheduled after this window, which moves the milestone's close (and its tag) to sprint 12 (see the table) |
 | **Release tag** | `v0.9.0` |
 | **Primary owner** | B, Integrations · C, Frontend/Patient |

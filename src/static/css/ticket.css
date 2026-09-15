@@ -110,7 +110,8 @@
 
 /* ── Actions ─────────────────────────────────────────────────── */
 
-.tk-actions, .tk-cancel, .tk-confirm { display: grid; gap: var(--space-2); }
+.tk-actions, .tk-cancel, .tk-confirm, .tk-push { display: grid; gap: var(--space-2); }
+.tk-push [data-push-say] { display: none; }
 .tk-actions .btn, .tk-cancel .btn { min-height: var(--tap); }
 .tk-confirm {
   padding: var(--space-4);

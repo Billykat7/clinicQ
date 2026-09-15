@@ -151,7 +151,7 @@ def test_a_provider_raising_anything_cannot_undo_the_call(
     """An exception that is not a transport error is still recorded, not raised into the request."""
 
     class Exploding(NoopTransport):
-        def send(self, *, to, message):  # type: ignore[no-untyped-def]
+        def send(self, *, to, message, patient=None):  # type: ignore[no-untyped-def]
             raise RuntimeError("the SDK crashed")
 
     with desk.session() as db:

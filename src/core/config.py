@@ -799,6 +799,80 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Web push (Issue 64). The key pair is a secret held in the environment, generated once with
+    # `python -m scripts.generate_vapid_keys`; with no keys, web push is off and patients get SMS.
+    web_push_vapid_public_key: str = Field(
+        default="",
+        description=(
+            "VAPID application server public key, base64url, uncompressed P-256 point: given to "
+            "browsers when they subscribe (env: WEB_PUSH_VAPID_PUBLIC_KEY)."
+        ),
+    )
+
+    web_push_vapid_private_key: str = Field(
+        default="",
+        description=(
+            "VAPID private key, base64url raw P-256 scalar. A secret: server-side only, never logged "
+            "(env: WEB_PUSH_VAPID_PRIVATE_KEY)."
+        ),
+    )
+
+    web_push_vapid_subject: str = Field(
+        default="",
+        description=(
+            "Contact push services use to reach the operator: a mailto: address or an https: URL "
+            "(env: WEB_PUSH_VAPID_SUBJECT)."
+        ),
+    )
+
+    web_push_allowed_hosts: list[str] = Field(
+        default=[
+            "fcm.googleapis.com",
+            "push.services.mozilla.com",
+            "push.apple.com",
+            "notify.windows.com",
+        ],
+        description=(
+            "Push service hosts (and their subdomains) a subscription endpoint may point at. The "
+            "server POSTs to the endpoint a browser gave it, so anything else is refused "
+            "(env: WEB_PUSH_ALLOWED_HOSTS, JSON list)."
+        ),
+    )
+
+    web_push_require_https: bool = Field(
+        default=True,
+        description=(
+            "Refuse a subscription endpoint that is not https. Only a local test push service turns "
+            "this off (env: WEB_PUSH_REQUIRE_HTTPS)."
+        ),
+    )
+
+    web_push_ttl_seconds: int = Field(
+        default=900,
+        ge=0,
+        le=86_400,
+        description=(
+            "How long a push service keeps a message for a phone that is offline: 'you are next' is "
+            "no use an hour later (env: WEB_PUSH_TTL_SECONDS)."
+        ),
+    )
+
+    web_push_timeout_seconds: float = Field(
+        default=5.0,
+        gt=0,
+        le=30,
+        description="Seconds to wait for a push service to accept a message (env: WEB_PUSH_TIMEOUT_SECONDS).",
+    )
+
+    @property
+    def web_push_enabled(self) -> bool:
+        """Whether web push is configured: both halves of the VAPID key pair and a subject."""
+        return bool(
+            self.web_push_vapid_public_key
+            and self.web_push_vapid_private_key
+            and self.web_push_vapid_subject
+        )
+
     notification_webhook_secret: str = Field(
         default="",
         description=(
@@ -1488,6 +1562,36 @@ class Settings(BaseSettings):
                     "PAYSTACK_SECRET_KEY",
                     "A live Paystack secret key (sk_live_…) may only be used in production; use "
                     "a test key (sk_test_…) outside production.",
+                )
+            )
+        vapid = (
+            self.web_push_vapid_public_key,
+            self.web_push_vapid_private_key,
+            self.web_push_vapid_subject,
+        )
+        if any(vapid) and not all(vapid):
+            problems.append(
+                ConfigProblem(
+                    "WEB_PUSH_VAPID_PRIVATE_KEY",
+                    "WEB_PUSH_VAPID_PUBLIC_KEY, WEB_PUSH_VAPID_PRIVATE_KEY and "
+                    "WEB_PUSH_VAPID_SUBJECT are set together or not at all.",
+                )
+            )
+        if self.web_push_vapid_subject and not self.web_push_vapid_subject.startswith(
+            ("mailto:", "https://")
+        ):
+            problems.append(
+                ConfigProblem(
+                    "WEB_PUSH_VAPID_SUBJECT",
+                    "WEB_PUSH_VAPID_SUBJECT must be a mailto: address or an https: URL.",
+                )
+            )
+        if not self.web_push_require_https and is_production:
+            problems.append(
+                ConfigProblem(
+                    "WEB_PUSH_REQUIRE_HTTPS",
+                    "WEB_PUSH_REQUIRE_HTTPS must be true in production: a push endpoint is "
+                    "reached over the internet.",
                 )
             )
         if self.environment is AppEnvironment.DEVELOPMENT:

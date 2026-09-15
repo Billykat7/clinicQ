@@ -14,12 +14,22 @@ Two endpoints, both operational rather than end-user facing:
 from __future__ import annotations
 
 import hmac
+from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from sqlalchemy.orm import Session
 
-from src.api.rbac_deps import require
+from src.api.rbac_deps import require, require_patient
 from src.commons.enums import (
     GrantScope,
     NotificationCategory,
@@ -29,10 +39,18 @@ from src.commons.enums import (
 )
 from src.commons.exceptions import InAppNotificationNotFoundError
 from src.core.config import Settings, get_settings
+from src.core.s3_logging import APP_TIMEZONE
 from src.core.security import get_current_user, resolve_active_user
+from src.database.models.patient import Patient
 from src.database.models.user import User
 from src.database.session import get_db
-from src.modules.notifications import CENTRE_RESOURCE_KEY, center, preferences, service
+from src.modules.notifications import (
+    CENTRE_RESOURCE_KEY,
+    center,
+    preferences,
+    service,
+    webpush,
+)
 from src.modules.notifications.center import CenterItem
 from src.modules.notifications.preferences import InvalidTimezoneError
 from src.modules.notifications.schemas import (
@@ -45,6 +63,10 @@ from src.modules.notifications.schemas import (
     NotificationPreferencesRead,
     NotificationPreferencesUpdate,
     NotificationRead,
+    PushSubscriptionIn,
+    PushSubscriptionOut,
+    PushUnsubscribeIn,
+    WebPushKeyOut,
 )
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -62,6 +84,8 @@ LogsReadDep = Annotated[
 DbSession = Annotated[Session, Depends(get_db)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 CurrentUser = Annotated[dict, Depends(get_current_user)]
+#: A patient acting for themselves: their own browsers' push subscriptions (Issue 64).
+PatientSelf = Annotated[Patient, Depends(require_patient("patients.self", "update"))]
 
 # Issue #163: resolved through the generic ``require`` factory (src.api.rbac_deps) against the
 # manifest-registered ``communications.notifications`` resource, rather than the hand-written named
@@ -252,6 +276,83 @@ def mark_notification_unread(
         ) from exc
     db.commit()
     return CenterMarkResult(unread_total=center.unread_total(db, user.id))
+
+
+# ---------------------------------------------------------------------------------------------------
+# Web push (Issue 64). Declared before ``GET /{notification_id}`` so ``web-push`` is never read as an id.
+# ---------------------------------------------------------------------------------------------------
+
+
+@router.get("/web-push/key", response_model=WebPushKeyOut)
+def get_web_push_key(settings: SettingsDep) -> WebPushKeyOut:
+    """The VAPID public key a browser subscribes with, or ``enabled: false`` while web push is off.
+
+    Public: the key is public by design (it is in every subscription a browser makes), and a patient's
+    phone asks for it before it has anything else.
+    """
+    if not settings.web_push_enabled:
+        return WebPushKeyOut(enabled=False)
+    return WebPushKeyOut(enabled=True, public_key=settings.web_push_vapid_public_key)
+
+
+@router.post(
+    "/web-push/subscriptions",
+    response_model=PushSubscriptionOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def subscribe_to_web_push(
+    payload: PushSubscriptionIn,
+    request: Request,
+    response: Response,
+    patient: PatientSelf,
+    db: DbSession,
+    settings: SettingsDep,
+) -> PushSubscriptionOut:
+    """Store the signed-in patient's browser subscription: ``201`` when new, ``200`` when refreshed.
+
+    Only a patient's own session may subscribe, so a phone that was only sent a ticket link cannot sign
+    itself up for someone else's messages. The endpoint must be a known push service over https (the
+    server POSTs to it later); anything else is ``422``, as are keys that are not a P-256 point and a
+    16-byte secret. Refused with ``409`` while web push is off.
+    """
+    if not settings.web_push_enabled:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail="Web push is not available."
+        )
+    expires_at = (
+        datetime.fromtimestamp(payload.expiration_time / 1000, APP_TIMEZONE)
+        if payload.expiration_time
+        else None
+    )
+    try:
+        row, created = webpush.subscribe(
+            db,
+            patient.id,
+            endpoint=payload.endpoint,
+            p256dh=payload.keys.p256dh,
+            auth=payload.keys.auth,
+            expires_at=expires_at,
+            user_agent=request.headers.get("User-Agent"),
+            settings=settings,
+        )
+    except webpush.InvalidSubscriptionError as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+    db.commit()
+    if not created:
+        response.status_code = status.HTTP_200_OK
+    return PushSubscriptionOut(id=row.id, created=created)
+
+
+@router.delete("/web-push/subscriptions", status_code=status.HTTP_204_NO_CONTENT)
+def unsubscribe_from_web_push(
+    payload: PushUnsubscribeIn, patient: PatientSelf, db: DbSession
+) -> Response:
+    """Stop notifying one of the signed-in patient's browsers. ``204`` whether or not it was subscribed."""
+    webpush.unsubscribe(db, patient.id, payload.endpoint)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{notification_id}", response_model=NotificationRead)

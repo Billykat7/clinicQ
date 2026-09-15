@@ -19,6 +19,7 @@
 
 {% block scripts %}
   <script src="/static/js/ticket.js" defer></script>
+  {% if ticket.push_key %}<script src="/static/js/push.js" defer></script>{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -85,6 +86,20 @@
     <button type="button" class="btn btn-quiet btn-block" id="tk-share">Share this ticket</button>
     <p class="tk-note" id="tk-share-note" role="status" hidden></p>
   </div>
+
+  {# Web push (Issue 64): only for the ticket's own patient, and the browser asks only when the button is
+     pressed, never on load. push.js shows the block and chooses which sentence to say. #}
+  {% if ticket.push_key %}
+  <div class="tk-push" id="tk-push" hidden>
+    <button type="button" class="btn btn-block" id="tk-push-start">Tell me on this phone when it is my turn</button>
+    <p class="tk-note" id="tk-push-note" role="status" hidden></p>
+    <p data-push-say="on" hidden>Done: this phone will be told when you are next and when you are called.</p>
+    <p data-push-say="declined" hidden>Notifications are off for this site, so we will send you an SMS instead.</p>
+    <p data-push-say="failed" hidden>This phone could not be set up for notifications. We will send you an SMS instead.</p>
+    <p data-push-say="ios" hidden>On an iPhone, add this page to your Home Screen and open it from there to get notifications. Until then we will send you an SMS.</p>
+    <p data-push-say="unsupported" hidden>This browser cannot show notifications, so we will send you an SMS instead.</p>
+  </div>
+  {% endif %}
 
   {# Cancelling: two taps. Offered only to the ticket's own patient while they are waiting. #}
   <div class="tk-cancel" id="tk-cancel" {% if not ticket.cancel_url %}hidden{% endif %}>

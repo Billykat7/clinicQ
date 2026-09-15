@@ -17,6 +17,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import sessionmaker
 
+from scripts.generate_vapid_keys import generate
 from src.commons.enums import ActorKind, SiteStatus, TicketSource
 from src.commons.ids import new_id
 from src.core import refresh_token_policy, security
@@ -27,6 +28,7 @@ from src.database.models import Queue
 from src.database.schema import apply_postgres_search_path
 from src.database.session import get_db
 from src.main import create_app
+from src.modules.queue import ticket_page
 from src.modules.queue.lifecycle import Actor, call_next
 from src.modules.queue.sequence import issue_ticket
 from src.modules.queue.snapshot import NoSnapshotCache, set_snapshot_cache
@@ -44,6 +46,14 @@ pytestmark = pytest.mark.postgres
 SITE = "0199b0c0-0000-7000-8000-0000000e2e68"
 #: How often the test server's ticket streams beat (production: 15 seconds).
 SERVER_HEARTBEAT_SECONDS = 0.5
+PUSH_SUBJECT = "mailto:ops@clinicq.example"
+
+
+def generate_vapid_keys(subject: str) -> dict[str, str]:
+    """The ``WEB_PUSH_VAPID_*`` settings as keyword arguments."""
+    return {name.lower(): value for name, value in generate(subject).items()}
+
+
 DESK = Actor(kind=ActorKind.STAFF, label="desk@clinicq.example")
 _DAY_TABLES = (
     "notification",
@@ -57,7 +67,10 @@ _DAY_TABLES = (
 @pytest.fixture(scope="module")
 def patient_clinic(e2e_database: URL, browser: Any) -> Iterator[SimpleNamespace]:
     """The clinic, its Triage queue and a running server for this module."""
-    settings = dashboard_settings(scheduler_enabled=False)
+    # Web push on (Issue 64), with a key pair made for this run. Nothing is sent to a push service here.
+    settings = dashboard_settings(
+        scheduler_enabled=False, **generate_vapid_keys(PUSH_SUBJECT)
+    )
     engine = create_engine(e2e_database, pool_size=10, max_overflow=10)
     apply_postgres_search_path(engine)
     factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
@@ -88,7 +101,7 @@ def patient_clinic(e2e_database: URL, browser: Any) -> Iterator[SimpleNamespace]
             yield db
 
     with pytest.MonkeyPatch.context() as patch:
-        for module in (security, refresh_token_policy):
+        for module in (security, refresh_token_policy, ticket_page):
             patch.setattr(module, "get_settings", lambda: settings)
         patch.setattr(
             ticket_routes, "TICKET_HEARTBEAT_SECONDS", SERVER_HEARTBEAT_SECONDS

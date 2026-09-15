@@ -58,7 +58,13 @@ class NoopTransport(Transport):
         """The configured address, whoever the patient is."""
         return self.address
 
-    def send(self, *, to: str, message: RenderedMessage) -> TransportReceipt:
+    def send(
+        self,
+        *,
+        to: str,
+        message: RenderedMessage,
+        patient: PatientAddresses | None = None,
+    ) -> TransportReceipt:
         """Record the message, or raise the configured failure."""
         if self.delay_seconds:
             time.sleep(self.delay_seconds)

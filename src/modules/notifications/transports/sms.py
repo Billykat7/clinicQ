@@ -38,7 +38,13 @@ class SmsTransport(Transport):
         """The patient's verified number: every patient has one, so SMS always can."""
         return patient.phone_e164
 
-    def send(self, *, to: str, message: RenderedMessage) -> TransportReceipt:
+    def send(
+        self,
+        *,
+        to: str,
+        message: RenderedMessage,
+        patient: PatientAddresses | None = None,
+    ) -> TransportReceipt:
         """Send the message's text; a number the gateway rejects is a permanent failure."""
         try:
             message_id = self.provider.send(

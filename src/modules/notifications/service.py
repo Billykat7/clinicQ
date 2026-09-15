@@ -55,7 +55,7 @@ from src.database.models.patient_notification_preference import (
     PatientNotificationPreference,
 )
 from src.database.session import get_db_context
-from src.modules.notifications import dispatch, preferences, templates
+from src.modules.notifications import dispatch, preferences, templates, webpush
 from src.modules.notifications.preferences import DeliveryDecision, DeliveryOutcome
 from src.modules.notifications.schemas import DeliveryReceipt, RenderedMessage
 from src.modules.notifications.sms import SmsProvider, build_sms_provider
@@ -67,6 +67,7 @@ from src.modules.notifications.transports import (
     TransportSet,
     active_transports,
 )
+from src.modules.notifications.webpush import SubscriptionGoneError
 
 logger = logging.getLogger(__name__)
 
@@ -137,14 +138,18 @@ def _deliver_email_transport(
 
 
 def _deliver_via_transport(
-    transport: Transport, *, to: str, message: RenderedMessage
+    transport: Transport,
+    *,
+    to: str,
+    message: RenderedMessage,
+    patient: PatientAddresses | None = None,
 ) -> TransportReceipt:
     """Hand one message to a transport adapter (SMS, web push, WhatsApp) and return its receipt.
 
     The only call to :meth:`Transport.send` in the application. It is private to this module and
     reached only from :func:`attempt`, after the send-time gate has answered.
     """
-    return transport.send(to=to, message=message)
+    return transport.send(to=to, message=message, patient=patient)
 
 
 # --------------------------------------------------------------------------------------
@@ -308,13 +313,22 @@ def attempt(
 
     transports = active_transports(sms_provider=provider)
     transport = transports.get(channel)
+    patient = (
+        db.get(Patient, notification.patient_id) if notification.patient_id else None
+    )
     try:
         if transport is None:
             raise PermanentTransportError(f"no {channel.value} transport is configured")
         receipt = _deliver_via_transport(
-            transport, to=notification.recipient, message=message
+            transport,
+            to=notification.recipient,
+            message=message,
+            patient=_addresses(db, patient, now=now) if patient is not None else None,
         )
     except Exception as exc:  # every transport error is recorded on the row, not raised
+        if isinstance(exc, SubscriptionGoneError):
+            # Dead at the push service: remove it now, so no later message tries it (Issue 64).
+            webpush.forget(db, exc.subscription_id)
         # SmsSendError, TransportError and anything a provider SDK raises all land here; the row
         # captures the reason and the backoff/dead-letter decision so the sweep can act on it.
         _apply_failure(
@@ -334,6 +348,8 @@ def attempt(
         now=now,
         cost=receipt.cost,
     )
+    if channel is NotificationChannel.WEB_PUSH:
+        webpush.mark_sent(db, notification.recipient, now=now)
     db.flush()
     return True
 
@@ -343,15 +359,15 @@ def attempt(
 # --------------------------------------------------------------------------------------
 
 
-def _addresses(db: Session, patient: Patient) -> PatientAddresses:
-    """Every way the service knows to reach ``patient``.
-
-    Push subscriptions are Issue 64's; until they exist a patient has none.
-    """
+def _addresses(
+    db: Session, patient: Patient, *, now: datetime | None = None
+) -> PatientAddresses:
+    """Every way the service knows to reach ``patient``: number, WhatsApp id and push subscriptions."""
     return PatientAddresses(
         patient_id=patient.id,
         phone_e164=patient.phone_e164,
         whatsapp_id=patient.whatsapp_id,
+        push_targets=webpush.targets_for(db, patient.id, now=now),
     )
 
 
@@ -451,7 +467,7 @@ def notify(
     settings = get_settings()
     template = PATIENT_EVENT_TEMPLATE[event]
     plan = plan_transports(
-        _addresses(db, patient),
+        _addresses(db, patient, now=now),
         active_transports(),
         preferred=preferred_channel(db, patient.id),
     )
@@ -542,7 +558,7 @@ def _fall_back(
     if patient is None:
         return None
     plan = plan_transports(
-        _addresses(db, patient),
+        _addresses(db, patient, now=now),
         transports,
         preferred=preferred_channel(db, patient.id),
         exclude=_tried_channels(db, failed),
