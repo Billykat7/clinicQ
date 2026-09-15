@@ -12,7 +12,8 @@ at `/t/{token}` *is* the app, and "installing" means the browser's **Add to home
 the patient's own ticket page, not on the home page.
 
 **The home page leads a patient to a ticket.** **Find a clinic** goes to `/discover`, then to the clinic's
-page, whose **Join the queue** opens the join page (Issue 200):
+page, whose **Join the queue** opens the join page (Issue 200). **Your ticket**, beside **Sign in** at the top
+of every front-door page and in the footer, opens `/t/`: the patient's open ticket, or the phone sign-in.
 
 | Step | Where | Works in the browser today? |
 |---|---|---|
@@ -20,7 +21,7 @@ page, whose **Join the queue** opens the join page (Issue 200):
 | Press **Join the queue** | the clinic page | Yes, with `PATIENT_JOIN_ENABLED=true` (off by default: the button is greyed out with the reason) |
 | Sign in with a phone number and a code, answer the messages question, choose a queue | `/discover/clinics/{slug}/join` | Yes |
 | Follow the ticket, message settings, cancel, push, install, offline, reception code | `/t/{token}` | Yes |
-| Sign in inside the installed app, to find a ticket joined in another browser | `/t/` | Yes |
+| Get back to a ticket, or sign in to find one joined in another browser | **Your ticket** on the home page, or the installed app, both `/t/` | Yes |
 | Front desk: board, *Call next*, walk-ins, Find ticket | `/dashboard` | Yes |
 | **Book an appointment** for a time | | **Not built.** Appointments are M11 (Issues 80 and 81). Today a patient joins a queue that is running now |
 | Join by USSD or WhatsApp | | **Not built.** M10 |
