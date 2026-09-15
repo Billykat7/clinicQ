@@ -562,6 +562,49 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ValidationError" }
 
+  /sites/{site_id}/tickets/lookup:
+    get:
+      tags: [queue]
+      operationId: queueTicketLookup
+      summary: The ticket a scanned QR or a typed reference code opens (Issue 70)
+      description: |
+        Resolves what a desk scanner or a receptionist typed: the QR's `CLINICQ:K7M-4QP`, or `K7M-4QP`, or
+        `k7m 4qp`. Only this clinic's tickets and only today's. A transferred ticket's code opens the leg the
+        visit is in now, naming the ticket it moved on from. Refusals are the error envelope with `code`
+        `queue.lookup.<reason>`: `not_a_code` (422), `not_found` (404, also for another clinic's code, so a
+        code cannot be probed for), `expired` (422, a code from an earlier service day, naming the day) and
+        `ended` (409, the ticket has ended and its code cannot be used again). Requires `queues.tickets` `read`.
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/SiteId" }
+        - { name: code, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 64 }, example: "CLINICQ:K7M-4QP" }
+      responses:
+        "200":
+          description: The ticket, where it stands, and a sentence for the desk.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TicketLookupOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: No ticket at this clinic has the code (`queue.lookup.not_found`), or not a clinic this caller works at.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "No ticket at this clinic has the code K7M-4QP. Check it with the patient.", code: "queue.lookup.not_found" }
+        "409":
+          description: The ticket has ended (`queue.lookup.ended`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "Ticket T004 (K7M-4QP) has ended: done. Its code cannot be used again.", code: "queue.lookup.ended" }
+        "422":
+          description: Not a ticket code (`queue.lookup.not_a_code`), a code from an earlier day (`queue.lookup.expired`), or a missing parameter.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "Code K7M-4QP was for Monday 14 September 2026. A ticket code works only on the day it was issued: the patient needs a new ticket today.", code: "queue.lookup.expired" }
+
   /sites/{site_id}/tickets/reorders:
     get:
       tags: [queue]
@@ -917,6 +960,8 @@ paths:
               example:
                 number: T005
                 reference_code: K7M-4QP
+                reference_qr: { payload: "CLINICQ:K7M-4QP", size: 29, path: "M4 4h7v1h-7zM12 4h2v1h-2z" }
+                reference_spoken: "Kilo 7 Mike, 4 Quebec Papa"
                 headline: waiting
                 status: waiting
                 service_day: "2026-09-15"
@@ -1250,9 +1295,32 @@ components:
       description: What a ticket page leads with, derived from the status and the place in line (Issue 68).
       enum: [waiting, next, called, in_progress, done, cancelled, missed, transferred]
       example: next
+    TicketQrOut:
+      type: object
+      description: A ticket's QR as drawable data (Issue 70), the same on the ticket page, its offline copy and the printed stub.
+      required: [payload, size, path]
+      properties:
+        payload: { type: string, pattern: "^CLINICQ:[2-9A-HJKMNP-Z]{3}-[2-9A-HJKMNP-Z]{3}$", description: "What the QR says: the reference code behind ClinicQ's prefix." }
+        size: { type: integer, minimum: 1, description: "The side of the square in modules, quiet margin included." }
+        path: { type: string, description: "The dark modules as one SVG path in size units." }
+    TicketLookupOut:
+      type: object
+      required: [ticket, queue_name, room_label, reference_spoken, message]
+      properties:
+        ticket: { $ref: "#/components/schemas/TicketOut" }
+        queue_name: { type: string }
+        room_label: { type: [string, "null"] }
+        waiting_ahead: { type: [integer, "null"], minimum: 0, description: "How many are ahead while the ticket waits." }
+        wait:
+          oneOf:
+            - { $ref: "#/components/schemas/WaitOut" }
+            - { type: "null" }
+        reference_spoken: { type: string, description: "The code as read aloud: Kilo 7 Mike, 4 Quebec Papa." }
+        followed_from: { type: [string, "null"], description: "The number of the ticket whose code this was, when a transfer moved the visit on." }
+        message: { type: string, description: "A sentence for the desk." }
     TicketPageOut:
       type: object
-      required: [number, reference_code, headline, status, service_day, clinic, queue, as_of, refresh_seconds, stale_after_seconds, stream_url, cancel_url, next_page_url]
+      required: [number, reference_code, reference_qr, reference_spoken, headline, status, service_day, clinic, queue, as_of, refresh_seconds, stale_after_seconds, stream_url, cancel_url, next_page_url]
       properties:
         number: { type: string }
         reference_code: { type: string, description: "Written the way it is read aloud: K7M-4QP." }
@@ -1289,6 +1357,8 @@ components:
         next_page_url: { type: [string, "null"], description: "The page of the ticket a transfer issued." }
         push_key: { type: [string, "null"], description: "The VAPID key to subscribe this browser with (Issue 64); only for the ticket's own signed-in patient." }
         push_subscribe_url: { type: [string, "null"], description: "Where that subscription is sent; set exactly when push_key is." }
+        reference_qr: { $ref: "#/components/schemas/TicketQrOut" }
+        reference_spoken: { type: string, description: "The reference code as read aloud (Issue 70): Kilo 7 Mike, 4 Quebec Papa." }
         offer_install: { type: boolean, description: "Offer adding the app to the home screen (Issue 69): the ticket's own signed-in patient, while the ticket is open." }
         preferences_url: { type: [string, "null"], description: "The patient's message preferences by this link (Issue 67); null for a walk-in with no patient." }
     PriorityReason:

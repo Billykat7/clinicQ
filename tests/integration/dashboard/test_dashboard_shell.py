@@ -57,10 +57,10 @@ def test_a_receptionist_a_nurse_and_a_manager_each_get_their_own_screens(
 ) -> None:
     """``/dashboard`` opens each person's clinic on their first screen, with their own menu."""
     expected = {
-        "desk.a": (["board", "walk_in"], "board"),
+        "desk.a": (["board", "walk_in", "ticket_lookup"], "board"),
         "nurse.a": (["room"], "room"),
         "manager.a": (
-            ["board", "walk_in", "overrides", "clinic_settings"],
+            ["board", "walk_in", "ticket_lookup", "overrides", "clinic_settings"],
             "board",
         ),
     }
@@ -173,8 +173,14 @@ def test_switching_clinics_reopens_the_board_scoped_to_the_new_clinic_without_si
     assert shell_b.site.id == dashboard.site_b
     assert [queue.id for queue in board_b.context["queues"]] == [dashboard.other_triage]
     # At clinic B this person is the manager, so the menu changes with the clinic.
-    assert _keys(shell_b) == ["board", "walk_in", "overrides", "clinic_settings"]
-    assert _keys(at_a) == ["board", "walk_in"]
+    assert _keys(shell_b) == [
+        "board",
+        "walk_in",
+        "ticket_lookup",
+        "overrides",
+        "clinic_settings",
+    ]
+    assert _keys(at_a) == ["board", "walk_in", "ticket_lookup"]
     # And /dashboard now reopens clinic B: the switch was remembered, not just followed.
     assert client.cookies.get(SITE_COOKIE_NAME) == dashboard.site_b
     assert client.get("/dashboard").headers["location"] == dashboard.page(
@@ -216,7 +222,7 @@ def test_the_menu_follows_a_grant_change_with_no_code_change(
     """Grant the receptionist role the room's resource: the room appears and opens. Remove it: gone."""
     desk = dashboard.client("desk.a")
     board = dashboard.page(dashboard.site_a, "board")
-    assert _keys(_shell(desk.get(board))) == ["board", "walk_in"]
+    assert _keys(_shell(desk.get(board))) == ["board", "walk_in", "ticket_lookup"]
 
     with dashboard.session() as db:
         db.add(
@@ -229,7 +235,12 @@ def test_the_menu_follows_a_grant_change_with_no_code_change(
             )
         )
         db.commit()
-    assert _keys(_shell(desk.get(board))) == ["board", "walk_in", "room"]
+    assert _keys(_shell(desk.get(board))) == [
+        "board",
+        "walk_in",
+        "ticket_lookup",
+        "room",
+    ]
     assert (
         desk.get(dashboard.page(dashboard.site_a, "room")).status_code
         == status.HTTP_200_OK
@@ -243,7 +254,7 @@ def test_the_menu_follows_a_grant_change_with_no_code_change(
             )
         )
         db.commit()
-    assert _keys(_shell(desk.get(board))) == ["board", "walk_in"]
+    assert _keys(_shell(desk.get(board))) == ["board", "walk_in", "ticket_lookup"]
     assert (
         desk.get(dashboard.page(dashboard.site_a, "room")).status_code
         == status.HTTP_403_FORBIDDEN

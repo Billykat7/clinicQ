@@ -17,6 +17,7 @@ Three rules shape it:
 """
 
 import re
+from dataclasses import asdict
 from datetime import datetime
 from typing import Final
 
@@ -33,9 +34,11 @@ from src.modules.queue.schemas import (
     TicketPageClinic,
     TicketPageOut,
     TicketPageQueue,
+    TicketQrOut,
     WaitOut,
 )
 from src.modules.queue.sequence import format_reference_code
+from src.modules.queue.ticket_codes import qr_for, spoken
 from src.modules.queue.tickets import waiting_ahead
 from src.modules.queue.waits import estimates_for
 
@@ -195,6 +198,8 @@ def page_state(
         next_page_url=page_url_for(next_leg) if next_leg is not None else None,
         push_key=settings.web_push_vapid_public_key if offer_push else None,
         push_subscribe_url=PUSH_SUBSCRIBE_URL if offer_push else None,
+        reference_qr=TicketQrOut(**asdict(qr_for(ticket.reference_code))),
+        reference_spoken=spoken(ticket.reference_code),
         offer_install=owner and status not in TICKET_TERMINAL_STATUSES,
         preferences_url=(
             f"/api/v1/notifications/patient-preferences/{ticket.page_token}"

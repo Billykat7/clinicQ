@@ -36,6 +36,7 @@ from src.core.telemetry import (
     raise_for_error_tracking,
 )
 from src.schemas.health import DependencyChecks, LivenessResponse, ReadinessResponse
+from src.web.dashboard.lookup import router as dashboard_lookup_router
 from src.web.dashboard.routes import router as dashboard_router
 from src.web.dashboard.settings import router as dashboard_settings_router
 from src.web.dashboard.walkin import router as dashboard_walk_in_router
@@ -123,6 +124,7 @@ def create_app(settings_obj: Settings | None = None) -> FastAPI:
     app.include_router(dashboard_router)
     app.include_router(dashboard_settings_router)
     app.include_router(dashboard_walk_in_router)
+    app.include_router(dashboard_lookup_router)
     # Clinic discovery (Issue 32): the patient's first screen, on the discovery service.
     app.include_router(discover_router)
     # The waiting-room board (M8): public, read-only, fed only by the privacy projection (Issue 58).

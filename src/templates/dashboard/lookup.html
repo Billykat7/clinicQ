@@ -1,0 +1,45 @@
+{% extends "dashboard/base.html" %}
+{#- Find a ticket by its code at reception (Issue 70).
+
+    One field with focus and a GET form: a desk QR scanner types CLINICQ:K7M-4QP and Enter, and a receptionist
+    types K7M-4QP (case, spaces and the dash do not matter). The result is the ticket with where it stands,
+    or one sentence saying why the code opened nothing. The field comes back empty and focused, ready for the
+    next scan. The service decides every rule; this page only shows its answer. -#}
+
+{% block clinic_content %}
+{% set view = lookup %}
+<div class="lookup">
+  <form class="card lookup-form" method="get" action="{{ request.url.path }}" autocomplete="off" role="search">
+    <label for="lookup-code">Scan the patient's QR, or type their code</label>
+    <div class="lookup-row">
+      <input id="lookup-code" name="code" type="search" required maxlength="64" autofocus spellcheck="false"
+             autocapitalize="characters" inputmode="text" placeholder="K7M-4QP" aria-describedby="lookup-hint">
+      <button type="submit" class="btn">Find ticket</button>
+    </div>
+    <p class="hint" id="lookup-hint">Codes work at this clinic, on the day they were issued. 0, O, 1, I and L are never in a code.</p>
+  </form>
+
+  {% if view.found %}
+  {% set found = view.found %}
+  <section class="card lookup-result" aria-labelledby="lookup-number" data-lookup="found">
+    <p class="lookup-queue">{{ found.queue_name }}{% if found.room_label %} · {{ found.room_label }}{% endif %}</p>
+    <p class="lookup-number" id="lookup-number">{{ found.ticket.number }}</p>
+    <p class="lookup-message" role="status">{{ found.message }}</p>
+    <dl class="lookup-facts">
+      <div><dt>Code</dt><dd><strong>{{ found.ticket.reference_code }}</strong> <span class="hint">{{ found.reference_spoken }}</span></dd></div>
+      <div><dt>Status</dt><dd>{{ found.ticket.status.value | replace("_", " ") | capitalize }}</dd></div>
+      {% if found.wait %}<div><dt>Wait</dt><dd>{{ found.wait.label }}</dd></div>{% endif %}
+      <div><dt>Joined</dt><dd>{{ found.ticket.joined_at.strftime("%H:%M") }} by {{ found.ticket.source.value | replace("_", " ") }}</dd></div>
+      {% if found.ticket.walk_in_name %}<div><dt>Name at the desk</dt><dd>{{ found.ticket.walk_in_name }}</dd></div>{% endif %}
+      {% if found.followed_from %}<div><dt>Moved on from</dt><dd>{{ found.followed_from }}</dd></div>{% endif %}
+    </dl>
+  </section>
+  {% elif view.refusal %}
+  <section class="card lookup-refused" data-lookup="{{ view.refusal_kind }}" aria-labelledby="lookup-refused-title">
+    <h2 id="lookup-refused-title">{% if view.refusal_kind == "expired" %}Code from another day{% elif view.refusal_kind == "ended" %}Ticket has ended{% elif view.refusal_kind == "not_a_code" %}Not a ticket code{% else %}No ticket found{% endif %}</h2>
+    <p role="alert">{{ view.refusal }}</p>
+    {% if view.code %}<p class="hint">You entered: <code>{{ view.code }}</code></p>{% endif %}
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

@@ -55,8 +55,10 @@ signal. It removes the 'what was your number again?' exchange that slows every f
 ## Files touched
 
 - `src/modules/queue/ticket_codes.py`
-- `src/templates/queue/_qr.html`
-- `src/web/dashboard/lookup.py`
+- `src/templates/queue/_qr.html` (drawn on `queue/ticket.html`, `patient/offline.html` and `print/ticket_stub.html`)
+- `src/web/dashboard/lookup.py`, `src/templates/dashboard/lookup.html`
+- `src/modules/queue/router.py` (`GET /sites/{site_id}/tickets/lookup`), `contracts/queue.yaml`
+- `docs/OPS/RECEPTION_LOOKUP.md`
 
 ---
 

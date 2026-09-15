@@ -1,6 +1,9 @@
 /**
  * The offline page (Issue 69): the last known state of the ticket, and how old it is.
  *
+ * The ticket's code for reception (Issue 70) is drawn here too, from the kept state's reference_qr: the QR
+ * needs no network and no library, only the path the server sent while the phone was online.
+ *
  * The service worker serves this page in place of a /t/ page it could not fetch, so location.pathname is
  * the ticket link the patient opened (or /t/ when the installed app was launched). The state comes from
  * patient-tickets.js: that ticket's, or else the most recent one this phone followed. The age counts up
@@ -56,6 +59,19 @@
     }
     var ahead = root.querySelector("[data-when-ahead]");
     if (ahead) ahead.hidden = !state.waiting_ahead;
+
+    fill("reference_code", state.reference_code);
+    fill("reference_spoken", state.reference_spoken);
+    var qr = state.reference_qr;
+    if (qr && typeof qr.path === "string" && qr.size > 0) {
+      var box = "0 0 " + qr.size + " " + qr.size;
+      $("off-qr").setAttribute("viewBox", box);
+      $("off-qr").setAttribute("aria-label", "QR code for ticket code " + state.reference_code);
+      $("off-qr-ground").setAttribute("width", String(qr.size));
+      $("off-qr-ground").setAttribute("height", String(qr.size));
+      $("off-qr-path").setAttribute("d", qr.path);
+      $("off-code").hidden = false;
+    }
 
     var at = new Date(entry.receivedAt);
     var sameDay = dayFormat.format(at) === dayFormat.format(new Date());

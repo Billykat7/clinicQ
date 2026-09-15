@@ -28,6 +28,7 @@ from typing import Any
 import yaml
 
 from src.commons.enums import JoinRefusal
+from src.modules.queue.ticket_codes import LookupRefusal
 
 _ROOT = Path(__file__).resolve().parents[3]
 _QUEUE_MODULE = _ROOT / "src" / "modules" / "queue"
@@ -38,6 +39,8 @@ _METHODS = ("get", "post", "put", "patch", "delete")
 #: source that raises them (their call sites) so a new reason is covered without editing this list.
 _REASON_FAMILIES: dict[str, set[str]] = {
     "queue.join.": {refusal.value for refusal in JoinRefusal},
+    # A ticket code that opens nothing at the desk (Issue 70).
+    "queue.lookup.": {refusal.value for refusal in LookupRefusal},
 }
 
 
@@ -156,7 +159,7 @@ def test_every_queue_operation_documents_its_refusals() -> None:
 def test_every_documented_409_names_the_codes_it_can_carry() -> None:
     """A 409 that says only "conflict" leaves a channel adapter guessing what to tell the patient."""
     document = _contract()
-    code_pattern = re.compile(r"(queue\.join|ticket\.[a-z_]+)\.[a-z_]+")
+    code_pattern = re.compile(r"(queue\.join|queue\.lookup|ticket\.[a-z_]+)\.[a-z_]+")
 
     def resolved(response: dict[str, Any]) -> dict[str, Any]:
         ref = response.get("$ref", "")
