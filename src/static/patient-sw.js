@@ -160,6 +160,9 @@ self.addEventListener("fetch", function (event) {
   }
 });
 
+/** The only path a reminder's reply buttons may send to. */
+var REPLY_PREFIX = "/api/v1/appointments/replies/";
+
 self.addEventListener("push", function (event) {
   var data = {};
   try {
@@ -169,6 +172,8 @@ self.addEventListener("push", function (event) {
   }
   var title = typeof data.title === "string" && data.title ? data.title : "Your ticket";
   var url = typeof data.url === "string" && data.url.charAt(0) === "/" ? data.url : "/";
+  // An appointment reminder (Issue 82) carries its reply path: Confirm and Cancel answer without opening a page.
+  var reply = typeof data.reply === "string" && data.reply.indexOf(REPLY_PREFIX) === 0 ? data.reply : null;
   var options = {
     body: typeof data.body === "string" ? data.body : "",
     tag: typeof data.tag === "string" && data.tag ? data.tag : "clinicq-ticket",
@@ -176,13 +181,34 @@ self.addEventListener("push", function (event) {
     requireInteraction: true,
     icon: "/static/icons/app-192.png",
     badge: "/static/favicon.svg",
-    data: { url: url }
+    data: { url: url, reply: reply }
   };
+  if (reply) {
+    options.actions = [
+      { action: "confirm", title: "Confirm" },
+      { action: "cancel", title: "Cancel" }
+    ];
+  }
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
 self.addEventListener("notificationclick", function (event) {
   event.notification.close();
+  var reply = event.notification.data && event.notification.data.reply;
+  if (reply && (event.action === "confirm" || event.action === "cancel")) {
+    // Answered from the notification itself: one request, no page opened (Issue 82).
+    event.waitUntil(
+      fetch(reply, {
+        method: "POST",
+        credentials: "omit",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reply: event.action })
+      }).catch(function () {
+        /* offline: the patient can still reply to the SMS or open the booking page */
+      })
+    );
+    return;
+  }
   var url = (event.notification.data && event.notification.data.url) || "/";
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (windows) {

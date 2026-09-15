@@ -145,3 +145,29 @@ body = "{app}: sorry, your {when} booking at {clinic} (ref {number}) could not g
 version = 1
 subject = "Your booking could not go ahead"
 body = "Ref {number} at {clinic}. Please book again."
+
+[appointment_reminder_24h.sms]
+version = 1
+body = "{app}: reminder, {when} at {clinic}, ref {number}. Reply CONFIRM to keep it or CANCEL to free the time."
+
+[appointment_reminder_24h.whatsapp]
+version = 1
+body = "{app}: reminder, {when} at {clinic}, ref {number}. Reply CONFIRM to keep it or CANCEL to free the time."
+
+[appointment_reminder_24h.web_push]
+version = 1
+subject = "Your appointment is tomorrow"
+body = "Ref {number} at {clinic}. Confirm or cancel below."
+
+[appointment_reminder_2h.sms]
+version = 1
+body = "{app}: in 2 hours, {when} at {clinic}, ref {number}. Reply CONFIRM or CANCEL."
+
+[appointment_reminder_2h.whatsapp]
+version = 1
+body = "{app}: in 2 hours, {when} at {clinic}, ref {number}. Reply CONFIRM or CANCEL."
+
+[appointment_reminder_2h.web_push]
+version = 1
+subject = "Your appointment is in 2 hours"
+body = "Ref {number} at {clinic}. Confirm or cancel below."

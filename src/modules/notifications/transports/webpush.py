@@ -28,7 +28,7 @@ from src.modules.notifications.webpush import (
 )
 
 #: Everything a payload may carry. The service worker shows ``title`` and ``body``, opens ``url``.
-PAYLOAD_KEYS: Final = frozenset({"title", "body", "url", "tag"})
+PAYLOAD_KEYS: Final = frozenset({"title", "body", "url", "tag", "reply"})
 #: Where a tap opens when the message names no page.
 DEFAULT_URL: Final = "/"
 #: The provider label recorded on the ledger row.
@@ -46,6 +46,9 @@ def payload_for(message: RenderedMessage) -> dict[str, str]:
     }
     if message.tag:
         payload["tag"] = message.tag
+    if message.reply_url:
+        # An appointment reminder's Confirm and Cancel buttons (Issue 82): a path on this site, never an id.
+        payload["reply"] = message.reply_url
     return payload
 
 

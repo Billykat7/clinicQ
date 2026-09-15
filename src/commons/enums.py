@@ -667,6 +667,32 @@ class FeedbackChannel(StrEnum):
     WHATSAPP = "whatsapp"
 
 
+class BookingReply(StrEnum):
+    """What a reply to an appointment reminder asks for (Issue 82)."""
+
+    CONFIRM = "confirm"
+    CANCEL = "cancel"
+
+
+class BookingReplyChannel(StrEnum):
+    """Where a reply to an appointment reminder came from (Issue 82). Stored in ``appointment.cancelled_via``.
+
+    - ``SMS``: a keyword reply (``CONFIRM``, ``CANCEL``).
+    - ``WEB_PUSH``: the notification's own Confirm or Cancel button, answered without opening a page.
+    - ``WHATSAPP``: a quick-reply button, once Issue 75's inbound adapter passes it on.
+    """
+
+    SMS = "sms"
+    WEB_PUSH = "web_push"
+    WHATSAPP = "whatsapp"
+
+
+#: SMS words that answer an appointment reminder (Issue 82). ``CANCEL`` is also a STOP synonym: it cancels the
+#: booking when the patient has a reminded booking open, and stops messages otherwise.
+SMS_CONFIRM_KEYWORDS: frozenset[str] = frozenset({"CONFIRM", "YES"})
+SMS_CANCEL_BOOKING_KEYWORDS: frozenset[str] = frozenset({"CANCEL", "NO"})
+
+
 class EstimateConfidence(StrEnum):
     """How much a wait estimate can be trusted (Issue 42). Shown beside every range.
 
@@ -838,6 +864,9 @@ class PatientEvent(StrEnum):
     BOOKED = "booked"
     #: A booking whose day ended before it could become a ticket (Issue 81).
     BOOKING_LAPSED = "booking_lapsed"
+    #: The day before an appointment, and two hours before it, with confirm and cancel (Issue 82).
+    REMINDER_24H = "reminder_24h"
+    REMINDER_2H = "reminder_2h"
 
 
 class PatientChannel(StrEnum):
@@ -1514,6 +1543,8 @@ class NotificationTemplate(StrEnum):
     TICKET_FEEDBACK = "ticket_feedback"
     APPOINTMENT_BOOKED = "appointment_booked"
     APPOINTMENT_LAPSED = "appointment_lapsed"
+    APPOINTMENT_REMINDER_24H = "appointment_reminder_24h"
+    APPOINTMENT_REMINDER_2H = "appointment_reminder_2h"
     # Catch-all for a pre-rendered message with no dedicated key (kept small on purpose).
     GENERIC = "generic"
 
@@ -1678,6 +1709,8 @@ NOTIFICATION_TEMPLATE_CATEGORY: dict[NotificationTemplate, NotificationCategory]
     NotificationTemplate.TICKET_FEEDBACK: NotificationCategory.ACCOUNT,
     NotificationTemplate.APPOINTMENT_BOOKED: NotificationCategory.ACCOUNT,
     NotificationTemplate.APPOINTMENT_LAPSED: NotificationCategory.ACCOUNT,
+    NotificationTemplate.APPOINTMENT_REMINDER_24H: NotificationCategory.ACCOUNT,
+    NotificationTemplate.APPOINTMENT_REMINDER_2H: NotificationCategory.ACCOUNT,
 }
 
 
@@ -1748,6 +1781,8 @@ PATIENT_EVENT_TEMPLATE: dict[PatientEvent, NotificationTemplate] = {
     PatientEvent.FEEDBACK: NotificationTemplate.TICKET_FEEDBACK,
     PatientEvent.BOOKED: NotificationTemplate.APPOINTMENT_BOOKED,
     PatientEvent.BOOKING_LAPSED: NotificationTemplate.APPOINTMENT_LAPSED,
+    PatientEvent.REMINDER_24H: NotificationTemplate.APPOINTMENT_REMINDER_24H,
+    PatientEvent.REMINDER_2H: NotificationTemplate.APPOINTMENT_REMINDER_2H,
 }
 
 #: The patient messages quiet hours never hold back (Issue 67), and the whole of that exception: each says

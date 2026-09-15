@@ -38,6 +38,7 @@ statements run and the concurrency claims are left to the PostgreSQL tests.
 
 from __future__ import annotations
 
+import secrets
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Final
@@ -271,6 +272,8 @@ def claim_place(
             status=AppointmentStatus.BOOKED.value,
             booked_at=moment,
             reference=new_reference_code(),
+            # A reminder's push buttons answer by this (Issue 82); 256 random bits, never derived.
+            reply_token=secrets.token_urlsafe(32),
             source=source.value,
             rescheduled_from_id=rescheduled_from_id,
         )

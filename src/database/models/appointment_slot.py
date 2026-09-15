@@ -315,6 +315,7 @@ class Appointment(Base, TimestampMixin):
         Index("ix_clinicq_appointment_patient", "patient_id"),
         # A booking is read aloud at the desk and typed into a menu by this (Issue 81).
         UniqueConstraint("reference", name="uq_appointment_reference"),
+        UniqueConstraint("reply_token", name="uq_appointment_reply_token"),
         # The conversion sweep reads what is still booked.
         Index("ix_clinicq_appointment_status", "status"),
     )
@@ -363,6 +364,22 @@ class Appointment(Base, TimestampMixin):
     lapsed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    reminded_24h_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """When the day-before reminder was sent (Issue 82); ``None`` if not (yet) sent."""
+    reminded_2h_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """When the two-hours-before reminder was sent (Issue 82)."""
+    confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """When the patient confirmed by replying to a reminder (Issue 82)."""
+    reply_token: Mapped[str | None] = mapped_column(String(43), nullable=True)
+    """The secret a web push's Confirm and Cancel buttons send, 256 random bits (Issue 82)."""
+    cancelled_via: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    """:class:`~src.commons.enums.BookingReplyChannel` a cancellation came through, when it was a reply (Issue 82)."""
 
     def __repr__(self) -> str:
         """Concise identifier for logs and test failures."""

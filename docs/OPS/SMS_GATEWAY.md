@@ -144,6 +144,11 @@ A reply that starts with a digit from 1 to 5 answers the patient's open post-vis
 digit is the score and anything after it the comment, screened for personal information before it is stored.
 A keyword wins over a digit, and a reply with no open question is `ignored`.
 
+A reply of `CONFIRM` or `YES`, or `CANCEL` or `NO`, from a patient who has been reminded of a booking (Issue 82)
+answers that reminder: it confirms or cancels the soonest reminded booking, and a cancellation frees the time
+in the same request (outcome `confirmed` or `cancelled`). Only then: `CANCEL` from anyone without a reminded
+booking is still a STOP, as above.
+
 A patient can also stop messages, set quiet hours or mute a message from the **Message settings** panel on
 their ticket page. Quiet hours hold every message except the four that cannot wait (you are next,
 please come in, you were called again and, at a clinic with a virtual waiting room, time to leave); an

@@ -66,6 +66,8 @@ from src.modules.notifications.sms_segments import (
 LOCALES_DIR: Final = Path(__file__).resolve().parents[2] / "locales"
 #: The templates this registry holds: every patient ticket message.
 PATIENT_TEMPLATES: Final = frozenset(PATIENT_EVENT_TEMPLATE.values())
+#: The only path a web push's reply buttons may send to (Issue 82).
+REPLY_PATH_PREFIX: Final = "/api/v1/appointments/replies/"
 #: The channels a patient message is written for.
 PATIENT_CHANNELS: Final = (
     NotificationChannel.SMS,
@@ -88,6 +90,8 @@ VARIABLES: Final[Mapping[NotificationTemplate, frozenset[str]]] = {
     # A booking's reference is its {number}, and {when} its time (Issue 81).
     NotificationTemplate.APPOINTMENT_BOOKED: _TICKET_BLANKS | {"when"},
     NotificationTemplate.APPOINTMENT_LAPSED: _TICKET_BLANKS | {"when"},
+    NotificationTemplate.APPOINTMENT_REMINDER_24H: _TICKET_BLANKS | {"when"},
+    NotificationTemplate.APPOINTMENT_REMINDER_2H: _TICKET_BLANKS | {"when"},
 }
 #: What a web push may say, whatever the template: a lock screen is public (Issue 64).
 PUSH_VARIABLES: Final = frozenset({"number", "clinic"})
@@ -211,6 +215,7 @@ def render(
     filled = values(context, channel)
     page_url = context.get("page_url")
     push = channel is NotificationChannel.WEB_PUSH
+    reply_url = context.get("reply_url")
     return RenderedMessage(
         text=body.format_map(filled),
         subject=subject.format_map(filled) if subject else None,
@@ -219,6 +224,12 @@ def render(
         if push and isinstance(page_url, str) and page_url.startswith(("/t/", "/f/"))
         else None,
         tag=f"clinicq-ticket-{filled['number']}" if push else None,
+        # A reminder's Confirm and Cancel buttons (Issue 82): only ever this site's own reply path.
+        reply_url=reply_url
+        if push
+        and isinstance(reply_url, str)
+        and reply_url.startswith(REPLY_PATH_PREFIX)
+        else None,
     )
 
 

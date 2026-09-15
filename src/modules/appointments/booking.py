@@ -392,13 +392,26 @@ def booking_view(
         rescheduled_from_id=appointment.rescheduled_from_id,
         ticket_page_url=page_url_for(ticket) if ticket is not None else None,
         changeable=status is AppointmentStatus.BOOKED,
+        reminded_24h_at=stored_sast(appointment.reminded_24h_at)
+        if appointment.reminded_24h_at
+        else None,
+        reminded_2h_at=stored_sast(appointment.reminded_2h_at)
+        if appointment.reminded_2h_at
+        else None,
+        confirmed_at=stored_sast(appointment.confirmed_at)
+        if appointment.confirmed_at
+        else None,
         message=message
-        or _STATUS_SENTENCE[status].format(
-            when=booked.when, reference=booked.reference
-        ),
+        or (
+            CONFIRMED_SENTENCE
+            if status is AppointmentStatus.BOOKED and appointment.confirmed_at
+            else _STATUS_SENTENCE[status]
+        ).format(when=booked.when, reference=booked.reference),
     )
 
 
+#: A booked appointment the patient confirmed by replying to a reminder (Issue 82).
+CONFIRMED_SENTENCE: Final = "Confirmed for {when}, reference {reference}. See you then."
 #: What a booking's status says to the patient.
 _STATUS_SENTENCE: Final[dict[AppointmentStatus, str]] = {
     AppointmentStatus.BOOKED: "Booked for {when}, reference {reference}.",

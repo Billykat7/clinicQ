@@ -10,7 +10,7 @@ from datetime import date, datetime, time
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from src.commons.enums import AppointmentStatus, SlotRefusal, TicketSource
+from src.commons.enums import AppointmentStatus, BookingReply, SlotRefusal, TicketSource
 from src.commons.time import stored_sast
 from src.database.models.appointment_slot import (
     CONVERT_LEAD_RANGE,
@@ -299,6 +299,10 @@ class BookingOut(BaseModel):
     ticket_page_url: str | None
     #: Whether the patient may still move or cancel it.
     changeable: bool
+    #: The reminders and the reply (Issue 82).
+    reminded_24h_at: datetime | None = None
+    reminded_2h_at: datetime | None = None
+    confirmed_at: datetime | None = None
     message: str
 
 
@@ -307,3 +311,39 @@ class BookingListOut(BaseModel):
 
     total: int = Field(ge=0)
     items: list[BookingOut]
+
+
+class BookingReplyIn(BaseModel):
+    """A reply from a reminder's own button: confirm or cancel."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reply: BookingReply
+
+
+class BookingReplyOut(BaseModel):
+    """What a reply did, in one sentence and nothing about the patient."""
+
+    reply: BookingReply
+    applied: bool
+    message: str
+
+
+class ReminderOutcomeOut(BaseModel):
+    """Bookings that received this many reminders, and what became of them."""
+
+    reminders: int = Field(ge=0, le=2)
+    bookings: int = Field(ge=0)
+    confirmed: int = Field(ge=0)
+    cancelled_by_reply: int = Field(ge=0)
+    attended: int = Field(ge=0)
+    no_show: int = Field(ge=0)
+
+
+class ReminderReportOut(BaseModel):
+    """Attendance with and without reminders at one clinic, for bookings whose day falls in the range."""
+
+    site_id: str
+    start: date
+    end: date
+    groups: list[ReminderOutcomeOut]

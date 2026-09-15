@@ -131,7 +131,10 @@ CONTRACTS: tuple[Contract, ...] = (
         name="appointments",
         filename="appointments.yaml",
         prefix="/api/v1",
-        pattern=r"^/api/v1/((sites|clinics)/\{site_id\}/appointments(/|$)|patients/me/appointments(/|$))",
+        pattern=(
+            r"^/api/v1/((sites|clinics)/\{site_id\}/appointments(/|$)|patients/me/appointments(/|$)"
+            r"|appointments/replies/|sites/\{site_id\}/reports/reminders$)"
+        ),
     ),
 )
 
