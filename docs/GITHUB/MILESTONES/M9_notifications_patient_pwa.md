@@ -4,13 +4,13 @@
 
 | | |
 |---|---|
-| **Status** | ✅ Done: issues 63–71 closed with the merge of the Issue 71 pull request, release note [`v0.9.0`](../RELEASES/RELEASE_v0_9_0.md), whose tag follows that merge. Three exit criteria are met; three are met in software and wait for people or later work: a real phone receiving "you are next" by push within 5 seconds and installing the app on Android (Issues 64, 69), and the other four languages' words (Issue 77) |
-| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (9/9 issues) |
+| **Status** | ✅ Done: issues 63–71 closed with the merge of the Issue 71 pull request, and Issue 200 (the join page, added after the patient testing guide found it missing) with its own. Release note [`v0.9.0`](../RELEASES/RELEASE_v0_9_0.md), whose tag follows those merges. Three exit criteria are met; three are met in software and wait for people or later work: a real phone receiving "you are next" by push within 5 seconds and installing the app on Android (Issues 64, 69), and the other four languages' words (Issue 77) |
+| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (10/10 issues) |
 | **Sprints** | 9–10 (weeks 17–20), semester 2. The sprint plan spreads its issues over sprints 3–12: some start early against stubs and some are scheduled after this window, which moves the milestone's close (and its tag) to sprint 12 (see the table) |
 | **Release tag** | `v0.9.0` |
 | **Primary owner** | B, Integrations · C, Frontend/Patient |
-| **Who does the work** | B: 7 issues · C: 2 issues (see each issue for the backup) |
-| **Issues** | 63–71 (9 issues, about 19 person-days of estimates) |
+| **Who does the work** | B: 7 issues · C: 3 issues (see each issue for the backup) |
+| **Issues** | 63–71 and 200 (10 issues, about 21 person-days of estimates) |
 | **Depends on** | [M6](M6_queue_engine_core.md) |
 | **Blocks** | [M10](M10_ussd_whatsapp_channels.md) (channels reuse the notification service), [M11](M11_appointments_checkin_patient_care.md) (reminders) |
 
@@ -55,6 +55,7 @@ different problem from one caused by bad wait estimates.
 | [69](../ISSUES/M9/ISSUE_69_pwa_shell_service_worker.md) | PWA shell: manifest, service worker, offline last-known ticket | C | 2 days | 7 | [68](../ISSUES/M9/ISSUE_68_patient_ticket_page.md) |
 | [70](../ISSUES/M9/ISSUE_70_qr_ticket_code.md) | QR ticket code for kiosk check-in and reception lookup | B | 1 day | 8 | [68](../ISSUES/M9/ISSUE_68_patient_ticket_page.md) |
 | [71](../ISSUES/M9/ISSUE_71_notifications_contract_tests.md) | Notification OpenAPI contract, delivery and retry tests | B | 2 days | 11–12 | [63](../ISSUES/M9/ISSUE_63_notification_service_adapters.md), [64](../ISSUES/M9/ISSUE_64_web_push_vapid.md), [65](../ISSUES/M9/ISSUE_65_sms_gateway_cost_caps.md), [66](../ISSUES/M9/ISSUE_66_notification_templates_i18n.md), [67](../ISSUES/M9/ISSUE_67_notification_preferences_quiet_hours.md), [68](../ISSUES/M9/ISSUE_68_patient_ticket_page.md), [69](../ISSUES/M9/ISSUE_69_pwa_shell_service_worker.md), [70](../ISSUES/M9/ISSUE_70_qr_ticket_code.md) |
+| [200](../ISSUES/M9/ISSUE_200_patient_join_page.md) | Patient web sign-in and join page | C | 2 days | 10 | [69](../ISSUES/M9/ISSUE_69_pwa_shell_service_worker.md) |
 
 ## Order of work
 
@@ -71,6 +72,7 @@ flowchart LR
     I69["69: PWA shell: manifest, service…"]
     I70["70: QR ticket code for kiosk check-in…"]
     I71["71: Notification OpenAPI contract…"]
+    I200["200: Patient web sign-in and join…"]
     I63 --> I64
     I63 --> I65
     I63 --> I66
@@ -85,6 +87,7 @@ flowchart LR
     I68 --> I71
     I69 --> I71
     I70 --> I71
+    I69 --> I200
 ```
 
 **Start here:** [Issue 63](../ISSUES/M9/ISSUE_63_notification_service_adapters.md), [Issue 68](../ISSUES/M9/ISSUE_68_patient_ticket_page.md).
