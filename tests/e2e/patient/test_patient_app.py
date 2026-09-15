@@ -143,15 +143,32 @@ def test_with_no_network_the_last_known_place_shows_with_its_age(
             == mine.number
         )
 
+        events: list[str] = []
+        page.on("console", lambda message: events.append(f"console {message.text}"))
+        page.on(
+            "requestfailed",
+            lambda request: events.append(f"failed {request.url} {request.failure}"),
+        )
+        page.on(
+            "response",
+            lambda response: events.append(f"{response.status} {response.url}"),
+        )
+        page.on("framenavigated", lambda frame: events.append(f"navigated {frame.url}"))
         link.restore()
         # Connections held while the router was down are reset, so the first request after it may fail
         # too; the offline page keeps checking by itself until the live page loads.
         page.locator("#off-retry").click()
-        _until(
-            page,
-            "() => document.getElementById('tk-live')?.textContent === 'Live'",
-            timeout=75,
-        )
+        try:
+            _until(
+                page,
+                "() => document.getElementById('tk-live')?.textContent === 'Live'",
+                timeout=75,
+            )
+        except AssertionError as exc:
+            where = page.evaluate(
+                "() => ({url: location.href, title: document.title, offline: !!document.getElementById('off')})"
+            )
+            raise AssertionError(f"{exc}\n{where}\n" + "\n".join(events[-60:])) from exc
         assert page.url.endswith(mine.path), (
             "back online, the app opens the live ticket"
         )
