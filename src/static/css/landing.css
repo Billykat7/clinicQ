@@ -148,6 +148,16 @@
 
 @media (max-width: 60rem) { .lp-nav-links { display: none; } .lp-nav-actions { margin-left: auto; } }
 
+/* The actions never wrap a label. On a small phone (Your ticket beside Sign in, Issue 200) the buttons
+   tighten and the brand keeps only its mark, so the bar stays one line at 320 px. */
+.lp-logo span:last-child, .lp-nav-actions .lp-btn { white-space: nowrap; }
+@media (max-width: 26rem) {
+  .lp-nav { gap: .5rem; }
+  .lp-nav-actions { gap: .3rem; }
+  .lp-nav-actions .lp-btn-sm { padding: 0 .75rem; }
+  .lp-logo span:last-child { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
+
 /* Theme toggle — the same control the signed-in shell carries, so the choice a visitor
    makes on the landing page is the one they meet after signing in (`theme.js`). */
 .lp-theme-toggle {

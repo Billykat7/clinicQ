@@ -7,7 +7,8 @@ Chromium against the real server and a migrated database, with the page's own sc
 * **each refusal is the API's own sentence on the page**: a number that cannot be read, a wrong code with
   the tries left, and a second code inside the cooldown, which holds the send button and counts down;
 * **a signed-in patient starts at the queue**, and joining the queue they already hold opens that ticket;
-* **the installed app's start page signs a patient in and opens their ticket**, without leaving ``/t/``.
+* **the installed app's start page signs a patient in and opens their ticket**, without leaving ``/t/``;
+* **the home page's Your ticket** is in the top bar on a 320 px phone, on one line, and opens ``/t/``.
 
 Set ``TICKET_PAGE_SHOTS`` to a folder to save the screenshots quoted in the pull request.
 """
@@ -51,12 +52,12 @@ def _until(page: Any, predicate: str, timeout: float = 15.0) -> None:
         time.sleep(0.05)
 
 
-def _shot(page: Any, name: str) -> None:
+def _shot(page: Any, name: str, *, full_page: bool = True) -> None:
     if SHOTS:
         Path(SHOTS).mkdir(parents=True, exist_ok=True)
         # From the top: a full-page capture of a scrolled page draws the sticky header mid-page.
         page.evaluate("() => window.scrollTo(0, 0)")
-        page.screenshot(path=str(Path(SHOTS) / f"{name}.png"), full_page=True)
+        page.screenshot(path=str(Path(SHOTS) / f"{name}.png"), full_page=full_page)
 
 
 @pytest.fixture
@@ -229,3 +230,23 @@ def test_the_app_start_page_signs_a_patient_in_and_opens_their_ticket(
     page.get_by_role("button", name="Sign in").click()
     page.wait_for_url(_TICKET_PATH)
     assert page.url.endswith(mine.path)
+
+
+def test_the_home_pages_your_ticket_fits_a_320_px_phone_and_opens_the_app_start_page(
+    joining: SimpleNamespace,
+) -> None:
+    """The top bar's links are hidden on a phone, so Your ticket sits with Sign in, and neither wraps."""
+    page = joining.day.follower_page(width=320, height=640)
+    page.goto("/")
+    link = page.get_by_role("banner").get_by_role("link", name="Your ticket")
+    assert link.is_visible()
+    assert page.evaluate("() => document.documentElement.scrollWidth") <= 320
+    heights = page.evaluate(
+        "() => [...document.querySelectorAll('.lp-nav-actions .lp-btn')].map((b) => b.getBoundingClientRect().height)"
+    )
+    assert len(set(heights)) == 1 and heights[0] < 44, heights
+    _shot(page, "home-your-ticket", full_page=False)
+
+    link.click()
+    page.wait_for_url("**/t/")
+    assert page.get_by_role("heading", name="No open ticket on this phone").is_visible()
