@@ -35,6 +35,7 @@ import yaml
 from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator
 
+from src.core.config import Settings
 from src.main import create_app
 
 _ROOT = Path(__file__).resolve().parents[3]
@@ -314,6 +315,33 @@ def _examples(document: dict[str, Any]) -> list[tuple[str, Any, dict[str, Any]]]
 
     walk(document, "")
     return found
+
+
+@pytest.mark.parametrize("contract", CONTRACTS, ids=_IDS)
+def test_every_cookie_the_contract_names_is_one_the_application_sets(
+    contract: Contract,
+) -> None:
+    """A cookie scheme with the wrong name sends a client's session nowhere; the drift test cannot see it.
+
+    Each ``in: cookie`` security scheme must name a cookie the application's settings actually use, and
+    the staff browser session (``sessionCookie``) must be the access-token cookie.
+    """
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    known = {
+        settings.access_token_cookie_name,
+        settings.refresh_token_cookie_name,
+        settings.patient_session_cookie_name,
+        settings.display_device_cookie_name,
+    }
+    schemes = contract.document().get("components", {}).get("securitySchemes", {})
+    cookies = {
+        name: scheme["name"]
+        for name, scheme in schemes.items()
+        if scheme.get("in") == "cookie"
+    }
+    assert set(cookies.values()) <= known, cookies
+    if "sessionCookie" in cookies:
+        assert cookies["sessionCookie"] == settings.access_token_cookie_name
 
 
 @pytest.mark.parametrize("contract", CONTRACTS, ids=_IDS)

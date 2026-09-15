@@ -1066,7 +1066,7 @@ components:
     sessionCookie:
       type: apiKey
       in: cookie
-      name: bk_clinicq_access
+      name: bk_clinicq_access_token
       description: |
         The browser session. An unsafe request must also echo the readable CSRF cookie
         (`bk_clinicq_csrf`) in `X-CSRF-Token`.

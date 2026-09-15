@@ -402,6 +402,12 @@ def get_web_push_key(settings: SettingsDep) -> WebPushKeyOut:
     "/web-push/subscriptions",
     response_model=PushSubscriptionOut,
     status_code=status.HTTP_201_CREATED,
+    responses={
+        status.HTTP_200_OK: {
+            "model": PushSubscriptionOut,
+            "description": "This browser was already subscribed: its keys were updated.",
+        }
+    },
 )
 def subscribe_to_web_push(
     payload: PushSubscriptionIn,
@@ -528,7 +534,7 @@ def delivery_status_webhook(
 
     Rejects the call with 404 when the webhook is not configured (no shared secret set), 401 when
     the presented secret does not match, and 404 when no row carries the given
-    ``provider_message_id``. A match advances the row to ``delivered`` (or records a bounce).
+    ``provider_message_id``. A match advances the row to ``delivered``, or ends it ``dead`` for a bounce.
     """
     expected = settings.notification_webhook_secret
     if not expected:

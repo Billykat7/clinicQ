@@ -29,7 +29,7 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -167,22 +167,18 @@ async def sms_delivery_receipt(
     try:
         sms_receipts.verify_token(token, settings)
     except sms_receipts.SmsWebhookNotConfiguredError:
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={"detail": "SMS delivery receipts are not configured."},
-        )
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="SMS delivery receipts are not configured.",
+        ) from None
     except sms_receipts.SmsWebhookRefusedError:
         logger.warning("sms.receipt.rejected", extra={"reason": "token"})
-        return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND, content={"detail": "Not Found"}
-        )
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not Found") from None
     payload = await request.body()
     try:
         receipt = sms_receipts.parse_receipt(payload)
     except sms_receipts.SmsWebhookRefusedError as exc:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST, content={"detail": str(exc)}
-        )
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     processed = sms_receipts.process_receipt(db, receipt)
     db.commit()
     ack = SmsReceiptAck(outcome=processed.outcome, event_id=processed.event_id)
@@ -206,21 +202,17 @@ async def sms_inbound_message(
     try:
         sms_receipts.verify_token(token, settings)
     except sms_receipts.SmsWebhookNotConfiguredError:
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={"detail": "SMS replies are not configured."},
-        )
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="SMS replies are not configured.",
+        ) from None
     except sms_receipts.SmsWebhookRefusedError:
         logger.warning("sms.reply.rejected", extra={"reason": "token"})
-        return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND, content={"detail": "Not Found"}
-        )
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not Found") from None
     try:
         reply = sms_receipts.parse_reply(await request.body())
     except sms_receipts.SmsWebhookRefusedError as exc:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST, content={"detail": str(exc)}
-        )
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     processed = sms_receipts.process_reply(db, reply)
     db.commit()
     ack = SmsReceiptAck(outcome=processed.outcome, event_id=processed.event_id)
