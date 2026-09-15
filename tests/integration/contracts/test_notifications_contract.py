@@ -430,7 +430,7 @@ CASES: tuple[Case, ...] = (
         400,
         "not a receipt",
         lambda w: _garbage_webhook(w, _RECEIPT),
-        None,
+        "http.bad_request",
     ),
     Case(
         "POST",
@@ -438,7 +438,7 @@ CASES: tuple[Case, ...] = (
         404,
         "wrong callback secret",
         lambda w: _receipt_webhook(w, _FORGED, sms_webhook_token=_SMS_TOKEN),
-        None,
+        "http.not_found",
     ),
     Case(
         "POST",
@@ -446,7 +446,7 @@ CASES: tuple[Case, ...] = (
         503,
         "webhook off",
         lambda w: _receipt_webhook(w, _RECEIPT),
-        None,
+        "http.service_unavailable",
     ),
     Case(
         "POST",
@@ -454,7 +454,7 @@ CASES: tuple[Case, ...] = (
         400,
         "not a message",
         lambda w: _garbage_webhook(w, _REPLY),
-        None,
+        "http.bad_request",
     ),
     Case(
         "POST",
@@ -464,7 +464,7 @@ CASES: tuple[Case, ...] = (
         lambda w: _receipt_webhook(
             w, f"{_FORGED}/inbound", sms_webhook_token=_SMS_TOKEN
         ),
-        None,
+        "http.not_found",
     ),
     Case(
         "POST",
@@ -472,7 +472,7 @@ CASES: tuple[Case, ...] = (
         503,
         "webhook off",
         lambda w: _receipt_webhook(w, _REPLY),
-        None,
+        "http.service_unavailable",
     ),
     # ── Templates ────────────────────────────────────────────────────────────────────────
     *_operator_only("GET", "/notifications/templates", _T),
@@ -873,6 +873,36 @@ def test_the_contract_documents_errors_on_most_of_its_operations() -> None:
     assert len(operations) >= 27
     assert len({(m, p) for m, p, _ in errors}) >= len(operations) - 1
     assert len(errors) >= 70
+
+
+def test_a_wrong_callback_secret_is_word_for_word_a_path_that_does_not_exist(
+    world: World,
+) -> None:
+    """The SMS callbacks answer in the envelope, and a wrong secret cannot be told from no route at all."""
+    world.configure(sms_webhook_token=_SMS_TOKEN)
+    client = world.anonymous()
+    nowhere = client.post("/api/v1/webhooks/sms/nobody-listens-here", content=b"id=1")
+    assert nowhere.status_code == 404
+
+    def shape(response: httpx.Response) -> tuple[int, dict[str, Any]]:
+        body = response.json()
+        assert body.pop("request_id"), "every refusal carries its request id"
+        return response.status_code, body
+
+    for path in (_FORGED, f"{_FORGED}/inbound"):
+        forged = client.post(
+            path,
+            content=b"id=ATXid_1&status=Success",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        assert (
+            shape(forged)
+            == shape(nowhere)
+            == (
+                404,
+                {"detail": "Not Found", "code": "http.not_found"},
+            )
+        )
 
 
 def test_the_reconciliation_fails_both_ways() -> None:

@@ -224,6 +224,50 @@ def test_record_delivery_status_marks_delivered(db: Session) -> None:
     assert notification.delivered_at is not None
 
 
+def test_a_bounce_is_terminal_never_retried_and_never_undoes_a_delivery(
+    db: Session,
+) -> None:
+    """A bounce ends the row ``dead`` with its reason, so the sweep does not send it again."""
+    provider = FakeSmsProvider()
+    bounced = service.send_sms(
+        db,
+        to="+27831112222",
+        template=NotificationTemplate.GENERIC,
+        context={"text": "hi"},
+        provider=provider,
+    )
+    delivered = service.send_sms(
+        db,
+        to="+27831113333",
+        template=NotificationTemplate.GENERIC,
+        context={"text": "hi"},
+        provider=provider,
+    )
+    db.commit()
+
+    for row, landed in ((bounced, False), (delivered, True), (delivered, False)):
+        assert service.record_delivery_status(
+            db,
+            DeliveryReceipt(
+                provider_message_id=row.provider_message_id or "",
+                delivered=landed,
+                detail=None if landed else "Mailbox full",
+            ),
+        )
+    db.commit()
+    db.refresh(bounced)
+    db.refresh(delivered)
+
+    assert bounced.status == NotificationStatus.DEAD.value
+    assert bounced.last_error == "delivery failed: Mailbox full"
+    assert bounced.next_attempt_at is None
+    assert delivered.status == NotificationStatus.DELIVERED.value, (
+        "a late bounce undid a delivery"
+    )
+    assert service.run_retry_sweep(db, provider=provider) == 0
+    assert len(provider.sent) == 2
+
+
 def test_record_delivery_status_unknown_id_returns_false(db: Session) -> None:
     """An unknown provider message id is reported unmatched (the endpoint answers 404)."""
     assert (

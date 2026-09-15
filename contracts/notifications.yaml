@@ -50,8 +50,8 @@ info:
     in `X-CSRF-Token`. That refusal is documented on the routes that take a session; on the routes
     authenticated by a secret it happens only to a caller that sends a session cookie it did not need.
 
-    **Errors.** The error envelope (`detail`, `code`, `request_id`) on every refusal except the SMS
-    gateway callbacks and the CSRF middleware, which answer `detail` alone. `code` is `http.<reason>`
+    **Errors.** The error envelope (`detail`, `code`, `request_id`) on every refusal except the CSRF
+    middleware's, which answers `detail` alone. `code` is `http.<reason>`
     for a refusal a handler raises (`http.not_found`), `request.invalid` for a request that failed
     validation, and `insufficient_permission` for a missing grant.
 
@@ -267,7 +267,8 @@ paths:
       summary: A provider's delivery-status callback
       description: |
         Advances the ledger row carrying `provider_message_id` to `delivered`, or records a bounce as
-        `failed` with its reason. A provider cannot present a session, so the call is authenticated by
+        `dead` with its reason: terminal, never sent again. A receipt never moves a row backwards, so a
+        late failure for a `delivered` row changes nothing. A provider cannot present a session, so the call is authenticated by
         the shared secret `NOTIFICATION_WEBHOOK_SECRET` in `X-Webhook-Secret`, compared in constant
         time. While no secret is configured the route answers `404`, as if it did not exist.
       security: [{ webhookSecret: [] }]
@@ -444,14 +445,14 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
-              example: { detail: "the body is not a receipt" }
+              example: { detail: "the body is not a receipt", code: http.bad_request, request_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7 }
         "404": { $ref: "#/components/responses/CallbackRefused" }
         "503":
           description: The webhook is off (`SMS_WEBHOOK_TOKEN` is not set).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
-              example: { detail: "SMS delivery receipts are not configured." }
+              example: { detail: "SMS delivery receipts are not configured.", code: http.service_unavailable, request_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7 }
 
   /webhooks/sms/africastalking/{token}/inbound:
     post:
@@ -485,14 +486,14 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
-              example: { detail: "the body is not a message" }
+              example: { detail: "the body is not a message", code: http.bad_request, request_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7 }
         "404": { $ref: "#/components/responses/CallbackRefused" }
         "503":
           description: The webhook is off (`SMS_WEBHOOK_TOKEN` is not set).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
-              example: { detail: "SMS replies are not configured." }
+              example: { detail: "SMS replies are not configured.", code: http.service_unavailable, request_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7 }
 
   # ── Templates (Issue 66) ────────────────────────────────────────────────────────────────
   /notifications/templates:
@@ -1146,12 +1147,12 @@ components:
           example: { detail: "Not found.", code: "http.not_found" }
     CallbackRefused:
       description: |
-        The token in the path is not the configured secret. The same `404` as a path that does not exist,
-        so the URL cannot be probed for; nothing is read or recorded.
+        The token in the path is not the configured secret. The same `404`, body and `code` as a path that
+        does not exist, so the URL cannot be probed for; nothing is read or recorded.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
-          example: { detail: "Not Found" }
+          example: { detail: "Not Found", code: http.not_found, request_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7 }
     TemplateNotFound:
       description: |
         The language is not one messages may be written in (`No such language.`), or the template and

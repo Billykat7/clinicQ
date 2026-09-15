@@ -1012,9 +1012,12 @@ def apply_sms_receipt(
 def record_delivery_status(db: Session, receipt: DeliveryReceipt) -> bool:
     """Apply a provider delivery-status callback to its notification row. Returns True if matched.
 
-    A confirmed delivery advances the row to ``delivered`` (terminal, better than ``sent``); a
-    reported bounce/failure records the reason. An unknown ``provider_message_id`` returns False so
-    the endpoint can answer 404.
+    A confirmed delivery advances the row to ``delivered`` (terminal, better than ``sent``). A reported
+    bounce or failure is terminal too: the row is ``dead`` with the reason and is never sent again,
+    because the provider has already tried the address and a resend would bounce the same way (and
+    count against the sender's reputation). A receipt never moves a row backwards: a late failure for
+    a delivered row is ignored, as SMS receipts are (:func:`apply_sms_receipt`). An unknown
+    ``provider_message_id`` returns False so the endpoint can answer 404.
     """
     notification = db.execute(
         select(Notification).where(
@@ -1023,16 +1026,20 @@ def record_delivery_status(db: Session, receipt: DeliveryReceipt) -> bool:
     ).scalar_one_or_none()
     if notification is None:
         return False
+    if notification.status == NotificationStatus.DELIVERED.value:
+        return True
     now = _now()
     if receipt.delivered:
         notification.status = NotificationStatus.DELIVERED.value
         notification.delivered_at = now
         notification.last_error = None
     else:
-        notification.status = NotificationStatus.FAILED.value
+        notification.status = NotificationStatus.DEAD.value
         notification.failed_at = now
-        if receipt.detail:
-            notification.last_error = receipt.detail[:2000]
+        notification.last_error = (
+            f"delivery failed: {receipt.detail or 'no reason given'}"[:2000]
+        )
+    notification.next_attempt_at = None
     db.flush()
     return True
 
