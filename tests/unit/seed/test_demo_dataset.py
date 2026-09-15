@@ -29,15 +29,17 @@ NOW = datetime(2026, 9, 11, 11, 30, tzinfo=APP_TIMEZONE)
 PROVINCE_BOUNDS = {
     Province.GAUTENG: ((-27.3, -25.1), (27.0, 29.1)),
     Province.KWAZULU_NATAL: ((-31.2, -26.8), (28.8, 33.0)),
+    Province.WESTERN_CAPE: ((-34.9, -30.4), (17.7, 23.5)),
 }
 
 
-def test_there_are_at_least_eight_clinics_across_both_provinces_and_sectors() -> None:
-    """The spec's minimum, in Gauteng and KwaZulu-Natal, public and private."""
+def test_there_are_at_least_eight_clinics_across_the_provinces_and_sectors() -> None:
+    """The spec's minimum, in Gauteng and KwaZulu-Natal, public and private, and Cape Town's clinics."""
     assert len(CLINICS) >= 8
     assert set(Counter(c.province for c in CLINICS)) == {
         Province.GAUTENG,
         Province.KWAZULU_NATAL,
+        Province.WESTERN_CAPE,
     }
     assert set(Counter(c.sector for c in CLINICS)) == {
         SiteSector.PUBLIC,
@@ -59,7 +61,7 @@ def test_clinics_are_distinct_and_traceable() -> None:
         values = [getattr(c, attribute) for c in CLINICS]
         assert len(values) == len(set(values)), attribute
     assert len({(c.latitude, c.longitude) for c in CLINICS}) == len(CLINICS)
-    assert all(c.osm.split("/")[0] in {"node", "way"} for c in CLINICS)
+    assert all(c.osm.split("/")[0] in {"node", "way", "relation"} for c in CLINICS)
     assert {c.display_mode for c in CLINICS} == {SITE_DEFAULT_DISPLAY_MODE}
 
 
@@ -152,3 +154,12 @@ def test_arrivals_follow_the_day() -> None:
         opens + timedelta(hours=6) <= j < opens + timedelta(hours=8) for j in joined
     )
     assert rush > 1.5 * afternoon
+
+
+def test_cape_town_has_public_and_private_clinics_across_the_metro() -> None:
+    """A tester in the Western Cape finds clinics near them: public and private, city centre to Khayelitsha."""
+    cape_town = [c for c in CLINICS if c.city == "Cape Town"]
+    assert len(cape_town) >= 10
+    assert {c.province for c in cape_town} == {Province.WESTERN_CAPE}
+    assert {c.sector for c in cape_town} == {SiteSector.PUBLIC, SiteSector.PRIVATE}
+    assert {"Woodstock", "Khayelitsha", "Delft"} <= {c.suburb for c in cape_town}

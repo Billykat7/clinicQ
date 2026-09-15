@@ -3,7 +3,7 @@
 Discovery is a PostGIS feature (``ST_DWithin`` on a ``geography`` column), so unlike the M4 suite
 these tests cannot run on SQLite. Every test here gets a database that did not exist a moment ago,
 brought to ``head`` by the real migrations (``migrated_engine`` in ``tests/conftest.py``), with the
-eleven demo clinics from ``scripts/db/demo_dataset.py``, all verified, each with its queues and a
+demo clinics from ``scripts/db/demo_dataset.py`` (Gauteng, KwaZulu-Natal and Cape Town), all verified, each with its queues and a
 weekday schedule.
 
     def test_something(directory):
@@ -64,7 +64,7 @@ def add_verified_clinic(db: Session, **overrides: object) -> str:
 def directory(
     migrated_engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> Iterator[SimpleNamespace]:
-    """The eleven demo clinics, verified, with queues, hours and services; an app and a session factory.
+    """The demo clinics, verified, with queues, hours and services; an app and a session factory.
 
     The RBAC catalogue is synced too, so a patient session opens the patient-only routes.
     ``directory.patient_client()`` returns a client signed in as a new patient.

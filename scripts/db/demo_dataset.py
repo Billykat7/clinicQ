@@ -8,9 +8,11 @@ these places actually are, so every name, coordinate and operator below was read
 on 2026-09-11 (`© OpenStreetMap contributors <https://www.openstreetmap.org/copyright>`_, ODbL), not
 typed from memory; each carries its OSM element. Eight public facilities (Gauteng and KwaZulu-Natal
 Departments of Health, eThekwini Municipality) and three Medicross practices, seven in Gauteng and
-four in KwaZulu-Natal, from inner-city Johannesburg and Soweto to Mamelodi, Durban and Imbali.
-Coordinates are WGS 84 (SRID 4326), five decimals (about a metre). One operator is not tagged in
-OSM and is marked so. **Opening hours and queues are demo values**, not the clinics' own.
+four in KwaZulu-Natal, from inner-city Johannesburg and Soweto to Mamelodi, Durban and Imbali. Fifteen
+more in Cape Town (read on 2026-09-15 from OSM data of 2026-05-31): thirteen public facilities (the Western
+Cape Government and the City of Cape Town), from Woodstock and Salt River to Delft and Khayelitsha, and two
+Medicross practices. Coordinates are WGS 84 (SRID 4326), five decimals (about a metre). Operators not
+tagged in OSM, or tagged with a typo, are marked so. **Opening hours and queues are demo values**, not the clinics' own.
 
 **The records are stubs.** Sites, queues and tickets get their tables in Issues 23, 25 and 39.
 Until then :class:`SiteStub`, :class:`QueueStub` and :class:`TicketStub` are the agreed contract:
@@ -118,7 +120,7 @@ class PatientStub:
     languages: tuple[str, ...] = field(default=("en",))
 
 
-#: The clinics, public first. Source: OpenStreetMap, retrieved 2026-09-11 (see the module docstring).
+#: The clinics, public first, by region. Source: OpenStreetMap (see the module docstring).
 CLINICS: Final[tuple[SiteStub, ...]] = (
     SiteStub(
         slug="hillbrow-chc",
@@ -258,6 +260,202 @@ CLINICS: Final[tuple[SiteStub, ...]] = (
         province=Province.KWAZULU_NATAL,
         operator="Netcare Medicross",
         osm="way/791382917",
+        opens=time(8, 0),
+        closes=time(17, 0),
+    ),
+    # Cape Town: read from OpenStreetMap on 2026-09-15 (data as of 2026-05-31), so a tester in the Western
+    # Cape finds clinics near them. Public first, from the city centre out to Khayelitsha, then private.
+    SiteStub(
+        slug="delft-chc",
+        name="Delft Community Health Centre",
+        sector=SiteSector.PUBLIC,
+        latitude=-33.97394,
+        longitude=18.64167,
+        suburb="Delft",
+        city="Cape Town",
+        province=Province.WESTERN_CAPE,
+        operator="Western Cape Government",
+        osm="way/1145639120",
+        opens=time(7, 0),
+        closes=time(19, 0),
+    ),
+    SiteStub(
+        slug="bishop-lavis-chc",
+        name="Bishop Lavis Community Health Centre",
+        sector=SiteSector.PUBLIC,
+        latitude=-33.94921,
+        longitude=18.58161,
+        suburb="Bishop Lavis",
+        city="Cape Town",
+        province=Province.WESTERN_CAPE,
+        operator="Western Cape Department of Health and Wellness",
+        osm="way/1281137984",
+        opens=time(7, 0),
+        closes=time(19, 0),
+    ),
+    SiteStub(
+        slug="lotus-river-chc",
+        name="Lotus River Community Health Centre",
+        sector=SiteSector.PUBLIC,
+        latitude=-34.02670,
+        longitude=18.50779,
+        suburb="Lotus River",
+        city="Cape Town",
+        province=Province.WESTERN_CAPE,
+        operator="Western Cape Department of Health",
+        osm="relation/17255030",
+    ),
+    SiteStub(
+        slug="site-b-clinic",
+        name="Site B Community Health Clinic",
+        sector=SiteSector.PUBLIC,
+        latitude=-34.02819,
+        longitude=18.66550,
+        suburb="Khayelitsha",
+        city="Cape Town",
+        province=Province.WESTERN_CAPE,
+        # "Western Cape Department oif health" in OSM: the typo is not kept.
+        operator="Western Cape Department of Health",
+        osm="node/4258245248",
+    ),
+    SiteStub(
+        slug="nolungile-clinic",
+        name="Nolungile Community Health Clinic",
+        sector=SiteSector.PUBLIC,
+        latitude=-34.01346,
+        longitude=18.65040,
+        suburb="Khayelitsha",
+        city="Cape Town",
+        province=Province.WESTERN_CAPE,
+        # Not tagged in OSM: the Western Cape Department of Health runs Khayelitsha's community health clinics.
+        operator="Western Cape Department of Health",
+        osm="node/4258245250",
+    ),
+    SiteStub(
+        slug="kuyasa-clinic",
+        name="Kuyasa Clinic",
+        sector=SiteSector.PUBLIC,
+        latitude=-34.05589,
+        longitude=18.68942,
+        suburb="Khayelitsha",
+        city="Cape Town",
+        province=Province.WESTERN_CAPE,
+        # OSM's addr:city names a plot; the clinic is in Kuyasa, Khayelitsha.
+        operator="Western Cape Department of Health",
+        osm="node/4258245245",
+    ),
+    SiteStub(
+        slug="nyanga-cdc",
+        name="Nyanga Community Day Clinic",
+        sector=SiteSector.PUBLIC,
+        latitude=-33.99167,
+        longitude=18.58520,
+        suburb="Nyanga",
+        city="Cape Town",
+        province=Province.WESTERN_CAPE,
+        operator="Western Cape Government",
+        osm="relation/16774647",
+    ),
+    SiteStub(
+        slug="elsies-river-clinic",
+        name="Elsies River Clinic",
+        sector=SiteSector.PUBLIC,
+        latitude=-33.92971,
+        longitude=18.57520,
+        suburb="Elsies River",
+        city="Cape Town",
+        province=Province.WESTERN_CAPE,
+        operator="Western Cape Department of Health",
+        osm="way/734180934",
+    ),
+    SiteStub(
+        slug="chapel-street-clinic",
+        name="Chapel Street Clinic",
+        sector=SiteSector.PUBLIC,
+        latitude=-33.92886,
+        longitude=18.43989,
+        suburb="Woodstock",
+        city="Cape Town",
+        province=Province.WESTERN_CAPE,
+        operator="City of Cape Town",
+        osm="way/899585048",
+    ),
+    SiteStub(
+        slug="spencer-road-clinic",
+        name="Spencer Road Clinic",
+        sector=SiteSector.PUBLIC,
+        latitude=-33.92901,
+        longitude=18.46483,
+        suburb="Salt River",
+        city="Cape Town",
+        province=Province.WESTERN_CAPE,
+        operator="City of Cape Town",
+        osm="way/899583686",
+        opens=time(8, 0),
+        closes=time(20, 0),
+    ),
+    SiteStub(
+        slug="maitland-clinic",
+        name="Maitland Clinic",
+        sector=SiteSector.PUBLIC,
+        latitude=-33.92198,
+        longitude=18.48953,
+        suburb="Maitland",
+        city="Cape Town",
+        province=Province.WESTERN_CAPE,
+        operator="City of Cape Town",
+        osm="way/1016858332",
+    ),
+    SiteStub(
+        slug="lavender-hill-clinic",
+        name="Lavender Hill Clinic",
+        sector=SiteSector.PUBLIC,
+        latitude=-34.06846,
+        longitude=18.48613,
+        suburb="Lavender Hill",
+        city="Cape Town",
+        province=Province.WESTERN_CAPE,
+        # "Western Cape department of Health" in OSM.
+        operator="Western Cape Department of Health",
+        osm="way/847525211",
+    ),
+    SiteStub(
+        slug="strandfontein-clinic",
+        name="Strandfontein Clinic",
+        sector=SiteSector.PUBLIC,
+        latitude=-34.07310,
+        longitude=18.55483,
+        suburb="Strandfontein",
+        city="Cape Town",
+        province=Province.WESTERN_CAPE,
+        operator="City of Cape Town",
+        osm="way/420896109",
+    ),
+    SiteStub(
+        slug="medicross-kenilworth",
+        name="Kenilworth Medicross",
+        sector=SiteSector.PRIVATE,
+        latitude=-33.99011,
+        longitude=18.47958,
+        suburb="Kenilworth",
+        city="Cape Town",
+        province=Province.WESTERN_CAPE,
+        operator="Medicross",
+        osm="node/2505871209",
+        opens=time(8, 0),
+        closes=time(17, 0),
+    ),
+    SiteStub(
+        slug="medicross-fish-hoek",
+        name="Medicross Fish Hoek",
+        sector=SiteSector.PRIVATE,
+        latitude=-34.13733,
+        longitude=18.42753,
+        suburb="Fish Hoek",
+        city="Cape Town",
+        province=Province.WESTERN_CAPE,
+        operator="Medicross",
+        osm="way/149042030",
         opens=time(8, 0),
         closes=time(17, 0),
     ),

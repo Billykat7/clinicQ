@@ -16,7 +16,7 @@ password into a real database is never the intent.
 **It is idempotent.** Everything is matched by a natural key (a staff account by its email), so a
 second run creates nothing: it updates what differs from the dataset and leaves the rest.
 
-**What it seeds today.** The eleven demo **clinics** (Issue 23), verified so they behave like
+**What it seeds today.** The demo **clinics** (Issue 23: Gauteng, KwaZulu-Natal and Cape Town), verified so they behave like
 listed ones, with their **weekly opening hours** and the country's **public holidays** for this year
 and next (Issue 24); and one staff account per ClinicQ staff role, printed with its development
 password, each (except the platform admin) assigned to the first demo clinic so the site-scoped
@@ -475,9 +475,10 @@ def main(argv: list[str] | None = None) -> int:
     summary = summarise_dataset(
         day, datetime.combine(day, time(11, 30), tzinfo=APP_TIMEZONE)
     )
+    provinces = sorted({clinic.province.value for clinic in CLINICS})
     print(
-        f"Demo dataset (scripts/db/demo_dataset.py): {summary.clinics} clinics in Gauteng and "
-        f"KwaZulu-Natal, {summary.queues} queues, {summary.tickets} tickets by 11:30 today "
+        f"Demo dataset (scripts/db/demo_dataset.py): {summary.clinics} clinics in "
+        f"{', '.join(provinces[:-1])} and {provinces[-1]}, {summary.queues} queues, {summary.tickets} tickets by 11:30 today "
         f"({summary.done} done; busiest: {summary.busiest_queue}, {summary.busiest_done} done)."
     )
     print(

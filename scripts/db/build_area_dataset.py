@@ -40,9 +40,36 @@ spellings people actually type that OpenStreetMap does not carry. Each entry the
 it belongs to by its OSM name and province, and the build fails if that place is not in the extract,
 so the list cannot drift into aliases for places that are not there.
 
+**Cape Town** (migration ``0038``, ``alembic/data/0038_areas_cape_town.csv``) is a second extract, built
+with ``--output``, for the Cape Town clinics the demo directory added: every place node inside the City of
+Cape Town, with the metropolitan boundary as its municipality::
+
+    [out:json][timeout:300];
+    area["name"="City of Cape Town"]["boundary"="administrative"]["admin_level"="6"]->.ct;
+    node(area.ct)["place"~"^(city|town|suburb|village|quarter|neighbourhood|township)$"]["name"];
+    convert place ::id=id(), ::=::, province="Western Cape", lat=lat(), lon=lon();
+    out;
+
+    [out:json][timeout:600];
+    area["name"="City of Cape Town"]["boundary"="administrative"]["admin_level"="6"]->.ct;
+    ( rel["name"="City of Cape Town"]["boundary"="administrative"]["admin_level"="6"];
+      rel(area.ct)["boundary"="administrative"]["admin_level"="8"]; );
+    out geom;
+
+A :data:`COMMON_NAMES` entry is checked against an extract only when its province is in that extract, so
+one list serves both. Two rules shape the Cape Town build, added with it (``0014``'s CSV was built before them
+and is frozen with its migration):
+
+* **Only places inside the operating country.** The City of Cape Town's boundary includes the Prince Edward
+  Islands, 1,700 km south-east; a search there cannot be answered (:func:`src.commons.geo.within_operating_area`).
+* **One place per name in a municipality.** A suggestion is labelled "name, municipality", so two places with
+  both the same would be two identical choices. Most are the same place mapped twice. The one kept is the
+  larger kind (a town over a suburb, a suburb over a neighbourhood), then the older OSM node.
+
 Usage::
 
     python -m scripts.db.build_area_dataset nodes.json bounds.json
+    python -m scripts.db.build_area_dataset ct_nodes.json ct_bounds.json --output alembic/data/0038_areas_cape_town.csv
 """
 
 import argparse
@@ -58,6 +85,7 @@ from shapely import Point, Polygon, STRtree
 from shapely.ops import polygonize, unary_union
 
 from src.commons.enums import AreaKind, SaProvince
+from src.commons.geo import Coordinates, within_operating_area
 
 REPO_ROOT: Final = Path(__file__).resolve().parents[2]
 #: Where the migration reads the dataset from.
@@ -72,6 +100,15 @@ PLACE_KINDS: Final[dict[str, AreaKind]] = {
     "village": AreaKind.VILLAGE,
     "quarter": AreaKind.NEIGHBOURHOOD,
     "neighbourhood": AreaKind.NEIGHBOURHOOD,
+}
+
+#: Which of two same-named places in one municipality is kept: the lower rank.
+KIND_RANK: Final[dict[AreaKind, int]] = {
+    AreaKind.CITY: 0,
+    AreaKind.TOWN: 1,
+    AreaKind.SUBURB: 2,
+    AreaKind.VILLAGE: 3,
+    AreaKind.NEIGHBOURHOOD: 4,
 }
 
 #: The OSM name tags read as alternatives, in order.
@@ -102,6 +139,13 @@ COMMON_NAMES: Final[dict[tuple[str, SaProvince], tuple[str, ...]]] = {
     ("Soweto", SaProvince.GAUTENG): ("South Western Townships",),
     ("Durban", SaProvince.KWAZULU_NATAL): ("eThekwini", "Durbs"),
     ("Pietermaritzburg", SaProvince.KWAZULU_NATAL): ("Maritzburg", "PMB", "Msunduzi"),
+    ("Cape Town", SaProvince.WESTERN_CAPE): ("CPT", "Kaapstad", "iKapa"),
+    ("Elsiesriver", SaProvince.WESTERN_CAPE): ("Elsies River", "Elsies Rivier"),
+    ("Guguletu", SaProvince.WESTERN_CAPE): ("Gugulethu",),
+    ("Mitchells Plain", SaProvince.WESTERN_CAPE): (
+        "Mitchell's Plain",
+        "Mitchells Plein",
+    ),
 }
 
 
@@ -158,11 +202,30 @@ def _alternatives(tags: dict[str, str], name: str) -> tuple[str, ...]:
     return tuple(seen)
 
 
+def _one_per_name(rows: Iterable[AreaRow]) -> dict[str, AreaRow]:
+    """Keep one place per ``(name, municipality, province)``: the larger kind, then the older OSM node."""
+    kept: dict[tuple[str, str, SaProvince], AreaRow] = {}
+    for row in rows:
+        key = (row.name.casefold(), row.municipality, row.province)
+        other = kept.get(key)
+        if other is None or _keep_rank(row) < _keep_rank(other):
+            kept[key] = row
+    return {row.osm_ref: row for row in kept.values()}
+
+
+def _keep_rank(row: AreaRow) -> tuple[int, int]:
+    """How strongly a place is kept over a same-named one: its kind, then its OSM node id."""
+    return (KIND_RANK[row.kind], int(row.osm_ref.split("/")[1]))
+
+
 def build(nodes: dict[str, Any], bounds: dict[str, Any]) -> list[AreaRow]:
     """Turn the two Overpass answers into dataset rows, sorted by province then name.
 
+    Places outside the operating country are left out, and one place is kept per name in a municipality.
+
     Raises:
-        ValueError: If a :data:`COMMON_NAMES` entry names a place the extract does not contain.
+        ValueError: If a :data:`COMMON_NAMES` entry for a province in the extract names a place the extract
+            does not contain.
     """
     polygons = boundary_polygons(bounds)
     tree = STRtree([polygon for _, _, polygon in polygons])
@@ -174,6 +237,10 @@ def build(nodes: dict[str, Any], bounds: dict[str, Any]) -> list[AreaRow]:
             continue
         osm_ref = f"node/{element['id']}"
         latitude, longitude = float(tags["lat"]), float(tags["lon"])
+        if not within_operating_area(
+            Coordinates(latitude=latitude, longitude=longitude)
+        ):
+            continue
         point = Point(longitude, latitude)
         containing = sorted(
             (polygons[i] for i in tree.query(point, predicate="within")),
@@ -193,8 +260,12 @@ def build(nodes: dict[str, Any], bounds: dict[str, Any]) -> list[AreaRow]:
             alternative_names=_alternatives(tags, name),
         )
 
+    rows = _one_per_name(rows.values())
     by_name = {(row.name, row.province): row for row in rows.values()}
+    provinces = {row.province for row in rows.values()}
     for (name, province), extra in COMMON_NAMES.items():
+        if province not in provinces:
+            continue
         row = by_name.get((name, province))
         if row is None:
             raise ValueError(
@@ -258,13 +329,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "bounds", type=Path, help="Overpass answer for the municipal boundaries"
     )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=OUTPUT,
+        help="Where to write the dataset (default: migration 0014's)",
+    )
     args = parser.parse_args(argv)
     rows = build(
         json.loads(args.nodes.read_text(encoding="utf-8")),
         json.loads(args.bounds.read_text(encoding="utf-8")),
     )
-    count = write(rows)
-    print(f"wrote {count} areas to {OUTPUT.relative_to(REPO_ROOT)}")
+    output = args.output.resolve()
+    count = write(rows, output)
+    shown = (
+        output.relative_to(REPO_ROOT) if output.is_relative_to(REPO_ROOT) else output
+    )
+    print(f"wrote {count} areas to {shown}")
     return 0
 
 

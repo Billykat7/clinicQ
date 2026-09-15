@@ -33,6 +33,9 @@ pytestmark = pytest.mark.postgres
 _ROOT = Path(__file__).resolve().parents[3]
 _MIGRATION = _ROOT / "alembic" / "versions" / "0014_areas_seed.py"
 _DATASET = _ROOT / "alembic" / "data" / "0014_areas.csv"
+#: Cape Town's places (Issue 23 follow-up), seeded by their own revision.
+_CAPE_TOWN_MIGRATION = _ROOT / "alembic" / "versions" / "0038_areas_cape_town.py"
+_CAPE_TOWN_DATASET = _ROOT / "alembic" / "data" / "0038_areas_cape_town.csv"
 _AREAS = "/api/v1/clinics/areas"
 _NEARBY = "/api/v1/clinics/nearby"
 
@@ -85,6 +88,8 @@ def test_common_misspellings_case_and_punctuation_are_forgiven(
         ("Tshwane", "Pretoria"),
         ("eThekwini", "Durban"),
         ("Maritzburg", "Pietermaritzburg"),
+        ("Gugulethu", "Guguletu"),
+        ("Kaapstad", "Cape Town"),
     ],
 )
 def test_alternative_names_find_the_place_and_say_which_name_matched(
@@ -120,11 +125,11 @@ def test_same_named_places_are_told_apart_by_municipality(
 
 
 def test_a_province_narrows_the_suggestions(directory: SimpleNamespace) -> None:
-    """Melville exists in both provinces; asking for KwaZulu-Natal leaves out Johannesburg's."""
+    """Melville exists in more than one province; asking for KwaZulu-Natal leaves out Johannesburg's."""
     with directory.session() as db:
         everywhere = search_areas(db, "Melville", limit=10)
         kzn = search_areas(db, "Melville", limit=10, province=SaProvince.KWAZULU_NATAL)
-    assert {a.province for a in everywhere} == {
+    assert {a.province for a in everywhere} >= {
         SaProvince.GAUTENG,
         SaProvince.KWAZULU_NATAL,
     }
@@ -246,9 +251,11 @@ def test_the_same_service_call_backs_web_ussd_and_whatsapp(
 def test_area_data_is_seeded_by_migration_with_its_source_documented(
     directory: SimpleNamespace,
 ) -> None:
-    """The migrated database holds every row of the dataset; the migration names source and licence."""
+    """The migrated database holds every row of both datasets; each migration names source and licence."""
     with _DATASET.open(encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle))
+    with _CAPE_TOWN_DATASET.open(encoding="utf-8", newline="") as handle:
+        cape_town = list(csv.DictReader(handle))
     with directory.session() as db:
         stored = db.execute(select(func.count()).select_from(Area)).scalar_one()
         names = db.execute(select(func.count()).select_from(AreaName)).scalar_one()
@@ -259,9 +266,10 @@ def test_area_data_is_seeded_by_migration_with_its_source_documented(
         )
         centroids = db.execute(select(Area.centroid)).scalars().all()
 
-    assert stored == len(rows) == 2081
+    assert len(rows) == 2081 and len(cape_town) == 513
+    assert stored == len(rows) + len(cape_town)
     assert names > stored  # alternative names are rows of their own
-    assert by_province == {"Gauteng": 1160, "KwaZulu-Natal": 921}
+    assert by_province == {"Gauteng": 1160, "KwaZulu-Natal": 921, "Western Cape": 513}
     assert all(within_operating_area(point) for point in centroids)
 
     docstring = _MIGRATION.read_text(encoding="utf-8")
@@ -274,13 +282,41 @@ def test_area_data_is_seeded_by_migration_with_its_source_documented(
         "scripts/db/build_area_dataset.py",
     ):
         assert fact in docstring, fact
-    assert all(row["osm_ref"].startswith("node/") for row in rows)
+    cape_town_docstring = _CAPE_TOWN_MIGRATION.read_text(encoding="utf-8")
+    for fact in (
+        "OpenStreetMap",
+        "Open Database Licence (ODbL) 1.0",
+        "513 places",
+        "Overpass API",
+        "scripts/db/build_area_dataset.py",
+    ):
+        assert fact in cape_town_docstring, fact
+    assert all(row["osm_ref"].startswith("node/") for row in (*rows, *cape_town))
+    assert {row["municipality"] for row in cape_town} == {"City of Cape Town"}
+    # One place per name: a label repeated in one municipality could not be chosen between.
+    assert len({row["name"] for row in cape_town}) == len(cape_town)
+
+
+def test_a_cape_town_suburb_finds_the_cape_town_clinics_near_it(
+    directory: SimpleNamespace,
+) -> None:
+    """Woodstock's centroid is a few hundred metres from Chapel Street Clinic, the nearest listed clinic."""
+    with directory.session() as db:
+        woodstock = search_areas(db, "Woodstock", province=SaProvince.WESTERN_CAPE)[0]
+    assert (woodstock.name, woodstock.municipality) == (
+        "Woodstock",
+        "City of Cape Town",
+    )
+    page = directory.client.get(_NEARBY, params={"area_id": woodstock.area_id}).json()
+    assert page["items"][0]["slug"] == "chapel-street-clinic"
 
 
 def test_every_area_kind_in_the_data_is_a_member_of_the_enum() -> None:
-    """The CSV speaks the vocabulary the model reads, so no row can fail ``AreaKind(...)``."""
-    with _DATASET.open(encoding="utf-8", newline="") as handle:
-        kinds = {row["kind"] for row in csv.DictReader(handle)}
+    """The CSVs speak the vocabulary the model reads, so no row can fail ``AreaKind(...)``."""
+    kinds: set[str] = set()
+    for dataset in (_DATASET, _CAPE_TOWN_DATASET):
+        with dataset.open(encoding="utf-8", newline="") as handle:
+            kinds |= {row["kind"] for row in csv.DictReader(handle)}
     assert kinds <= {kind.value for kind in AreaKind}
     assert importlib.util.find_spec("scripts.db.build_area_dataset") is not None
 

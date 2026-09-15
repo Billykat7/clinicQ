@@ -137,7 +137,7 @@ make seed-rbac && ./scripts/db/seed-dev-user.sh --password 'choose-a-password'
 
 **For demo data**, `make seed-dev-data` adds one staff account per ClinicQ role (printed with their
 development password) and reports the demo clinics, queues and ticket history in
-`scripts/db/demo_dataset.py`: eleven real Gauteng and KwaZulu-Natal clinics, written to the database
+`scripts/db/demo_dataset.py`: twenty-six real clinics in Gauteng, KwaZulu-Natal and Cape Town, written to the database
 as their tables land (Issues 23, 25 and 39). It is idempotent, and refuses any database that is not
 a local development one.
 
