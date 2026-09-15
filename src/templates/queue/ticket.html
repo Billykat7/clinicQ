@@ -99,10 +99,18 @@
     <button type="button" class="btn btn-block" id="tk-push-start">Tell me on this phone when it is my turn</button>
     <p class="tk-note" id="tk-push-note" role="status" hidden></p>
     <p data-push-say="on" hidden>Done: this phone will be told when you are next and when you are called.</p>
+    {# What happens without push depends on whether this deployment sends SMS (SMS_ENABLED). #}
+    {% if settings.sms_enabled %}
     <p data-push-say="declined" hidden>Notifications are off for this site, so we will send you an SMS instead.</p>
     <p data-push-say="failed" hidden>This phone could not be set up for notifications. We will send you an SMS instead.</p>
     <p data-push-say="ios" hidden>On an iPhone, add this page to your Home Screen and open it from there to get notifications. Until then we will send you an SMS.</p>
     <p data-push-say="unsupported" hidden>This browser cannot show notifications, so we will send you an SMS instead.</p>
+    {% else %}
+    <p data-push-say="declined" hidden>Notifications are off for this site. Keep this page open to see when it is your turn.</p>
+    <p data-push-say="failed" hidden>This phone could not be set up for notifications. Keep this page open to see when it is your turn.</p>
+    <p data-push-say="ios" hidden>On an iPhone, add this page to your Home Screen and open it from there to get notifications. Until then, keep this page open to see when it is your turn.</p>
+    <p data-push-say="unsupported" hidden>This browser cannot show notifications. Keep this page open to see when it is your turn.</p>
+    {% endif %}
   </div>
   {% endif %}
 

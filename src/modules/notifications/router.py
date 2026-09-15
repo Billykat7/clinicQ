@@ -346,12 +346,14 @@ LogsUpdateDep = Annotated[
 
 
 def _kill_switch_out(db: Session) -> SmsKillSwitchOut:
-    """The switch as it stands: off when nobody has ever flipped it."""
+    """The switch as it stands (off when nobody has ever flipped it), and the deployment's SMS flag."""
+    sms_enabled = get_settings().sms_enabled
     row = budget.sms_kill_switch(db)
     if row is None:
-        return SmsKillSwitchOut(enabled=False)
+        return SmsKillSwitchOut(enabled=False, sms_enabled=sms_enabled)
     return SmsKillSwitchOut(
         enabled=row.enabled,
+        sms_enabled=sms_enabled,
         reason=row.reason,
         changed_by=row.changed_by,
         changed_at=row.changed_at,

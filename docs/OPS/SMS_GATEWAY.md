@@ -6,7 +6,19 @@ receipts, what a message costs, and how to stop every SMS in an emergency.
 
 ## 1. Setting up the gateway
 
-ClinicQ sends SMS through whichever provider `SMS_PROVIDER` names:
+**SMS is off unless `SMS_ENABLED=true`.** The flag is read on every send. While it is off (the default):
+
+- no SMS is handed to any provider, whatever `SMS_PROVIDER` says;
+- a patient message goes by web push when the patient has a subscription, and otherwise its ledger row is
+  `suppressed` with "no transport can reach the patient (SMS is switched off: SMS_ENABLED)";
+- any other SMS (a staff invitation's text, for example) is recorded as `suppressed`, "SMS not sent: disabled";
+- `POST /api/v1/patients/otp/request` answers `503` with `patients.otp.sms_disabled`, so sign-in by SMS code is
+  unavailable;
+- delivery receipts and STOP replies are still accepted, so a patient can always opt out;
+- `GET /api/v1/notifications/sms/kill-switch` reports the flag as `sms_enabled`.
+
+The flag is for a whole deployment and needs a restart to change. To stop SMS at run time with no deploy, use
+the kill switch (§4). With the flag on, ClinicQ sends SMS through whichever provider `SMS_PROVIDER` names:
 
 | `SMS_PROVIDER` | What it does | Spend |
 |---|---|---|

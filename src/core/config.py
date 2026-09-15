@@ -714,6 +714,16 @@ class Settings(BaseSettings):
     # Notification service (Issue #67) — one service for transactional email + SMS with
     # delivery status. Email reuses the SMTP transport above; SMS sits behind a pluggable
     # provider interface (see ``src.modules.notifications.sms``).
+    sms_enabled: bool = Field(
+        default=False,
+        description=(
+            "The SMS feature flag (env: SMS_ENABLED). Off (the default), no SMS is handed to any "
+            "provider: patient messages go by web push or are recorded as not sent, and sign-in by "
+            "SMS code answers 503. Set true to send SMS through SMS_PROVIDER. The operators' kill "
+            "switch can still stop SMS at run time while this is on."
+        ),
+    )
+
     sms_provider: SmsProviderKind = Field(
         default=SmsProviderKind.LOGGING,
         description=(

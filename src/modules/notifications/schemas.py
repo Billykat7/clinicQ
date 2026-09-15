@@ -375,6 +375,8 @@ class SmsKillSwitchOut(BaseModel):
     """Whether every SMS is stopped, and who said so."""
 
     enabled: bool
+    sms_enabled: bool = True
+    """The deployment's ``SMS_ENABLED`` flag. While it is false no SMS is sent whatever the switch says."""
     reason: str | None = None
     changed_by: str | None = None
     changed_at: datetime | None = None
