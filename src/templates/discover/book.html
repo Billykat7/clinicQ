@@ -1,0 +1,80 @@
+{% extends "layouts/patient.html" %}
+{#- Booking an appointment from the web (Issue 81): rendered by src.web.book.clinic_book from a BookPage.
+
+    Two parts once signed in: choose a day and a time, and the patient's own bookings with Move and Cancel.
+    patient-book.js does both over the JSON API and shows the server's sentences. Built for 320 px: one
+    column, full-width buttons. -#}
+
+{% block title %}Book a time · {{ page.name }} · {{ app_name }}{% endblock %}
+
+{% block styles %}
+  {{ super() }}
+  <link rel="stylesheet" href="/static/css/discover.css">
+{% endblock %}
+
+{% block scripts %}
+  <script src="/static/js/patient-sign-in.js" defer></script>
+  <script src="/static/js/patient-book.js" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="stack discover join book" id="book" data-site="{{ page.site_id }}" data-signed-in="{{ 'true' if page.signed_in else 'false' }}">
+  <p class="clinic-back"><a href="{{ page.clinic_href }}">Back to the clinic</a></p>
+
+  <header>
+    <h1>Book a time</h1>
+    <p class="lead join-clinic">{{ page.name }}</p>
+    <p class="clinic-hint">Rather wait today? <a href="{{ page.join_href }}">Join the queue now</a>.</p>
+  </header>
+
+  <noscript>
+    <p class="msg msg-error">This page needs JavaScript to sign you in. You can also book at the clinic's front desk.</p>
+  </noscript>
+
+  {% with sign_in = page.sign_in, sign_in_hidden = page.signed_in %}
+    {% include "patient/_sign_in.html" %}
+  {% endwith %}
+
+  {#- The messages question, as the join page asks it: the booking's reference and time are a message. -#}
+  <section class="card join-step" id="book-consent" aria-labelledby="book-consent-heading" hidden>
+    <h2 id="book-consent-heading" tabindex="-1">Messages about your booking</h2>
+    <form class="sign-in-form" id="book-consent-form" novalidate>
+      <fieldset class="join-choices">
+        <legend>{{ page.notifications_question }}</legend>
+        <label class="check-option"><input type="radio" name="notifications" value="yes"> Yes, message me</label>
+        <label class="check-option"><input type="radio" name="notifications" value="no"> No, thank you</label>
+      </fieldset>
+      <p class="clinic-hint">Saying no never affects your care. Your booking's reference is shown here either way.</p>
+      <button class="btn btn-block" type="submit" id="book-consent-save">Continue</button>
+    </form>
+  </section>
+
+  <section class="card join-step" id="book-choose" aria-labelledby="book-choose-heading"{% if not page.signed_in %} hidden{% endif %}>
+    <h2 id="book-choose-heading" tabindex="-1">Choose a day and a time</h2>
+    <p class="clinic-hint" id="book-moving" hidden>Choose the new time for your booking. <button type="button" class="btn btn-quiet btn-sm" id="book-moving-stop">Keep the time I have</button></p>
+    <label class="sign-in-label" for="book-day">Day</label>
+    <select class="sign-in-input" id="book-day">
+      {% for day in page.days %}
+      <option value="{{ day.iso }}"{% if loop.index == 2 %} selected{% endif %}>{{ day.label }}</option>
+      {% endfor %}
+    </select>
+    <div class="book-times" id="book-times" aria-live="polite"></div>
+    <p class="clinic-hint" id="book-none" hidden>No times left on this day. Try another day.</p>
+    <p class="clinic-hint">{{ page.late_rule }}</p>
+  </section>
+
+  <section class="card book-confirmed" id="book-confirmed" role="status" hidden>
+    <h2>Booked</h2>
+    <p id="book-confirmed-message"></p>
+    <p class="book-reference">Reference <b id="book-confirmed-reference"></b></p>
+  </section>
+
+  <section class="card join-step" id="book-mine" aria-labelledby="book-mine-heading"{% if not page.signed_in %} hidden{% endif %}>
+    <h2 id="book-mine-heading">Your bookings</h2>
+    <ul class="book-list" id="book-list"></ul>
+    <p class="clinic-hint" id="book-list-empty" hidden>You have no bookings from today on.</p>
+  </section>
+
+  <p class="sign-in-error" id="book-error" role="alert" hidden></p>
+</div>
+{% endblock %}

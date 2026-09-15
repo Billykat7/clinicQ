@@ -29,6 +29,8 @@ class BookingPolicy:
 
     horizon_days: int
     min_lead_minutes: int
+    #: How long before its time a booking becomes a ticket (Issue 81).
+    convert_lead_minutes: int = 30
 
     def last_bookable_day(self, moment: datetime) -> date:
         """The furthest service day a booking made at ``moment`` may be for."""

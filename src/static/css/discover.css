@@ -330,3 +330,11 @@
 .join-choices legend { font-weight: 400; }
 .join-step h2:focus { outline: none; }
 .join-step h2:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* ── Booking a time (Issue 81) ───────────────────────────────── */
+.book-times { display: grid; gap: .5rem; margin: .75rem 0; }
+.book-reference { font-size: 1.1rem; }
+.book-list { list-style: none; padding: 0; margin: 0; display: grid; gap: .75rem; }
+.book-item { display: grid; gap: .35rem; padding-block: .5rem; border-top: 1px solid var(--line); }
+.book-item:first-child { border-top: 0; }
+.book-item-when { font-weight: 600; margin: 0; }

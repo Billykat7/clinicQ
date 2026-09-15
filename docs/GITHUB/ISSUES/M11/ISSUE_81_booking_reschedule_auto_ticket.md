@@ -54,10 +54,11 @@ diary that disagree.
 
 ## Files touched
 
-- `src/modules/appointments/service.py`
-- `src/modules/appointments/conversion.py`
-- `src/core/scheduler.py`
-- `tests/integration/appointments/test_appointment_conversion.py`
+- `src/modules/appointments/booking.py` (book, reschedule, cancel for every channel), `conversion.py` (the sweep and the late rule), `booking_router.py`
+- `src/modules/appointments/capacity.py` (references, one booking a day, `mark_converted`), `src/modules/queue/service.py` (`join_queue(appointment=...)`)
+- `alembic/versions/0042_booking.py`, `src/core/scheduler.py` (lock 881)
+- `src/web/book.py`, `src/templates/discover/book.html`, `src/static/js/patient-book.js`
+- `contracts/appointments.yaml`, `tests/integration/appointments/test_booking.py`, `test_capacity_concurrency.py`
 
 ---
 

@@ -36,6 +36,7 @@ from src.core.telemetry import (
     raise_for_error_tracking,
 )
 from src.schemas.health import DependencyChecks, LivenessResponse, ReadinessResponse
+from src.web.book import router as book_router
 from src.web.dashboard.lookup import router as dashboard_lookup_router
 from src.web.dashboard.routes import router as dashboard_router
 from src.web.dashboard.settings import router as dashboard_settings_router
@@ -131,6 +132,7 @@ def create_app(settings_obj: Settings | None = None) -> FastAPI:
     app.include_router(discover_router)
     # Joining a queue from the web (Issue 200): sign in by phone, then the queue.
     app.include_router(join_router)
+    app.include_router(book_router)
     # The waiting-room board (M8): public, read-only, fed only by the privacy projection (Issue 58).
     app.include_router(display_router)
     app.include_router(display_stream_router)

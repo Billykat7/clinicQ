@@ -42,7 +42,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.commons.enums import AppointmentStatus, DbSchema
+from src.commons.enums import AppointmentStatus, DbSchema, TicketSource
 from src.commons.ids import new_id
 from src.database.models.base import Base
 from src.database.models.mixins import TimestampMixin
@@ -61,6 +61,9 @@ MAX_MIN_LEAD_MINUTES = 7 * 24 * 60
 SLOT_MINUTES_RANGE = (5, 240)
 #: The most patients one slot may hold. A group session, not a waiting room.
 MAX_SLOT_CAPACITY = 50
+#: How long before its time a booking becomes a ticket, by default and at most (Issue 81).
+DEFAULT_CONVERT_LEAD_MINUTES = 30
+CONVERT_LEAD_RANGE = (5, 240)
 
 
 class AppointmentPolicy(Base, TimestampMixin):
@@ -74,6 +77,10 @@ class AppointmentPolicy(Base, TimestampMixin):
         CheckConstraint(
             f"min_lead_minutes BETWEEN 0 AND {MAX_MIN_LEAD_MINUTES}",
             name="min_lead_minutes_range",
+        ),
+        CheckConstraint(
+            f"convert_lead_minutes BETWEEN {CONVERT_LEAD_RANGE[0]} AND {CONVERT_LEAD_RANGE[1]}",
+            name="convert_lead_minutes_range",
         ),
     )
 
@@ -90,6 +97,13 @@ class AppointmentPolicy(Base, TimestampMixin):
         Integer, nullable=False, default=DEFAULT_MIN_LEAD_MINUTES
     )
     """A slot starting sooner than this is no longer offered."""
+    convert_lead_minutes: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=DEFAULT_CONVERT_LEAD_MINUTES,
+        server_default=str(DEFAULT_CONVERT_LEAD_MINUTES),
+    )
+    """How long before its time a booking becomes a ticket in the queue (Issue 81)."""
 
     def __repr__(self) -> str:
         """Concise identifier for logs and test failures."""
@@ -299,6 +313,10 @@ class Appointment(Base, TimestampMixin):
     __table_args__ = (
         Index("ix_clinicq_appointment_slot_status", "slot_id", "status"),
         Index("ix_clinicq_appointment_patient", "patient_id"),
+        # A booking is read aloud at the desk and typed into a menu by this (Issue 81).
+        UniqueConstraint("reference", name="uq_appointment_reference"),
+        # The conversion sweep reads what is still booked.
+        Index("ix_clinicq_appointment_status", "status"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -324,6 +342,25 @@ class Appointment(Base, TimestampMixin):
     """:class:`~src.commons.enums.AppointmentStatus`."""
     booked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     cancelled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    reference: Mapped[str] = mapped_column(String(6), nullable=False)
+    """Six unambiguous characters (the ticket reference alphabet), read aloud or typed on a menu (Issue 81)."""
+    source: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=TicketSource.WEB.value, server_default="web"
+    )
+    """:class:`~src.commons.enums.TicketSource` the booking came through; its ticket records the same."""
+    rescheduled_from_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(f"{SCHEMA}.appointment.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    """The booking this one replaced, when it was a move to another time."""
+    converted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """When the booking became a ticket; the ticket names this booking (``ticket.appointment_id``)."""
+    lapsed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 

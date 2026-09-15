@@ -85,6 +85,10 @@ PUBLIC: dict[str, str] = {
         "256-bit path secret as the delivery receipts is checked before the body is read; a reply can only "
         "stop or restart messages to the patient whose number sent it"
     ),
+    "GET /api/v1/clinics/{site_id}/appointments/availability": (
+        "the times a patient can book at a clinic (Issue 81), as public as the clinic's queues in discovery: only "
+        "clinics a patient may be shown, only times with room, and nothing about any other patient"
+    ),
     "GET /api/v1/feedback/{token}": (
         "a post-visit question by its unguessable link (Issue 87): the patient has no account, and the link, "
         "256 random bits sent only to them, shows the question and whether it was answered, nothing about "

@@ -11,7 +11,7 @@
 # Blanks: {app} the service's name · {number} the ticket number · {clinic} the clinic · {queue} the queue
 # · {room} the room, when the queue has one · {where} the room, else the queue · {minutes} minutes left
 # before a recall becomes a no-show, or the patient's stated trip in a time-to-leave alert · {wait} the
-# expected wait, a range.
+# expected wait, a range · {when} an appointment's time. For an appointment, {number} is its reference.
 
 language = "en"
 reviewed_by = "Written in English by the team; no separate review"
@@ -119,3 +119,29 @@ body = "{app}: how was your visit to {clinic} today (ticket {number})? Reply 1 (
 version = 1
 subject = "How was your visit today?"
 body = "Ticket {number} at {clinic}. Tap to answer in one tap."
+
+[appointment_booked.sms]
+version = 1
+body = "{app}: booked {when} at {clinic}, {queue}. Ref {number}. Please arrive a little early."
+
+[appointment_booked.whatsapp]
+version = 1
+body = "{app}: booked {when} at {clinic}, {queue}. Ref {number}. Please arrive a little early."
+
+[appointment_booked.web_push]
+version = 1
+subject = "Appointment booked"
+body = "Ref {number} at {clinic}."
+
+[appointment_lapsed.sms]
+version = 1
+body = "{app}: sorry, your {when} booking at {clinic} (ref {number}) could not go ahead. Please book again."
+
+[appointment_lapsed.whatsapp]
+version = 1
+body = "{app}: sorry, your {when} booking at {clinic} (ref {number}) could not go ahead. Please book again."
+
+[appointment_lapsed.web_push]
+version = 1
+subject = "Your booking could not go ahead"
+body = "Ref {number} at {clinic}. Please book again."

@@ -155,6 +155,8 @@ class Ticket(Base, TimestampMixin):
         ),
         UniqueConstraint("reference_code", name="uq_ticket_reference_code"),
         UniqueConstraint("page_token", name="uq_ticket_page_token"),
+        # The conversion's idempotency key (Issue 81): one ticket per booking, at the database.
+        UniqueConstraint("appointment_id", name="uq_ticket_appointment"),
         CheckConstraint("sequence >= 1", name="sequence_positive"),
         CheckConstraint(_in_clause("status", TicketStatus), name="status"),
         CheckConstraint(_in_clause("source", TicketSource), name="source"),
@@ -311,6 +313,13 @@ class Ticket(Base, TimestampMixin):
     on_my_way_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    appointment_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(f"{SCHEMA}.appointment.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    """The booking this ticket was converted from (Issue 81). Unique: a booking becomes one ticket, however
+    often the conversion runs."""
     """When the patient tapped "On my way" (Issue 86), shown to reception beside the ticket."""
     cancelled_via: Mapped[str | None] = mapped_column(String(16), nullable=True)
     """:class:`~src.commons.enums.PatientChannel` a cancellation came through (Issue 44)."""

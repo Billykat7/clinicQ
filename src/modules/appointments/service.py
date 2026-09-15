@@ -52,6 +52,7 @@ from src.database.models import (
     Site,
 )
 from src.database.models.appointment_slot import (
+    DEFAULT_CONVERT_LEAD_MINUTES,
     DEFAULT_HORIZON_DAYS,
     DEFAULT_MIN_LEAD_MINUTES,
 )
@@ -157,8 +158,18 @@ def policy_for(db: Session, rows: RowSource) -> tuple[BookingPolicy, bool]:
     """The clinic's booking policy, and whether it is the default (no row written yet)."""
     row = db.execute(rows(AppointmentPolicy)).scalar_one_or_none()
     if row is None:
-        return BookingPolicy(DEFAULT_HORIZON_DAYS, DEFAULT_MIN_LEAD_MINUTES), True
-    return BookingPolicy(row.horizon_days, row.min_lead_minutes), False
+        return (
+            BookingPolicy(
+                DEFAULT_HORIZON_DAYS,
+                DEFAULT_MIN_LEAD_MINUTES,
+                DEFAULT_CONVERT_LEAD_MINUTES,
+            ),
+            True,
+        )
+    return (
+        BookingPolicy(row.horizon_days, row.min_lead_minutes, row.convert_lead_minutes),
+        False,
+    )
 
 
 def set_policy(db: Session, access: SiteAccess, payload: PolicyIn) -> BookingPolicy:
@@ -169,8 +180,11 @@ def set_policy(db: Session, access: SiteAccess, payload: PolicyIn) -> BookingPol
         db.add(row)
     row.horizon_days = payload.horizon_days
     row.min_lead_minutes = payload.min_lead_minutes
+    row.convert_lead_minutes = payload.convert_lead_minutes
     db.flush()
-    return BookingPolicy(row.horizon_days, row.min_lead_minutes)
+    return BookingPolicy(
+        row.horizon_days, row.min_lead_minutes, row.convert_lead_minutes
+    )
 
 
 # --------------------------------------------------------------------------------------

@@ -136,6 +136,46 @@ _UNSCOPED_BY_DESIGN: dict[str, str] = {
         "queue ids. It returns interval minutes and call hours, never a ticket or a patient "
         "(Issue 42)"
     ),
+    "modules/appointments/booking.py::own_booking": (
+        "a patient's own booking by id (Issue 81): a patient holds no role at a clinic, so there is no SiteAccess; "
+        "the narrowing is the authenticated patient id, checked before anything is returned (another patient's "
+        "booking is the same 404), as in cancel_own_ticket"
+    ),
+    "modules/appointments/booking.py::reschedule": (
+        "reads the original slot of the patient's own booking, already found by own_booking (Issue 81)"
+    ),
+    "modules/appointments/booking.py::patient_bookings": (
+        "a patient's own bookings, at whichever clinics they booked (Issue 81): narrowed by the authenticated "
+        "patient id, like patient_tickets_select; never another patient's"
+    ),
+    "modules/appointments/booking.py::booking_view": (
+        "the ticket a booking became, by the booking's id (Issue 81); the booking itself was already scoped by "
+        "its caller: the patient's own, or the clinic's through the site guard"
+    ),
+    "modules/appointments/booking.py::view_by_id": (
+        "one booking with its slot, queue and clinic by id, after the route checked it is the patient's own "
+        "(Issue 81)"
+    ),
+    "modules/appointments/capacity.py::claim_place": (
+        "the one-booking-per-patient-per-day check (Issue 81) under the day's lock: narrowed by a patient id and a "
+        "queue the caller already resolved through a guard, and it reads only whether a row exists"
+    ),
+    "modules/appointments/conversion.py::_due": (
+        "the conversion sweep (Issue 81) is a scheduled system job with no caller and no clinic, like the recall "
+        "timers: it reads every booking still booked for today or earlier, to hand each to the join service"
+    ),
+    "modules/appointments/conversion.py::_leads": (
+        "the same system job reads the lead time of the clinics whose bookings it is converting"
+    ),
+    "modules/appointments/conversion.py::_lapse": (
+        "the same system job reads a lapsed booking's own queue by id, to tell its patient"
+    ),
+    "modules/appointments/conversion.py::convert_due": (
+        "the same system job reads each due booking's own queue by id before handing it to join_queue"
+    ),
+    "modules/appointments/conversion.py::_convert_onto_existing": (
+        "the same system job reads, by id, the ticket join_queue returned for that patient in that queue"
+    ),
     "modules/appointments/feedback.py::request_after_visit": (
         "the done transition's hook (Issue 87): the ticket was already scoped by the move that ended the "
         "visit; it checks whether that visit (by id) was asked about and reads the ticket's own queue by id"

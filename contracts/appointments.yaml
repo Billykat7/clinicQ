@@ -59,7 +59,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PolicyOut" }
-              example: { site_id: 0199b0c0-0000-7000-8000-0000000c1a01, horizon_days: 28, min_lead_minutes: 60, is_default: true }
+              example: { site_id: 0199b0c0-0000-7000-8000-0000000c1a01, horizon_days: 28, min_lead_minutes: 60, convert_lead_minutes: 30, is_default: true }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -73,14 +73,14 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/PolicyIn" }
-            example: { horizon_days: 42, min_lead_minutes: 120 }
+            example: { horizon_days: 42, min_lead_minutes: 120, convert_lead_minutes: 45 }
       responses:
         "200":
           description: The policy as stored.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PolicyOut" }
-              example: { site_id: 0199b0c0-0000-7000-8000-0000000c1a01, horizon_days: 42, min_lead_minutes: 120, is_default: false }
+              example: { site_id: 0199b0c0-0000-7000-8000-0000000c1a01, horizon_days: 42, min_lead_minutes: 120, convert_lead_minutes: 45, is_default: false }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -329,6 +329,191 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
+  /clinics/{site_id}/appointments/availability:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    get:
+      tags: [appointments]
+      operationId: appointmentsPublicAvailability
+      summary: The times a patient can book at a clinic on one day
+      description: |
+        Public, like a clinic's queues in discovery (Issue 81). Only clinics a patient may be shown, only times the
+        clinic offers now with room (the same rule a booking is refused by), and no counts of other patients. A
+        clinic a patient may not see is a 404.
+      security: []
+      parameters:
+        - { name: day, in: query, required: false, schema: { type: string, format: date }, description: Defaults to today in Johannesburg. }
+      responses:
+        "200":
+          description: The day's bookable times per queue.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicDayOut" }
+              example:
+                site_id: 0199b0c0-0000-7000-8000-0000000c1a01
+                day: "2026-10-06"
+                as_of: "2026-10-05T09:12:00+02:00"
+                queues:
+                  - queue_id: 0199b0c0-0000-7000-8000-0000000c1a11
+                    queue_name: Chronic collection
+                    slots:
+                      - { id: 0199b0c0-0000-7000-8000-0000000c1b21, starts_at: "2026-10-06T10:30:00+02:00", ends_at: "2026-10-06T10:45:00+02:00", service_id: null }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /clinics/{site_id}/appointments:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    post:
+      tags: [appointments]
+      operationId: appointmentsBook
+      summary: Book an appointment as the signed-in patient
+      description: |
+        The web's door to the booking service every channel calls (Issue 81). One booking per patient per queue
+        per day. The patient is sent the reference and the time through their notification settings.
+      security: [{ bearerAuth: [] }, { sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BookIn" }
+            example: { slot_id: 0199b0c0-0000-7000-8000-0000000c1b21 }
+      responses:
+        "201":
+          description: Booked.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BookingOut" }
+              example: { id: 01a0a6e1-0000-7000-8000-00000000b001, reference: K7M-4QP, status: booked, source: web, site_id: 0199b0c0-0000-7000-8000-0000000c1a01, clinic: Hillbrow Community Health Centre, queue_id: 0199b0c0-0000-7000-8000-0000000c1a11, queue_name: Chronic collection, starts_at: "2026-10-06T10:30:00+02:00", ends_at: "2026-10-06T10:45:00+02:00", booked_at: "2026-09-16T08:02:11+02:00", converted_at: null, rescheduled_from_id: null, ticket_page_url: null, changeable: true, message: "Booked: Chronic collection at Hillbrow Community Health Centre, Tue 6 Oct 10:30. Reference K7M-4QP. It becomes your place in the queue shortly before the time." }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: No such time at a clinic a patient may see.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "No such appointment time.", code: appointments.slot.not_found }
+        "409":
+          description: The time is not on offer, is full, the day is full, or the patient already booked that queue that day.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                full:
+                  value: { detail: "That time is fully booked. Please choose another time.", code: appointments.slot.slot_full }
+                already:
+                  value: { detail: "You already have a booking in this queue on that day. Change that booking instead.", code: appointments.slot.already_booked }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /patients/me/appointments:
+    get:
+      tags: [appointments]
+      operationId: appointmentsMine
+      summary: My bookings from today on
+      security: [{ bearerAuth: [] }, { sessionCookie: [] }]
+      responses:
+        "200":
+          description: Soonest first, at every clinic.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BookingListOut" }
+              example: { total: 1, items: [{ id: 01a0a6e1-0000-7000-8000-00000000b001, reference: K7M-4QP, status: booked, source: web, site_id: 0199b0c0-0000-7000-8000-0000000c1a01, clinic: Hillbrow Community Health Centre, queue_id: 0199b0c0-0000-7000-8000-0000000c1a11, queue_name: Chronic collection, starts_at: "2026-10-06T10:30:00+02:00", ends_at: "2026-10-06T10:45:00+02:00", booked_at: "2026-09-16T08:02:11+02:00", converted_at: null, rescheduled_from_id: null, ticket_page_url: null, changeable: true, message: "Booked: Chronic collection at Hillbrow Community Health Centre, Tue 6 Oct 10:30. Reference K7M-4QP. It becomes your place in the queue shortly before the time." }] }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /patients/me/appointments/{appointment_id}/reschedule:
+    parameters:
+      - { name: appointment_id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [appointments]
+      operationId: appointmentsReschedule
+      summary: Move my booking to another time
+      description: |
+        At the same clinic. The original time is freed and the new one taken in one transaction, so the original is
+        free the moment this answers; a refused move changes nothing. The new booking has a new reference and names
+        the one it replaced.
+      security: [{ bearerAuth: [] }, { sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BookIn" }
+      responses:
+        "200":
+          description: The new booking.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BookingOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Not the patient's booking, or no such time.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "No such booking.", code: appointments.booking.not_found }
+        "409":
+          description: Already a ticket, cancelled or moved; the same time; or the new time refuses.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                not_booked:
+                  value: { detail: "This booking can no longer be changed: it has become a ticket, or was cancelled or moved.", code: appointments.booking.not_booked }
+                same:
+                  value: { detail: "That is already the time you have booked.", code: appointments.booking.same_slot }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /patients/me/appointments/{appointment_id}/cancel:
+    parameters:
+      - { name: appointment_id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [appointments]
+      operationId: appointmentsCancel
+      summary: Cancel my booking
+      security: [{ bearerAuth: [] }, { sessionCookie: [] }]
+      responses:
+        "200":
+          description: The booking, cancelled; the time is free for someone else.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BookingOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Not the patient's booking.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Already a ticket, cancelled or moved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "This booking can no longer be changed: it has become a ticket, or was cancelled or moved.", code: appointments.booking.not_booked }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/appointments/bookings:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    get:
+      tags: [appointments]
+      operationId: appointmentsSiteBookings
+      summary: A clinic's bookings on one day
+      description: The front desk's list (`appointments:read`), every booking that day whatever became of it, in time order.
+      parameters:
+        - { name: day, in: query, required: false, schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: The day's bookings.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BookingListOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
 components:
   parameters:
     SiteId:
@@ -400,7 +585,7 @@ components:
       description: |
         Why a slot cannot be booked. As an error code it is `appointments.slot.<reason>` (Issue 81's
         booking answers 409 with it).
-      enum: [slot_full, day_full, blocked, withdrawn, closed, too_soon, too_far]
+      enum: [slot_full, day_full, blocked, withdrawn, closed, too_soon, too_far, already_booked]
 
     PolicyIn:
       type: object
@@ -409,13 +594,15 @@ components:
       properties:
         horizon_days: { type: integer, minimum: 1, maximum: 365 }
         min_lead_minutes: { type: integer, minimum: 0, maximum: 10080 }
+        convert_lead_minutes: { type: integer, minimum: 5, maximum: 240, default: 30, description: How long before its time a booking becomes a ticket (Issue 81). }
     PolicyOut:
       type: object
-      required: [site_id, horizon_days, min_lead_minutes, is_default]
+      required: [site_id, horizon_days, min_lead_minutes, convert_lead_minutes, is_default]
       properties:
         site_id: { type: string, format: uuid }
         horizon_days: { type: integer, minimum: 1, maximum: 365 }
         min_lead_minutes: { type: integer, minimum: 0, maximum: 10080 }
+        convert_lead_minutes: { type: integer, minimum: 5, maximum: 240 }
         is_default: { type: boolean }
 
     WindowFields:
@@ -564,3 +751,62 @@ components:
         day: { type: string, format: date }
         as_of: { type: string, format: date-time }
         queues: { type: array, items: { $ref: "#/components/schemas/QueueDayOut" } }
+
+    PublicSlotOut:
+      type: object
+      required: [id, starts_at, ends_at, service_id]
+      properties:
+        id: { type: string }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        service_id: { type: [string, "null"] }
+    PublicQueueDayOut:
+      type: object
+      required: [queue_id, queue_name, slots]
+      properties:
+        queue_id: { type: string }
+        queue_name: { type: string }
+        slots: { type: array, items: { $ref: "#/components/schemas/PublicSlotOut" } }
+    PublicDayOut:
+      type: object
+      required: [site_id, day, as_of, queues]
+      properties:
+        site_id: { type: string }
+        day: { type: string, format: date }
+        as_of: { type: string, format: date-time }
+        queues: { type: array, items: { $ref: "#/components/schemas/PublicQueueDayOut" } }
+    BookIn:
+      type: object
+      additionalProperties: false
+      required: [slot_id]
+      properties:
+        slot_id: { type: string, minLength: 1, maxLength: 36 }
+    BookingStatus:
+      type: string
+      enum: [booked, cancelled, rescheduled, converted, lapsed]
+    BookingOut:
+      type: object
+      required: [id, reference, status, source, site_id, clinic, queue_id, queue_name, starts_at, ends_at, booked_at, converted_at, rescheduled_from_id, ticket_page_url, changeable, message]
+      properties:
+        id: { type: string }
+        reference: { type: string, pattern: "^[2-9A-HJKMNP-Z]{3}-[2-9A-HJKMNP-Z]{3}$" }
+        status: { $ref: "#/components/schemas/BookingStatus" }
+        source: { type: string, enum: [web, ussd, whatsapp, walk_in] }
+        site_id: { type: string }
+        clinic: { type: string }
+        queue_id: { type: string }
+        queue_name: { type: string }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        booked_at: { type: string, format: date-time }
+        converted_at: { type: [string, "null"], format: date-time }
+        rescheduled_from_id: { type: [string, "null"] }
+        ticket_page_url: { type: [string, "null"], description: The ticket page, once the booking has become a ticket. }
+        changeable: { type: boolean }
+        message: { type: string }
+    BookingListOut:
+      type: object
+      required: [total, items]
+      properties:
+        total: { type: integer, minimum: 0 }
+        items: { type: array, items: { $ref: "#/components/schemas/BookingOut" } }

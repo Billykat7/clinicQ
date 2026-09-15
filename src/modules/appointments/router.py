@@ -106,6 +106,7 @@ def get_policy(access: AppointmentsRead, db: DbSession) -> PolicyOut:
         site_id=access.site_id,
         horizon_days=policy.horizon_days,
         min_lead_minutes=policy.min_lead_minutes,
+        convert_lead_minutes=policy.convert_lead_minutes,
         is_default=is_default,
     )
 
@@ -129,7 +130,8 @@ def set_policy(
         entity_id=access.site_id,
         context=(
             f"set the booking policy: {policy.horizon_days} days ahead, "
-            f"{policy.min_lead_minutes} minutes' notice"
+            f"{policy.min_lead_minutes} minutes' notice, a ticket {policy.convert_lead_minutes} "
+            "minutes before"
         ),
     )
     db.commit()
@@ -137,6 +139,7 @@ def set_policy(
         site_id=access.site_id,
         horizon_days=policy.horizon_days,
         min_lead_minutes=policy.min_lead_minutes,
+        convert_lead_minutes=policy.convert_lead_minutes,
         is_default=False,
     )
 
