@@ -2,7 +2,8 @@
 
 The page's decisions are made in :func:`src.web.join.join_page` (the step to start at, the queues offered, the
 reason when joining is not possible, the question asked), so they are asserted as data. The routes are
-asserted by status, headers and the page they render. The calls the page's scripts make, in the order they
+asserted by status, headers and the data they render with, never by reading HTML
+(``docs/IDE/RULES/testing-strategy.mdc``). The calls the page's scripts make, in the order they
 make them, run against the real app and database. The browser walk-through is
 ``tests/e2e/patient/test_join_page.py``.
 """
@@ -185,7 +186,6 @@ def test_the_page_is_served_never_cached_and_starts_where_the_visitor_is(
     assert anonymous.status_code == status.HTTP_200_OK
     assert anonymous.headers["cache-control"] == "no-store"
     assert anonymous.context["page"].step is JoinStep.PHONE  # type: ignore[attr-defined]
-    assert 'data-step="phone"' in anonymous.text
 
     client, patient_id = directory.patient_client()
     with directory.session() as db:
@@ -239,8 +239,7 @@ def test_switched_off_the_page_is_served_with_the_reason_and_no_form(
         JoinStep.UNAVAILABLE,
         JOIN_NOT_SWITCHED_ON,
     )
-    assert "sign-in-phone-form" not in response.text
-    assert "patient-join.js" not in response.text
+    assert page.queues == ()
 
 
 # --------------------------------------------------------------------------------------
@@ -392,10 +391,7 @@ def test_the_app_start_page_offers_the_sign_in_to_nobody_and_not_to_a_signed_in_
     anonymous = directory.client.get("/t/")
     assert anonymous.status_code == status.HTTP_200_OK
     assert anonymous.context["signed_in"] is False  # type: ignore[attr-defined]
-    assert (
-        "sign-in-phone-form" in anonymous.text
-        and "patient-sign-in.js" in anonymous.text
-    )
+    assert anonymous.context["sign_in"].invalid_phone == INVALID_PHONE_MESSAGE  # type: ignore[attr-defined]
 
     client, _ = directory.patient_client()
     signed_in = client.get("/t/", follow_redirects=False)
@@ -403,4 +399,3 @@ def test_the_app_start_page_offers_the_sign_in_to_nobody_and_not_to_a_signed_in_
         signed_in.status_code == status.HTTP_200_OK
     )  # no open ticket today: the page, not a redirect
     assert signed_in.context["signed_in"] is True  # type: ignore[attr-defined]
-    assert "sign-in-phone-form" not in signed_in.text
