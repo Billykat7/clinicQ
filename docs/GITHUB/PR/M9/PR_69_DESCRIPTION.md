@@ -97,6 +97,11 @@ deferred while the worker is handling requests. The browser test showed it: the 
 longer than 30 seconds to arrive. `pwa.js` calls `registration.update()` on every load, so "the next launch"
 is a check, not a hope.
 
+**Why the worker aborts what it gives up on.** A fetch that has run past its limit still holds a connection
+until the network gives it back, which may be never. Left alone, a few of them are enough to block every
+later request to the server, and the app stays on the offline page with the network back. So the worker's
+fetches are aborted at the limit, not just ignored.
+
 **Why the offline page retries by itself.** A phone behind a dead router, or on a weak signal, never gets an
 `online` event, because as far as the browser knows it was online all along. In CI, the first request after
 the router came back failed on a connection it had reset. The offline page now asks for the page every 15
@@ -132,12 +137,23 @@ launch installs it.
 - [x] `ruff check .`, `ruff format --check .` and `mypy src/` (298 files) clean.
 - [x] `TZ=UTC pytest tests/ -n auto` on the Docker PostgreSQL 18 and Redis, with browsers: **2227 passed,
   1 skipped, 9 xfailed, 0 failed**.
-- [x] **The first CI run's browser job failed** in `test_with_no_network_…`. The offline page appeared, but after
-  the router came back the page stayed offline for 40 seconds. Locally, the deploy test also failed once in
-  three runs, waiting for Chromium's own update check. Both are fixed in the product, not the test: the offline
-  page now checks by itself every 15 seconds, and every page asks for a worker update on load. After the fix,
-  `test_patient_app.py` passed three runs in a row, and `pytest tests/e2e` run serially as CI runs it:
-  **60 passed**.
+- [x] **CI's browser job failed three times before it passed**, always in `test_with_no_network_…`, after
+  the offline page had appeared correctly. Once the router came back, the page stayed offline. What each fix
+  was:
+  1. The offline page now checks by itself every 15 seconds, and every page asks for a worker update on load
+     (locally, the deploy test had also failed once in three runs, waiting on Chromium's own update check).
+     CI still failed.
+  2. I added a diagnostic to the test: on failure it lists what the page loaded. The CI log then showed the
+     offline page's own check reaching the server every 15 seconds, while each reload still got the offline
+     page.
+  3. The cause: the worker's navigation fetches that outlived the 10-second limit were ignored but never
+     aborted, and hung on dead connections until no request could get through. That is the same trap #68's
+     polls fell into. The worker's page and shell fetches now carry an abort signal, and the browser job
+     passes.
+
+  Locally, `test_patient_app.py` passed repeatedly after each change, and `pytest tests/e2e` run serially as
+  CI runs it gave **60 passed**. The router-reset behaviour that exposed the hang shows up on CI's Linux and
+  not on macOS.
 - [x] **How to verify, step 2 (airplane mode):** `test_with_no_network_the_last_known_place_shows_with_its_age`,
   a 320 px phone signed in as the patient, through a router the test can kill:
 
