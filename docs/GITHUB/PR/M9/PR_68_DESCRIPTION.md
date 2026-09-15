@@ -58,6 +58,10 @@ much longer?" honestly and live, and keep cancelling within reach. With this PR:
     values;
   - it runs the stream with a polling fallback, a once-a-second age and stale check, the wait countdown, and
     the title and vibration for the urgent headlines;
+  - it polls one request at a time, each giving up after 10 s, and it also polls while a stream that looks
+    open has gone silent. Without that, on a network that swallows packets, hung polls filled Chromium's six
+    connections to the site, and the page could not recover when the network came back. The first CI run
+    of the stale test caught it;
   - sharing uses `navigator.share`, with a copy-link fallback;
   - cancelling is a confirm panel that posts to `cancel_url` with the CSRF header.
 - **An optional patient session** (`patients/sessions.py::signed_in_patient_id`): the same checks as

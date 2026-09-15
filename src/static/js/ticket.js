@@ -154,6 +154,8 @@
     fill("wait", waitLabel(state));
     var finished = isFinished(state);
     var stale = !finished && now - lastHeard > state.stale_after_seconds * 1000;
+    // A stream that went silent without an error (a dead router) is not trusted any more: poll too.
+    if (stale) startPolling();
     $("tk-stale").hidden = !stale;
     $("tk-stale-age").textContent = age(now - receivedAt);
     var live = $("tk-live");
@@ -163,9 +165,26 @@
 
   // ── Following the ticket ──────────────────────────────────────────────────────────────────
 
+  /**
+   * One read of the ticket. At most one at a time, and each gives up after POLL_TIMEOUT_MS: on a network
+   * that swallows packets a request can hang for minutes, and polls stacking up behind it would fill the
+   * browser's six connections to this site, so none could get through when the signal came back.
+   */
+  var POLL_TIMEOUT_MS = 10000;
+  var polling = false;
   function poll() {
-    if (!apiUrl) return;
-    fetch(apiUrl, { credentials: "same-origin", headers: { Accept: "application/json" }, cache: "no-store" })
+    if (!apiUrl || polling) return;
+    polling = true;
+    var controller = typeof window.AbortController === "function" ? new window.AbortController() : null;
+    var timer = window.setTimeout(function () {
+      if (controller) controller.abort();
+    }, POLL_TIMEOUT_MS);
+    fetch(apiUrl, {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+      signal: controller ? controller.signal : undefined
+    })
       .then(function (response) {
         if (!response.ok) throw new Error("HTTP " + response.status);
         return response.json();
@@ -175,7 +194,11 @@
         if (isFinished(next)) stopFollowing();
       })
       .catch(function () {
-        /* offline or the server is away: the age keeps growing and the warning says so */
+        /* offline, timed out or the server is away: the age keeps growing and the warning says so */
+      })
+      .then(function () {
+        window.clearTimeout(timer);
+        polling = false;
       });
   }
 
@@ -205,9 +228,10 @@
     }
     stream = new window.EventSource(state.stream_url);
     stream.addEventListener("open", function () {
-      stopPolling();
+      // Polling stops once the stream proves itself with an event, not merely by opening.
     });
     stream.addEventListener("ticket.state", function (message) {
+      stopPolling();
       try {
         var data = JSON.parse(message.data);
         render(data.ticket);
@@ -218,6 +242,7 @@
     });
     stream.addEventListener("heartbeat", function () {
       lastHeard = Date.now();
+      stopPolling();
     });
     stream.addEventListener("error", function () {
       // The browser reconnects by itself unless the server refused (a 503, a 404): poll meanwhile.
