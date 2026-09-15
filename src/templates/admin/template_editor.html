@@ -1,0 +1,96 @@
+{% extends "layouts/dashboard.html" %}
+
+{#
+  Editing one patient message template (Issue 66): its words, a live preview of exactly what a patient
+  receives, and its version history.
+
+  admin-template-editor.js previews the words through POST /api/v1/notifications/templates/preview as they
+  change (a sample ticket, and for an SMS its character and segment count, including with the longest names
+  the database allows) and publishes them through the versions route, which refuses words that break the
+  message's variable contract. A published version is sent from the next message on; older versions stay,
+  so every message sent can be reproduced.
+#}
+
+{% block layout_head %}
+  {{ super() }}
+  <script src="/static/js/admin-template-editor.js" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>{{ template_key }} <span class="badge badge-muted">{{ channel.value }}</span> <span class="badge badge-muted">{{ language }}</span></h1>
+  <p class="lead">Now sending version {{ detail.current.version }}{% if detail.current.source.value == 'edited' %}, edited by {{ detail.current.created_by }}{% else %}, from the locale file{% endif %}.
+  Blanks this message may use: {% for name in detail.variables %}<code>{{ '{' }}{{ name }}{{ '}' }}</code>{% if not loop.last %} {% endif %}{% endfor %}.</p>
+  {% include "partials/breadcrumbs.html" %}
+</div>
+
+<div class="split" id="te-split"
+     data-preview-url="/api/v1/notifications/templates/preview"
+     data-publish-url="/api/v1/notifications/templates/{{ template_key }}/{{ channel.value }}/{{ language }}/versions"
+     data-template="{{ template_key }}"
+     data-channel="{{ channel.value }}"
+     data-language="{{ language }}">
+  <div class="card">
+    <h2 class="card-title">Words</h2>
+    <form id="te-form">
+      {% if channel.value == 'web_push' %}
+      <div class="field">
+        <label for="te-subject">Title</label>
+        <input type="text" id="te-subject" maxlength="120" value="{{ detail.current.subject or '' }}">
+      </div>
+      {% endif %}
+      <div class="field">
+        <label for="te-body">Message</label>
+        <textarea id="te-body" rows="5" maxlength="1000">{{ detail.current.body }}</textarea>
+        <p class="hint" id="te-count" aria-live="polite"></p>
+      </div>
+      <div class="field">
+        <label for="te-reviewed">Checked by (a fluent speaker, credited)</label>
+        <input type="text" id="te-reviewed" maxlength="200" value="">
+      </div>
+      <p class="msg msg-error" id="te-error" role="alert" hidden></p>
+      <p class="msg msg-ok" id="te-saved" role="status" hidden></p>
+      <div class="form-actions">
+        {% if can('logs', 'update') %}
+        <button type="submit" class="btn" id="te-publish">Publish as version {{ (detail.versions | map(attribute='version') | max) + 1 if detail.versions else detail.current.version + 1 }}</button>
+        {% endif %}
+        <a class="btn btn-quiet" href="/admin/notification-templates/{{ tab }}">Back to the list</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2 class="card-title">What a patient receives</h2>
+    <p class="hint">A sample ticket: A043 at Zola Community Clinic, General consultation, Room 4.</p>
+    <div class="preview-phone" id="te-preview">
+      <p class="preview-subject" id="te-preview-subject" hidden></p>
+      <p class="preview-text" id="te-preview-text">{{ detail.current.body }}</p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Versions</h2>
+  <div class="table-wrap table-scroll">
+    <table class="data">
+      <thead>
+        <tr><th>Version</th><th>From</th><th>By</th><th>Checked by</th><th>Words</th></tr>
+      </thead>
+      <tbody>
+        {% for version in detail.versions %}
+        <tr>
+          <td>{{ version.version }}</td>
+          <td>{{ 'Edited' if version.source.value == 'edited' else 'Locale file' }}</td>
+          <td>{{ version.created_by or '—' }}</td>
+          <td>{{ version.reviewed_by or '—' }}</td>
+          <td>{% if version.subject %}<strong>{{ version.subject }}</strong>: {% endif %}{{ version.body }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if not detail.versions %}
+  <p class="empty">No version has been sent yet: the locale file's words are used from the first message.</p>
+  {% endif %}
+</div>
+{% endblock %}

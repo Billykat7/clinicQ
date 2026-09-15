@@ -30,6 +30,7 @@ from src.database.models.mixins import ActiveMixin, SoftDeleteMixin, TimestampMi
 from src.database.models.nav_gate_override import NavGateOverride
 from src.database.models.notification import Notification
 from src.database.models.notification_preference import NotificationPreference
+from src.database.models.notification_template import NotificationTemplateVersion
 
 # ── your models ──────────────────────────────────────────────────────────────
 # Add `from src.database.models.<name> import <Model>` here and the name to __all__.
@@ -113,6 +114,7 @@ __all__ = [
     "NavGateOverride",
     "Notification",
     "NotificationPreference",
+    "NotificationTemplateVersion",
     "Patient",
     "PatientConsent",
     "PatientConsentEvent",

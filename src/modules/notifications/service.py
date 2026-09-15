@@ -37,9 +37,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.commons.enums import (
+    DEFAULT_NOTIFICATION_LANGUAGE,
+    NOTIFICATION_LANGUAGES,
     NOTIFICATION_SECRET_FIELDS,
     PATIENT_EVENT_TEMPLATE,
     PATIENT_TRANSPORT_CHAIN,
+    BoardLanguage,
     NotificationChannel,
     NotificationStatus,
     NotificationTemplate,
@@ -51,12 +54,21 @@ from src.core.config import get_settings
 from src.core.domain_events import subscribe
 from src.core.s3_logging import APP_TIMEZONE
 from src.database.models.notification import Notification
+from src.database.models.notification_template import NotificationTemplateVersion
 from src.database.models.patient import Patient
 from src.database.models.patient_notification_preference import (
     PatientNotificationPreference,
 )
+from src.database.models.site import Site
 from src.database.session import get_db_context
-from src.modules.notifications import budget, dispatch, preferences, templates, webpush
+from src.modules.notifications import (
+    budget,
+    dispatch,
+    preferences,
+    template_registry,
+    templates,
+    webpush,
+)
 from src.modules.notifications.preferences import DeliveryDecision, DeliveryOutcome
 from src.modules.notifications.schemas import DeliveryReceipt, RenderedMessage
 from src.modules.notifications.sms import SmsProvider, build_sms_provider
@@ -290,7 +302,7 @@ def attempt(
         )
         db.flush()
         return False
-    message = templates.render(channel, template, context or notification.payload)
+    message = _message_for(db, notification, context)
     if channel is NotificationChannel.EMAIL:
         try:
             message_id = _deliver_email_transport(
@@ -386,6 +398,57 @@ def _addresses(
         whatsapp_id=patient.whatsapp_id,
         push_targets=webpush.targets_for(db, patient.id, now=now),
     )
+
+
+def _message_for(
+    db: Session, notification: Notification, context: dict | None
+) -> RenderedMessage:
+    """What ``notification`` says: the template version pinned on its row, else the registry's current words.
+
+    A row pinned to a version (Issue 66) renders exactly that version on every attempt, so a retry, or a
+    look at the message months later, gives the words the first attempt sent, however the template has
+    been edited since.
+    """
+    values = context or notification.payload
+    if notification.template_version_id:
+        version = db.get(NotificationTemplateVersion, notification.template_version_id)
+        if version is not None:
+            return template_registry.render_version(version, values)
+    return templates.render(
+        NotificationChannel(notification.channel),
+        NotificationTemplate(notification.template_key),
+        values,
+    )
+
+
+def language_for(db: Session, patient: Patient, site_id: str | None) -> BoardLanguage:
+    """The language to tell ``patient`` in (Issue 66): theirs, else the clinic's board language, else English.
+
+    Only the five notification languages count; a clinic whose board reads Setswana still sends English
+    until Setswana messages are written.
+    """
+    codes = {language.value: language for language in NOTIFICATION_LANGUAGES}
+    preference = db.get(PatientNotificationPreference, patient.id)
+    if preference is not None and preference.language in codes:
+        return codes[preference.language]
+    site = db.get(Site, site_id) if site_id else None
+    if site is not None and site.board_language in codes:
+        return codes[site.board_language]
+    return DEFAULT_NOTIFICATION_LANGUAGE
+
+
+def _pin_version(
+    db: Session,
+    notification: Notification,
+    *,
+    template: NotificationTemplate,
+    channel: NotificationChannel,
+    language: BoardLanguage,
+) -> None:
+    """Record on the row the exact template version it is sent with, and the language that version is in."""
+    version = template_registry.current(db, template, channel, language)
+    notification.template_version_id = version.id
+    notification.language = version.language
 
 
 def preferred_channel(db: Session, patient_id: str) -> NotificationChannel | None:
@@ -516,6 +579,13 @@ def notify(
         next_attempt_at=now
         + timedelta(seconds=settings.notification_dispatch_grace_seconds),
     )
+    _pin_version(
+        db,
+        notification,
+        template=template,
+        channel=channel,
+        language=language_for(db, patient, site_id),
+    )
     deliver_after_commit = False
     if decision.outcome is DeliveryOutcome.SUPPRESS or not plan:
         notification.status = NotificationStatus.SUPPRESSED.value
@@ -601,6 +671,16 @@ def _fall_back(
         site_id=failed.site_id,
         event=failed.event,
         fallback_of_id=failed.id,
+    )
+    _pin_version(
+        db,
+        fallback,
+        template=NotificationTemplate(failed.template_key),
+        channel=channel,
+        language=next(
+            (lang for lang in NOTIFICATION_LANGUAGES if lang.value == failed.language),
+            DEFAULT_NOTIFICATION_LANGUAGE,
+        ),
     )
     db.add(fallback)
     db.flush()

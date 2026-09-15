@@ -1,0 +1,131 @@
+{% extends "layouts/dashboard.html" %}
+
+{#
+  The patient message templates console (Issue 66): what each message says, in each channel and language,
+  as it is sent now.
+
+  An admin console, so it follows docs/IDE/RULES/list-view-ui-pattern.mdc:
+
+  * every channel is its own URL (`/admin/notification-templates/{sms|web-push|whatsapp}`), and the bare URL
+    redirects to the default;
+  * a collapsible filter bar with its own remembered state (`data-filter-key`);
+  * click-to-sort columns (`data-sort-key`);
+  * clicking a row opens its words in a slideover beside the list, whose full view is the editor.
+
+  Server-rendered: every row for the channel is in the page, so sorting and the quick view work on the rows
+  themselves. Changing words happens only in the editor, which checks them before they are published.
+#}
+
+{% block layout_head %}
+  {{ super() }}
+  <script src="/static/js/admin-crud.js" defer></script>
+  <script src="/static/js/admin-notification-templates.js" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Patient message templates</h1>
+  <p class="lead">What patients are told about their ticket, per channel and language. Every change is a new
+  version, and every message sent names the version it used. Written so far in: {{ languages_available | join(", ") }};
+  the other notification languages ({{ all_languages | reject("in", languages_available) | join(", ") }})
+  are sent in English until their words are written and checked by a fluent speaker.</p>
+  {% include "partials/breadcrumbs.html" %}
+</div>
+
+<div class="tabs-branch">
+  <div class="tabs-scroll">
+    <div class="tabs tabs-sub" role="tablist">
+      {% for slug, value in tabs.items() %}
+      <a class="tab{% if tab == slug %} active{% endif %}" href="/admin/notification-templates/{{ slug }}"
+         role="tab"{% if tab == slug %} aria-current="page"{% endif %}>{{ {"sms": "SMS", "web-push": "Web push", "whatsapp": "WhatsApp"}[slug] }}</a>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<form class="filter-bar" data-filter-key="notification-templates" method="get">
+  <div class="field">
+    <label for="nt-template">Message</label>
+    <select id="nt-template" name="template">
+      <option value="">— any —</option>
+      {% for key in templates_available %}
+      <option value="{{ key }}"{% if key == template_filter %} selected{% endif %}>{{ key }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="nt-language">Language</label>
+    <select id="nt-language" name="language">
+      <option value="">— any —</option>
+      {% for code in languages_available %}
+      <option value="{{ code }}"{% if code == language_filter %} selected{% endif %}>{{ code }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="form-actions">
+    <button type="submit" class="btn btn-sm">Filter</button>
+    <a class="btn btn-quiet btn-sm" href="/admin/notification-templates/{{ tab }}">Clear</a>
+  </div>
+</form>
+
+<div class="split split-full" id="nt-split">
+  <div class="card">
+    <div class="table-wrap table-scroll">
+      <table class="data" id="nt-table">
+        <thead>
+          <tr>
+            <th data-sort-key="template">Message</th>
+            <th data-sort-key="language">Language</th>
+            <th data-sort-key="version">Version</th>
+            <th data-sort-key="source">From</th>
+            <th data-sort-key="body">Words</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr tabindex="0"
+              data-template="{{ row.template.value }}"
+              data-language="{{ row.language }}"
+              data-version="{{ row.version }}"
+              data-source="{{ row.source.value }}"
+              data-subject="{{ row.subject or '' }}"
+              data-body="{{ row.body }}"
+              data-reviewed="{{ row.reviewed_by or '' }}"
+              data-edit="/admin/notification-templates/{{ tab }}/{{ row.template.value }}/{{ row.language }}">
+            <td>{{ row.template.value }}</td>
+            <td>{{ row.language }}</td>
+            <td>{{ row.version }}</td>
+            <td>{% if row.source.value == 'edited' %}<span class="badge badge-warn">Edited</span>{% else %}<span class="badge badge-ok">Locale file</span>{% endif %}</td>
+            <td>{{ row.body | truncate(70) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if not rows %}
+    <p class="empty">No templates here.</p>
+    {% endif %}
+    <p class="card-sub">{{ rows | length }} template{{ '' if rows | length == 1 else 's' }}.</p>
+  </div>
+</div>
+
+<div class="slideover slideover-inset" id="nt-detail" data-anchor="#nt-split">
+  <div class="slideover-panel" role="dialog" aria-modal="false" aria-labelledby="ntd-title" tabindex="-1">
+    <div class="slideover-head">
+      <div class="slideover-titles">
+        <p class="detail-eyebrow">Template</p>
+        <h2 id="ntd-title"></h2>
+        <p class="hint" id="ntd-meta"></p>
+      </div>
+      <button type="button" class="btn btn-quiet btn-sm slideover-close" data-slideover-close aria-label="Close template">Close</button>
+    </div>
+    <div class="slideover-body">
+      <dl class="detail-list">
+        <dt>Title</dt><dd id="ntd-subject"></dd>
+        <dt>Words</dt><dd id="ntd-body"></dd>
+        <dt>Checked by</dt><dd id="ntd-reviewed"></dd>
+      </dl>
+    </div>
+  </div>
+</div>
+{% endblock %}

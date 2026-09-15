@@ -29,15 +29,26 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Form,
+    HTTPException,
+    Request,
+    status,
+)
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from starlette.templating import Jinja2Templates
 
 from src.commons.enums import (
+    NOTIFICATION_LANGUAGES,
     DisplayDeviceStatus,
     GrantScope,
+    NotificationChannel,
+    NotificationTemplate,
     PermissionVerb,
     S3LogListingLevel,
     SaProvince,
@@ -500,6 +511,135 @@ async def admin_display_devices_section(
         silent_minutes=get_settings().display_device_silent_minutes,
     )
     return templates.TemplateResponse(request, "admin/display_devices.html", ctx)
+
+
+#: The template editor's channel tabs (Issue 66): the URL's word for each channel.
+_TEMPLATE_CHANNEL_TABS: dict[str, NotificationChannel] = {
+    "sms": NotificationChannel.SMS,
+    "web-push": NotificationChannel.WEB_PUSH,
+    "whatsapp": NotificationChannel.WHATSAPP,
+}
+
+
+@router.get("/admin/notification-templates", response_class=HTMLResponse)
+async def admin_notification_templates(request: Request) -> RedirectResponse:
+    """Redirect the bare console URL to its default tab."""
+    return RedirectResponse(
+        url="/admin/notification-templates/sms", status_code=status.HTTP_302_FOUND
+    )
+
+
+@router.get("/admin/notification-templates/{tab}", response_class=HTMLResponse)
+def admin_notification_templates_tab(
+    tab: str,
+    request: Request,
+    template: str = "",
+    language: str = "",
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """Every patient message template in one channel, as it is sent now (Issue 66).
+
+    For operators holding ``logs``. Server-rendered (``docs/IDE/RULES/list-view-ui-pattern.mdc``, second
+    wiring style): each channel is its own URL, the filter is a GET form, columns sort in place and a row
+    opens its words in the slideover, whose full view is the editor.
+    """
+    if not require_authenticated_html(request, db):
+        return _redirect_to_sign_in(request)  # type: ignore[return-value]
+    channel = _TEMPLATE_CHANNEL_TABS.get(tab)
+    if channel is None:
+        return RedirectResponse(  # type: ignore[return-value]
+            url="/admin/notification-templates/sms", status_code=status.HTTP_302_FOUND
+        )
+    ctx = page_context(
+        request, db, active_nav="logs", page_title="Patient message templates"
+    )
+    if not ctx["nav"].visible("logs"):
+        return _forbidden_html(request, db)
+
+    from src.modules.notifications import template_registry
+    from src.modules.notifications.template_router import _current_out
+
+    rows = [
+        _current_out(db, key, channel, lang)
+        for key in sorted(template_registry.PATIENT_TEMPLATES)
+        for lang in template_registry.languages()
+        if (not template or key.value == template)
+        and (not language or lang.value == language)
+    ]
+    ctx.update(
+        tab=tab,
+        tabs=_TEMPLATE_CHANNEL_TABS,
+        rows=rows,
+        template_filter=template,
+        language_filter=language,
+        templates_available=sorted(
+            t.value for t in template_registry.PATIENT_TEMPLATES
+        ),
+        languages_available=[lang.value for lang in template_registry.languages()],
+        all_languages=[lang.value for lang in NOTIFICATION_LANGUAGES],
+    )
+    return templates.TemplateResponse(request, "admin/notification_templates.html", ctx)
+
+
+@router.get(
+    "/admin/notification-templates/{tab}/{template}/{language}",
+    response_class=HTMLResponse,
+)
+def admin_template_editor(
+    tab: str,
+    template: str,
+    language: str,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """Edit one template in one channel and language, with a live preview (Issue 66).
+
+    The page carries what is sent now and the version history; ``admin-template-editor.js`` previews through
+    ``POST /api/v1/notifications/templates/preview`` as the words change and publishes through the versions
+    route, which refuses words that break the variable contract.
+    """
+    if not require_authenticated_html(request, db):
+        return _redirect_to_sign_in(request)  # type: ignore[return-value]
+    ctx = page_context(
+        request, db, active_nav="logs", page_title="Edit a patient message"
+    )
+    if not ctx["nav"].visible("logs"):
+        return _forbidden_html(request, db)
+
+    from src.modules.notifications import template_registry
+    from src.modules.notifications.template_router import get_template
+
+    channel = _TEMPLATE_CHANNEL_TABS.get(tab)
+    try:
+        key = NotificationTemplate(template)
+    except ValueError:
+        key = None
+    if channel is None or key is None or key not in template_registry.PATIENT_TEMPLATES:
+        return RedirectResponse(  # type: ignore[return-value]
+            url="/admin/notification-templates/sms", status_code=status.HTTP_302_FOUND
+        )
+    try:
+        detail = get_template(key, channel, language, None, db)
+    except HTTPException:
+        return RedirectResponse(  # type: ignore[return-value]
+            url=f"/admin/notification-templates/{tab}",
+            status_code=status.HTTP_302_FOUND,
+        )
+    ctx.update(
+        tab=tab,
+        channel=channel,
+        template_key=key.value,
+        language=language,
+        detail=detail,
+        breadcrumbs=[
+            {
+                "label": "Patient message templates",
+                "href": f"/admin/notification-templates/{tab}",
+            },
+            {"label": f"{key.value} ({language})", "current": True},
+        ],
+    )
+    return templates.TemplateResponse(request, "admin/template_editor.html", ctx)
 
 
 @router.get("/me/consent", response_class=HTMLResponse)

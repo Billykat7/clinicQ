@@ -1,0 +1,74 @@
+{
+  "en/ticket_called/sms": {
+    "sha256": "40931ca95a9c7ae9d26826d8ad3216d96ee29e1859adde105f1e54ce91a4d2a8",
+    "version": 1
+  },
+  "en/ticket_called/web_push": {
+    "sha256": "95516494a0dcc2a51f8f52001b901f02541bc98eeea4e73fb4c9e0cda5ee47dd",
+    "version": 1
+  },
+  "en/ticket_called/whatsapp": {
+    "sha256": "40931ca95a9c7ae9d26826d8ad3216d96ee29e1859adde105f1e54ce91a4d2a8",
+    "version": 1
+  },
+  "en/ticket_cancelled/sms": {
+    "sha256": "727aafdce6f349c8a6804e4d0cd782ff98359d2bcbd1e5429800bda90b2d9ec5",
+    "version": 1
+  },
+  "en/ticket_cancelled/web_push": {
+    "sha256": "573e53482490c511d3bc89f4d1408abbf2b5fcdcddbc113b2782014394c1c671",
+    "version": 1
+  },
+  "en/ticket_cancelled/whatsapp": {
+    "sha256": "727aafdce6f349c8a6804e4d0cd782ff98359d2bcbd1e5429800bda90b2d9ec5",
+    "version": 1
+  },
+  "en/ticket_next/sms": {
+    "sha256": "2abb06c8a0babaab75f4b11c0ee20d076d9262b32e8a0a8dbc2fc9ae46220447",
+    "version": 1
+  },
+  "en/ticket_next/web_push": {
+    "sha256": "1a7219f311a0775457aef0f0cb2dbcf1b4dbbafb6f6b1d0c60c175fef3f9b5bd",
+    "version": 1
+  },
+  "en/ticket_next/whatsapp": {
+    "sha256": "2abb06c8a0babaab75f4b11c0ee20d076d9262b32e8a0a8dbc2fc9ae46220447",
+    "version": 1
+  },
+  "en/ticket_no_show/sms": {
+    "sha256": "5a9462f73564be23c429f57abd07e12bef768c093ba45a30edc9b331c9766abd",
+    "version": 1
+  },
+  "en/ticket_no_show/web_push": {
+    "sha256": "ebb7211e5b544bf8ff847a8ebc9eb69e07b8cc47ef2f7b7eceb6898ede932cb7",
+    "version": 1
+  },
+  "en/ticket_no_show/whatsapp": {
+    "sha256": "5a9462f73564be23c429f57abd07e12bef768c093ba45a30edc9b331c9766abd",
+    "version": 1
+  },
+  "en/ticket_recalled/sms": {
+    "sha256": "ca83cc4a6ed2d03ae5f6b9675e75f26715859e41b1d0f4e2ff4e863fd307350a",
+    "version": 1
+  },
+  "en/ticket_recalled/web_push": {
+    "sha256": "86c51acee9939fc903500d7723fe17c925a25e30ea3758fd20af761928bd7af2",
+    "version": 1
+  },
+  "en/ticket_recalled/whatsapp": {
+    "sha256": "ca83cc4a6ed2d03ae5f6b9675e75f26715859e41b1d0f4e2ff4e863fd307350a",
+    "version": 1
+  },
+  "en/ticket_transferred/sms": {
+    "sha256": "788aedd908ba5c28f73e0bdb499990845a7cc19c2b22b2cb6d56d09925f949a9",
+    "version": 1
+  },
+  "en/ticket_transferred/web_push": {
+    "sha256": "90a32ba86be6d3b4a94225abb35bcb2afa8389413bbe5fbc220edad2d28be25b",
+    "version": 1
+  },
+  "en/ticket_transferred/whatsapp": {
+    "sha256": "788aedd908ba5c28f73e0bdb499990845a7cc19c2b22b2cb6d56d09925f949a9",
+    "version": 1
+  }
+}

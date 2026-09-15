@@ -3,7 +3,7 @@
 A gateway bills per segment. These tests pin the counting rules (GSM 7-bit with its two-septet extension
 characters, UCS-2 for anything else), the normalisation that keeps a stray en dash from doubling a bill,
 and then render **every** patient SMS in **every** language the registry has
-(:data:`~src.modules.notifications.templates.SMS_LANGUAGES`) with the longest values the database allows,
+(:data:`~src.modules.notifications.template_registry.languages()`) with the longest values the database allows,
 and require one GSM 7-bit segment each.
 """
 
@@ -11,11 +11,16 @@ from __future__ import annotations
 
 import pytest
 
-from src.commons.enums import PATIENT_EVENT_TEMPLATE, NotificationChannel, PatientEvent
+from src.commons.enums import (
+    PATIENT_EVENT_TEMPLATE,
+    BoardLanguage,
+    NotificationChannel,
+    PatientEvent,
+)
 from src.database.models.queue import Queue
 from src.database.models.site import Site
 from src.database.models.ticket import Ticket
-from src.modules.notifications import templates
+from src.modules.notifications import template_registry
 from src.modules.notifications.sms_segments import (
     SegmentCount,
     SmsEncoding,
@@ -86,14 +91,17 @@ def test_look_alike_characters_are_sent_as_gsm_so_a_dash_cannot_double_the_bill(
     assert count_segments(normalised).encoding is SmsEncoding.GSM7
 
 
-@pytest.mark.parametrize("language", templates.SMS_LANGUAGES)
+@pytest.mark.parametrize("language", template_registry.languages())
 @pytest.mark.parametrize("event", list(PatientEvent))
 def test_every_queue_sms_fits_one_segment_in_every_language(
-    language: str, event: PatientEvent
+    language: BoardLanguage, event: PatientEvent
 ) -> None:
     """How to verify, step 3: every template through the segment counter, one segment each."""
-    message = templates.render(
-        NotificationChannel.SMS, PATIENT_EVENT_TEMPLATE[event], dict(_WORST)
+    template = PATIENT_EVENT_TEMPLATE[event]
+    text = template_registry.builtin_text(template, NotificationChannel.SMS, language)
+    assert text.language is language, f"no {language.value} words for {template.value}"
+    message = template_registry.render(
+        template, NotificationChannel.SMS, text.body, None, dict(_WORST)
     )
     count = count_segments(to_gsm7(message.text))
     assert (count.encoding, count.segments) == (SmsEncoding.GSM7, 1), (
