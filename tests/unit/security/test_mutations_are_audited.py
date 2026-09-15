@@ -30,6 +30,7 @@ CLINICQ_MODULES = (
     "queue",
     "tickets",
     "consent",
+    "appointments",
 )
 _MUTATING = frozenset({"post", "put", "patch", "delete"})
 #: The call that records an audit row, wherever it is made.

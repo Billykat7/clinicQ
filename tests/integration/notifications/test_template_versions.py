@@ -203,7 +203,10 @@ def test_words_that_break_the_contract_are_refused_and_the_preview_says_why(
 
     assert desk.staff("desk.a").get(_BASE).status_code == status.HTTP_403_FORBIDDEN
     listing = operator.get(_BASE).json()
-    assert listing["languages"] == ["en"] and len(listing["items"]) == 6 * 3
+    assert (
+        listing["languages"] == ["en"]
+        and len(listing["items"]) == len(PatientEvent) * 3
+    )
 
 
 @pytest.fixture

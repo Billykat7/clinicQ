@@ -83,6 +83,7 @@ VARIABLES: Final[Mapping[NotificationTemplate, frozenset[str]]] = {
     NotificationTemplate.TICKET_NO_SHOW: _TICKET_BLANKS,
     NotificationTemplate.TICKET_TRANSFERRED: _TICKET_BLANKS | {"wait"},
     NotificationTemplate.TICKET_CANCELLED: _TICKET_BLANKS,
+    NotificationTemplate.TICKET_LEAVE_NOW: _TICKET_BLANKS | {"wait", "minutes"},
 }
 #: What a web push may say, whatever the template: a lock screen is public (Issue 64).
 PUSH_VARIABLES: Final = frozenset({"number", "clinic"})
@@ -99,7 +100,8 @@ WORST_CASE: Final[Mapping[str, object]] = {
     "clinic": "X" * 200,
     "queue": "Q" * 80,
     "room": "R" * 40,
-    "minutes": 60,
+    # A recall's minutes are at most 60; a stated trip (Issue 86) at most MAX_TRAVEL_MINUTES.
+    "minutes": 180,
     "wait": "~180–240 min (approximate)",
 }
 #: What the editor's preview is rendered with: a plausible ticket, so the words read as a patient sees them.

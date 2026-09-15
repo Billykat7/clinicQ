@@ -99,7 +99,7 @@ ever empty: that is the whole design goal. Issue numbers in brackets.
 | **7** | 13–14 | M6 ⚠️ | 🚧 in progress — M6 closed (issues 39–47, tag `v0.6.0` to follow); ticket page [68] delivered; adapter framework [72], simulators [78] and PWA shell [69] not started; call-next actions [50] and walk-in intake [51] delivered with M7 |
 | **8** | 15–16 | M7 | 🚧 in progress — reorder UI [52] and room view [53] delivered; QR ticket [70] delivered with M9; appointment slots [80] delivered; USSD menu tree [73], security hardening [97] and i18n [77] not started |
 | **9** | 17–18 | M7 · M8 · M9 | 🚧 in progress — manager settings [54], board SSE [57] and board privacy [58] delivered; booking [81], USSD sessions [74], kiosk check-in [83], encryption [98] and the stats worker [88] not started |
-| **10** | 19–20 | M9 · M10 | 🚧 in progress — board accessibility [59], the kiosk device registry [61], audio announcements [60] and board resilience [62] delivered, closing M8 (tag `v0.8.0` to follow); proxy booking [84], virtual waiting room [86], WhatsApp webhook [75], templates [76], accessibility audit [101], reports UI [89] and KPIs [90] not started |
+| **10** | 19–20 | M9 · M10 | 🚧 in progress — board accessibility [59], the kiosk device registry [61], audio announcements [60] and board resilience [62] delivered, closing M8 (tag `v0.8.0` to follow); virtual waiting room [86] delivered; proxy booking [84], WhatsApp webhook [75], templates [76], accessibility audit [101], reports UI [89] and KPIs [90] not started |
 | **11** | 21–22 | M10 · M11 | 🚧 in progress — dashboard offline and browser tests [55] delivered, closing M7 (tag `v0.7.0` to follow), and board offline tests [62] delivered with sprint 10's lane; chronic reminders [85], reminders [82], parity tests [79], notification contract [71], pen-test prep [100], exports [91] and the district dashboard [92] not started |
 | **12** | 23–24 | M11 · M12 · M13 | 📋 planned |
 | **13** | 25–26 | M13 · M14 | 📋 planned |
@@ -110,7 +110,7 @@ release notes `v0.1.0`–`v0.5.0`. Only `v0.2.0` is tagged so far; the others ar
 are closed** (issues 39–62, release notes `v0.6.0`–`v0.8.0`), but **sprints 6 to 11 are under way,
 not done:** the queue engine, every dashboard issue (48–55) and every waiting-room board issue (56–62) are delivered, while those sprints' other
 lanes (72, 78, 73, 97, 77, 81, 74, 83, 98, 88 and the rest of sprints 10 and 11) have not
-started (M9's 67, 69 and 70 and M11's 80 are delivered) — and by the rule below a sprint is ticked only when *every* issue its lanes deliver is closed.
+started (M9's 67, 69 and 70 and M11's 80 and 86 are delivered) — and by the rule below a sprint is ticked only when *every* issue its lanes deliver is closed.
 
 A sprint is **done** when every issue its lanes *deliver* is closed. That is marked by hand, not
 generated, because a lane also names issues it works **against** — a contract stub, a fixture, a

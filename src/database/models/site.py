@@ -219,6 +219,14 @@ class Site(Base, TimestampMixin, ActiveMixin, SoftDeleteMixin):
     On by default; a clinic that objects switches it off and no view or join of it is recorded from
     then on. The events never identify a patient either way."""
 
+    virtual_waiting_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    """Whether patients joining by phone may wait away from the clinic and be told when to leave (Issue 86).
+
+    Off by default: a clinic switches it on when its manager wants patients waiting at home or nearby.
+    While off, nobody is asked for a travel time and nobody is sent a "time to leave" alert."""
+
     @property
     def sector_enum(self) -> SiteSector:
         """``sector`` as its enum member, for code that compares rather than renders."""

@@ -39,6 +39,23 @@
   </div>
 </form>
 
+{#- The virtual waiting room (Issue 86): one switch for the clinic, saved with
+    PUT /api/v1/sites/{id}/settings/virtual-waiting, which records the change. -#}
+<form class="card settings-form" id="vw-form" data-api="/api/v1/sites/{{ site.id }}/settings/virtual-waiting" data-method="PUT">
+  <h2>Virtual waiting room</h2>
+  <div class="field">
+    <label class="check">
+      <input type="checkbox" id="vw-enabled" name="virtual_waiting_enabled"{% if virtual_waiting.enabled %} checked{% endif %}>
+      Let patients who join by phone wait away from the clinic
+    </label>
+    <p class="hint">{{ virtual_waiting.explanation }}</p>
+  </div>
+  <div class="form-actions">
+    <button type="submit" class="btn btn-sm">Save</button>
+    <span class="msg" data-api-msg aria-live="polite"></span>
+  </div>
+</form>
+
 <div class="settings-list-head">
   <button type="button" class="btn btn-sm" data-new-record="sq-detail">Add a queue</button>
   <button type="button" class="btn btn-quiet btn-sm" id="sq-save-order" data-api="/api/v1/sites/{{ site.id }}/queues" data-method="PUT" hidden>Save this order</button>

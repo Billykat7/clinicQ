@@ -136,6 +136,20 @@ _UNSCOPED_BY_DESIGN: dict[str, str] = {
         "queue ids. It returns interval minutes and call hours, never a ticket or a patient "
         "(Issue 42)"
     ),
+    "modules/appointments/virtual_waiting.py::_awaiting_alert": (
+        "the call-forward sweep (Issue 86) is a scheduled system job with no caller and no clinic, like "
+        "the recall timers: it reads today's waiting, travelling, not yet alerted tickets at every clinic "
+        "whose virtual waiting room is on, and only tells each ticket's own patient"
+    ),
+    "modules/appointments/virtual_waiting.py::check_ticket": (
+        "reads one ticket's own queue by id to estimate its wait (Issue 86); the ticket was already "
+        "scoped by its caller: the sweep's system read, or the patient's own join"
+    ),
+    "modules/appointments/virtual_waiting.py::acknowledge": (
+        "a patient's own ticket by id (Issue 86): a patient holds no role at a clinic, so there is no "
+        "SiteAccess; the narrowing is the authenticated patient id, checked before anything is read or "
+        "written (another patient's ticket is the same 404), as in cancel_own_ticket"
+    ),
     "modules/queue/timers.py::_due": (
         "the recall timer sweep (Issue 43) is a scheduled system job with no caller and no clinic: "
         "it reads **every** called or recalled ticket on the platform, with its own queue's and "

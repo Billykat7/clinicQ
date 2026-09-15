@@ -15,6 +15,8 @@
 <details class="queue-line" data-queue-line="{{ queue.id }}">
   <summary class="queue-line-toggle">
     Waiting line <span class="queue-line-count">({{ line.waiting | length }})</span>
+    {%- set coming = line.waiting | selectattr("on_my_way_at") | list %}
+    {%- if coming %} <span class="badge badge-ok line-travel-count">{{ coming | length }} on the way</span>{% endif %}
   </summary>
   {% if line.waiting %}
   {% if not can_reorder %}
@@ -28,6 +30,14 @@
       <span class="line-number">{{ ticket.number }}</span>
       <span class="line-name">{{ ticket.name or ticket.source_label }}</span>
       <span class="line-waited" title="Waiting for {{ ticket.waited_minutes }} minutes">{{ ticket.waited_minutes }} min</span>
+      {#- The virtual waiting room (Issue 86): who is on the way, and who was told to leave but has not said. -#}
+      {% if ticket.on_my_way_at %}
+      <span class="badge badge-ok line-travel" title="Said at {{ ticket.on_my_way_at.strftime('%H:%M') }}, a {{ ticket.travel_minutes }}-minute trip">On my way</span>
+      {% elif ticket.leave_alert_at %}
+      <span class="badge badge-warn line-travel" title="Told to leave at {{ ticket.leave_alert_at.strftime('%H:%M') }}, a {{ ticket.travel_minutes }}-minute trip">Told to leave</span>
+      {% elif ticket.waiting_nearby %}
+      <span class="badge badge-muted line-travel" title="Waiting away from the clinic, a {{ ticket.travel_minutes }}-minute trip">Away {{ ticket.travel_minutes }} min</span>
+      {% endif %}
       {% if ticket.priority %}
       <span class="badge badge-warn line-priority" title="Moved forward at {{ ticket.priority.at.strftime('%H:%M') }} by {{ ticket.priority.staff }}: {{ ticket.priority.reason_label }}">Priority</span>
       {% endif %}

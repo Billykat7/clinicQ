@@ -30,13 +30,16 @@ from typing import Annotated, Final
 
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import HTMLResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.commons.enums import ConsentPurpose
 from src.commons.phone import INVALID_PHONE_MESSAGE
 from src.core.config import get_settings
+from src.database.models.site import Site
 from src.database.models.ticket import MAX_REASON_LENGTH
 from src.database.session import get_db
+from src.modules.appointments.call_forward import DEFAULT_TRAVEL_MINUTES, TRAVEL_CHOICES
 from src.modules.discovery import profile as profile_service
 from src.modules.discovery.profile import ClinicProfile
 from src.modules.patients.consent import has_consent
@@ -108,6 +111,31 @@ class JoinQueueOption:
 
 
 @dataclass(frozen=True, slots=True)
+class TravelChoice:
+    """One answer to "how long does your trip to the clinic take?" (Issue 86)."""
+
+    minutes: int
+    label: str
+
+
+def _travel_label(minutes: int) -> str:
+    """``0`` is being there already; otherwise hours and minutes, as a person says them."""
+    if minutes == 0:
+        return "I am at the clinic already"
+    hours, rest = divmod(minutes, 60)
+    parts = [f"{hours} hour{'s' if hours > 1 else ''}"] if hours else []
+    if rest:
+        parts.append(f"{rest} minutes")
+    return " ".join(parts)
+
+
+#: The travel question's answers, offered only at a clinic with a virtual waiting room.
+TRAVEL_OPTIONS: Final = tuple(
+    TravelChoice(minutes, _travel_label(minutes)) for minutes in TRAVEL_CHOICES
+)
+
+
+@dataclass(frozen=True, slots=True)
 class JoinPage:
     """Everything the join page renders, decided here."""
 
@@ -126,6 +154,11 @@ class JoinPage:
     notifications_granted: bool
     reason_max_length: int
     sign_in: SignInView
+    #: The travel question's answers (Issue 86); empty, so no question, where the clinic has no virtual
+    #: waiting room.
+    travel_choices: tuple[TravelChoice, ...] = ()
+    #: The answer selected to begin with: the default trip.
+    travel_default: int = DEFAULT_TRAVEL_MINUTES
 
 
 def join_page(
@@ -134,8 +167,13 @@ def join_page(
     join_enabled: bool,
     signed_in: bool,
     notifications_granted: bool = False,
+    virtual_waiting: bool = False,
 ) -> JoinPage:
-    """The join page for this clinic now, for a visitor who is or is not signed in."""
+    """The join page for this clinic now, for a visitor who is or is not signed in.
+
+    ``virtual_waiting`` is the clinic's switch (Issue 86): only then is the patient asked how long their
+    trip takes.
+    """
     button = join_button(profile, join_enabled=join_enabled)
     options = tuple(
         JoinQueueOption(
@@ -166,6 +204,7 @@ def join_page(
         notifications_granted=notifications_granted,
         reason_max_length=MAX_REASON_LENGTH,
         sign_in=sign_in_view(),
+        travel_choices=TRAVEL_OPTIONS if virtual_waiting else (),
     )
 
 
@@ -189,6 +228,11 @@ def clinic_join(request: Request, slug: Slug, db: DbSession) -> HTMLResponse:
         signed_in=patient_id is not None,
         notifications_granted=patient_id is not None
         and has_consent(db, patient_id, ConsentPurpose.NOTIFICATIONS),
+        virtual_waiting=bool(
+            db.execute(
+                select(Site.virtual_waiting_enabled).where(Site.id == found.site_id)
+            ).scalar_one_or_none()
+        ),
     )
     response = templates.TemplateResponse(
         request,

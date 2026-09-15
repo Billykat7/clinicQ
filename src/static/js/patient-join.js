@@ -106,12 +106,14 @@
       return;
     }
     var reason = document.getElementById("join-reason").value.trim();
+    // Asked only where the clinic runs a virtual waiting room (Issue 86).
+    var travel = document.getElementById("join-travel");
+    var body = { reason_text: reason || null };
+    if (travel) body.travel_minutes = Number(travel.value);
     say("");
     busy(submit, true, "Joining…");
     signIn
-      .call("POST", "/api/v1/clinics/" + encodeURIComponent(site) + "/queues/" + encodeURIComponent(queue) + "/tickets", {
-        reason_text: reason || null,
-      })
+      .call("POST", "/api/v1/clinics/" + encodeURIComponent(site) + "/queues/" + encodeURIComponent(queue) + "/tickets", body)
       .then(function (answer) {
         if (answer.ok && TICKET_PAGE.test(answer.body.page_url || "")) {
           window.location.assign(answer.body.page_url);

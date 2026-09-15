@@ -80,6 +80,16 @@
       <textarea class="sign-in-input join-reason" id="join-reason" name="reason_text" rows="3"
                 maxlength="{{ page.reason_max_length }}"></textarea>
       <p class="clinic-hint">The clinic's staff see this. It is never shown on the waiting-room screen.</p>
+      {% if page.travel_choices %}
+      {#- The virtual waiting room (Issue 86): asked only where the clinic runs one. -#}
+      <label class="sign-in-label" for="join-travel">How long does your trip to the clinic take?</label>
+      <select class="sign-in-input" id="join-travel" name="travel_minutes">
+        {% for choice in page.travel_choices %}
+        <option value="{{ choice.minutes }}"{% if choice.minutes == page.travel_default %} selected{% endif %}>{{ choice.label }}</option>
+        {% endfor %}
+      </select>
+      <p class="clinic-hint">You can wait at home or nearby. We will tell you when to leave, so you arrive before your turn.</p>
+      {% endif %}
       <button class="btn btn-block" type="submit" id="join-submit">Join the queue</button>
     </form>
     <p class="clinic-hint" id="join-messages"{% if not page.signed_in %} hidden{% endif %}>

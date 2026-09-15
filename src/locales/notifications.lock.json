@@ -23,6 +23,18 @@
     "sha256": "727aafdce6f349c8a6804e4d0cd782ff98359d2bcbd1e5429800bda90b2d9ec5",
     "version": 1
   },
+  "en/ticket_leave_now/sms": {
+    "sha256": "fdd19fa846b78704f1b86c8df304585b4b5388388d2669e46c3368a4a1224b20",
+    "version": 1
+  },
+  "en/ticket_leave_now/web_push": {
+    "sha256": "789484a3da692efd075754c82e238112a7a2ee422bd352df7aaa21b8cac27f20",
+    "version": 1
+  },
+  "en/ticket_leave_now/whatsapp": {
+    "sha256": "fdd19fa846b78704f1b86c8df304585b4b5388388d2669e46c3368a4a1224b20",
+    "version": 1
+  },
   "en/ticket_next/sms": {
     "sha256": "2abb06c8a0babaab75f4b11c0ee20d076d9262b32e8a0a8dbc2fc9ae46220447",
     "version": 1

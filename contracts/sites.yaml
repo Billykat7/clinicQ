@@ -887,6 +887,50 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
+  # ── Virtual waiting room (Issue 86) ──────────────────────────────────────────────────────
+  /sites/{site_id}/settings/virtual-waiting:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    get:
+      tags: [sites]
+      operationId: sitesGetVirtualWaitingSettings
+      summary: Whether this clinic runs a virtual waiting room
+      description: |
+        The clinic manager's (`sites.settings:read`). `explanation` is the sentence shown beside the switch.
+      responses:
+        "200":
+          description: The switch, the default trip and what it means.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VirtualWaitingSettingsOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    put:
+      tags: [sites]
+      operationId: sitesSetVirtualWaitingSettings
+      summary: Turn the virtual waiting room on or off
+      description: |
+        `sites.settings:update`. Off stops the travel question on the join page and every time-to-leave
+        alert at once; nobody's place changes. A change is written to the clinic's audit trail.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VirtualWaitingSettingsIn" }
+            example: { virtual_waiting_enabled: true }
+      responses:
+        "200":
+          description: The switch, as saved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VirtualWaitingSettingsOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
   # ── Transfers (Issue 45) ─────────────────────────────────────────────────────────────────
   /sites/{site_id}/settings/transfers:
     parameters:
@@ -2068,6 +2112,20 @@ components:
       properties:
         analytics_enabled: { type: boolean }
       example: { analytics_enabled: false }
+    VirtualWaitingSettingsIn:
+      type: object
+      additionalProperties: false
+      required: [virtual_waiting_enabled]
+      properties:
+        virtual_waiting_enabled: { type: boolean }
+    VirtualWaitingSettingsOut:
+      type: object
+      required: [site_id, virtual_waiting_enabled, default_travel_minutes, explanation]
+      properties:
+        site_id: { type: string }
+        virtual_waiting_enabled: { type: boolean }
+        default_travel_minutes: { type: integer, description: The trip assumed for a patient who does not state one. }
+        explanation: { type: string }
     AnalyticsSettingsOut:
       type: object
       required: [site_id, analytics_enabled, explanation]

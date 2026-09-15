@@ -854,6 +854,61 @@ paths:
                   value: { detail: "A done ticket cannot change any more.", code: "ticket.transition.illegal" }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
+  /patients/me/tickets/{ticket_id}/on-my-way:
+    post:
+      tags: [queue]
+      operationId: queueOnMyWay
+      summary: Tell reception I am on my way
+      description: |
+        The virtual waiting room's acknowledgement (Issue 86), usually after "time to leave". Reception
+        sees it beside the ticket at once. Idempotent: a second tap keeps the first time. Nothing about the
+        ticket's place changes, and not tapping it never costs the place. Another patient's ticket is the
+        same 404 as one that does not exist.
+      security: [{ bearerAuth: [] }, { sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/TicketId" }
+      responses:
+        "200":
+          description: The ticket, with `on_my_way_at` set.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnMyWayOut" }
+              example:
+                ticket:
+                  id: 01a09cf1-951b-7278-a2be-5fe7590abe56
+                  site_id: 01a09c0b-ce1c-743e-b8ff-544bb4ac8774
+                  queue_id: 01a09c0b-ce5e-7037-8071-cd12f438bd3d
+                  number: T003
+                  reference_code: K7M-4QP
+                  source: web
+                  status: waiting
+                  service_day: "2026-09-14"
+                  joined_at: "2026-09-14T07:31:12+02:00"
+                  walk_in_name: null
+                  travel_minutes: 30
+                  leave_alert_at: "2026-09-14T09:40:31+02:00"
+                  on_my_way_at: "2026-09-14T09:41:02+02:00"
+                message: Reception knows T003 is on the way.
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Not one of this patient's tickets.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "No such ticket.", code: "http.not_found" }
+        "409":
+          description: The clinic has no virtual waiting room, or the visit has begun or ended.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                not_offered:
+                  value: { detail: "This clinic is not waiting for patients to travel in.", code: "ticket.on_my_way.not_offered" }
+                ended:
+                  value: { detail: "This ticket is no longer in the queue.", code: "ticket.on_my_way.ended" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
   /sites/{site_id}/tickets/{ticket_id}/cancel:
     post:
       tags: [queue]
@@ -1207,7 +1262,14 @@ components:
           type: boolean
           default: false
           description: Consent, for this visit only, to show the reason on the waiting-room board.
-      example: { reason_text: null, comment_consent: false }
+        travel_minutes:
+          type: [integer, "null"]
+          minimum: 0
+          maximum: 180
+          description: |
+            How long the trip to the clinic takes, at a clinic with a virtual waiting room (Issue 86).
+            `0` is "already here"; null takes the default (15). Not kept at a clinic without one.
+      example: { reason_text: null, comment_consent: false, travel_minutes: 30 }
     WalkInIn:
       type: object
       properties:
@@ -1251,6 +1313,9 @@ components:
         service_day: { type: string, format: date }
         joined_at: { type: string, format: date-time }
         walk_in_name: { type: [string, "null"], description: "The desk's name for a walk-in; null for a phone join." }
+        travel_minutes: { type: [integer, "null"], description: "The stated trip, at a clinic with a virtual waiting room (Issue 86)." }
+        leave_alert_at: { type: [string, "null"], format: date-time, description: "When the patient was told it is time to leave." }
+        on_my_way_at: { type: [string, "null"], format: date-time, description: "When the patient said they are on their way: what reception looks for." }
       example:
         id: 01a09cf1-951b-7278-a2be-5fe7590abe56
         site_id: 01a09c0b-ce1c-743e-b8ff-544bb4ac8774
@@ -1361,6 +1426,37 @@ components:
         reference_spoken: { type: string, description: "The reference code as read aloud (Issue 70): Kilo 7 Mike, 4 Quebec Papa." }
         offer_install: { type: boolean, description: "Offer adding the app to the home screen (Issue 69): the ticket's own signed-in patient, while the ticket is open." }
         preferences_url: { type: [string, "null"], description: "The patient's message preferences by this link (Issue 67); null for a walk-in with no patient." }
+        call_forward:
+          oneOf:
+            - $ref: "#/components/schemas/CallForwardOut"
+            - type: "null"
+          description: The virtual waiting room (Issue 86), for a travelling patient at a clinic that runs one.
+    CallForwardOut:
+      type: object
+      required: [travel_minutes, leave_at, due, alerted_at, on_my_way_at, on_my_way_url]
+      description: |
+        When to leave, from the same estimate as the page's `wait`: due once the low end of the wait is no
+        more than the trip plus 10 minutes. Once the ticket is called, `leave_at` is null and `due` true.
+      properties:
+        travel_minutes: { type: integer, minimum: 1 }
+        leave_at: { type: [string, "null"], format: date-time }
+        due: { type: boolean }
+        alerted_at: { type: [string, "null"], format: date-time }
+        on_my_way_at: { type: [string, "null"], format: date-time }
+        on_my_way_url: { type: [string, "null"], description: "For the ticket's own patient until they have said it." }
+      example:
+        travel_minutes: 30
+        leave_at: "2026-09-14T09:40:00+02:00"
+        due: false
+        alerted_at: null
+        on_my_way_at: null
+        on_my_way_url: /api/v1/patients/me/tickets/01a09cf1-951b-7278-a2be-5fe7590abe56/on-my-way
+    OnMyWayOut:
+      type: object
+      required: [ticket, message]
+      properties:
+        ticket: { $ref: "#/components/schemas/TicketOut" }
+        message: { type: string }
     PriorityReason:
       type: string
       description: Why a patient was moved forward. Required for every override; never free text.

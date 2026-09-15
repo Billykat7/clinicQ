@@ -701,6 +701,25 @@ class AnalyticsSettingsOut(BaseModel):
     explanation: str = Field(description="What is and is not recorded, in plain words.")
 
 
+class VirtualWaitingSettingsIn(BaseModel):
+    """Whether this clinic runs a virtual waiting room (Issue 86)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    virtual_waiting_enabled: bool
+
+
+class VirtualWaitingSettingsOut(BaseModel):
+    """A clinic's virtual waiting room switch, with what it means."""
+
+    site_id: str
+    virtual_waiting_enabled: bool
+    default_travel_minutes: int = Field(
+        description="The trip assumed for a patient who does not state one."
+    )
+    explanation: str = Field(description="What the switch does, in plain words.")
+
+
 class DiscoveryConversionOut(BaseModel):
     """How many patients opened this clinic's page, and how many went on to join a queue."""
 

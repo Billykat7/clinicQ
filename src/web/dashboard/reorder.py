@@ -77,6 +77,16 @@ class LineTicket:
     #: Whole minutes since the ticket joined, as of the read.
     waited_minutes: int
     priority: PriorityMark | None
+    #: The virtual waiting room (Issue 86): the patient's stated trip, when they were told to leave, and
+    #: when they said they are on their way. ``None`` for a patient in the room, and at clinics without one.
+    travel_minutes: int | None = None
+    leave_alert_at: datetime | None = None
+    on_my_way_at: datetime | None = None
+
+    @property
+    def waiting_nearby(self) -> bool:
+        """Whether the patient is waiting away from the clinic and has not yet said they are coming."""
+        return bool(self.travel_minutes) and self.on_my_way_at is None
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,6 +255,13 @@ def queue_lines(
                         ),
                     ),
                     priority=marks.get(ticket.id),
+                    travel_minutes=ticket.travel_minutes,
+                    leave_alert_at=stored_sast(ticket.leave_alert_at)
+                    if ticket.leave_alert_at
+                    else None,
+                    on_my_way_at=stored_sast(ticket.on_my_way_at)
+                    if ticket.on_my_way_at
+                    else None,
                 )
                 for place, ticket in enumerate(waiting, start=1)
             ),

@@ -141,8 +141,9 @@ recorded once in `sms_inbound_event` (a repeated callback answers `duplicate`), 
 did, never the text.
 
 A patient can also stop messages, set quiet hours or mute a message from the **Message settings** panel on
-their ticket page. Quiet hours hold every message except the three that say "come now" (you are next,
-please come in, you were called again); an opt-out stops those too.
+their ticket page. Quiet hours hold every message except the four that cannot wait (you are next,
+please come in, you were called again and, at a clinic with a virtual waiting room, time to leave); an
+opt-out stops those too.
 
 ---
 

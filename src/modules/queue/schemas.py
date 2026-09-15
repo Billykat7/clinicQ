@@ -23,7 +23,7 @@ from src.commons.enums import (
 )
 from src.commons.time import stored_sast
 from src.database.models.queue_reorder import MAX_REORDER_NOTE_LENGTH, QueueReorder
-from src.database.models.ticket import MAX_REASON_LENGTH, Ticket
+from src.database.models.ticket import MAX_REASON_LENGTH, MAX_TRAVEL_MINUTES, Ticket
 from src.modules.queue.estimate import WaitEstimate
 from src.modules.queue.sequence import format_reference_code
 
@@ -43,6 +43,9 @@ class JoinIn(BaseModel):
     """A short reason for the visit, if they want to give one."""
     comment_consent: bool = False
     """Consent, for this visit only, to show the reason on the waiting-room board. Off by default."""
+    travel_minutes: int | None = Field(default=None, ge=0, le=MAX_TRAVEL_MINUTES)
+    """How long the trip to the clinic takes, for a clinic with a virtual waiting room (Issue 86). ``0`` is
+    "already here"; ``None`` takes the default. Not kept where the clinic has no virtual waiting room."""
     _trim = field_validator("reason_text")(_blank_to_none)
 
 
@@ -92,6 +95,12 @@ class TicketOut(BaseModel):
     joined_at: datetime
     walk_in_name: str | None
     """The desk's name for a walk-in; ``None`` for a phone join, whose name is on the patient."""
+    travel_minutes: int | None = None
+    """The trip the patient stated, at a clinic with a virtual waiting room (Issue 86)."""
+    leave_alert_at: datetime | None = None
+    """When the patient was told it is time to leave (Issue 86)."""
+    on_my_way_at: datetime | None = None
+    """When the patient said they are on their way (Issue 86): what reception looks for."""
 
     @classmethod
     def of(cls, ticket: Ticket) -> TicketOut:
@@ -108,6 +117,13 @@ class TicketOut(BaseModel):
             # Read back through stored_sast: SQLite hands a stored datetime back without its offset.
             joined_at=stored_sast(ticket.joined_at),
             walk_in_name=ticket.walk_in_name,
+            travel_minutes=ticket.travel_minutes,
+            leave_alert_at=stored_sast(ticket.leave_alert_at)
+            if ticket.leave_alert_at
+            else None,
+            on_my_way_at=stored_sast(ticket.on_my_way_at)
+            if ticket.on_my_way_at
+            else None,
         )
 
 
@@ -168,6 +184,30 @@ class TicketQrOut(BaseModel):
     """The dark modules as one SVG path, drawn in ``size`` units."""
 
 
+class CallForwardOut(BaseModel):
+    """The virtual waiting room on a ticket page (Issue 86): when to leave, and "On my way"."""
+
+    travel_minutes: int = Field(gt=0)
+    """The trip the patient stated (or the default)."""
+    leave_at: datetime | None
+    """When to set off, from the same estimate as :attr:`TicketPageOut.wait`; ``None`` once called."""
+    due: bool
+    """Whether it is time to leave now."""
+    alerted_at: datetime | None
+    """When the patient was sent "time to leave", if they have been."""
+    on_my_way_at: datetime | None
+    """When the patient said they are on their way, if they have."""
+    on_my_way_url: str | None
+    """Where the ticket's own patient says so; ``None`` for anyone else, once said, or once the visit began."""
+
+
+class OnMyWayOut(BaseModel):
+    """The ticket after "On my way": reception now sees it."""
+
+    ticket: TicketOut
+    message: str
+
+
 class TicketPageOut(BaseModel):
     """Everything a patient's ticket page shows, derived on every read (Issue 68).
 
@@ -217,6 +257,8 @@ class TicketPageOut(BaseModel):
     preferences_url: str | None = None
     """Where the patient's message preferences are read and changed by this link (Issue 67); ``None`` for a
     walk-in with no patient."""
+    call_forward: CallForwardOut | None = None
+    """The virtual waiting room (Issue 86), for a travelling patient at a clinic that runs one."""
 
 
 class TicketLookupOut(BaseModel):

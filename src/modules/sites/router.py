@@ -51,6 +51,10 @@ from src.core.site_scope import (
     site_not_found,
 )
 from src.database.models.site import Site
+from src.modules.appointments.call_forward import (
+    DEFAULT_TRAVEL_MINUTES,
+    VIRTUAL_WAITING_EXPLANATION,
+)
 from src.modules.discovery import analytics as discovery_analytics
 from src.modules.queue.timers import timeout_minutes
 from src.modules.sites import (
@@ -103,6 +107,8 @@ from src.modules.sites.schemas import (
     VerificationDecisionIn,
     VerificationQueueItemOut,
     VerificationQueueOut,
+    VirtualWaitingSettingsIn,
+    VirtualWaitingSettingsOut,
     WeeklyHoursIn,
     WeeklyHoursOut,
 )
@@ -1322,6 +1328,58 @@ def set_analytics_settings(
     db.commit()
     db.refresh(site)
     return _analytics_out(site)
+
+
+def _virtual_waiting_out(site: Site) -> VirtualWaitingSettingsOut:
+    return VirtualWaitingSettingsOut(
+        site_id=site.id,
+        virtual_waiting_enabled=site.virtual_waiting_enabled,
+        default_travel_minutes=DEFAULT_TRAVEL_MINUTES,
+        explanation=VIRTUAL_WAITING_EXPLANATION,
+    )
+
+
+@router.get(
+    "/{site_id}/settings/virtual-waiting",
+    response_model=VirtualWaitingSettingsOut,
+    operation_id="sitesGetVirtualWaitingSettings",
+    summary="Whether this clinic runs a virtual waiting room",
+)
+def get_virtual_waiting_settings(
+    access: SiteSettingsRead, db: DbSession
+) -> VirtualWaitingSettingsOut:
+    """The clinic's virtual waiting room switch and what it means (Issue 86)."""
+    return _virtual_waiting_out(_site_or_404(db, access))
+
+
+@router.put(
+    "/{site_id}/settings/virtual-waiting",
+    response_model=VirtualWaitingSettingsOut,
+    operation_id="sitesSetVirtualWaitingSettings",
+    summary="Turn the virtual waiting room on or off",
+)
+def set_virtual_waiting_settings(
+    payload: VirtualWaitingSettingsIn,
+    request: Request,
+    access: SiteSettingsUpdate,
+    db: DbSession,
+) -> VirtualWaitingSettingsOut:
+    """Turn it on or off. Off stops the travel question and every alert at once; places are untouched."""
+    site = _site_or_404(db, access)
+    if site.virtual_waiting_enabled != payload.virtual_waiting_enabled:
+        site.virtual_waiting_enabled = payload.virtual_waiting_enabled
+        _audit(
+            db,
+            request,
+            access.user.email,
+            str(access.user.id),
+            AuditAction.UPDATE,
+            site.id,
+            f"virtual waiting room {'on' if payload.virtual_waiting_enabled else 'off'} for {site.slug}",
+        )
+    db.commit()
+    db.refresh(site)
+    return _virtual_waiting_out(site)
 
 
 @router.get(

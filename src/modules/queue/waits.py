@@ -35,6 +35,7 @@ from src.modules.queue.estimate import (
     WaitEstimate,
     estimate_wait,
 )
+from src.modules.queue.tickets import waiting_ahead
 
 #: A call interval longer than this is not throughput: the room was closed, or the day stopped.
 MAX_INTERVAL_MINUTES: Final = 180.0
@@ -160,3 +161,16 @@ def estimates_for(
         )
         for queue in queues
     }
+
+
+def ticket_wait(
+    db: Session, ticket: Ticket, queue: Queue, *, moment: datetime
+) -> tuple[int, WaitEstimate]:
+    """How many are waiting ahead of ``ticket``, and the wait that means: **the** estimate for one ticket.
+
+    The ticket page, the answer to a join and the virtual waiting room's "time to leave" alert (Issue 86)
+    all read it here, so the number a patient is shown and the number an alert is timed by are one
+    computation from one read, and cannot disagree.
+    """
+    ahead = waiting_ahead(db, ticket)
+    return ahead, estimates_for(db, [queue], {queue.id: ahead}, moment=moment)[queue.id]
