@@ -72,6 +72,9 @@ MAX_SUBSCRIBERS_PER_SITE: Final = 100
 #: Events a subscriber may have waiting before it is treated as gone. A live screen reads each one in
 #: microseconds; one that has 256 unread has stopped reading.
 SUBSCRIBER_BACKLOG: Final = 256
+#: Patients following their own tickets (Issue 68) have a budget of their own, far larger than the
+#: screens', so a full waiting room of phones can never take a stream from the clinic's board.
+MAX_PATIENT_STREAMS_PER_SITE: Final = 500
 #: The media type of a server-sent events response.
 EVENT_STREAM_MEDIA_TYPE: Final = "text/event-stream"
 #: Response headers every stream sends: never cached, and never buffered by a proxy in front of us.
@@ -325,16 +328,35 @@ class SiteEventBroker:
             await events.aclose()
 
 
-#: The process's broker: every stream subscribes to it, every committed change is published to it.
+#: The process's broker: every staff and board stream subscribes to it, every committed change is
+#: published to it.
 broker = SiteEventBroker()
+#: The broker patients' ticket pages subscribe to (Issue 68). Every change goes to both brokers; they
+#: differ only in whose streams count against which budget.
+patient_broker = SiteEventBroker(max_per_site=MAX_PATIENT_STREAMS_PER_SITE)
+
+
+class _LocalStreams:
+    """Both of this instance's brokers, as one place to hand an event (for the Redis fan-out)."""
+
+    def publish(self, event: LiveEvent) -> None:
+        """Hand ``event`` to every stream on this instance."""
+        broker.publish(event)
+        patient_broker.publish(event)
+
+
+#: Every stream on this instance: staff, boards and patients.
+local_streams = _LocalStreams()
 
 #: How many streams are open on this instance, every clinic and every kind: what an operator watches to
 #: see that connections do not pile up over a day (Issue 57). On ``/metrics``.
 STREAMS_OPEN = Gauge(
     "clinicq_live_streams_open",
-    "Open live-event streams (dashboards and waiting-room boards) on this instance.",
+    "Open live-event streams (dashboards, waiting-room boards and ticket pages) on this instance.",
 )
-STREAMS_OPEN.set_function(lambda: broker.subscriber_count())
+STREAMS_OPEN.set_function(
+    lambda: broker.subscriber_count() + patient_broker.subscriber_count()
+)
 
 # --------------------------------------------------------------------------------------
 # Fan-out across instances (Issue 57)
@@ -358,7 +380,7 @@ class RedisFanout:
     def __init__(
         self,
         client: Any,
-        target: SiteEventBroker,
+        target: SiteEventBroker | _LocalStreams,
         *,
         channel: str = FANOUT_CHANNEL,
         origin: str | None = None,
@@ -497,7 +519,7 @@ def start_fanout(settings: Settings) -> RedisFanout | None:
             "REDIS_URL is not a usable Redis URL (%s); no live-event fan-out.", exc
         )
         return None
-    _fanout = RedisFanout(client, broker)
+    _fanout = RedisFanout(client, local_streams)
     _fanout.start()
     return _fanout
 
@@ -512,7 +534,7 @@ def stop_fanout() -> None:
 
 def publish_live(event: LiveEvent) -> None:
     """Publish ``event`` to this instance's streams, and to the other instances' through Redis."""
-    broker.publish(event)
+    local_streams.publish(event)
     if _fanout is not None:
         _fanout.publish(event)
 

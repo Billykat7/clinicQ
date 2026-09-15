@@ -140,6 +140,10 @@ def test_every_queue_operation_documents_its_refusals() -> None:
         responses = set(operation.get("responses", {}))
         if path == "/patients/me/tickets" and method == "get":
             required = {"401", "403"}  # a patient's own list: nothing to be not found
+        elif path == "/tickets/{page_token}" and method == "get":
+            # The ticket page (Issue 68): the link is the credential, so there is no sign-in to lack
+            # and no grant to be refused. A link that finds nothing is the only refusal.
+            required = {"404"}
         else:
             required = {"401", "403", "404"}
         if method != "get":

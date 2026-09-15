@@ -48,6 +48,7 @@ from src.commons.enums import (
     TicketSource,
     TicketStatus,
 )
+from src.commons.exceptions import NotFoundError
 from src.commons.phone import normalize_phone
 from src.commons.time import business_date, business_day_bounds, stored_sast
 from src.core.client_ip import resolve_client_ip
@@ -66,6 +67,7 @@ from src.database.models import Patient, Queue, Site, Ticket, Visit
 from src.database.session import get_db
 from src.modules.patients.consent import record_consent
 from src.modules.patients.service import get_or_create_patient
+from src.modules.patients.sessions import signed_in_patient_id
 from src.modules.queue import service
 from src.modules.queue.cancellation import (
     CancelResult,
@@ -98,6 +100,7 @@ from src.modules.queue.schemas import (
     StaffOverrideCountOut,
     TicketListOut,
     TicketOut,
+    TicketPageOut,
     TransferIn,
     TransferOut,
     TransitionIn,
@@ -108,6 +111,7 @@ from src.modules.queue.schemas import (
     WalkInIn,
 )
 from src.modules.queue.service import JoinRefusedError, JoinResult
+from src.modules.queue.ticket_page import find_by_page_token, page_state, page_url_for
 from src.modules.queue.tickets import (
     CALL_ORDER,
     patient_tickets_select,
@@ -169,6 +173,7 @@ def _answer(result: JoinResult, response: Response) -> JoinOut:
         waiting_ahead=result.waiting_ahead,
         wait=WaitOut.of(result.wait),
         message=message,
+        page_url=page_url_for(result.ticket),
     )
 
 
@@ -366,7 +371,7 @@ def my_tickets(patient: PatientReading, db: DbSession) -> list[MyTicketOut]:
     )
     out: list[MyTicketOut] = []
     for row in rows:
-        mine = MyTicketOut(**TicketOut.of(row).model_dump())
+        mine = MyTicketOut(**TicketOut.of(row).model_dump(), page_url=page_url_for(row))
         if row.status_enum is TicketStatus.WAITING:
             queue = db.get(Queue, row.queue_id)
             ahead = waiting_ahead(db, row)
@@ -377,6 +382,28 @@ def my_tickets(patient: PatientReading, db: DbSession) -> list[MyTicketOut]:
                 )
         out.append(mine)
     return out
+
+
+@router.get(
+    "/tickets/{page_token}",
+    response_model=TicketPageOut,
+    operation_id="queueTicketPage",
+    summary="One ticket as its page shows it, found by the page's unguessable link",
+)
+def ticket_page(
+    page_token: str, request: Request, response: Response, db: DbSession
+) -> TicketPageOut:
+    """The data behind a patient's ticket page (Issue 68): number, clinic, place in line, wait range.
+
+    No sign-in: the link is the credential, and it lets its holder follow the ticket and nothing more.
+    The ticket's own patient, signed in on this browser, is also given ``cancel_url``. An id, a number,
+    a reference code or an unknown token is the same 404, so a ticket cannot be probed for.
+    """
+    ticket = find_by_page_token(db, page_token)
+    if ticket is None:
+        raise NotFoundError("No such ticket.", code="http.not_found")
+    response.headers["Cache-Control"] = "no-store"
+    return page_state(db, ticket, viewer_patient_id=signed_in_patient_id(request, db))
 
 
 @router.post(

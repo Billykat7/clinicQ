@@ -882,6 +882,69 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
+  # ── The patient's ticket page (Issue 68) ────────────────────────────────────────────────
+  /tickets/{page_token}:
+    get:
+      tags: [queue]
+      operationId: queueTicketPage
+      summary: One ticket as its page shows it, found by the page's unguessable link
+      description: |
+        The data behind the patient's ticket page at `/t/{page_token}`: number, clinic, queue, place in
+        line, wait range and a headline that says what to do now. No sign-in: the token (43 URL-safe
+        characters, 256 random bits) is the credential, and it lets its holder follow the ticket and
+        nothing more. It carries nothing about the patient (no name, phone number or reason).
+
+        `cancel_url` is set only when the ticket's own patient is signed in on the browser asking and
+        the ticket is still waiting; the cancel route checks again. A ticket id, number or reference
+        code is not a token, and every link that finds nothing is the same `404`.
+
+        The page follows `/t/{page_token}/stream`: server-sent `ticket.state` events carrying this
+        object as `ticket`, in the waiting-room board's envelope (Issue 57), with a heartbeat every
+        15 seconds. While the stream is down it reads this route every `refresh_seconds`.
+      parameters:
+        - name: page_token
+          in: path
+          required: true
+          description: The ticket page's token, from `page_url` in the join answer or the patient's tickets.
+          schema: { type: string, pattern: "^[A-Za-z0-9_-]{43}$" }
+          example: 3q2X9vJp0kQy7W1mZ5nR8tB4cD6eF2gH0iJkLmNoPqR
+      responses:
+        "200":
+          description: The ticket as it stands now. Never cached.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TicketPageOut" }
+              example:
+                number: T005
+                reference_code: K7M-4QP
+                headline: waiting
+                status: waiting
+                service_day: "2026-09-15"
+                clinic:
+                  name: Zola Community Clinic
+                  address: "1 Main Road, Zola, Soweto"
+                  phone_e164: "+27110000000"
+                  call_url: "tel:+27110000000"
+                  directions_url: "https://www.google.com/maps/dir/?api=1&destination=-26.244000,27.855000"
+                queue: { name: Triage, room: Room 2 }
+                position: 4
+                waiting_ahead: 3
+                wait: { low_minutes: 10, high_minutes: 20, confidence: medium, approximate: false, label: "~10–20 min" }
+                called_at: null
+                as_of: "2026-09-15T08:41:05+02:00"
+                refresh_seconds: 15
+                stale_after_seconds: 45
+                stream_url: /t/3q2X9vJp0kQy7W1mZ5nR8tB4cD6eF2gH0iJkLmNoPqR/stream
+                cancel_url: null
+                next_page_url: null
+        "404":
+          description: No ticket has this link.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "No such ticket.", code: "http.not_found" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
   # ── Private visit notes (Issue 53) ──────────────────────────────────────────────────────
   /sites/{site_id}/tickets/{ticket_id}/notes:
     get:
@@ -1181,6 +1244,49 @@ components:
         waiting_ahead: { type: integer, minimum: 0, description: "Waiting tickets ahead of this one now." }
         wait: { $ref: "#/components/schemas/WaitOut" }
         message: { type: string, description: "A sentence for the patient." }
+        page_url: { type: [string, "null"], description: "The ticket page, to follow live and share (Issue 68)." }
+    TicketPageHeadline:
+      type: string
+      description: What a ticket page leads with, derived from the status and the place in line (Issue 68).
+      enum: [waiting, next, called, in_progress, done, cancelled, missed, transferred]
+      example: next
+    TicketPageOut:
+      type: object
+      required: [number, reference_code, headline, status, service_day, clinic, queue, as_of, refresh_seconds, stale_after_seconds, stream_url, cancel_url, next_page_url]
+      properties:
+        number: { type: string }
+        reference_code: { type: string, description: "Written the way it is read aloud: K7M-4QP." }
+        headline: { $ref: "#/components/schemas/TicketPageHeadline" }
+        status: { $ref: "#/components/schemas/TicketStatus" }
+        service_day: { type: string, format: date }
+        clinic:
+          type: object
+          required: [name, address, phone_e164, call_url, directions_url]
+          properties:
+            name: { type: string }
+            address: { type: string }
+            phone_e164: { type: [string, "null"] }
+            call_url: { type: [string, "null"], description: "A tel: link; null when the clinic has no number." }
+            directions_url: { type: string }
+        queue:
+          type: object
+          required: [name, room]
+          properties:
+            name: { type: string }
+            room: { type: [string, "null"] }
+        position: { type: [integer, "null"], minimum: 1, description: "Place in the waiting line, 1 being next; null once not waiting." }
+        waiting_ahead: { type: [integer, "null"], minimum: 0 }
+        wait:
+          oneOf:
+            - { $ref: "#/components/schemas/WaitOut" }
+            - { type: "null" }
+        called_at: { type: [string, "null"], format: date-time }
+        as_of: { type: string, format: date-time, description: "When this was read; the page shows how old it is." }
+        refresh_seconds: { type: integer, minimum: 1, description: "How often to read again while the stream is down." }
+        stale_after_seconds: { type: integer, minimum: 1, description: "Silence after which the page says it is not live." }
+        stream_url: { type: [string, "null"], description: "The live stream; null once the ticket is finished." }
+        cancel_url: { type: [string, "null"], description: "Only for the ticket's own signed-in patient, while waiting." }
+        next_page_url: { type: [string, "null"], description: "The page of the ticket a transfer issued." }
     PriorityReason:
       type: string
       description: Why a patient was moved forward. Required for every override; never free text.
@@ -1369,6 +1475,7 @@ components:
               oneOf:
                 - { $ref: "#/components/schemas/WaitOut" }
                 - { type: "null" }
+            page_url: { type: [string, "null"], description: "The ticket page (Issue 68); null for a ticket older than the page." }
     TicketListOut:
       type: object
       required: [site_id, service_day, total, items]

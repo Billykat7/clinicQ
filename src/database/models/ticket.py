@@ -28,6 +28,10 @@ worth stating before the columns:
   before it runs, including the bulk ``UPDATE`` and raw SQL that an attribute listener cannot see.
 * **``number`` is stored, not recomputed.** It is what was printed on the stub and read out in the
   waiting room, so a queue whose prefix is renamed at noon must not renumber the morning's tickets.
+* **``page_token`` is the ticket page's address** (Issue 68): 43 URL-safe characters from 256 random
+  bits, so the link a patient shares with family cannot be guessed or walked from another ticket's.
+  It lets its holder follow the ticket and nothing more: cancelling still needs the patient's own
+  session. ``NULL`` only for tickets issued before the page existed.
 * **``reference_code`` is for people, not machines.** Six characters from an alphabet with no
   ``0``/``O`` and no ``1``/``I``/``L`` (:data:`src.modules.queue.sequence.REFERENCE_ALPHABET`), so it
   survives being read aloud across a reception desk and typed back in. It is unique across the
@@ -78,6 +82,9 @@ SCHEMA = DbSchema.CLINICQ.value
 MAX_REASON_LENGTH = 140
 #: Length of a ticket's reference code (see :mod:`src.modules.queue.sequence`).
 REFERENCE_CODE_LENGTH = 6
+
+#: Length of a ticket page token: ``secrets.token_urlsafe(32)``, 256 random bits (Issue 68).
+PAGE_TOKEN_LENGTH = 43
 
 
 def _in_clause(
@@ -144,6 +151,7 @@ class Ticket(Base, TimestampMixin):
             name="uq_ticket_queue_id_service_day_sequence",
         ),
         UniqueConstraint("reference_code", name="uq_ticket_reference_code"),
+        UniqueConstraint("page_token", name="uq_ticket_page_token"),
         CheckConstraint("sequence >= 1", name="sequence_positive"),
         CheckConstraint(_in_clause("status", TicketStatus), name="status"),
         CheckConstraint(_in_clause("source", TicketSource), name="source"),
@@ -242,6 +250,10 @@ class Ticket(Base, TimestampMixin):
         String(REFERENCE_CODE_LENGTH), nullable=False
     )
     """Six unambiguous characters for finding the ticket at the desk. Not a secret."""
+    page_token: Mapped[str | None] = mapped_column(
+        String(PAGE_TOKEN_LENGTH), nullable=True
+    )
+    """The ticket page's unguessable address (Issue 68); ``NULL`` for a ticket older than the page."""
     source: Mapped[str] = mapped_column(String(16), nullable=False)
     """:class:`~src.commons.enums.TicketSource`. Recorded for reporting, never used for ordering."""
     walk_in_name: Mapped[str | None] = mapped_column(String(80), nullable=True)

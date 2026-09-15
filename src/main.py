@@ -44,6 +44,7 @@ from src.web.discover import router as discover_router
 from src.web.display import router as display_router
 from src.web.display_stream import router as display_stream_router
 from src.web.routes import router as web_router
+from src.web.ticket import router as ticket_router
 
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -126,6 +127,7 @@ def create_app(settings_obj: Settings | None = None) -> FastAPI:
     # The waiting-room board (M8): public, read-only, fed only by the privacy projection (Issue 58).
     app.include_router(display_router)
     app.include_router(display_stream_router)
+    app.include_router(ticket_router)
     # The component catalogue and layout samples (Issue 5) exist only in development: in staging
     # and production the paths are not registered at all, so they answer 404.
     if cfg.environment is AppEnvironment.DEVELOPMENT:

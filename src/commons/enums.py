@@ -847,6 +847,8 @@ class LiveEventType(StrEnum):
       :data:`~src.core.live_events.HEARTBEAT_SECONDS`, so a silent connection is noticed.
     - ``BOARD_STATE``: the whole waiting-room board as it is now, the first event on every connection
       to a board's stream, so a board that reconnects is resynced before anything else (Issue 57).
+    - ``TICKET_STATE``: one patient's ticket as it is now (Issue 68), sent first on a ticket page's
+      stream and again after every change in the ticket's queue, in the same envelope.
 
     A board's stream carries the board with every event (``board``, the privacy projection of Issue 58);
     the dashboard's stream carries only what changed, and the dashboard reads its cards again.
@@ -857,6 +859,32 @@ class LiveEventType(StrEnum):
     BOARD_CONFIG_CHANGED = "board.config_changed"
     HEARTBEAT = "heartbeat"
     BOARD_STATE = "board.state"
+    TICKET_STATE = "ticket.state"
+
+
+class TicketPageHeadline(StrEnum):
+    """What a patient's ticket page leads with (Issue 68): the one answer to "what now?".
+
+    Derived on every read from the ticket's status and its place in line, never stored.
+
+    - ``WAITING``: in line, with people ahead; the page shows the position and the wait range.
+    - ``NEXT``: nobody is waiting ahead; be ready. Impossible to miss on the page.
+    - ``CALLED``: called or called again; go in now, to the room named.
+    - ``IN_PROGRESS``: being seen.
+    - ``DONE``: the visit is finished.
+    - ``CANCELLED``: the ticket was cancelled, by the patient or the clinic.
+    - ``MISSED``: marked a no-show after being called twice.
+    - ``TRANSFERRED``: the visit continues in another queue, on the ticket the page links to.
+    """
+
+    WAITING = "waiting"
+    NEXT = "next"
+    CALLED = "called"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+    CANCELLED = "cancelled"
+    MISSED = "missed"
+    TRANSFERRED = "transferred"
 
 
 class DisplayMode(StrEnum):

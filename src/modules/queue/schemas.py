@@ -16,6 +16,7 @@ from src.commons.enums import (
     CancellationReason,
     EstimateConfidence,
     PriorityReason,
+    TicketPageHeadline,
     TicketSource,
     TicketStatus,
     TransferReason,
@@ -133,6 +134,61 @@ class WaitOut(BaseModel):
         )
 
 
+class TicketPageClinic(BaseModel):
+    """The clinic on a ticket page: where it is and how to reach it (Issue 68)."""
+
+    name: str
+    address: str
+    phone_e164: str | None
+    call_url: str | None
+    """``tel:`` link for a tap-to-call button; ``None`` when the clinic has no number."""
+    directions_url: str
+    """A maps link to the clinic's position."""
+
+
+class TicketPageQueue(BaseModel):
+    """The queue on a ticket page, and the room it is called to."""
+
+    name: str
+    room: str | None
+
+
+class TicketPageOut(BaseModel):
+    """Everything a patient's ticket page shows, derived on every read (Issue 68).
+
+    The page is reached by an unguessable link, so it carries nothing about the patient: no name, no
+    phone number, no reason for the visit.
+    """
+
+    number: str
+    reference_code: str
+    """Written the way it is read aloud: ``K7M-4QP``."""
+    headline: TicketPageHeadline
+    """What the page leads with."""
+    status: TicketStatus
+    service_day: date
+    clinic: TicketPageClinic
+    queue: TicketPageQueue
+    position: int | None = Field(default=None, ge=1)
+    """Place in the waiting line, 1 being next; ``None`` once the ticket is no longer waiting."""
+    waiting_ahead: int | None = Field(default=None, ge=0)
+    wait: WaitOut | None = None
+    """The expected wait from ``as_of``, always a range; ``None`` once the ticket is no longer waiting."""
+    called_at: datetime | None = None
+    as_of: datetime
+    """When this state was read. The page shows how old it is."""
+    refresh_seconds: int = Field(gt=0)
+    """How often the page reads this again while its live stream is down."""
+    stale_after_seconds: int = Field(gt=0)
+    """How long without word from the server before the page says it is not live."""
+    stream_url: str | None
+    """The live stream (``ticket.state`` events); ``None`` once the ticket is finished."""
+    cancel_url: str | None
+    """Where the ticket's own patient cancels it; ``None`` for anyone else, or once it is not waiting."""
+    next_page_url: str | None
+    """The page of the ticket a transfer issued, so the family following along follows the visit."""
+
+
 class JoinOut(BaseModel):
     """The answer to a join: the ticket, whether it is new, and where it stands."""
 
@@ -144,6 +200,8 @@ class JoinOut(BaseModel):
     """The expected wait from now, for this ticket."""
     message: str
     """A sentence for the patient: "You are A043." or "You already hold A041."."""
+    page_url: str | None
+    """The ticket page, to follow the ticket live and share with family (Issue 68)."""
 
 
 class CancelIn(BaseModel):
@@ -168,6 +226,8 @@ class MyTicketOut(TicketOut):
     """Waiting tickets ahead in call order; ``None`` once the ticket is no longer waiting."""
     wait: WaitOut | None = None
     """The expected wait from now; ``None`` once the ticket is no longer waiting."""
+    page_url: str | None = None
+    """The ticket page (Issue 68); ``None`` for a ticket older than the page."""
 
 
 class PriorityIn(BaseModel):

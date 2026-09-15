@@ -88,6 +88,15 @@ class ReferenceCodeExhaustedError(RuntimeError):
     """No free reference code was found in :data:`MAX_REFERENCE_ATTEMPTS` draws."""
 
 
+def new_page_token() -> str:
+    """A new ticket page token: 256 random bits, URL-safe, never derived from anything (Issue 68).
+
+    From :mod:`secrets`, so the link to one ticket says nothing about the link to any other, and
+    nobody can reach a ticket page they were not given.
+    """
+    return secrets.token_urlsafe(32)
+
+
 def new_reference_code() -> str:
     """Draw a random reference code from :data:`REFERENCE_ALPHABET` with a CSPRNG.
 
@@ -242,6 +251,7 @@ def issue_ticket(
             sequence=sequence,
             number=format_ticket_number(queue.ticket_prefix, sequence),
             reference_code=new_reference_code(),
+            page_token=new_page_token(),
             source=source.value,
             walk_in_name=walk_in_name,
             reason_text=reason_text,
