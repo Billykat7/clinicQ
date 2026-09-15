@@ -275,6 +275,12 @@ CASES: dict[str, dict[str, object]] = {
         "reader": "a@clinicq.example",
         "paths": lambda site, _row: (f"/api/v1/sites/{site}/appointments/blocks",),
     },
+    "visitfeedback": {
+        # Post-visit feedback (Issue 87): a clinic's report. The manager reads it; another clinic's id is a 404.
+        "resource": "sites.reports",
+        "reader": "manager.a@clinicq.example",
+        "paths": lambda site, _row: (f"/api/v1/sites/{site}/reports/feedback",),
+    },
     "staffinvitation": {
         # Who has been invited to a clinic (Issue 22): the same grant as the staff list, so a
         # receptionist reads it, and another clinic's list is a 404 like everything else.

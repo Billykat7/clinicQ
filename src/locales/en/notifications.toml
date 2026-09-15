@@ -106,3 +106,16 @@ body = "{app}: ticket {number} at {clinic}: time to leave. Your turn is in {wait
 version = 1
 subject = "Time to leave for the clinic"
 body = "Ticket {number} at {clinic}. Leave now to be there before your turn."
+
+[ticket_feedback.sms]
+version = 1
+body = "{app}: how was your visit to {clinic} today (ticket {number})? Reply 1 (very poor) to 5 (very good), then any comment."
+
+[ticket_feedback.whatsapp]
+version = 1
+body = "{app}: how was your visit to {clinic} today (ticket {number})? Reply 1 (very poor) to 5 (very good), then any comment."
+
+[ticket_feedback.web_push]
+version = 1
+subject = "How was your visit today?"
+body = "Ticket {number} at {clinic}. Tap to answer in one tap."

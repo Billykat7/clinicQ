@@ -1,0 +1,12 @@
+{% extends "layouts/patient.html" %}
+{#- A feedback link that opens nothing (Issue 87). The same page whatever the reason, so a link cannot be probed for. -#}
+
+{% block title %}Question not found · {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="stack">
+  <h1>Question not found</h1>
+  <p class="lead">This link does not open a question about a visit. Check that the whole link was copied.</p>
+  <p><a class="btn" href="/discover">Find a clinic</a></p>
+</div>
+{% endblock %}

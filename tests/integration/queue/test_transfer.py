@@ -164,10 +164,12 @@ def test_triage_to_doctor_to_pharmacy_is_one_visit_with_three_tickets(
             "P001 in Pharmacy: transferred from D001 in Doctor, reason next_step",
         ]
     )
-    # Each transfer is one message; each call in between is one too (Issue 63).
+    # Each transfer is one message; each call in between is one too (Issue 63). The visit's end, not
+    # each leg's, asks once how it went (Issue 87).
     assert sorted(messages) == sorted(
         [NotificationTemplate.TICKET_TRANSFERRED.value] * 2
         + [NotificationTemplate.TICKET_CALLED.value] * 3
+        + [NotificationTemplate.TICKET_FEEDBACK.value]
     )
 
 

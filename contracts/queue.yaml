@@ -1431,6 +1431,12 @@ components:
             - $ref: "#/components/schemas/CallForwardOut"
             - type: "null"
           description: The virtual waiting room (Issue 86), for a travelling patient at a clinic that runs one.
+        feedback:
+          type: [object, "null"]
+          description: |
+            The post-visit question (Issue 87), for the ticket's own patient once the visit is done and the question
+            was sent; the same shape as `FeedbackRequestOut` in contracts/feedback.yaml. One tap on a score posts to
+            its `answer_url`.
     CallForwardOut:
       type: object
       required: [travel_minutes, leave_at, due, alerted_at, on_my_way_at, on_my_way_url]

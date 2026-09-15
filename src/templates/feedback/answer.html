@@ -1,0 +1,44 @@
+{% extends "layouts/patient.html" %}
+{#- The post-visit question (Issue 87): one tap on a score answers.
+
+    The comment box sits above the scores, so a patient who wants to say something types first and then
+    taps; one who does not simply taps. feedback.js sends the score and the comment to the state's
+    answer_url and shows the thank-you. The comment is screened for personal information on the server
+    before it is stored. No inline handlers or styles. -#}
+
+{% block title %}How was your visit? · {{ app_name }}{% endblock %}
+
+{% block styles %}
+  {{ super() }}
+  <link rel="stylesheet" href="/static/css/ticket.css">
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="/static/js/feedback.js" defer></script>
+{% endblock %}
+
+{% block content %}
+<script type="application/json" id="fb-state">{{ state_json | tojson }}</script>
+<div class="tk fb" id="fb">
+  <section class="tk-card" aria-labelledby="fb-question">
+    <p class="tk-lbl">{{ feedback.clinic }}</p>
+    <h1 class="fb-question" id="fb-question">{{ feedback.question }}</h1>
+
+    <div id="fb-ask" {% if feedback.answered or feedback.expired %}hidden{% endif %}>
+      <label class="tk-hint" for="fb-comment">Anything to add? (optional, before you tap)</label>
+      <textarea class="sign-in-input fb-comment" id="fb-comment" rows="3" maxlength="{{ feedback.max_comment_length }}"></textarea>
+      <p class="tk-hint">Please do not write your phone number or ID number: anything like that is removed.</p>
+      <div class="fb-scores" role="group" aria-labelledby="fb-question">
+        {% for choice in feedback.choices | reverse %}
+        <button type="button" class="btn btn-block fb-score" data-score="{{ choice.score }}">{{ choice.score }}: {{ choice.label }}</button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <p class="tk-pos" id="fb-thanks" {% if not feedback.answered %}hidden{% endif %}>Thank you. Your answer helps the clinic.</p>
+    <p class="tk-pos" id="fb-closed" {% if feedback.answered or not feedback.expired %}hidden{% endif %}>This question has closed. Thank you all the same.</p>
+    <p class="tk-note" id="fb-note" role="status" hidden></p>
+  </section>
+</div>
+{% endblock %}

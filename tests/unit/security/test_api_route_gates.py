@@ -85,6 +85,15 @@ PUBLIC: dict[str, str] = {
         "256-bit path secret as the delivery receipts is checked before the body is read; a reply can only "
         "stop or restart messages to the patient whose number sent it"
     ),
+    "GET /api/v1/feedback/{token}": (
+        "a post-visit question by its unguessable link (Issue 87): the patient has no account, and the link, "
+        "256 random bits sent only to them, shows the question and whether it was answered, nothing about "
+        "the patient or the ticket"
+    ),
+    "POST /api/v1/feedback/{token}": (
+        "answering that question by the same link (Issue 87): it can record one score and a screened comment "
+        "on that one request, once, and nothing else"
+    ),
     "GET /api/v1/notifications/patient-preferences/{page_token}": (
         "a patient's own notification preferences by their ticket page's unguessable link (Issue 67): a "
         "patient has no account, and the link, 256 random bits sent to the patient, finds their "

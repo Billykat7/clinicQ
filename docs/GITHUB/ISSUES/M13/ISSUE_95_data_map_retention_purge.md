@@ -23,6 +23,7 @@ intention and a privacy control.
 
 - The kernel already runs a retention sweep for documents (`run_retention_sweep` in `src/modules/documents/service.py`, registered in `src/core/scheduler.py`). Model the purge on it: idempotent, advisory-locked, tombstoning what it removes.
 - F drafts the data map from sprint 2 onwards, so the list of fields should already exist when this starts.
+- Post-visit feedback comments (`visit_feedback.comment`, Issue 87) are already screened before storage and emptied by their own nightly sweep at `site.reason_retention_days`; the data map should list them with the other patient text, and this issue's policy replaces that interim window.
 
 ## Scope
 

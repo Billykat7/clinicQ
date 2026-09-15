@@ -123,7 +123,7 @@ def test_a_new_patient_joins_from_the_clinic_page_by_keyboard_on_a_320_px_screen
     _until(page, "() => !document.querySelector('[data-join-step=\"consent\"]').hidden")
     assert page.evaluate("() => document.activeElement.id") == "join-consent-heading"
     assert (
-        page.locator("#join-consent-form legend").inner_text()
+        page.locator("#join-consent-form legend").first.inner_text()
         == CONSENT_WORDING[ConsentPurpose.NOTIFICATIONS]
     )
     _shot(page, "join-3-consent")

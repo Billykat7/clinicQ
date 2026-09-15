@@ -30,7 +30,9 @@ from src.core.config import get_settings
 from src.database.models.queue import Queue
 from src.database.models.site import Site
 from src.database.models.ticket import PAGE_TOKEN_LENGTH, Ticket
+from src.modules.appointments import feedback
 from src.modules.appointments.call_forward import ON_THE_WAY_STATUSES, call_forward
+from src.modules.appointments.feedback_schemas import FeedbackRequestOut
 from src.modules.queue.estimate import WaitEstimate
 from src.modules.queue.schemas import (
     CallForwardOut,
@@ -208,7 +210,18 @@ def page_state(
             else None
         ),
         call_forward=_call_forward(site, ticket, estimate, owner=owner, moment=moment),
+        feedback=_feedback(db, ticket, owner=owner, moment=moment),
     )
+
+
+def _feedback(
+    db: Session, ticket: Ticket, *, owner: bool, moment: datetime
+) -> FeedbackRequestOut | None:
+    """The post-visit question (Issue 87), on the patient's own page only: a shared link never answers it."""
+    if not owner or ticket.status_enum is not TicketStatus.DONE:
+        return None
+    sent = feedback.sent_for_ticket(db, ticket.id)
+    return feedback.request_view(db, sent, moment=moment) if sent is not None else None
 
 
 def _call_forward(

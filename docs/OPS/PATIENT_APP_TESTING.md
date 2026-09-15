@@ -170,6 +170,12 @@ online). The page shows **Not live** and the age of its data, then catches up.
   way**: the front desk's waiting line shows **On my way** beside the ticket (open **Waiting line** on the
   queue card). Not pressing it changes nothing: the patient keeps their place until called. Untick the
   setting and the join page stops asking.
+- **How was your visit?** (Issue 87). On the join page's messages step, also answer **Yes, ask me** to the
+  one short message after the visit. When reception moves the ticket to done, `/dev/outbox` gets `how was
+  your visit to … (ticket A010)? Reply 1 (very poor) to 5 (very good), then any comment.`, and the patient's own
+  ticket page shows the question: one tap on a score answers. By SMS, post a reply such as `4 quick and friendly`
+  to the inbound webhook (`SMS_WEBHOOK_TOKEN` set). The manager reads `GET /api/v1/sites/{id}/reports/feedback`.
+  A patient who said no is sent nothing.
 - **Notifications on this phone** (needs the VAPID keys from section 1). Press **Tell me on this phone when
   it is my turn** and allow notifications. Chrome allows web push on `localhost` and `https://` only, so
   use `localhost`, not a network address. When reception calls, the notification names only the ticket

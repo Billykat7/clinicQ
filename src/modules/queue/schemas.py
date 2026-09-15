@@ -24,6 +24,7 @@ from src.commons.enums import (
 from src.commons.time import stored_sast
 from src.database.models.queue_reorder import MAX_REORDER_NOTE_LENGTH, QueueReorder
 from src.database.models.ticket import MAX_REASON_LENGTH, MAX_TRAVEL_MINUTES, Ticket
+from src.modules.appointments.feedback_schemas import FeedbackRequestOut
 from src.modules.queue.estimate import WaitEstimate
 from src.modules.queue.sequence import format_reference_code
 
@@ -259,6 +260,9 @@ class TicketPageOut(BaseModel):
     walk-in with no patient."""
     call_forward: CallForwardOut | None = None
     """The virtual waiting room (Issue 86), for a travelling patient at a clinic that runs one."""
+    feedback: FeedbackRequestOut | None = None
+    """The post-visit question (Issue 87), for the ticket's own patient once the visit is done and the
+    question was sent: one tap on a score answers it here too."""
 
 
 class TicketLookupOut(BaseModel):

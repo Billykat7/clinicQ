@@ -228,3 +228,22 @@ def test_the_filter_never_drops_a_record_even_with_a_broken_format() -> None:
     record = logging.makeLogRecord({"msg": f"to {_PHONE} %s %s", "args": ("one",)})
     assert RedactionFilter().filter(record) is True
     assert record.getMessage() == f"to {PHONE_MASK} %s %s"
+
+
+def test_patient_free_text_is_screened_for_phones_emails_and_id_numbers_and_counted() -> (
+    None
+):
+    """Issue 87: a feedback comment keeps its words and loses what could identify or reach the patient."""
+    from src.core.log_redaction import screen_free_text
+
+    screened, removed = screen_free_text(
+        "Kind sister. Phone 082 123 4567, mail thandi.m@example.co.za, ID 800101 5009 087."
+    )
+    assert screened == (
+        "Kind sister. Phone [REDACTED:phone], mail [REDACTED:email], ID [REDACTED:id]."
+    )
+    assert removed == 3
+    assert screen_free_text("Waited 45 minutes, room 4 was quick.") == (
+        "Waited 45 minutes, room 4 was quick.",
+        0,
+    )

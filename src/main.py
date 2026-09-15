@@ -44,6 +44,7 @@ from src.web.dev import router as dev_router
 from src.web.discover import router as discover_router
 from src.web.display import router as display_router
 from src.web.display_stream import router as display_stream_router
+from src.web.feedback import router as feedback_page_router
 from src.web.join import router as join_router
 from src.web.routes import router as web_router
 from src.web.ticket import router as ticket_router
@@ -134,6 +135,7 @@ def create_app(settings_obj: Settings | None = None) -> FastAPI:
     app.include_router(display_router)
     app.include_router(display_stream_router)
     app.include_router(ticket_router)
+    app.include_router(feedback_page_router)
     app.include_router(patient_worker_router)
     # The component catalogue and layout samples (Issue 5) exist only in development: in staging
     # and production the paths are not registered at all, so they answer 404.

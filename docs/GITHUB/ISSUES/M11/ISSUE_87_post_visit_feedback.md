@@ -55,9 +55,12 @@ service-quality metric rather than only technical ones.
 
 ## Files touched
 
-- `src/modules/appointments/feedback.py`
-- `src/database/models/feedback.py`
-- `tests/integration/appointments/test_feedback.py`
+- `src/modules/appointments/feedback.py` (the request, the answer, the reply, retention, the report), `feedback_router.py`, `feedback_schemas.py`
+- `src/database/models/feedback.py`, `alembic/versions/0041_visit_feedback.py`
+- `src/modules/queue/lifecycle.py` (the done hook), `src/modules/patients/consent.py` (the survey consent gate)
+- `src/core/log_redaction.py` (`screen_free_text`), `src/core/webhook_gateways/africastalking.py` (SMS replies)
+- `src/web/feedback.py`, `src/templates/feedback/`, `src/static/js/feedback.js`; the ticket page and join page
+- `contracts/feedback.yaml`, `tests/integration/appointments/test_feedback.py`
 
 ---
 
