@@ -118,6 +118,13 @@ CONTRACTS: tuple[Contract, ...] = (
         prefix="/api/v1",
         pattern=r"^/api/v1/(notifications(/|$)|sites/\{site_id\}/sms-budget$|webhooks/sms/)",
     ),
+    # A clinic's appointment book (Issue 80): it hangs under /sites, which cedes it by this pattern.
+    Contract(
+        name="appointments",
+        filename="appointments.yaml",
+        prefix="/api/v1",
+        pattern=r"^/api/v1/sites/\{site_id\}/appointments(/|$)",
+    ),
 )
 
 _IDS = [contract.name for contract in CONTRACTS]

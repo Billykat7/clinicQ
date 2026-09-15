@@ -1,0 +1,566 @@
+# ClinicQ: the appointments contract (Issue 80).
+#
+# Hand-written from the router as it is, so the booking screens (Issue 81) and the reminder and kiosk
+# work after it (82, 83) can be built against a stable description. Checked against the application's
+# /openapi.json in both directions by tests/integration/contracts/test_openapi_contracts.py, which
+# gives this contract every /sites/{site_id}/appointments route (the sites contract cedes them).
+#
+# The conventions are the sites contract's:
+#
+#   * every route names {site_id} and goes through the site guard: another clinic's id, or a queue
+#     that is not this clinic's, answers 404 with the same body an unknown id gets;
+#   * error responses are documented where the handler can produce them;
+#   * every example validates against the schema it is an example of.
+
+openapi: 3.1.0
+
+info:
+  title: ClinicQ appointments
+  version: "0.11.0"
+  description: |
+    A clinic's appointment book: how far ahead it takes bookings, the weekly windows and one-date
+    overrides its slots are generated from, the ranges a manager takes out of it, and what one day
+    looks like to somebody booking.
+
+    **Authentication.** A signed-in staff session: `Authorization: Bearer <access token>`, or the
+    session cookies from `POST /api/v1/auth/password/login` with `X-CSRF-Token` on unsafe requests.
+    The front desk and nurses read the book (`appointments:read`); the clinic manager shapes it
+    (`appointments:update`).
+
+    **One daily limit.** A queue's `max_daily_capacity` is shared by walk-ins, remote joins and booked
+    appointments. The day view shows each queue's tickets and appointments against it, and caps every
+    slot's `remaining` by what the day has left.
+
+    **Time.** Datetimes are ISO 8601 in `Africa/Johannesburg` (`+02:00`); one sent without an offset
+    is read as Johannesburg wall clock. Window times are wall clock in that zone, and a window whose
+    `ends_at` is at or before its `starts_at` crosses midnight. A slot belongs to the service day it
+    starts on.
+
+servers:
+  - url: /api/v1
+    description: This deployment.
+
+tags:
+  - name: appointments
+    description: A clinic's appointment book.
+
+paths:
+  /sites/{site_id}/appointments/policy:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    get:
+      tags: [appointments]
+      operationId: appointmentsGetPolicy
+      summary: The clinic's booking horizon and minimum lead time
+      description: The defaults (28 days, 60 minutes) with `is_default` true until a manager sets them.
+      responses:
+        "200":
+          description: The policy.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PolicyOut" }
+              example: { site_id: 0199b0c0-0000-7000-8000-0000000c1a01, horizon_days: 28, min_lead_minutes: 60, is_default: true }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [appointments]
+      operationId: appointmentsSetPolicy
+      summary: Set the booking horizon and minimum lead time
+      description: Audited. The day view follows on its next read.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PolicyIn" }
+            example: { horizon_days: 42, min_lead_minutes: 120 }
+      responses:
+        "200":
+          description: The policy as stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PolicyOut" }
+              example: { site_id: 0199b0c0-0000-7000-8000-0000000c1a01, horizon_days: 42, min_lead_minutes: 120, is_default: false }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/appointments/queues/{queue_id}/template:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+      - $ref: "#/components/parameters/QueueId"
+    get:
+      tags: [appointments]
+      operationId: appointmentsGetTemplate
+      summary: A queue's weekly appointment windows
+      responses:
+        "200":
+          description: The week, ordered by weekday and start.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WeeklyTemplateOut" }
+              example:
+                site_id: 0199b0c0-0000-7000-8000-0000000c1a01
+                queue_id: 0199b0c0-0000-7000-8000-0000000c1a11
+                windows:
+                  - { id: 0199b0c0-0000-7000-8000-0000000c1d41, weekday: 0, starts_at: "08:00:00", ends_at: "11:00:00", slot_minutes: 15, capacity: 2, service_id: null }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [appointments]
+      operationId: appointmentsReplaceTemplate
+      summary: Replace a queue's whole week
+      description: |
+        Stored slots change when slots are next generated. A window naming a service that is not on
+        this clinic's catalogue is refused with 422.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WeeklyTemplateIn" }
+            example:
+              windows:
+                - { weekday: 0, starts_at: "08:00:00", ends_at: "11:00:00", slot_minutes: 15, capacity: 2, service_id: null }
+                - { weekday: 0, starts_at: "23:00:00", ends_at: "01:00:00", slot_minutes: 30, capacity: 1, service_id: null }
+      responses:
+        "200":
+          description: The week as stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WeeklyTemplateOut" }
+              example:
+                site_id: 0199b0c0-0000-7000-8000-0000000c1a01
+                queue_id: 0199b0c0-0000-7000-8000-0000000c1a11
+                windows:
+                  - { id: 0199b0c0-0000-7000-8000-0000000c1d41, weekday: 0, starts_at: "08:00:00", ends_at: "11:00:00", slot_minutes: 15, capacity: 2, service_id: null }
+                  - { id: 0199b0c0-0000-7000-8000-0000000c1d42, weekday: 0, starts_at: "23:00:00", ends_at: "01:00:00", slot_minutes: 30, capacity: 1, service_id: null }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/appointments/queues/{queue_id}/days/{day}:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+      - $ref: "#/components/parameters/QueueId"
+      - { name: day, in: path, required: true, schema: { type: string, format: date }, description: The Johannesburg date. }
+    put:
+      tags: [appointments]
+      operationId: appointmentsSetDayOverride
+      summary: Replace one date's windows
+      description: An empty `windows` list means no appointments on that date.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DayOverrideIn" }
+            example: { windows: [] }
+      responses:
+        "200":
+          description: The date's override as stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DayOverrideOut" }
+              example: { site_id: 0199b0c0-0000-7000-8000-0000000c1a01, queue_id: 0199b0c0-0000-7000-8000-0000000c1a11, day: "2026-10-05", windows: [] }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    delete:
+      tags: [appointments]
+      operationId: appointmentsClearDayOverride
+      summary: Remove one date's override
+      description: The ordinary week applies to the date again.
+      responses:
+        "204": { description: Removed. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Another clinic's id, an unknown queue, or a date with no override.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/appointments/queues/{queue_id}/slots/generate:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+      - $ref: "#/components/parameters/QueueId"
+    post:
+      tags: [appointments]
+      operationId: appointmentsGenerateSlots
+      summary: Generate or bring up to date a queue's slots
+      description: |
+        By default from today through the booking horizon. Idempotent. Public holidays, announced
+        closures and the hours the clinic is shut produce no slots. An unbooked slot the schedule no
+        longer produces is removed; a booked one is withdrawn (no longer offered, its bookings stand).
+        Slots that have started are never touched.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GenerateIn" }
+            example: { from_day: "2026-10-01", days: 31 }
+      responses:
+        "200":
+          description: What changed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GenerateOut" }
+              example: { site_id: 0199b0c0-0000-7000-8000-0000000c1a01, queue_id: 0199b0c0-0000-7000-8000-0000000c1a11, first_day: "2026-10-01", last_day: "2026-10-31", created: 216, kept: 0, removed: 0, withdrawn: 0, restored: 0 }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/appointments/availability:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    get:
+      tags: [appointments]
+      operationId: appointmentsDayAvailability
+      summary: One service day's bookable slots per queue
+      description: |
+        Read live on every call: a cancellation shows on the next read. Each queue carries its daily
+        limit and what tickets and appointments have taken; each slot's `remaining` is capped by the
+        day. Slots that cannot be booked are left out unless `include_unavailable`, in which case each
+        carries its `refusal`.
+      parameters:
+        - { name: day, in: query, required: false, schema: { type: string, format: date }, description: Defaults to today in Johannesburg. }
+        - { name: queue_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: include_unavailable, in: query, required: false, schema: { type: boolean, default: false } }
+      responses:
+        "200":
+          description: The day.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DayAvailabilityOut" }
+              example:
+                site_id: 0199b0c0-0000-7000-8000-0000000c1a01
+                day: "2026-10-06"
+                as_of: "2026-10-05T09:12:00+02:00"
+                queues:
+                  - queue_id: 0199b0c0-0000-7000-8000-0000000c1a11
+                    queue_name: Chronic collection
+                    daily_limit: 40
+                    tickets: 0
+                    appointments: 3
+                    day_remaining: 37
+                    slots:
+                      - { id: 0199b0c0-0000-7000-8000-0000000c1b21, queue_id: 0199b0c0-0000-7000-8000-0000000c1a11, service_id: null, starts_at: "2026-10-06T00:00:00+02:00", ends_at: "2026-10-06T00:30:00+02:00", capacity: 2, booked: 1, remaining: 1, refusal: null }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/appointments/blocks:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    get:
+      tags: [appointments]
+      operationId: appointmentsListBlocks
+      summary: The ranges taken out of the book
+      parameters:
+        - { name: include_lifted, in: query, required: false, schema: { type: boolean, default: false } }
+      responses:
+        "200":
+          description: The blocks, most recent first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BlockListOut" }
+              example:
+                site_id: 0199b0c0-0000-7000-8000-0000000c1a01
+                total: 1
+                items:
+                  - { id: 0199b0c0-0000-7000-8000-0000000c1c31, site_id: 0199b0c0-0000-7000-8000-0000000c1a01, queue_id: null, starts_at: "2026-10-14T08:00:00+02:00", ends_at: "2026-10-14T13:00:00+02:00", reason: "Sister Dlamini on leave", lifted_at: null, created_at: "2026-10-01T10:02:11+02:00" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    post:
+      tags: [appointments]
+      operationId: appointmentsAddBlock
+      summary: Block a range for a staff absence
+      description: |
+        Its slots stop being offered at once, for one queue or (with `queue_id` null) every queue.
+        Places already booked inside are counted in `booked_places_inside` and left standing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BlockIn" }
+            example: { starts_at: "2026-10-14T08:00:00+02:00", ends_at: "2026-10-14T13:00:00+02:00", reason: "Sister Dlamini on leave", queue_id: null }
+      responses:
+        "201":
+          description: The block.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BlockCreatedOut" }
+              example: { id: 0199b0c0-0000-7000-8000-0000000c1c31, site_id: 0199b0c0-0000-7000-8000-0000000c1a01, queue_id: null, starts_at: "2026-10-14T08:00:00+02:00", ends_at: "2026-10-14T13:00:00+02:00", reason: "Sister Dlamini on leave", lifted_at: null, created_at: "2026-10-01T10:02:11+02:00", booked_places_inside: 3 }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/appointments/blocks/{block_id}:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+      - { name: block_id, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      tags: [appointments]
+      operationId: appointmentsLiftBlock
+      summary: Lift a block early
+      description: Its slots are offered again. The row stays, with `lifted_at` set.
+      responses:
+        "200":
+          description: The block, lifted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BlockOut" }
+              example: { id: 0199b0c0-0000-7000-8000-0000000c1c31, site_id: 0199b0c0-0000-7000-8000-0000000c1a01, queue_id: null, starts_at: "2026-10-14T08:00:00+02:00", ends_at: "2026-10-14T13:00:00+02:00", reason: "Sister Dlamini on leave", lifted_at: "2026-10-02T07:45:00+02:00", created_at: "2026-10-01T10:02:11+02:00" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Another clinic's id, or a block that is already lifted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+components:
+  parameters:
+    SiteId:
+      name: site_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    QueueId:
+      name: queue_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    Unauthenticated:
+      description: No session, or an expired or deactivated one.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { detail: "Not authenticated" }
+    Forbidden:
+      description: Signed in, and the caller's grants do not admit this. Never "not your clinic", which is a 404.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { detail: "Forbidden" }
+    NotFound:
+      description: No such record, or one at a clinic the caller may not reach. Indistinguishable on purpose.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { detail: "Not found." }
+    Unprocessable:
+      description: A field failed validation, or a window names a service not on the clinic's catalogue.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ValidationError" }
+
+  schemas:
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail: { type: string, description: A sentence a person can act on. }
+        code: { type: string, description: A stable machine-readable code, when the handler sets one. }
+        request_id: { type: string }
+      example: { detail: "Not found.", code: "http.not_found" }
+    ValidationError:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: object
+                required: [loc, msg, type]
+                properties:
+                  loc: { type: array, items: { anyOf: [{ type: string }, { type: integer }] } }
+                  msg: { type: string }
+                  type: { type: string }
+      example:
+        detail:
+          - { loc: [body, windows, 0, slot_minutes], msg: "Input should be greater than or equal to 5", type: greater_than_equal }
+
+    SlotRefusal:
+      type: string
+      description: |
+        Why a slot cannot be booked. As an error code it is `appointments.slot.<reason>` (Issue 81's
+        booking answers 409 with it).
+      enum: [slot_full, day_full, blocked, withdrawn, closed, too_soon, too_far]
+
+    PolicyIn:
+      type: object
+      additionalProperties: false
+      required: [horizon_days, min_lead_minutes]
+      properties:
+        horizon_days: { type: integer, minimum: 1, maximum: 365 }
+        min_lead_minutes: { type: integer, minimum: 0, maximum: 10080 }
+    PolicyOut:
+      type: object
+      required: [site_id, horizon_days, min_lead_minutes, is_default]
+      properties:
+        site_id: { type: string, format: uuid }
+        horizon_days: { type: integer, minimum: 1, maximum: 365 }
+        min_lead_minutes: { type: integer, minimum: 0, maximum: 10080 }
+        is_default: { type: boolean }
+
+    WindowFields:
+      type: object
+      required: [starts_at, ends_at, slot_minutes, capacity]
+      properties:
+        starts_at: { type: string, format: time }
+        ends_at: { type: string, format: time, description: At or before `starts_at` crosses midnight. }
+        slot_minutes: { type: integer, minimum: 5, maximum: 240 }
+        capacity: { type: integer, minimum: 1, maximum: 50 }
+        service_id: { type: [string, "null"], format: uuid }
+    WeeklyWindowIn:
+      allOf:
+        - $ref: "#/components/schemas/WindowFields"
+      type: object
+      required: [weekday]
+      properties:
+        weekday: { type: integer, minimum: 0, maximum: 6, description: 0 is Monday. }
+    WeeklyTemplateIn:
+      type: object
+      additionalProperties: false
+      required: [windows]
+      properties:
+        windows: { type: array, maxItems: 50, items: { $ref: "#/components/schemas/WeeklyWindowIn" } }
+    WeeklyWindowOut:
+      type: object
+      required: [id, weekday, starts_at, ends_at, slot_minutes, capacity, service_id]
+      properties:
+        id: { type: string, format: uuid }
+        weekday: { type: integer, minimum: 0, maximum: 6 }
+        starts_at: { type: string, format: time }
+        ends_at: { type: string, format: time }
+        slot_minutes: { type: integer }
+        capacity: { type: integer }
+        service_id: { type: [string, "null"], format: uuid }
+    WeeklyTemplateOut:
+      type: object
+      required: [site_id, queue_id, windows]
+      properties:
+        site_id: { type: string, format: uuid }
+        queue_id: { type: string, format: uuid }
+        windows: { type: array, items: { $ref: "#/components/schemas/WeeklyWindowOut" } }
+    DayOverrideIn:
+      type: object
+      additionalProperties: false
+      required: [windows]
+      properties:
+        windows: { type: array, maxItems: 50, items: { $ref: "#/components/schemas/WindowFields" } }
+    DayOverrideOut:
+      type: object
+      required: [site_id, queue_id, day, windows]
+      properties:
+        site_id: { type: string, format: uuid }
+        queue_id: { type: string, format: uuid }
+        day: { type: string, format: date }
+        windows: { type: array, items: { $ref: "#/components/schemas/WindowFields" } }
+
+    GenerateIn:
+      type: object
+      additionalProperties: false
+      properties:
+        from_day: { type: [string, "null"], format: date, description: Never earlier than today. }
+        days: { type: [integer, "null"], minimum: 1, maximum: 365, description: Defaults to through the horizon. }
+    GenerateOut:
+      type: object
+      required: [site_id, queue_id, first_day, last_day, created, kept, removed, withdrawn, restored]
+      properties:
+        site_id: { type: string, format: uuid }
+        queue_id: { type: string, format: uuid }
+        first_day: { type: string, format: date }
+        last_day: { type: string, format: date }
+        created: { type: integer, minimum: 0 }
+        kept: { type: integer, minimum: 0 }
+        removed: { type: integer, minimum: 0 }
+        withdrawn: { type: integer, minimum: 0 }
+        restored: { type: integer, minimum: 0 }
+
+    BlockIn:
+      type: object
+      additionalProperties: false
+      required: [starts_at, ends_at, reason]
+      properties:
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time, description: After `starts_at`. }
+        reason: { type: string, minLength: 3, maxLength: 280, description: For staff; never shown to patients. }
+        queue_id: { type: [string, "null"], format: uuid, description: Null blocks every queue. }
+    BlockOut:
+      type: object
+      required: [id, site_id, queue_id, starts_at, ends_at, reason, lifted_at, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        site_id: { type: string, format: uuid }
+        queue_id: { type: [string, "null"], format: uuid }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        reason: { type: string }
+        lifted_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+    BlockCreatedOut:
+      allOf:
+        - $ref: "#/components/schemas/BlockOut"
+      type: object
+      required: [booked_places_inside]
+      properties:
+        booked_places_inside: { type: integer, minimum: 0 }
+    BlockListOut:
+      type: object
+      required: [site_id, total, items]
+      properties:
+        site_id: { type: string, format: uuid }
+        total: { type: integer, minimum: 0 }
+        items: { type: array, items: { $ref: "#/components/schemas/BlockOut" } }
+
+    SlotOut:
+      type: object
+      required: [id, queue_id, service_id, starts_at, ends_at, capacity, booked, remaining, refusal]
+      properties:
+        id: { type: string, format: uuid }
+        queue_id: { type: string, format: uuid }
+        service_id: { type: [string, "null"], format: uuid }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        capacity: { type: integer, minimum: 1 }
+        booked: { type: integer, minimum: 0 }
+        remaining: { type: integer, minimum: 0, description: The slot's free places, capped by the queue's day. }
+        refusal:
+          oneOf:
+            - $ref: "#/components/schemas/SlotRefusal"
+            - type: "null"
+    QueueDayOut:
+      type: object
+      required: [queue_id, queue_name, daily_limit, tickets, appointments, day_remaining, slots]
+      properties:
+        queue_id: { type: string, format: uuid }
+        queue_name: { type: string }
+        daily_limit: { type: [integer, "null"], description: The queue's max_daily_capacity; null is no limit. }
+        tickets: { type: integer, minimum: 0, description: Tickets that day holding a place. }
+        appointments: { type: integer, minimum: 0, description: Appointment places held that day. }
+        day_remaining: { type: [integer, "null"] }
+        slots: { type: array, items: { $ref: "#/components/schemas/SlotOut" } }
+    DayAvailabilityOut:
+      type: object
+      required: [site_id, day, as_of, queues]
+      properties:
+        site_id: { type: string, format: uuid }
+        day: { type: string, format: date }
+        as_of: { type: string, format: date-time }
+        queues: { type: array, items: { $ref: "#/components/schemas/QueueDayOut" } }

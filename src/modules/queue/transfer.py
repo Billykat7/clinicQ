@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Final
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -57,6 +57,7 @@ from src.database.models.queue import Queue
 from src.database.models.site import Site
 from src.database.models.ticket import Ticket
 from src.database.models.visit import Visit
+from src.modules.appointments.capacity import day_is_over
 from src.modules.queue import notices
 from src.modules.queue.estimate import WaitEstimate
 from src.modules.queue.lifecycle import Actor, lock_ticket, transition_ticket
@@ -142,19 +143,6 @@ def _placement_key(
     return None
 
 
-def _issued_today(db: Session, queue: Queue, moment: datetime) -> int:
-    """Today's tickets in ``queue`` that hold a place, counted under its counter lock (Issue 40)."""
-    return int(
-        db.execute(
-            select(func.count(Ticket.id)).where(
-                Ticket.queue_id == queue.id,
-                Ticket.service_day == business_date(moment),
-                Ticket.status != TicketStatus.CANCELLED.value,
-            )
-        ).scalar_one()
-    )
-
-
 def transfer_ticket(
     db: Session,
     ticket_id: str,
@@ -232,8 +220,8 @@ def transfer_ticket(
                 if not is_second_active_ticket(exc):
                     raise
                 raise _RefuseError("already_there", ALREADY_THERE) from None
-            capacity = target.max_daily_capacity
-            if capacity is not None and _issued_today(db, target, moment) > capacity:
+            # Walk-ins, joins and booked appointments share the target's daily limit (Issue 80).
+            if day_is_over(db, target, business_date(moment)):
                 raise _RefuseError("queue_full", TARGET_FULL)
             record_audit_event(
                 db,

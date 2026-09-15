@@ -598,6 +598,38 @@ class TicketSource(StrEnum):
     WALK_IN = "walk_in"
 
 
+class AppointmentStatus(StrEnum):
+    """Where one booked appointment is (Issue 80). Stored in ``appointment.status``.
+
+    - ``BOOKED``: the patient holds a place in the slot, and it counts against the queue's day.
+    - ``CANCELLED``: the place was given back; the slot and the day have it free again.
+    """
+
+    BOOKED = "booked"
+    CANCELLED = "cancelled"
+
+
+class SlotRefusal(StrEnum):
+    """Why a place in an appointment slot cannot be taken (Issue 80). The reason in ``appointments.slot.<reason>``.
+
+    - ``SLOT_FULL``: every place in the slot is held.
+    - ``DAY_FULL``: the queue's daily limit is reached by walk-ins and appointments together.
+    - ``BLOCKED``: a manager has blocked the range (a staff absence).
+    - ``WITHDRAWN``: the schedule no longer offers this time.
+    - ``CLOSED``: the clinic is closed at that time (a holiday, a closure, outside its hours).
+    - ``TOO_SOON``: the slot starts sooner than the clinic's minimum lead time, or has started.
+    - ``TOO_FAR``: the slot's day is past the clinic's booking horizon.
+    """
+
+    SLOT_FULL = "slot_full"
+    DAY_FULL = "day_full"
+    BLOCKED = "blocked"
+    WITHDRAWN = "withdrawn"
+    CLOSED = "closed"
+    TOO_SOON = "too_soon"
+    TOO_FAR = "too_far"
+
+
 class EstimateConfidence(StrEnum):
     """How much a wait estimate can be trusted (Issue 42). Shown beside every range.
 
@@ -1877,6 +1909,10 @@ class AuditEntityType(StrEnum):
     DOCUMENT = "document"
     WIDGET = "widget"
     DISPLAY_DEVICE = "display_device"
+    #: A queue's appointment schedule: its policy, weekly windows, day overrides and generation (Issue 80).
+    APPOINTMENT_SCHEDULE = "appointment_schedule"
+    APPOINTMENT_BLOCK = "appointment_block"
+    APPOINTMENT = "appointment"
 
 
 # Field names whose values must never be written into an audit diff in the clear: encrypted or

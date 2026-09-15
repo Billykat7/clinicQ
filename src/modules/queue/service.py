@@ -21,10 +21,12 @@ What :func:`join_queue` decides, in this order, and why the order matters:
    phone number on every remote channel, per client address on the web, and a per-clinic daily cap
    on remote joins. A walk-in is exempt: reception is authenticated staff, and a cap at the desk
    would turn away someone standing at the counter.
-5. **Is there room?** The queue's ``max_daily_capacity``, checked **after** the number is allocated.
-   Allocation locks the queue's counter row, so every other join on this queue waits behind this
-   one, and the count of today's tickets taken here cannot change underneath it. A join that finds
-   the queue full rolls back its savepoint, which returns the number: the day keeps no gap.
+5. **Is there room?** The queue's ``max_daily_capacity``, checked **after** the number is allocated,
+   by :func:`src.modules.appointments.capacity.day_is_over`: the one place walk-ins, remote joins and
+   booked appointments are counted against the same limit (Issue 80). Allocation locks the queue's
+   counter row, and the capacity check then locks the queue's day, so neither another join nor a
+   booking can change the count underneath it. A join that finds the queue full rolls back its
+   savepoint, which returns the number: the day keeps no gap.
 
 Every refusal is a :class:`JoinRefusedError` carrying a :class:`~src.commons.enums.JoinRefusal`
 code and a sentence written for a patient ("Hillbrow Clinic is closed at the moment."), so each
@@ -40,7 +42,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Final
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -51,7 +53,6 @@ from src.commons.enums import (
     DiscoveryChannel,
     JoinRefusal,
     TicketSource,
-    TicketStatus,
 )
 from src.commons.exceptions import ConflictError
 from src.commons.time import business_date, now_sast
@@ -62,6 +63,7 @@ from src.database.models.patient import Patient
 from src.database.models.queue import Queue
 from src.database.models.site import Site
 from src.database.models.ticket import Ticket
+from src.modules.appointments.capacity import day_is_over
 from src.modules.discovery import analytics
 from src.modules.queue.estimate import WaitEstimate
 from src.modules.queue.sequence import is_second_active_ticket, issue_ticket
@@ -215,24 +217,6 @@ def _guard_abuse(
     return cap_key
 
 
-def _issued_today(db: Session, queue: Queue, service_day: date) -> int:
-    """Today's tickets in ``queue`` that hold a place: every one not cancelled.
-
-    Read only while this transaction holds the queue's counter lock (see the module docstring), so
-    no other join can add to it between this count and the insert. It is a capacity check, never a
-    number: numbers come from the counter.
-    """
-    return int(
-        db.execute(
-            select(func.count(Ticket.id)).where(
-                Ticket.queue_id == queue.id,
-                Ticket.service_day == service_day,
-                Ticket.status != TicketStatus.CANCELLED.value,
-            )
-        ).scalar_one()
-    )
-
-
 def join_queue(
     db: Session,
     *,
@@ -335,11 +319,7 @@ def join_queue(
                 comment_consent=comment_consent,
                 moment=moment,
             )
-            capacity = queue.max_daily_capacity
-            if (
-                capacity is not None
-                and _issued_today(db, queue, service_day) > capacity
-            ):
+            if day_is_over(db, queue, service_day):
                 raise _QueueFullError
     except _QueueFullError:
         raise JoinRefusedError(JoinRefusal.QUEUE_FULL, QUEUE_FULL) from None

@@ -43,6 +43,7 @@ shows what ships.
 
 | Resource | `patient` | `receptionist` | `nurse_doctor` | `clinic_manager` | `platform_admin` | `admin` | `user` |
 |---|---|---|---|---|---|---|---|
+| `appointments` | — | read · assigned | read · assigned | update · assigned | read · business | — | — |
 | `audit` | — | — | — | — | read · business | read · business | — |
 | `communications` | — | — | — | — | — | delete · business | — |
 | `communications.alerts` | — | — | — | — | — | delete · business | — |
