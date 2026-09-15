@@ -16,13 +16,15 @@ This PR builds that page. A patient goes from the clinic page to their ticket in
 4. one of the clinic's queues that take remote joins.
 
 The installed app's start page (`/t/`) gets the same sign-in. That matters on an iPhone, where a Home Screen app
-keeps its own storage and could not otherwise find a ticket joined in Safari.
+keeps its own storage and could not otherwise find a ticket joined in Safari. The home page gets a **Your
+ticket** button beside **Sign in** that opens `/t/`, so a patient can get back to their ticket, or sign in to
+find it, from the front door.
 
 ## Scope
 
 - **In:**
   - the join page and its two scripts;
-  - the sign-in on `/t/`;
+  - the sign-in on `/t/`, and **Your ticket** in the front door's top bar and footer;
   - the testing guide using the page instead of the snippet;
   - Issue 200 in the M9 milestone, its progress and the v0.9.0 note.
 - **Out:**
@@ -55,6 +57,8 @@ keeps its own storage and could not otherwise find a ticket joined in Safari.
   closed and no remote queue, each with the reason the clinic page's disabled button gives.
 - **`/t/` signs a patient in** inside the app's scope, then reloads `/t/`, which already sends a signed-in
   patient to their open ticket. A signed-in patient with no open ticket is told so.
+- **Your ticket on every front-door page** (`/`, `/features`, `/privacy`, `/terms`, `/register-clinic`), in
+  the top bar and the footer, opens `/t/`.
 
 ## Design notes
 
@@ -75,6 +79,9 @@ keeps its own storage and could not otherwise find a ticket joined in Safari.
 - **The cooldown belongs to the number.** After a code is sent, only "Send a new code" waits. "Use a different
   number" frees "Send me a code", so a patient who mistyped their number can send to the right one at once.
   If they send to the same number again, the server's `429` holds the button for its `Retry-After`.
+- **Your ticket sits with Sign in, not with the page links.** The top bar hides its links below 60rem, which
+  is every phone, so a link there would never reach a patient. At 26rem and below the actions tighten and the
+  brand keeps only its mark (the name stays for screen readers), so both labels fit on one line at 320 px.
 - **The notifications answer is asked after sign-in, not before.** It is stored against the patient, so it
   needs one. A patient who is already signed in is not asked again. The queue step says what their answer is,
   with a link to change it.
@@ -90,12 +97,14 @@ keeps its own storage and could not otherwise find a ticket joined in Safari.
 - **`src/templates/patient/home.html`, `src/static/js/patient-home.js`, `src/web/ticket.py`:** the sign-in on
   `/t/`, and the signed-in, no-ticket state.
 - **`src/static/css/components.css`, `src/static/css/discover.css`:** the sign-in and join styles, tokens only.
+- **`src/templates/web/partials/lp_header.html`, `lp_footer.html`, `src/static/css/landing.css`:** **Your
+  ticket** in the top bar and the footer, and the bar kept to one line on a small phone.
 - **`src/commons/phone.py`:** `INVALID_PHONE_MESSAGE`, no change in words.
 - **`src/core/config.py`, `.env.example`:** `PATIENT_JOIN_ENABLED`'s description names the join page. The
   default is unchanged.
 - **`src/main.py`, `src/web/discover.py`:** the router registered; comments point at the page.
-- **Tests:** `tests/integration/discovery/test_join_page.py` (13) and `tests/e2e/patient/test_join_page.py`
-  (4).
+- **Tests:** `tests/integration/discovery/test_join_page.py` (13, asserting the page's data, never its HTML)
+  and `tests/e2e/patient/test_join_page.py` (5).
 - **Docs:**
   - `docs/OPS/PATIENT_APP_TESTING.md`: sections 0, 1, 2, 3, 7 and 8 use the page;
   - the Issue 200 spec, the M9 milestone and its diagram, `docs/GITHUB/ISSUES/README.md`,
@@ -129,6 +138,18 @@ tests/e2e/patient/test_join_page.py::test_the_app_start_page_signs_a_patient_in_
 ```
 
 The other 13 of the 30 are `tests/integration/discovery/test_clinic_detail.py`, all passing.
+
+**After adding Your ticket**, the Issue 200 tests again with the public front-door tests
+(`tests/integration/public`), and the unit tests:
+
+```text
+21 passed, 9 warnings in 35.94s
+1212 passed, 3 xfailed, 11 warnings in 42.74s
+```
+
+`test_the_home_pages_your_ticket_fits_a_320_px_phone_and_opens_the_app_start_page` opens `/` at 320 px. It
+finds **Your ticket** in the banner, checks the page does not scroll sideways and both action buttons are
+one line high (under 44 px), then clicks through to "No open ticket on this phone".
 
 **The browser tests drive the page's own scripts** in Chromium against a running server:
 
@@ -164,6 +185,8 @@ source files`; unit tests `1212 passed, 3 xfailed`.
 - Hillbrow's **Join the queue**, then `082 555 0606`, read the code from `/dev/outbox`, a wrong code first,
   then the right one, yes to messages, Triage with a reason. Result: ticket `T001`, "You are next".
 - Already signed in, joining General consultation, where that patient held `A004`, opened `A004`.
+- **Your ticket** on the home page, at 320 px and on desktop, opened `/t/`, which went straight to the ticket
+  that browser had followed (`T001`).
 - Signed out with the phone's kept tickets cleared, `/t/` showed the sign-in. Signing in with `082 555 0606`
   opened `T001` at `/t/2rmKq0WM…`, never leaving `/t/`.
 
@@ -185,9 +208,9 @@ At 320 px, from `tests/e2e/patient/test_join_page.py` with `TICKET_PAGE_SHOTS` s
 |---|---|---|
 | ![Choose a queue with Triage selected, a reason typed, and the messages line](https://github.com/Billykat7/clinicQ/blob/76e6860c8c9ca9c15782fd8555c4015ae302b294/docs/GITHUB/PR/M9/assets/pr200/4-queue.png?raw=true) | ![The ticket page for T001, you are next](https://github.com/Billykat7/clinicQ/blob/76e6860c8c9ca9c15782fd8555c4015ae302b294/docs/GITHUB/PR/M9/assets/pr200/5-ticket.png?raw=true) | ![Too many code requests, with the send button held and a countdown](https://github.com/Billykat7/clinicQ/blob/76e6860c8c9ca9c15782fd8555c4015ae302b294/docs/GITHUB/PR/M9/assets/pr200/refused-cooldown.png?raw=true) |
 
-| The installed app's start page |
-|---|
-| ![No open ticket on this phone, with the phone sign-in below](https://github.com/Billykat7/clinicQ/blob/76e6860c8c9ca9c15782fd8555c4015ae302b294/docs/GITHUB/PR/M9/assets/pr200/app-start.png?raw=true) |
+| The home page's Your ticket | The installed app's start page |
+|---|---|
+| ![The home page top bar at 320 px with Your ticket beside Sign in, on one line](https://github.com/Billykat7/clinicQ/blob/953954dc405960a8095453063332e363169a1561/docs/GITHUB/PR/M9/assets/pr200/home-your-ticket.png?raw=true) | ![No open ticket on this phone, with the phone sign-in below](https://github.com/Billykat7/clinicQ/blob/76e6860c8c9ca9c15782fd8555c4015ae302b294/docs/GITHUB/PR/M9/assets/pr200/app-start.png?raw=true) |
 
 ## Acceptance criteria
 
@@ -204,6 +227,8 @@ At 320 px, from `tests/e2e/patient/test_join_page.py` with `TICKET_PAGE_SHOTS` s
 
 - **Off by default.** With `PATIENT_JOIN_ENABLED` unset, the clinic page's button stays disabled and the join
   page says joining from a phone is not switched on. Nothing changes for a deployment until it sets the flag.
+- **Every front-door page gains a button.** It is a plain link to `/t/`, which answers for anyone. On a phone
+  the brand name is hidden visually to make room; it is still the link's accessible name.
 - **`/t/` now offers sign-in to anyone with no session.** It calls the same public code request as before,
   under its existing per-number and per-address limits, and signing in only reveals the patient's own ticket.
 - **A stale stylesheet shows the new forms unstyled.** Static files carry no cache header, so a browser that
