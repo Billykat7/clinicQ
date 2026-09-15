@@ -39,6 +39,13 @@ idna>=3.18
 requests>=2.33.0
 fast-flights>=0.5.0
 
+# Web push (Issue 64): the two parts of the protocol worth a library, pinned deliberately. py-vapid signs
+# the VAPID token a push service checks (RFC 8292); http-ece encrypts the payload so only the patient's
+# browser can read it (RFC 8291, aes128gcm). Both need only cryptography, already here. The POST itself is
+# httpx, above: pywebpush would do the same three steps but adds aiohttp and requests to the image.
+py-vapid==1.9.4
+http-ece==1.2.1
+
 # Data validation and serialization
 pydantic==2.13.4
 pydantic-settings==2.14.2

@@ -21,6 +21,7 @@ from src.modules.notifications.transports.base import Transport
 from src.modules.notifications.transports.sms import SmsTransport
 from src.modules.notifications.transports.webpush import WebPushTransport
 from src.modules.notifications.transports.whatsapp import WhatsAppTransport
+from src.modules.notifications.webpush import VapidSender
 
 type TransportSet = Mapping[NotificationChannel, Transport]
 
@@ -31,13 +32,16 @@ _override_lock = Lock()
 def build_transports(
     settings: Settings | None = None, *, sms_provider: SmsProvider | None = None
 ) -> TransportSet:
-    """The configured transports: web push and WhatsApp (not yet configured), and SMS."""
+    """The configured transports: web push (when VAPID keys are set), WhatsApp (not yet), and SMS."""
+    cfg = settings or get_settings()
     return MappingProxyType(
         {
-            NotificationChannel.WEB_PUSH: WebPushTransport(),
+            NotificationChannel.WEB_PUSH: WebPushTransport(
+                VapidSender(cfg) if cfg.web_push_enabled else None
+            ),
             NotificationChannel.WHATSAPP: WhatsAppTransport(),
             NotificationChannel.SMS: SmsTransport(
-                sms_provider or build_sms_provider(settings or get_settings())
+                sms_provider or build_sms_provider(cfg)
             ),
         }
     )

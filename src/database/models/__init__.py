@@ -48,6 +48,7 @@ from src.database.models.permission_usage import (
     PermissionUsage,
     PermissionUsageWindow,
 )
+from src.database.models.push_subscription import PushSubscription
 from src.database.models.queue import Queue
 from src.database.models.queue_reorder import QueueReorder
 from src.database.models.queue_request_key import QueueRequestKey
@@ -118,6 +119,7 @@ __all__ = [
     "PermissionUsage",
     "PermissionUsageWindow",
     "PublicHoliday",
+    "PushSubscription",
     "Queue",
     "QueueReorder",
     "QueueRequestKey",

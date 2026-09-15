@@ -24,6 +24,7 @@ from src.database.models.queue import Queue
 from src.database.models.site import Site
 from src.database.models.ticket import Ticket
 from src.modules.notifications import service as notifications
+from src.modules.queue.ticket_page import page_url_for
 from src.modules.queue.tickets import CALL_ORDER
 
 
@@ -64,6 +65,8 @@ def tell(
             "clinic": site.name,
             "queue": queue.name,
             "room": queue.room_label,
+            # Where tapping a push opens (Issue 64): the ticket's own page, never an id.
+            "page_url": page_url_for(ticket),
             **details,
         },
         site_id=ticket.site_id,

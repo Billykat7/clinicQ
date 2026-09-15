@@ -157,8 +157,7 @@ def _render_ticket_cancelled_sms(context: dict[str, Any]) -> RenderedMessage:
 
 
 #: The patient's ticket messages (Issues 43, 45, 63). Until Issue 66 writes a richer variant per
-#: channel, web push and WhatsApp carry the same words as the SMS, so a fallback never changes what
-#: the patient reads.
+#: channel, WhatsApp carries the same words as the SMS; web push says less (``_PUSH_WORDS``).
 _TICKET_RENDERERS: dict[NotificationTemplate, Renderer] = {
     NotificationTemplate.TICKET_NEXT: _render_ticket_next_sms,
     NotificationTemplate.TICKET_CALLED: _render_ticket_called_sms,
@@ -168,10 +167,60 @@ _TICKET_RENDERERS: dict[NotificationTemplate, Renderer] = {
     NotificationTemplate.TICKET_CANCELLED: _render_ticket_cancelled_sms,
 }
 
-#: The channels a patient notification can go out on.
+#: What each ticket message says as a web push (Issue 64): a title, and a body naming the ticket number
+#: and the clinic, nothing else. A lock screen is read by whoever picks the phone up, so no queue name
+#: (a queue can be "HIV clinic"), room, reason or name. ``{number}`` and ``{clinic}`` are the only blanks.
+_PUSH_WORDS: dict[NotificationTemplate, tuple[str, str]] = {
+    NotificationTemplate.TICKET_NEXT: (
+        "You are next",
+        "Ticket {number} at {clinic}. Please be ready.",
+    ),
+    NotificationTemplate.TICKET_CALLED: (
+        "Please come in now",
+        "Ticket {number} at {clinic}.",
+    ),
+    NotificationTemplate.TICKET_RECALLED: (
+        "You have been called again",
+        "Ticket {number} at {clinic}. Please come in now.",
+    ),
+    NotificationTemplate.TICKET_NO_SHOW: (
+        "Ticket marked missed",
+        "Ticket {number} at {clinic}. Ask at the front desk to join again.",
+    ),
+    NotificationTemplate.TICKET_TRANSFERRED: (
+        "Your visit continues",
+        "Ticket {number} at {clinic}. Open to see where to go.",
+    ),
+    NotificationTemplate.TICKET_CANCELLED: (
+        "Ticket cancelled",
+        "Ticket {number} at {clinic} was cancelled by the clinic.",
+    ),
+}
+
+
+def _push_renderer(template: NotificationTemplate) -> Renderer:
+    """A web push renderer for ``template``: :data:`_PUSH_WORDS`, a link to the ticket page, a tag."""
+    title, body = _PUSH_WORDS[template]
+
+    def render_push(context: dict[str, Any]) -> RenderedMessage:
+        """Title and body from the number and clinic only; tapping opens the ticket's page."""
+        number, clinic = str(context["number"]), str(context["clinic"])
+        page_url = context.get("page_url")
+        return RenderedMessage(
+            subject=title,
+            text=body.format(number=number, clinic=clinic),
+            link=page_url
+            if isinstance(page_url, str) and page_url.startswith("/t/")
+            else None,
+            tag=f"clinicq-ticket-{number}",
+        )
+
+    return render_push
+
+
+#: The channels a patient notification can go out on with the SMS words. Web push has its own.
 _PATIENT_CHANNELS = (
     NotificationChannel.SMS,
-    NotificationChannel.WEB_PUSH,
     NotificationChannel.WHATSAPP,
 )
 
@@ -189,6 +238,10 @@ _RENDERERS: dict[tuple[NotificationChannel, NotificationTemplate], Renderer] = {
         (channel, template): renderer
         for channel in _PATIENT_CHANNELS
         for template, renderer in _TICKET_RENDERERS.items()
+    },
+    **{
+        (NotificationChannel.WEB_PUSH, template): _push_renderer(template)
+        for template in _PUSH_WORDS
     },
 }
 

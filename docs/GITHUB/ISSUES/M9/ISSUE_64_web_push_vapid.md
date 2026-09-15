@@ -20,7 +20,7 @@ transport for smartphone patients, with SMS reserved as the paid fallback for ev
 
 ## Starting point
 
-- Nothing for web push exists yet; a VAPID library (for example `pywebpush`) needs adding to `requirements.txt`.
+- Nothing for web push exists yet; a VAPID library needs adding to `requirements.txt`. Decided in the PR: `py-vapid` (signing) and `http-ece` (payload encryption), pinned, with the POST made by `httpx`, rather than `pywebpush`, which would add `aiohttp` and `requests`.
 - Keep the browser code in an external file under `src/static/js/` (CSP).
 
 ## Scope
@@ -53,9 +53,11 @@ transport for smartphone patients, with SMS reserved as the paid fallback for ev
 
 ## Files touched
 
-- `src/modules/notifications/transports/webpush.py`
+- `src/modules/notifications/transports/webpush.py`, `src/modules/notifications/webpush.py`
 - `src/modules/notifications/router.py`
-- `src/static/js/push.js`
+- `src/static/js/push.js`, `src/static/patient-sw.js`
+- `alembic/versions/0033_push_subscription.py`
+- `docs/OPS/WEB_PUSH.md`
 - `requirements.txt`
 
 ---

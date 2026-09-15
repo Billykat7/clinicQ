@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from src.commons.enums import TICKET_TERMINAL_STATUSES, TicketPageHeadline, TicketStatus
 from src.commons.time import now_sast, stored_sast
+from src.core.config import get_settings
 from src.database.models.queue import Queue
 from src.database.models.site import Site
 from src.database.models.ticket import PAGE_TOKEN_LENGTH, Ticket
@@ -40,6 +41,8 @@ from src.modules.queue.waits import estimates_for
 
 #: What a page token looks like: nothing else is looked up.
 PAGE_TOKEN_SHAPE: Final = re.compile(rf"[A-Za-z0-9_-]{{{PAGE_TOKEN_LENGTH}}}")
+#: Where a browser's web push subscription is sent (Issue 64).
+PUSH_SUBSCRIBE_URL: Final = "/api/v1/notifications/web-push/subscriptions"
 #: How often the page reads its state again while the live stream is down.
 REFRESH_SECONDS: Final = 15
 #: How long without word from the server (a state or a heartbeat) before the page says it is not live:
@@ -127,6 +130,12 @@ def page_state(
     next_leg = _next_leg(db, ticket) if status is TicketStatus.TRANSFERRED else None
     owner = viewer_patient_id is not None and viewer_patient_id == ticket.patient_id
     location = site.location
+    settings = get_settings()
+    # Offered only after joining (this page exists only for a ticket), only to the patient themselves,
+    # and never asked for on load: the page shows a button, and the browser asks when it is pressed.
+    offer_push = (
+        owner and settings.web_push_enabled and status not in TICKET_TERMINAL_STATUSES
+    )
     return TicketPageOut(
         number=ticket.number,
         reference_code=format_reference_code(ticket.reference_code),
@@ -164,4 +173,6 @@ def page_state(
             else None
         ),
         next_page_url=page_url_for(next_leg) if next_leg is not None else None,
+        push_key=settings.web_push_vapid_public_key if offer_push else None,
+        push_subscribe_url=PUSH_SUBSCRIBE_URL if offer_push else None,
     )

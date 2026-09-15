@@ -187,6 +187,11 @@ class TicketPageOut(BaseModel):
     """Where the ticket's own patient cancels it; ``None`` for anyone else, or once it is not waiting."""
     next_page_url: str | None
     """The page of the ticket a transfer issued, so the family following along follows the visit."""
+    push_key: str | None = None
+    """The VAPID key to subscribe this browser to web push with (Issue 64). Only for the ticket's own
+    signed-in patient, while the ticket is still in its day and web push is configured."""
+    push_subscribe_url: str | None = None
+    """Where that subscription is sent; set exactly when ``push_key`` is."""
 
 
 class JoinOut(BaseModel):

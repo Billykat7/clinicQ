@@ -31,6 +31,12 @@ class WhatsAppTransport(Transport):
         """The patient's WhatsApp id when a provider is configured, else ``None``."""
         return patient.whatsapp_id if self.configured else None
 
-    def send(self, *, to: str, message: RenderedMessage) -> TransportReceipt:
+    def send(
+        self,
+        *,
+        to: str,
+        message: RenderedMessage,
+        patient: PatientAddresses | None = None,
+    ) -> TransportReceipt:
         """No WhatsApp provider exists before Issue 76, so any attempt is a retryable failure."""
         raise TransportError("WhatsApp has no provider configured (Issue 76)")

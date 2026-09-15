@@ -19,34 +19,43 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from src.commons.enums import NotificationChannel
 from src.modules.notifications.schemas import RenderedMessage
+from src.modules.notifications.transport_errors import (
+    PermanentTransportError,
+    TransportError,
+)
+
+__all__ = [
+    "FREE",
+    "PatientAddresses",
+    "PermanentTransportError",
+    "Transport",
+    "TransportError",
+    "TransportReceipt",
+]
+
+if TYPE_CHECKING:
+    from src.modules.notifications.webpush import PushTarget
 
 #: What a free transport costs.
 FREE = Decimal("0")
-
-
-class TransportError(Exception):
-    """The provider did not accept the message this time; worth retrying."""
-
-
-class PermanentTransportError(TransportError):
-    """The address can never receive this message; retrying would only repeat the failure."""
 
 
 @dataclass(frozen=True, slots=True)
 class PatientAddresses:
     """Every way the service knows to reach one patient, read once per send.
 
-    ``push_subscription_ids`` is empty until Issue 64 stores subscriptions; ``whatsapp_id`` is set
-    once a patient has used WhatsApp (Issue 75).
+    ``push_targets`` are the patient's browsers that allowed notifications, newest first (Issue 64);
+    ``whatsapp_id`` is set once a patient has used WhatsApp (Issue 75).
     """
 
     patient_id: str
     phone_e164: str | None = None
     whatsapp_id: str | None = None
-    push_subscription_ids: tuple[str, ...] = ()
+    push_targets: tuple[PushTarget, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,8 +85,17 @@ class Transport(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def send(self, *, to: str, message: RenderedMessage) -> TransportReceipt:
+    def send(
+        self,
+        *,
+        to: str,
+        message: RenderedMessage,
+        patient: PatientAddresses | None = None,
+    ) -> TransportReceipt:
         """Hand one message to the provider.
+
+        ``patient`` is everything known about reaching the patient, for a transport whose address alone
+        is not enough to send (a push subscription id names the keys the payload is encrypted to).
 
         Raises:
             PermanentTransportError: The address will never work.

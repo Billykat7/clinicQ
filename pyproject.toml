@@ -68,6 +68,12 @@ python_version = "3.14"
 module = ["apscheduler.*"]
 ignore_missing_imports = true
 
+# The web push libraries (Issue 64) ship no type information. Their surface in this project is two
+# calls, both wrapped and typed in src/modules/notifications/webpush.py.
+[[tool.mypy.overrides]]
+module = ["http_ece", "py_vapid"]
+ignore_missing_imports = true
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Ruff — the single source of truth for linting and formatting.
 #
