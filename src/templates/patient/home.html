@@ -2,7 +2,10 @@
 {#- Where the installed app opens (Issue 69), when no signed-in patient on this phone has an open ticket.
 
     patient-home.js opens the last ticket this phone followed, if it is from today and has not ended. With
-    none, the page says how to get one. Nothing here asks to install anything. -#}
+    none, the page says how to get one, and offers to sign in by phone (Issue 200): an iPhone Home Screen
+    app keeps its own storage, so a patient who joined in Safari signs in here to find their ticket. A
+    successful sign-in comes back to /t/, which opens the patient's open ticket. Nothing here asks to
+    install anything. -#}
 
 {% block title %}Your ticket · {{ app_name }}{% endblock %}
 
@@ -10,16 +13,29 @@
 
 {% block scripts %}
   <script src="/static/js/patient-tickets.js" defer></script>
+  {% if not signed_in %}<script src="/static/js/patient-sign-in.js" defer></script>{% endif %}
   <script src="/static/js/patient-home.js" defer></script>
   <script src="/static/js/pwa.js" defer></script>
 {% endblock %}
 
 {% block content %}
 <div class="stack" id="home">
+  {% if signed_in %}
+  <h1>No open ticket today</h1>
+  <p class="lead" id="home-lead">
+    You are signed in, and you have no ticket still open today. Join a clinic's queue and your ticket opens
+    here, with your place in line.
+  </p>
+  <p><a class="btn" href="/discover">Find a clinic</a></p>
+  {% else %}
   <h1>No open ticket on this phone</h1>
   <p class="lead" id="home-lead">
     Join a clinic's queue and your ticket opens here, with your place in line.
   </p>
   <p><a class="btn" href="/discover">Find a clinic</a></p>
+  <p id="home-sign-in-lead">Joined in another browser? Sign in with the same number and your ticket opens
+    here.</p>
+  {% include "patient/_sign_in.html" %}
+  {% endif %}
 </div>
 {% endblock %}

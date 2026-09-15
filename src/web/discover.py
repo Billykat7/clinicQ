@@ -998,7 +998,7 @@ LIVE_REFRESH_SECONDS: Final = 30
 
 #: The label on the join action, enabled or not. The words never change, only whether it works.
 JOIN_LABEL: Final = "Join the queue"
-#: Why the action is disabled while joining from a phone is not switched on (Issue 40 switches it).
+#: Why the action is disabled while joining from a phone is not switched on (``PATIENT_JOIN_ENABLED``).
 JOIN_NOT_SWITCHED_ON: Final = (
     "Joining from your phone is not switched on yet. You can join at the clinic's front desk "
     "while it is open."
@@ -1019,7 +1019,7 @@ PAYMENT_FILTER_NOTICE: Final = (
 class JoinButton:
     """The join action: always rendered, enabled only when joining works, and never without a reason.
 
-    ``href`` is where an enabled action goes: the join flow Issue 40 serves at that address.
+    ``href`` is where an enabled action goes: the join page (:mod:`src.web.join`, Issue 200).
     """
 
     label: str

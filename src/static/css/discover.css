@@ -316,3 +316,17 @@
 
 .map-fallback[hidden] { display: none; }
 .clinic-card-actions { margin-top: var(--space-3); }
+
+/* ── Joining a queue (Issue 200) ────────────────────────────── */
+
+.join .check-option { display: flex; overflow-wrap: anywhere; }
+.join-queue { align-items: flex-start; padding-block: var(--space-2); }
+.join-queue input { margin-top: .1rem; }
+.join-queue-text { display: grid; gap: .1rem; min-width: 0; }
+.join-queue-name { font-weight: 600; }
+.join-queue-figures { font-size: var(--step--1); color: var(--muted); }
+.join-reason { resize: vertical; }
+/* The notifications question is a full sentence: read as text, not as a bold label. */
+.join-choices legend { font-weight: 400; }
+.join-step h2:focus { outline: none; }
+.join-step h2:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }

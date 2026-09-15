@@ -5,7 +5,7 @@ source of truth: scope, context, acceptance criteria and how to check them live 
 thread. This page explains what each part of a spec means, the steps for picking one up, where the
 code goes in *this* repository, and the decisions and inconsistencies the team still has to settle.
 
-- **110 issues** in `M1/` … `M14/`: 1–109 planned up front, and 197 added to M14 when the projects moved to one shared S3 bucket.
+- **111 issues** in `M1/` … `M14/`: 1–109 planned up front, 197 added to M14 when the projects moved to one shared S3 bucket, and 200 added to M9 when the patient testing guide found no web page to join a queue.
 - **[Backlog](BACKLOG/)**: six ideas deliberately parked until after the capstone.
 - **[Milestones](../MILESTONES/README.md)**: what each group of issues delivers, and in which order.
 
@@ -280,6 +280,7 @@ affected spec carries a **Note** saying the same thing.
 | [69](M9/ISSUE_69_pwa_shell_service_worker.md) | PWA shell: manifest, service worker, offline last-known ticket | [M9](../MILESTONES/M9_notifications_patient_pwa.md) | C | 7 | 2 days | [5](M1/ISSUE_5_base_ui_shell_tailwind_htmx.md), [68](M9/ISSUE_68_patient_ticket_page.md) |
 | [70](M9/ISSUE_70_qr_ticket_code.md) | QR ticket code for kiosk check-in and reception lookup | [M9](../MILESTONES/M9_notifications_patient_pwa.md) | B | 8 | 1 day | [39](M6/ISSUE_39_tickets_model_sequence.md), [68](M9/ISSUE_68_patient_ticket_page.md) |
 | [71](M9/ISSUE_71_notifications_contract_tests.md) | Notification OpenAPI contract, delivery and retry tests | [M9](../MILESTONES/M9_notifications_patient_pwa.md) | B | 11–12 | 2 days | [63](M9/ISSUE_63_notification_service_adapters.md), [64](M9/ISSUE_64_web_push_vapid.md), [65](M9/ISSUE_65_sms_gateway_cost_caps.md), [66](M9/ISSUE_66_notification_templates_i18n.md), [67](M9/ISSUE_67_notification_preferences_quiet_hours.md), [68](M9/ISSUE_68_patient_ticket_page.md), [69](M9/ISSUE_69_pwa_shell_service_worker.md), [70](M9/ISSUE_70_qr_ticket_code.md) |
+| [200](M9/ISSUE_200_patient_join_page.md) | Patient web sign-in and join page | [M9](../MILESTONES/M9_notifications_patient_pwa.md) | C | 10 | 2 days | [17](M3/ISSUE_17_patient_identity_otp.md), [21](M3/ISSUE_21_consent_capture_withdrawal.md), [40](M6/ISSUE_40_join_queue_service_api.md), [69](M9/ISSUE_69_pwa_shell_service_worker.md) |
 | [72](M10/ISSUE_72_channel_adapter_framework.md) | Channel adapter framework with Redis session state | [M10](../MILESTONES/M10_ussd_whatsapp_channels.md) | B | 7 | 3 days | [31](M5/ISSUE_31_clinics_nearby_postgis_search.md), [40](M6/ISSUE_40_join_queue_service_api.md) |
 | [73](M10/ISSUE_73_ussd_menu_tree.md) | USSD webhook and menu tree (find, join, status, cancel) | [M10](../MILESTONES/M10_ussd_whatsapp_channels.md) | B | 8 | 3 days | [72](M10/ISSUE_72_channel_adapter_framework.md) |
 | [74](M10/ISSUE_74_ussd_sessions_security.md) | USSD session resume, timeouts and gateway signature verification | [M10](../MILESTONES/M10_ussd_whatsapp_channels.md) | B | 9 | 2 days | [73](M10/ISSUE_73_ussd_menu_tree.md) |

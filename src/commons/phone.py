@@ -33,6 +33,12 @@ _PUNCTUATION: Final = re.compile(r"[\s\-.()]")
 _E164_DIGITS: Final = range(8, 16)
 
 
+#: What a patient is told for a number that cannot be read, however it is wrong.
+INVALID_PHONE_MESSAGE: Final = (
+    "Enter a mobile number such as 082 123 4567 or +27 82 123 4567."
+)
+
+
 class InvalidPhoneNumberError(UnprocessableError):
     """A phone number that cannot be normalised: HTTP 422, code ``patients.phone.invalid``.
 
@@ -42,10 +48,7 @@ class InvalidPhoneNumberError(UnprocessableError):
 
     def __init__(self) -> None:
         """One message for every way a number can be wrong."""
-        super().__init__(
-            "Enter a mobile number such as 082 123 4567 or +27 82 123 4567.",
-            code="patients.phone.invalid",
-        )
+        super().__init__(INVALID_PHONE_MESSAGE, code="patients.phone.invalid")
 
 
 def _south_african(national: str) -> str:

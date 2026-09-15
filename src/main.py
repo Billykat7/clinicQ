@@ -44,6 +44,7 @@ from src.web.dev import router as dev_router
 from src.web.discover import router as discover_router
 from src.web.display import router as display_router
 from src.web.display_stream import router as display_stream_router
+from src.web.join import router as join_router
 from src.web.routes import router as web_router
 from src.web.ticket import router as ticket_router
 from src.web.ticket import worker_router as patient_worker_router
@@ -127,6 +128,8 @@ def create_app(settings_obj: Settings | None = None) -> FastAPI:
     app.include_router(dashboard_lookup_router)
     # Clinic discovery (Issue 32): the patient's first screen, on the discovery service.
     app.include_router(discover_router)
+    # Joining a queue from the web (Issue 200): sign in by phone, then the queue.
+    app.include_router(join_router)
     # The waiting-room board (M8): public, read-only, fed only by the privacy projection (Issue 58).
     app.include_router(display_router)
     app.include_router(display_stream_router)

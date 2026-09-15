@@ -1,11 +1,12 @@
 # Release v0.9.0: Notifications & Patient PWA
 
-**Date:** 2026-09-15 · **Milestone:** M9 · **Issues closed:** 63–71
+**Date:** 2026-09-15 · **Milestone:** M9 · **Issues closed:** 63–71 and 200
 
 A pre-release. v0.8.0 put the call on the waiting-room TV, but a patient still had to be in the room to see
 it. This release **reaches the patient wherever they are waiting**:
 
 - the queue tells them "you are next" and "please come in now" by web push, WhatsApp or SMS, cheapest first;
+- they sign in with their phone number and join a clinic's queue from its page;
 - they follow their place in line on a live ticket page from a link, with no account;
 - they choose how and when they are told, and STOP means stop on every channel;
 - the ticket page installs as an app that still shows the last known place in line with no signal;
@@ -30,7 +31,9 @@ Four rules shape the release, and each is enforced where a bug cannot get round 
 
 All nine pull requests merged on 15 September 2026, each after its checks were green and before the next
 branched from `main`: #186 (63) → #187 (68) → #188 (64) → #189 (65) → #190 (66) → #191 (67) → #192 (69) →
-#193 (70) → #194 (71). The tag is cut from `main` after #194 merges.
+#193 (70) → #194 (71). Issue 200, the join page, was added to the milestone afterwards, when the patient
+testing guide (PR #199) found that the clinic page's **Join the queue** led nowhere; its pull request merges
+before the tag. The tag is cut from `main` after that merge.
 
 ## What shipped
 
@@ -118,6 +121,17 @@ branched from `main`: #186 (63) → #187 (68) → #188 (64) → #189 (65) → #1
     transport per hour when at least 25% of 20 or more attempted messages were dead-lettered.
   - **No notification test can reach a real provider.** A fixture fails any HTTP request that leaves the
     machine.
+- **The join page** (Issue 200).
+  - **`/discover/clinics/{slug}/join`**, the page the clinic page's **Join the queue** opens: the phone
+    number, the code by SMS, the notifications question in Issue 21's words, then one of the clinic's queues
+    that take remote joins, with an optional reason, and on to the ticket page.
+  - **A signed-in patient starts at the queue**, and joining a queue they already hold opens that ticket.
+  - **Every refusal is the API's own sentence**: an unreadable number, a wrong or locked code, a second code
+    inside the cooldown (counting down), SMS switched off, a closed or full queue. When joining is not
+    possible the page says why, in the clinic page's words, and has no form.
+  - **The installed app's start page (`/t/`) signs a patient in** inside the app's scope, so an iPhone Home
+    Screen app, which keeps its own storage, can find a ticket joined in Safari.
+  - No new API: the page calls Issue 17's sign-in, Issue 21's consent and Issue 40's join.
 
 ## Migrations
 
@@ -177,6 +191,8 @@ Only `0032` writes to existing rows on the way up. Each is reversible, with the 
 - **New public routes** (no sign-in, each protected otherwise):
   - `/t/{token}`, its stream and `GET /api/v1/tickets/{page_token}`, by the unguessable link;
   - `/t/`, `/t/offline`, `/patient-sw.js` and `/static/manifest.json`;
+  - `/discover/clinics/{slug}/join`, whose form works only with `PATIENT_JOIN_ENABLED=true` (default
+    `false`, so joining from the web stays off until a deployment switches it on);
   - `GET`/`PUT /api/v1/notifications/patient-preferences/{page_token}`, by the same link;
   - `GET /api/v1/notifications/web-push/key`;
   - the two SMS callbacks, by their secret path.
