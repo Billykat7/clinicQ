@@ -114,7 +114,26 @@ once any character outside it appears (a curly quote, an en dash, an Afrikaans "
   are long. `tests/unit/notifications/test_sms_segments.py` renders every one, in every language the
   templates have, with the longest names the database allows.
 
+## 6. Replies: STOP means stop
+
+A patient who replies `STOP` (or `STOPALL`, `UNSUBSCRIBE`, `END`, `QUIT`, `CANCEL`, `OPTOUT`) to any ClinicQ
+SMS is opted out of **every** channel at once: SMS, web push and WhatsApp, including a message already
+queued or held by quiet hours. `START` (or `UNSTOP`, `SUBSCRIBE`, `OPTIN`) undoes it. Case and spacing do not
+matter; any other reply is recorded as ignored and changes nothing. ClinicQ does not text back to confirm,
+so a STOP never costs a message.
+
+Replies use the same secret as receipts. In the Africa's Talking dashboard, under SMS callback URLs, set the
+incoming messages URL to
+`https://<ClinicQ's address>/api/v1/webhooks/sms/africastalking/<the secret>/inbound`. Each reply is
+recorded once in `sms_inbound_event` (a repeated callback answers `duplicate`), with the keyword (when it was one) and what it
+did, never the text.
+
+A patient can also stop messages, set quiet hours or mute a message from the **Message settings** panel on
+their ticket page. Quiet hours hold every message except the three that say "come now" (you are next,
+please come in, you were called again); an opt-out stops those too.
+
 ---
 
-**Refs:** [Issue 65](../GITHUB/ISSUES/M9/ISSUE_65_sms_gateway_cost_caps.md) · `src/modules/notifications/sms.py` ·
+**Refs:** [Issue 65](../GITHUB/ISSUES/M9/ISSUE_65_sms_gateway_cost_caps.md) ·
+[Issue 67](../GITHUB/ISSUES/M9/ISSUE_67_notification_preferences_quiet_hours.md) · `src/modules/notifications/sms.py` ·
 `src/modules/notifications/budget.py` · `src/core/webhook_gateways/africastalking.py`

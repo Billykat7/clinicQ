@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Status** | 🚧 In progress: the notification service, transports and delivery log (63), the patient ticket page (68), web push (64), the SMS gateway with cost caps (65) and versioned templates with their editor (66; English only until Issue 77) delivered |
-| **Progress** | 🟩🟩🟩🟩🟩🟩⬜⬜⬜⬜ **56%** (5/9 issues) |
+| **Status** | 🚧 In progress: the notification service, transports and delivery log (63), the patient ticket page (68), web push (64), the SMS gateway with cost caps (65), versioned templates with their editor (66; English only until Issue 77) and patient preferences with quiet hours and STOP across every channel (67) delivered |
+| **Progress** | 🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜ **67%** (6/9 issues) |
 | **Sprints** | 9–10 (weeks 17–20), semester 2. The sprint plan spreads its issues over sprints 3–12: some start early against stubs and some are scheduled after this window, which moves the milestone's close (and its tag) to sprint 12 (see the table) |
 | **Release tag** | `v0.9.0` |
 | **Primary owner** | B, Integrations · C, Frontend/Patient |

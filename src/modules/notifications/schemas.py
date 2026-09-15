@@ -438,3 +438,46 @@ class TemplatePreviewOut(BaseModel):
     segments: int | None = None
     worst_characters: int | None = None
     worst_segments: int | None = None
+
+
+# --- Patient preferences (Issue 67) ----------------------------------------------------------------
+
+
+class PatientPreferencesOut(BaseModel):
+    """How and when a patient is told about their ticket, as they set it."""
+
+    opted_out: bool
+    """True when the patient stopped every message, on every channel."""
+    opted_out_at: datetime | None = None
+    preferred_channel: NotificationChannel | None = None
+    language: str | None = None
+    quiet_hours_start: time | None = None
+    quiet_hours_end: time | None = None
+    muted_events: list[PatientEvent]
+    quiet_hours_exempt: list[PatientEvent]
+    """The messages quiet hours never hold back: each says "come now" about a visit happening now."""
+    languages: list[str]
+    """The languages a patient may choose."""
+
+
+class PatientPreferencesIn(BaseModel):
+    """A change to a patient's preferences. A field left out is not changed; ``null`` clears it."""
+
+    model_config = {"extra": "forbid"}
+
+    opted_out: bool | None = None
+    preferred_channel: NotificationChannel | None = None
+    language: str | None = Field(default=None, min_length=2, max_length=5)
+    quiet_hours_start: time | None = None
+    quiet_hours_end: time | None = None
+    muted_events: list[PatientEvent] | None = None
+
+    @model_validator(mode="after")
+    def quiet_hours_come_in_pairs(self) -> PatientPreferencesIn:
+        """A quiet-hours window needs a start and an end, or neither."""
+        fields = self.model_fields_set
+        if ("quiet_hours_start" in fields) != ("quiet_hours_end" in fields) or (
+            (self.quiet_hours_start is None) != (self.quiet_hours_end is None)
+        ):
+            raise ValueError("Quiet hours need both a start and an end, or neither.")
+        return self

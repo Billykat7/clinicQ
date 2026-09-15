@@ -80,6 +80,20 @@ PUBLIC: dict[str, str] = {
     "POST /api/v1/esign/webhook": "verifies the provider's signature before anything else",
     "POST /api/v1/notifications/webhooks/delivery": "verifies the provider's shared secret",
     "GET /api/v1/reference/enums": "the public wire vocabulary (Issue 4)",
+    "POST /api/v1/webhooks/sms/africastalking/{token}/inbound": (
+        "a patient's SMS reply (Issue 67): the gateway calls with no session and does not sign, so the same "
+        "256-bit path secret as the delivery receipts is checked before the body is read; a reply can only "
+        "stop or restart messages to the patient whose number sent it"
+    ),
+    "GET /api/v1/notifications/patient-preferences/{page_token}": (
+        "a patient's own notification preferences by their ticket page's unguessable link (Issue 67): a "
+        "patient has no account, and the link, 256 random bits sent to the patient, finds their "
+        "preferences and nothing else about them"
+    ),
+    "PUT /api/v1/notifications/patient-preferences/{page_token}": (
+        "changing those preferences by the same link (Issue 67): it can only change how and when that "
+        "patient is told about their tickets, never consent, a ticket or another patient"
+    ),
     "POST /api/v1/webhooks/sms/africastalking/{token}": (
         "SMS delivery receipts (Issue 65): the gateway calls back with no session and does not sign, so "
         "a 256-bit secret in the registered callback URL is checked in constant time before the body is "

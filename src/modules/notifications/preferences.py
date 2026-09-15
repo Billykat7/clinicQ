@@ -39,10 +39,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.commons.enums import (
+    PATIENT_EVENT_TEMPLATE,
+    PATIENT_QUIET_HOURS_EXEMPT,
     NotificationCategory,
     NotificationChannel,
     NotificationChannelPreference,
     NotificationTemplate,
+    PatientEvent,
     SecurityAuditEvent,
     SecurityAuditOutcome,
     is_essential_category,
@@ -53,6 +56,9 @@ from src.core.config import get_settings
 from src.core.s3_logging import APP_TIMEZONE
 from src.core.security import create_unsubscribe_token, decode_unsubscribe_token
 from src.database.models.notification_preference import NotificationPreference
+from src.database.models.patient_notification_preference import (
+    PatientNotificationPreference,
+)
 from src.database.models.user import User
 from src.modules.notifications.schemas import (
     CategoryPreference,
@@ -163,11 +169,20 @@ def _quiet_until(preference: NotificationPreference, now: datetime) -> datetime 
     The returned datetime is timezone-aware in the business timezone (the retry sweep compares in
     that zone), and is always strictly after ``now``.
     """
-    start = preference.quiet_hours_start
-    end = preference.quiet_hours_end
+    return quiet_until(
+        preference.quiet_hours_start,
+        preference.quiet_hours_end,
+        _user_timezone(preference),
+        now,
+    )
+
+
+def quiet_until(
+    start: time | None, end: time | None, tz: ZoneInfo, now: datetime
+) -> datetime | None:
+    """The end of the quiet-hours window ``now`` falls in, strictly after ``now``; ``None`` outside one."""
     if start is None or end is None:
         return None
-    tz = _user_timezone(preference)
     now_local = now.astimezone(tz)
     if not _in_quiet_hours(start, end, now_local.time()):
         return None
@@ -233,9 +248,10 @@ def resolve(
     opted in. Then the recipient's per-category channel choice, quiet hours (deferred, not dropped)
     and the rule that essential mail to an *account holder* is never dropped.
 
-    ``patient_id`` marks a patient notification (Issue 63): consent is checked for that patient, and
-    the account-holder preferences below do not apply, because a patient has no account. A patient's
-    own preferences (quiet hours, opt-outs) are Issue 67's, and they belong in this same function.
+    ``patient_id`` marks a patient notification (Issue 63): consent is checked for that patient, then
+    the patient's own preferences (Issue 67, :func:`_resolve_patient`), not the account-holder ones
+    below, because a patient has no account. Consent says whether a message may be sent at all; the
+    preferences say how and when. Both are checked, in that order, for every send and every retry.
     """
     now = now or _now()
     category = notification_category_for(template)
@@ -253,12 +269,14 @@ def resolve(
             reason="no-patient-consent",
         )
     if patient_id is not None:
-        return DeliveryDecision(
-            outcome=DeliveryOutcome.SEND,
+        return _resolve_patient(
+            db,
+            patient_id,
+            template=template,
+            channel=channel,
             category=category,
             essential=essential,
-            channel=channel,
-            reason="ok",
+            now=now,
         )
     preference = load_preference(db, recipient_email)
     choice = chosen_channel(preference, category)
@@ -305,6 +323,58 @@ def resolve(
         channel=channel,
         reason="ok",
     )
+
+
+def _resolve_patient(
+    db: Session,
+    patient_id: str,
+    *,
+    template: NotificationTemplate,
+    channel: NotificationChannel,
+    category: NotificationCategory,
+    essential: bool,
+    now: datetime,
+) -> DeliveryDecision:
+    """A consenting patient's own preferences, applied to one send (Issue 67).
+
+    In order: a global opt-out stops everything, on every channel, whatever the event; an event the patient
+    muted is not sent; a message landing in their quiet hours waits for the end of the window, unless it is
+    one of the three "come now" messages of :data:`~src.commons.enums.PATIENT_QUIET_HOURS_EXEMPT`.
+    """
+    preference = db.get(PatientNotificationPreference, patient_id)
+
+    def decide(
+        outcome: DeliveryOutcome, reason: str, defer: datetime | None = None
+    ) -> DeliveryDecision:
+        return DeliveryDecision(
+            outcome=outcome,
+            category=category,
+            essential=essential,
+            channel=channel,
+            defer_until=defer,
+            reason=reason,
+        )
+
+    if preference is None:
+        return decide(DeliveryOutcome.SEND, "ok")
+    if preference.opted_out_at is not None:
+        return decide(DeliveryOutcome.SUPPRESS, "opted-out")
+    event = _EVENT_BY_TEMPLATE.get(template)
+    if event is not None and event.value in (preference.muted_events or []):
+        return decide(DeliveryOutcome.SUPPRESS, f"muted-{event.value}")
+    if template not in PATIENT_QUIET_HOURS_EXEMPT:
+        defer = quiet_until(
+            preference.quiet_hours_start, preference.quiet_hours_end, APP_TIMEZONE, now
+        )
+        if defer is not None:
+            return decide(DeliveryOutcome.DEFER, "quiet-hours", defer)
+    return decide(DeliveryOutcome.SEND, "ok")
+
+
+#: Which patient event each ticket template tells (the reverse of PATIENT_EVENT_TEMPLATE).
+_EVENT_BY_TEMPLATE: dict[NotificationTemplate, PatientEvent] = {
+    template: event for event, template in PATIENT_EVENT_TEMPLATE.items()
+}
 
 
 def email_allowed(

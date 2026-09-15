@@ -57,6 +57,7 @@ def generate_vapid_keys(subject: str) -> dict[str, str]:
 DESK = Actor(kind=ActorKind.STAFF, label="desk@clinicq.example")
 _DAY_TABLES = (
     "notification",
+    "patient_notification_preference",
     "ticket",
     "visit",
     "ticket_sequence",

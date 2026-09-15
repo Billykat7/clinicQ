@@ -187,3 +187,41 @@ async def sms_delivery_receipt(
     db.commit()
     ack = SmsReceiptAck(outcome=processed.outcome, event_id=processed.event_id)
     return JSONResponse(status_code=status.HTTP_200_OK, content=ack.model_dump())
+
+
+@router.post(
+    "/sms/africastalking/{token}/inbound",
+    response_model=SmsReceiptAck,
+    summary="SMS reply from a patient (Africa's Talking)",
+    operation_id="smsInboundMessage",
+)
+async def sms_inbound_message(
+    token: str, db: DbSession, settings: SettingsDep, request: Request
+) -> JSONResponse:
+    """Receive a patient's SMS reply and apply its keyword (Issue 67): ``STOP`` stops every message at once.
+
+    Verified like the delivery receipts: the path's secret first, then the body, recorded once. The outcome is
+    ``stopped``, ``restarted``, ``ignored`` (no keyword, or a number no patient has) or ``duplicate``.
+    """
+    try:
+        sms_receipts.verify_token(token, settings)
+    except sms_receipts.SmsWebhookNotConfiguredError:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"detail": "SMS replies are not configured."},
+        )
+    except sms_receipts.SmsWebhookRefusedError:
+        logger.warning("sms.reply.rejected", extra={"reason": "token"})
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND, content={"detail": "Not Found"}
+        )
+    try:
+        reply = sms_receipts.parse_reply(await request.body())
+    except sms_receipts.SmsWebhookRefusedError as exc:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST, content={"detail": str(exc)}
+        )
+    processed = sms_receipts.process_reply(db, reply)
+    db.commit()
+    ack = SmsReceiptAck(outcome=processed.outcome, event_id=processed.event_id)
+    return JSONResponse(status_code=status.HTTP_200_OK, content=ack.model_dump())

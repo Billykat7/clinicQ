@@ -54,9 +54,11 @@ that must be impossible to bypass.
 
 ## Files touched
 
-- `src/modules/notifications/preferences.py`
-- `src/modules/notifications/router.py`
-- `tests/integration/notifications/test_quiet_hours.py`
+- `src/modules/notifications/preferences.py`, `src/modules/notifications/patient_preferences.py`
+- `src/modules/notifications/router.py`, `src/api/v1/routes/webhooks.py` (inbound SMS keywords)
+- `alembic/versions/0036_patient_preferences_quiet_hours.py`
+- `src/templates/queue/ticket.html`, `src/static/js/ticket-preferences.js`
+- `tests/integration/notifications/test_quiet_hours.py`, `tests/unit/security/test_transport_gate.py`
 
 ---
 

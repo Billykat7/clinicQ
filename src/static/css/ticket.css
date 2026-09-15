@@ -124,3 +124,30 @@
 .tk-note { text-align: center; font-weight: 600; }
 .tk-ref { text-align: center; font-size: var(--step--1); color: var(--muted); }
 .tk-ref b { color: var(--ink); letter-spacing: .06em; }
+
+/* ── Message settings (Issue 67) ─────────────────────────────── */
+
+.tk-settings {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.tk-settings summary { min-height: var(--tap); display: flex; align-items: center; font-weight: 700; cursor: pointer; }
+.tk-settings-form { min-width: 0; display: grid; gap: var(--space-2); margin-top: var(--space-3); }
+.tk-settings-form select, .tk-settings-form input[type="time"] {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--tap);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+.tk-settings fieldset { min-width: 0; display: grid; gap: var(--space-2); margin: 0; padding: var(--space-3); border: 1px solid var(--line-soft); border-radius: var(--radius); }
+.tk-settings legend { padding-inline: var(--space-1); font-weight: 600; }
+.tk-check { display: flex; overflow-wrap: anywhere; align-items: center; gap: var(--space-2); min-height: var(--tap); }
+.tk-check input { width: 1.25rem; height: 1.25rem; }
+.tk-hint { font-size: var(--step--1); color: var(--muted); }
