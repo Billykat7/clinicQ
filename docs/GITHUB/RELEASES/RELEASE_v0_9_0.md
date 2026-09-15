@@ -148,18 +148,21 @@ Only `0032` writes to existing rows on the way up. Each is reversible, with the 
 ## Upgrade notes
 
 - **Patients start receiving messages.** A patient who has agreed to notifications (Issue 21) is told "you
-  are next" and "please come in now" from the moment this is deployed. With `SMS_PROVIDER` left at its
-  default (`logging`), an SMS is only written to the log, though the ledger records it as `sent`. Web push is
-  off until VAPID keys are set.
-- **SMS is sandbox until switched.** Going live needs `SMS_PROVIDER=africas_talking`, a real
+  are next" and "please come in now" from the moment this is deployed, by web push once VAPID keys are set,
+  and by SMS only where `SMS_ENABLED=true`. With `SMS_PROVIDER` left at its default (`logging`), an SMS is
+  only written to the log, though the ledger records it as `sent`.
+- **SMS is off until `SMS_ENABLED=true`.** Without it no SMS is sent at all: patient messages go by web push
+  or are recorded as not sent, and sign-in by SMS code answers `503`. Set it in every environment that should
+  send SMS (`docs/OPS/SMS_GATEWAY.md` §1).
+- **SMS is sandbox until switched.** Going live needs `SMS_ENABLED=true`, `SMS_PROVIDER=africas_talking`, a real
   `AFRICAS_TALKING_USERNAME` and `AFRICAS_TALKING_API_KEY` as secrets, and `SMS_SANDBOX=false`, in that
   order (`docs/OPS/SMS_GATEWAY.md`). Set `SMS_WEBHOOK_TOKEN` and register both callback URLs (receipts and
   inbound replies) in the gateway dashboard, **or STOP replies are not received**.
 - **Web push needs keys.** Generate once with `python -m scripts.generate_vapid_keys` and set
   `WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_VAPID_PRIVATE_KEY` and `WEB_PUSH_VAPID_SUBJECT` as secrets.
   Rotating the key pair makes every browser subscribe again.
-- **Twenty-two new settings**, all with defaults (`.env.example` regenerated):
-  - SMS: `AFRICAS_TALKING_USERNAME`, `AFRICAS_TALKING_API_KEY`, `SMS_SANDBOX`, `SMS_SITE_DAILY_CAP`,
+- **Twenty-three new settings**, all with defaults (`.env.example` regenerated):
+  - SMS: `SMS_ENABLED` (default `false`), `AFRICAS_TALKING_USERNAME`, `AFRICAS_TALKING_API_KEY`, `SMS_SANDBOX`, `SMS_SITE_DAILY_CAP`,
     `SMS_PATIENT_DAILY_CAP`, `SMS_MAX_SEGMENTS`, `SMS_WEBHOOK_TOKEN`;
   - dispatch: `NOTIFICATION_DISPATCH`, `NOTIFICATION_DISPATCH_WORKERS`,
     `NOTIFICATION_DISPATCH_GRACE_SECONDS`, `NOTIFICATION_COST_CURRENCY`;

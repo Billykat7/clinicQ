@@ -1464,12 +1464,14 @@ class SmsBlockReason(StrEnum):
     Recorded on the ledger row (``last_error``) and, for the caps, raised once per day as a team alert,
     so a message that did not leave never does so silently.
 
+    - ``DISABLED``: SMS is switched off for this deployment (``SMS_ENABLED`` is not true).
     - ``KILL_SWITCH``: an operator stopped every SMS (``PUT /notifications/sms/kill-switch``).
     - ``SITE_DAILY_CAP``: the clinic has sent its day's allowance.
     - ``PATIENT_DAILY_CAP``: this patient has been sent their day's allowance.
     - ``TOO_LONG``: the message would be more than ``SMS_MAX_SEGMENTS`` billable parts.
     """
 
+    DISABLED = "disabled"
     KILL_SWITCH = "kill_switch"
     SITE_DAILY_CAP = "site_daily_cap"
     PATIENT_DAILY_CAP = "patient_daily_cap"

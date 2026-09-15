@@ -7,6 +7,7 @@ maps the three exceptions below to 429, 400 and 502.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from http import HTTPStatus
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -23,7 +24,7 @@ from src.commons.enums import (
     OtpVerification,
     PatientChannel,
 )
-from src.commons.exceptions import UpstreamError
+from src.commons.exceptions import BKPropertyError, UpstreamError
 from src.commons.phone import normalize_phone
 from src.commons.schemas import ModuleInfo
 from src.commons.time import now_sast
@@ -49,6 +50,18 @@ def get_module_info() -> ModuleInfo:
 def actor_for(patient: Patient) -> str:
     """The audit actor label for a patient: ``patient:<id>``."""
     return f"{PATIENT_ACTOR_PREFIX}:{patient.id}"
+
+
+class SmsSignInUnavailableError(BKPropertyError):
+    """SMS is switched off for this deployment (``SMS_ENABLED``), so no sign-in code can be sent: HTTP 503."""
+
+    status_code = HTTPStatus.SERVICE_UNAVAILABLE
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Sign-in by SMS code is not available here. Please try again later or ask at the clinic.",
+            code="patients.otp.sms_disabled",
+        )
 
 
 class OtpThrottledError(Exception):
@@ -151,11 +164,14 @@ def send_code(
     """Send a sign-in code to a number. No patient is created until the code is verified.
 
     Raises:
+        SmsSignInUnavailableError: SMS is switched off (``SMS_ENABLED``): nothing is issued or counted (503).
         InvalidPhoneNumberError: The number cannot be normalised (422).
         OtpThrottledError: Over the per-number or per-IP budget, or inside the resend cooldown.
         UpstreamError: The SMS could not be handed to the provider (502); the code is discarded.
     """
     settings = get_settings()
+    if not settings.sms_enabled:
+        raise SmsSignInUnavailableError()
     phone = normalize_phone(raw_phone)
     if not otp_store.within_request_limit(OtpSubjectKind.PHONE, phone, ip):
         raise OtpThrottledError(settings.otp_rate_limit_window_minutes * 60)

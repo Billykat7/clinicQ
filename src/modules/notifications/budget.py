@@ -225,11 +225,14 @@ def check_sms(
 ) -> SmsBlockReason | None:
     """Why this SMS must not be sent now, or ``None`` when it may. Alerts the team when a cap is first hit.
 
-    Called just before the gateway, with the ledger row the message belongs to.
+    Called just before the gateway, with the ledger row the message belongs to. The deployment's
+    ``SMS_ENABLED`` flag is checked first, then the operators' kill switch, then the caps.
     """
+    cfg = settings or get_settings()
+    if not cfg.sms_enabled:
+        return SmsBlockReason.DISABLED
     if sms_stopped(db):
         return SmsBlockReason.KILL_SWITCH
-    cfg = settings or get_settings()
     day = business_date(now or now_sast())
     if notification.site_id is not None:
         _serialise_site(db, notification.site_id)

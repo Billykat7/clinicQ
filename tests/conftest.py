@@ -1,6 +1,13 @@
 """Pytest fixtures."""
 
 import os
+
+# SMS is off unless a deployment turns it on (SMS_ENABLED, default false). The suite exercises the SMS
+# path everywhere (sign-in codes, patient messages, caps, receipts), always through fakes, so it runs with
+# the flag on; a test of the flag itself builds its settings with ``sms_enabled=False``. Set before any
+# ``src`` import, so every ``Settings()`` in the process sees it.
+os.environ.setdefault("SMS_ENABLED", "true")
+
 from collections.abc import Generator
 from pathlib import Path
 from typing import NoReturn

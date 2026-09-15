@@ -93,7 +93,8 @@ def request_code(body: OtpRequestIn, request: Request, db: DbSession) -> OtpRequ
 
     The same answer whether or not the number already belongs to a patient; no patient is created
     until the code is verified. 422 for a number that cannot be read, 429 (with ``Retry-After``)
-    inside the resend cooldown or over the request budget.
+    inside the resend cooldown or over the request budget, 503 (``patients.otp.sms_disabled``) while
+    SMS is switched off for the deployment (``SMS_ENABLED``).
     """
     try:
         sent = service.send_code(

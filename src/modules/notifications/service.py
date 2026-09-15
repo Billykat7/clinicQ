@@ -50,7 +50,7 @@ from src.commons.enums import (
     SmsDeliveryState,
     notification_category_for,
 )
-from src.core.config import get_settings
+from src.core.config import Settings, get_settings
 from src.core.domain_events import subscribe
 from src.core.s3_logging import APP_TIMEZONE
 from src.database.models.notification import Notification
@@ -496,6 +496,18 @@ def preferred_channel(db: Session, patient_id: str) -> NotificationChannel | Non
     return NotificationChannel(preference.preferred_channel)
 
 
+def switched_off_channels(
+    settings: Settings | None = None,
+) -> frozenset[NotificationChannel]:
+    """The patient transports this deployment has switched off: SMS while ``SMS_ENABLED`` is not true.
+
+    Left out of the plan rather than tried and suppressed, so a web push with no SMS behind it keeps its
+    full retry budget instead of the single attempt a transport with a fallback gets.
+    """
+    cfg = settings or get_settings()
+    return frozenset() if cfg.sms_enabled else frozenset({NotificationChannel.SMS})
+
+
 def plan_transports(
     addresses: PatientAddresses,
     transports: TransportSet,
@@ -587,6 +599,7 @@ def notify(
         _addresses(db, patient, now=now),
         active_transports(),
         preferred=preferred_channel(db, patient.id),
+        exclude=switched_off_channels(settings),
     )
     channel, address = (
         plan[0] if plan else (NotificationChannel.SMS, patient.phone_e164)
@@ -630,6 +643,7 @@ def notify(
             f"suppressed by preference ({decision.reason})"
             if decision.outcome is DeliveryOutcome.SUPPRESS
             else "no transport can reach the patient"
+            + ("" if settings.sms_enabled else " (SMS is switched off: SMS_ENABLED)")
         )
         notification.next_attempt_at = None
     elif decision.outcome is DeliveryOutcome.DEFER:
@@ -685,7 +699,7 @@ def _fall_back(
         _addresses(db, patient, now=now),
         transports,
         preferred=preferred_channel(db, patient.id),
-        exclude=_tried_channels(db, failed),
+        exclude=_tried_channels(db, failed) | switched_off_channels(),
     )
     if not plan:
         logger.error(
