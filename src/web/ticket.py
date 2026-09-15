@@ -15,17 +15,28 @@ what opens it, so a patient can share it with the person driving them.
   room full of phones cannot take a stream from the clinic's board. Beyond it the stream answers ``503``
   with ``Retry-After`` and the page follows by polling the JSON instead, showing the data's age.
 * **No request-scoped session.** A stream may stay open for an hour, so every read opens a short one.
+
+**The installable app** (Issue 69) lives in the same scope, ``/t/``:
+
+* ``GET /patient-sw.js`` is the patient service worker, with this release's version and its shell (the
+  files the offline page needs, :data:`PATIENT_SHELL`) written in. Web push (Issue 64) and the offline shell
+  are one worker, separate from the waiting-room board's (Issue 62).
+* ``GET /t/`` is where the home-screen app opens (the manifest's ``start_url``): straight to the signed-in
+  patient's open ticket when there is one, otherwise a page that opens the last ticket this phone saw.
+* ``GET /t/offline`` is the page the worker shows in place of any ``/t/`` page the network cannot bring:
+  the last known state of the ticket, kept on the phone, with how old it is.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Final
 
 from fastapi import APIRouter, Request, status
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import RedirectResponse, Response, StreamingResponse
 
 from src.commons.enums import TICKET_TERMINAL_STATUSES, LiveEventType
 from src.core.config import get_settings
@@ -40,7 +51,11 @@ from src.core.live_events import (
 )
 from src.modules.patients.sessions import signed_in_patient_id
 from src.modules.queue.schemas import TicketPageOut
-from src.modules.queue.ticket_page import find_by_page_token, page_state
+from src.modules.queue.ticket_page import (
+    active_page_for_patient,
+    find_by_page_token,
+    page_state,
+)
 from src.web.context import short_session
 from src.web.routes import templates
 
@@ -48,13 +63,57 @@ router = APIRouter(prefix="/t", include_in_schema=False)
 #: The patient service worker (Issue 64), served from the site's root so it may control ``/t/``.
 worker_router = APIRouter(include_in_schema=False)
 _WORKER = Path(__file__).resolve().parents[1] / "static" / "patient-sw.js"
+#: The marks in ``patient-sw.js`` the server writes the release's version and the shell's file list over.
+WORKER_VERSION_MARK: Final = "__CLINICQ_PATIENT_VERSION__"
+WORKER_SHELL_MARK: Final = "__CLINICQ_PATIENT_SHELL__"
+#: The page the worker shows when a ``/t/`` page cannot be reached.
+OFFLINE_PATH: Final = "/t/offline"
+#: Everything the offline page needs to draw itself with no network, and nothing else. The worker keeps
+#: exactly these files, in a cache named for the release, so what it stores cannot grow: a test renders the
+#: offline page and fails if it asks for a file that is not listed here.
+PATIENT_SHELL: Final[tuple[str, ...]] = (
+    OFFLINE_PATH,
+    "/static/manifest.json",
+    "/static/css/site.css",
+    "/static/css/components.css",
+    "/static/css/layouts.css",
+    "/static/css/ticket.css",
+    "/static/fonts/dm-sans-latin.woff2",
+    "/static/favicon.svg",
+    "/static/icons/app-192.png",
+    "/static/icons/apple-touch-icon.png",
+    "/static/js/theme.js",
+    "/static/vendor/htmx-2.0.0.min.js",
+    "/static/js/csrf-htmx.js",
+    "/static/js/ui-feedback.js",
+    "/static/js/patient-tickets.js",
+    "/static/js/pwa.js",
+    "/static/js/ticket-offline.js",
+)
+
+
+def worker_version() -> str:
+    """The version written into the worker: the release and its commit, so every deploy installs a new worker."""
+    settings = get_settings()
+    if settings.git_sha and settings.git_sha != "unknown":
+        return f"{settings.version}-{settings.git_sha[:12]}"
+    return settings.version
 
 
 @worker_router.get("/patient-sw.js", name="patient_service_worker")
 def patient_service_worker() -> Response:
-    """The patient service worker. Never cached, so a new deploy is picked up on the next visit."""
+    """The patient service worker, with this release's version and shell written in.
+
+    Never cached by the browser's HTTP cache: the browser compares the worker on every navigation, and a
+    different version installs the new release on the next launch.
+    """
+    body = (
+        _WORKER.read_text(encoding="utf-8")
+        .replace(WORKER_VERSION_MARK, worker_version())
+        .replace(WORKER_SHELL_MARK, json.dumps(list(PATIENT_SHELL)))
+    )
     return Response(
-        _WORKER.read_bytes(),
+        body,
         media_type="text/javascript",
         headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/t/"},
     )
@@ -77,6 +136,47 @@ def _read(request: Request, token: str) -> TicketPageOut | None:
         return page_state(
             db, ticket, viewer_patient_id=signed_in_patient_id(request, db)
         )
+
+
+def _page_context(page_title: str) -> dict[str, object]:
+    settings = get_settings()
+    return {
+        "settings": settings,
+        "app_name": settings.app_name,
+        "page_title": page_title,
+    }
+
+
+@router.get("/", name="ticket_home")
+def ticket_home(request: Request) -> Response:
+    """Where the installed app opens: the signed-in patient's open ticket, or the page that finds the last one.
+
+    Without a signed-in patient with an open ticket, ``patient-home.js`` opens the last unfinished ticket this
+    phone saw, and otherwise says how to join a queue.
+    """
+    with short_session(request) as db:
+        patient_id = signed_in_patient_id(request, db)
+        path = active_page_for_patient(db, patient_id) if patient_id else None
+    if path is not None:
+        return RedirectResponse(
+            path, status_code=status.HTTP_303_SEE_OTHER, headers=NO_STORE
+        )
+    response = templates.TemplateResponse(
+        request, "patient/home.html", _page_context("Your ticket")
+    )
+    response.headers.update(NO_STORE)
+    return response
+
+
+@router.get("/offline", name="ticket_offline")
+def ticket_offline(request: Request) -> Response:
+    """The offline page, kept by the service worker and shown when a ``/t/`` page cannot be reached.
+
+    It carries no ticket: ``ticket-offline.js`` draws the last state the phone kept, with its age.
+    """
+    return templates.TemplateResponse(
+        request, "patient/offline.html", _page_context("Offline")
+    )
 
 
 @router.get("/{token}", name="ticket_page")

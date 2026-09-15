@@ -24,7 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.commons.enums import TICKET_TERMINAL_STATUSES, TicketPageHeadline, TicketStatus
-from src.commons.time import now_sast, stored_sast
+from src.commons.time import business_date, now_sast, stored_sast
 from src.core.config import get_settings
 from src.database.models.queue import Queue
 from src.database.models.site import Site
@@ -68,6 +68,26 @@ def page_path(token: str) -> str:
 def page_url_for(ticket: Ticket) -> str | None:
     """The ticket's page, or ``None`` for a ticket issued before pages existed."""
     return page_path(ticket.page_token) if ticket.page_token else None
+
+
+def active_page_for_patient(db: Session, patient_id: str) -> str | None:
+    """The page of the patient's most recently joined ticket that is still open today, or ``None`` (Issue 69).
+
+    Where the installed app opens for a signed-in patient. Only today's tickets: yesterday's open ticket is a
+    record to tidy, not a place in line.
+    """
+    ticket = db.scalars(
+        select(Ticket)
+        .where(
+            Ticket.patient_id == patient_id,
+            Ticket.service_day == business_date(now_sast()),
+            Ticket.status.not_in([status.value for status in TICKET_TERMINAL_STATUSES]),
+            Ticket.page_token.is_not(None),
+        )
+        .order_by(Ticket.joined_at.desc())
+        .limit(1)
+    ).first()
+    return page_url_for(ticket) if ticket is not None else None
 
 
 def find_by_page_token(db: Session, token: str) -> Ticket | None:
@@ -175,6 +195,7 @@ def page_state(
         next_page_url=page_url_for(next_leg) if next_leg is not None else None,
         push_key=settings.web_push_vapid_public_key if offer_push else None,
         push_subscribe_url=PUSH_SUBSCRIBE_URL if offer_push else None,
+        offer_install=owner and status not in TICKET_TERMINAL_STATUSES,
         preferences_url=(
             f"/api/v1/notifications/patient-preferences/{ticket.page_token}"
             if ticket.patient_id and ticket.page_token

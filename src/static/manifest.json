@@ -1,0 +1,20 @@
+{
+  "id": "/t/",
+  "name": "BK ClinicQ",
+  "short_name": "ClinicQ",
+  "description": "Your place in the clinic queue, live, and the last one you saw when there is no signal.",
+  "lang": "en-ZA",
+  "dir": "ltr",
+  "start_url": "/t/?source=home-screen",
+  "scope": "/t/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f7f6f3",
+  "theme_color": "#0f6e56",
+  "categories": ["health", "medical"],
+  "icons": [
+    { "src": "/static/icons/app-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icons/app-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icons/app-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

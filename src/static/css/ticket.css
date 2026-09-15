@@ -110,7 +110,7 @@
 
 /* ── Actions ─────────────────────────────────────────────────── */
 
-.tk-actions, .tk-cancel, .tk-confirm, .tk-push { display: grid; gap: var(--space-2); }
+.tk-actions, .tk-cancel, .tk-confirm, .tk-push, .tk-install { display: grid; gap: var(--space-2); }
 .tk-push [data-push-say] { display: none; }
 .tk-actions .btn, .tk-cancel .btn { min-height: var(--tap); }
 .tk-confirm {
@@ -151,3 +151,14 @@
 .tk-check { display: flex; overflow-wrap: anywhere; align-items: center; gap: var(--space-2); min-height: var(--tap); }
 .tk-check input { width: 1.25rem; height: 1.25rem; }
 .tk-hint { font-size: var(--step--1); color: var(--muted); }
+
+/* ── The installable app (Issue 69) ──────────────────────────── */
+
+.tk-install {
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--brand-tint);
+}
+.tk-install-title { font-weight: 700; }
+.tk-install .btn { min-height: var(--tap); }

@@ -147,6 +147,11 @@ _UNSCOPED_BY_DESIGN: dict[str, str] = {
         "at any clinic and may have no account at all: the token (256 random bits, unique) finds the "
         "one ticket, as a device secret finds its box (Issue 61)"
     ),
+    "modules/queue/ticket_page.py::active_page_for_patient": (
+        "the installed patient app (Issue 69) opens at the signed-in patient's own open ticket: the patient "
+        "holds no role at any clinic, and the query is narrowed to that patient's tickets, as the patient's "
+        "own ticket list is"
+    ),
     "modules/queue/ticket_page.py::page_state": (
         "reads the found ticket's own queue and clinic by id to show where the patient is; the ticket "
         "came from find_by_page_token and nothing else is reachable from here (Issue 68)"

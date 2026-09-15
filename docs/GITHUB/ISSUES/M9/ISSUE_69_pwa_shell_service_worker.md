@@ -55,9 +55,12 @@ on a taxi or inside a concrete waiting room.
 
 ## Files touched
 
-- `src/static/manifest.json`
-- `src/static/sw.js`
-- `src/templates/patient/offline.html`
+- `src/static/manifest.json`, `src/static/icons/` (from `scripts/render_app_icons.py`)
+- `src/static/patient-sw.js` (the patient worker from Issue 64, extended; not a second `sw.js`)
+- `src/templates/patient/offline.html`, `src/templates/patient/home.html`, `src/templates/components/pwa_head.html`
+- `src/web/ticket.py` (`/t/`, `/t/offline`, the worker's version and shell)
+- `src/static/js/patient-tickets.js`, `pwa.js`, `ticket-offline.js`, `patient-home.js`
+- `docs/OPS/PATIENT_APP.md`
 
 ---
 

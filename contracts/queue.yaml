@@ -1289,6 +1289,7 @@ components:
         next_page_url: { type: [string, "null"], description: "The page of the ticket a transfer issued." }
         push_key: { type: [string, "null"], description: "The VAPID key to subscribe this browser with (Issue 64); only for the ticket's own signed-in patient." }
         push_subscribe_url: { type: [string, "null"], description: "Where that subscription is sent; set exactly when push_key is." }
+        offer_install: { type: boolean, description: "Offer adding the app to the home screen (Issue 69): the ticket's own signed-in patient, while the ticket is open." }
         preferences_url: { type: [string, "null"], description: "The patient's message preferences by this link (Issue 67); null for a walk-in with no patient." }
     PriorityReason:
       type: string

@@ -192,6 +192,9 @@ class TicketPageOut(BaseModel):
     signed-in patient, while the ticket is still in its day and web push is configured."""
     push_subscribe_url: str | None = None
     """Where that subscription is sent; set exactly when ``push_key`` is."""
+    offer_install: bool = False
+    """Whether to offer adding the app to the home screen (Issue 69): only to the ticket's own signed-in
+    patient, who has just joined, and only while the ticket is open. Never on a shared link."""
     preferences_url: str | None = None
     """Where the patient's message preferences are read and changed by this link (Issue 67); ``None`` for a
     walk-in with no patient."""

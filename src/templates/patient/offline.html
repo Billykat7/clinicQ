@@ -1,0 +1,63 @@
+{% extends "layouts/patient.html" %}
+{#- The offline page (Issue 69): what the installed app shows when a ticket page cannot be reached.
+
+    The service worker keeps this page and the files it needs, and serves it in place of any /t/ page when
+    there is no network. It carries no ticket of its own: ticket-offline.js reads the last state the ticket
+    page kept on this phone (patient-tickets.js) and fills it in, with the time it was last updated and how
+    long ago that was, counting up. It never says a number is current. When the network comes back the page
+    reloads itself into the live ticket. -#}
+
+{% block title %}Offline · {{ app_name }}{% endblock %}
+
+{% block head %}{% include "components/pwa_head.html" %}{% endblock %}
+
+{% block styles %}
+  {{ super() }}
+  <link rel="stylesheet" href="/static/css/ticket.css">
+{% endblock %}
+
+{% block scripts %}
+  <script src="/static/js/patient-tickets.js" defer></script>
+  <script src="/static/js/ticket-offline.js" defer></script>
+  <script src="/static/js/pwa.js" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="tk tk-offline" id="off">
+  <p class="tk-stale" role="status">
+    No connection. <span id="off-kept-line" hidden>This is how your ticket stood the last time this phone could check: your place may have moved since.</span>
+  </p>
+
+  <section class="tk-card" id="off-ticket" aria-labelledby="off-number" hidden>
+    <div class="tk-head">
+      <b>Your ticket</b>
+      <span class="tk-live" data-live="false">Offline</span>
+    </div>
+    <p class="tk-lbl"><span data-fill="clinic"></span>: <span data-fill="queue"></span></p>
+    <h1 class="tk-no" id="off-number" data-fill="number"></h1>
+    <div class="tk-status">
+      <div data-when="waiting next" hidden>
+        <p class="tk-pos">You were number <b data-fill="position"></b> in line</p>
+        <p class="tk-ahead" data-when-ahead hidden><span data-fill="ahead"></span> <span data-fill="ahead-noun"></span> ahead of you then</p>
+      </div>
+      <p class="tk-pos" data-when="next" hidden>You were next.</p>
+      <p class="tk-pos" data-when="called" hidden>You had been called to <b data-fill="where"></b>.</p>
+      <p class="tk-pos" data-when="in_progress" hidden>You were being seen.</p>
+      <p class="tk-pos" data-when="done cancelled missed transferred" hidden>This ticket had already ended.</p>
+    </div>
+  </section>
+
+  <p class="tk-updated" id="off-updated" hidden>
+    Last updated <time id="off-as-of"></time> · <b id="off-age"></b> ago
+  </p>
+
+  <div class="stack" id="off-none" hidden>
+    <h1>No ticket saved on this phone</h1>
+    <p class="lead">Connect to the internet to see your ticket. Your place in the queue is kept at the clinic either way.</p>
+  </div>
+
+  <div class="tk-actions">
+    <button type="button" class="btn btn-block" id="off-retry">Try again</button>
+  </div>
+</div>
+{% endblock %}
