@@ -67,7 +67,7 @@ from src.modules.appointments.capacity import (
 from src.modules.notifications import service as notifications
 from src.modules.queue.sequence import format_reference_code
 from src.modules.queue.service import JoinRefusedError, join_queue
-from src.modules.sites.hours import published_schedules
+from src.modules.sites.hours import OpeningSchedule, published_schedules
 
 #: Who the audit trail says converted a booking: the sweep, never a person.
 CONVERSION_ACTOR = "system:appointment-conversion"
@@ -184,34 +184,67 @@ def convert_due(db: Session, *, moment: datetime | None = None) -> Converted:
             > moment
         ):
             continue
-        site = db.get(Site, appointment.site_id)
-        queue = db.get(Queue, appointment.queue_id)
-        patient = db.get(Patient, appointment.patient_id)
         schedule = schedules.get(appointment.site_id)
-        if site is None or queue is None or patient is None or schedule is None:
+        if schedule is None:
             continue  # a clinic no longer listed: its bookings wait, and lapse at the day's end
         try:
             with db.begin_nested():
-                result = join_queue(
-                    db,
-                    site=site,
-                    queue=queue,
-                    schedule=schedule,
-                    source=TicketSource(appointment.source),
-                    patient=patient,
-                    actor=CONVERSION_ACTOR,
-                    appointment=appointment,
-                    moment=moment,
-                )
-                if not result.created:
-                    _convert_onto_existing(db, appointment, result.ticket.id, moment)
+                ticket = convert_one(db, appointment, schedule=schedule, moment=moment)
         except JoinRefusedError as refused:
             done.waiting.append((appointment.id, refused.refusal))
             continue
-        except BookingAlreadyConvertedError:
+        except BookingAlreadyConvertedError, MissingBookingPartsError:
             continue
-        done.converted.append((appointment.id, result.ticket.id))
+        done.converted.append((appointment.id, ticket.id))
     return done
+
+
+class MissingBookingPartsError(RuntimeError):
+    """The booking's clinic, queue or patient is no longer there: nothing to convert onto."""
+
+
+def lead_minutes(db: Session, site_id: str) -> int:
+    """One clinic's conversion lead time in minutes, or the default where it has set none."""
+    return _leads(db, {site_id})[site_id]
+
+
+def convert_one(
+    db: Session,
+    appointment: Appointment,
+    *,
+    schedule: OpeningSchedule,
+    moment: datetime,
+) -> Ticket:
+    """Turn **one** booking into its ticket through the join service, and return the ticket.
+
+    The single conversion: the sweep calls it when the lead time comes, and the check-in tablet
+    (Issue 83) calls it when the patient arrives. The caller owns the transaction, and the sweep wraps
+    each call in its own savepoint so one refusal rolls back only that booking's number.
+
+    Raises:
+        JoinRefusedError: The queue cannot take the ticket (closed, or full).
+        BookingAlreadyConvertedError: Another writer converted it first.
+        MissingBookingPartsError: Its clinic, queue or patient has gone.
+    """
+    site = db.get(Site, appointment.site_id)
+    queue = db.get(Queue, appointment.queue_id)
+    patient = db.get(Patient, appointment.patient_id)
+    if site is None or queue is None or patient is None:
+        raise MissingBookingPartsError
+    result = join_queue(
+        db,
+        site=site,
+        queue=queue,
+        schedule=schedule,
+        source=TicketSource(appointment.source),
+        patient=patient,
+        actor=CONVERSION_ACTOR,
+        appointment=appointment,
+        moment=moment,
+    )
+    if not result.created:
+        _convert_onto_existing(db, appointment, result.ticket.id, moment)
+    return result.ticket
 
 
 def _convert_onto_existing(

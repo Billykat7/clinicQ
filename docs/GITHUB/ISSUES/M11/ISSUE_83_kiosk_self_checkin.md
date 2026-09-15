@@ -53,9 +53,12 @@ to talk to reception.
 
 ## Files touched
 
-- `src/web/kiosk.py`
-- `src/templates/kiosk/checkin.html`
-- `src/modules/appointments/checkin.py`
+- `src/modules/appointments/checkin.py` (arrivals, walk-ins at the door), `conversion.py` (`convert_one`)
+- `src/web/kiosk.py`, `src/templates/kiosk/checkin.html`, `src/static/js/checkin.js`, `src/static/css/kiosk.css`
+- `alembic/versions/0044_kiosk_checkin.py`, `src/database/models/display_device.py`, `ticket.py`, `site.py`
+- `src/modules/display/devices.py` and `router.py` (a device's kind), `src/web/display.py` (where a paired device lands)
+- `src/modules/sites/router.py` (the walk-in switch), `src/web/dashboard/settings.py`, `settings_devices.html`
+- `contracts/sites.yaml`, `docs/OPS/KIOSK_SETUP.md`, `tests/integration/appointments/test_kiosk_checkin.py`
 
 ---
 

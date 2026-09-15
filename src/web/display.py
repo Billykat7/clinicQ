@@ -42,6 +42,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from src.commons.enums import DisplayDeviceKind
 from src.commons.time import now_sast, stored_sast
 from src.core.config import get_settings
 from src.core.nav_visibility import peek_user_from_refresh_cookie
@@ -86,6 +87,9 @@ MESSAGE_SECONDS: Final = 12
 
 #: Where a box that may not see a board is sent: the start page, which pairs it.
 START_PATH: Final = "/display"
+#: The check-in tablet's page (Issue 83). It sits under ``/display`` so a device paired at the one start
+#: address keeps the one device cookie, which is scoped to that path.
+CHECK_IN_PATH: Final = "/display/check-in"
 #: How long a box's device cookie lasts in the browser: the longest a browser keeps a cookie (400 days),
 #: renewed by every heartbeat, so a box in daily use never loses it.
 DEVICE_COOKIE_MAX_AGE: Final = 400 * 24 * 3600
@@ -120,6 +124,13 @@ def device_from_cookie(request: Request, db: Session) -> DisplayDevice | None:
     return devices.device_for_secret(
         db, request.cookies.get(get_settings().display_device_cookie_name)
     )
+
+
+def home_for(device: DisplayDevice) -> str:
+    """Where a paired device belongs: its clinic's board, or the check-in page (Issue 83)."""
+    if device.kind_enum is DisplayDeviceKind.CHECK_IN:
+        return CHECK_IN_PATH
+    return f"{START_PATH}/{device.site_id}"
 
 
 def board_audience(request: Request, db: Session, site_id: str) -> BoardAudience | None:
@@ -198,9 +209,7 @@ def start_page(request: Request, db: DbSession) -> Response:
     """
     device = device_from_cookie(request, db)
     if devices.is_paired(device) and device is not None:
-        return RedirectResponse(
-            f"{START_PATH}/{device.site_id}", status_code=status.HTTP_302_FOUND
-        )
+        return RedirectResponse(home_for(device), status_code=status.HTTP_302_FOUND)
     user_agent = request.headers.get("user-agent")
     secret: str | None = None
     if device is None or device.revoked_at is not None:
@@ -250,10 +259,7 @@ def pairing_state(request: Request, db: DbSession) -> Response:
     """Whether the box asking has been paired: ``paired`` with its board's address, ``waiting``, or ``expired``."""
     device = device_from_cookie(request, db)
     if devices.is_paired(device) and device is not None:
-        body = {
-            "state": PairingState.PAIRED.value,
-            "board_url": f"{START_PATH}/{device.site_id}",
-        }
+        body = {"state": PairingState.PAIRED.value, "board_url": home_for(device)}
     elif (
         device is None
         or device.revoked_at is not None

@@ -720,6 +720,22 @@ class VirtualWaitingSettingsOut(BaseModel):
     explanation: str = Field(description="What the switch does, in plain words.")
 
 
+class KioskSettingsIn(BaseModel):
+    """Whether the check-in tablet at the door may also start a walk-in (Issue 83)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kiosk_walk_ins_enabled: bool
+
+
+class KioskSettingsOut(BaseModel):
+    """A clinic's check-in tablet switch, with what it means."""
+
+    site_id: str
+    kiosk_walk_ins_enabled: bool
+    explanation: str = Field(description="What the switch does, in plain words.")
+
+
 class DiscoveryConversionOut(BaseModel):
     """How many patients opened this clinic's page, and how many went on to join a queue."""
 

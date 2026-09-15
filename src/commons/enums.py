@@ -1080,6 +1080,20 @@ SITE_DEFAULT_BOARD_THEME: BoardTheme = BoardTheme.DIM
 SITE_DEFAULT_ANNOUNCE_VOLUME: int = 80
 
 
+class DisplayDeviceKind(StrEnum):
+    """What a paired device at a clinic is (Issues 61 and 83). Chosen by the manager when pairing.
+
+    - ``BOARD``: the waiting-room screen, which shows the queues and announces calls.
+    - ``CHECK_IN``: the tablet at the door, where a patient says they have arrived.
+
+    Both pair the same way, with the same six-character code, and both are revoked the same way. The kind
+    decides only which page the device is sent to when it is paired.
+    """
+
+    BOARD = "board"
+    CHECK_IN = "check_in"
+
+
 class DisplayDeviceStatus(StrEnum):
     """Where a kiosk box is, as a manager and an operator see it (Issue 61). Derived, never stored.
 

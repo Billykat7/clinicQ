@@ -55,6 +55,7 @@ from src.modules.appointments.call_forward import (
     DEFAULT_TRAVEL_MINUTES,
     VIRTUAL_WAITING_EXPLANATION,
 )
+from src.modules.appointments.checkin import KIOSK_WALK_INS_EXPLANATION
 from src.modules.discovery import analytics as discovery_analytics
 from src.modules.queue.timers import timeout_minutes
 from src.modules.sites import (
@@ -90,6 +91,8 @@ from src.modules.sites.schemas import (
     HolidayListOut,
     HolidayOut,
     HolidayRuleIn,
+    KioskSettingsIn,
+    KioskSettingsOut,
     OpenStateOut,
     PaymentProfileIn,
     PaymentProfileOut,
@@ -1380,6 +1383,55 @@ def set_virtual_waiting_settings(
     db.commit()
     db.refresh(site)
     return _virtual_waiting_out(site)
+
+
+def _kiosk_out(site: Site) -> KioskSettingsOut:
+    return KioskSettingsOut(
+        site_id=site.id,
+        kiosk_walk_ins_enabled=site.kiosk_walk_ins_enabled,
+        explanation=KIOSK_WALK_INS_EXPLANATION,
+    )
+
+
+@router.get(
+    "/{site_id}/settings/kiosk",
+    response_model=KioskSettingsOut,
+    operation_id="sitesGetKioskSettings",
+    summary="Whether the check-in tablet may start a walk-in",
+)
+def get_kiosk_settings(access: SiteSettingsRead, db: DbSession) -> KioskSettingsOut:
+    """The clinic's check-in tablet switch and what it means (Issue 83)."""
+    return _kiosk_out(_site_or_404(db, access))
+
+
+@router.put(
+    "/{site_id}/settings/kiosk",
+    response_model=KioskSettingsOut,
+    operation_id="sitesSetKioskSettings",
+    summary="Let the check-in tablet start walk-ins, or stop it",
+)
+def set_kiosk_settings(
+    payload: KioskSettingsIn,
+    request: Request,
+    access: SiteSettingsUpdate,
+    db: DbSession,
+) -> KioskSettingsOut:
+    """Turn walk-ins at the door on or off. Checking in a ticket or a booking is unaffected."""
+    site = _site_or_404(db, access)
+    if site.kiosk_walk_ins_enabled != payload.kiosk_walk_ins_enabled:
+        site.kiosk_walk_ins_enabled = payload.kiosk_walk_ins_enabled
+        _audit(
+            db,
+            request,
+            access.user.email,
+            str(access.user.id),
+            AuditAction.UPDATE,
+            site.id,
+            f"kiosk walk-ins {'on' if payload.kiosk_walk_ins_enabled else 'off'} for {site.slug}",
+        )
+    db.commit()
+    db.refresh(site)
+    return _kiosk_out(site)
 
 
 @router.get(

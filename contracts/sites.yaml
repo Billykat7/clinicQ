@@ -931,6 +931,50 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
+  # ── The check-in tablet at the door (Issue 83) ───────────────────────────────────────────
+  /sites/{site_id}/settings/kiosk:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    get:
+      tags: [sites]
+      operationId: sitesGetKioskSettings
+      summary: Whether the check-in tablet may start a walk-in
+      description: |
+        The clinic manager's (`sites.settings:read`). `explanation` is the sentence shown beside the switch.
+      responses:
+        "200":
+          description: The switch and what it means.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KioskSettingsOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    put:
+      tags: [sites]
+      operationId: sitesSetKioskSettings
+      summary: Let the check-in tablet start walk-ins, or stop it
+      description: |
+        `sites.settings:update`. Off, the tablet only checks in patients who already hold a ticket or a
+        booking. Checking in is unaffected either way. A change is written to the clinic's audit trail.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/KioskSettingsIn" }
+            example: { kiosk_walk_ins_enabled: true }
+      responses:
+        "200":
+          description: The switch, as saved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KioskSettingsOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
   # ── Transfers (Issue 45) ─────────────────────────────────────────────────────────────────
   /sites/{site_id}/settings/transfers:
     parameters:
@@ -2126,6 +2170,24 @@ components:
         virtual_waiting_enabled: { type: boolean }
         default_travel_minutes: { type: integer, description: The trip assumed for a patient who does not state one. }
         explanation: { type: string }
+    KioskSettingsIn:
+      type: object
+      required: [kiosk_walk_ins_enabled]
+      additionalProperties: false
+      properties:
+        kiosk_walk_ins_enabled: { type: boolean }
+      example: { kiosk_walk_ins_enabled: true }
+    KioskSettingsOut:
+      type: object
+      required: [site_id, kiosk_walk_ins_enabled, explanation]
+      properties:
+        site_id: { type: string }
+        kiosk_walk_ins_enabled: { type: boolean }
+        explanation: { type: string }
+      example:
+        site_id: "0199b0c0-0000-7000-8000-00000000a001"
+        kiosk_walk_ins_enabled: false
+        explanation: "On: the check-in tablet at the door also offers your open queues, so a patient with no booking can take a number without queueing at reception. Off: the tablet only checks in patients who already hold a ticket or a booking, and sends everyone else to reception."
     AnalyticsSettingsOut:
       type: object
       required: [site_id, analytics_enabled, explanation]

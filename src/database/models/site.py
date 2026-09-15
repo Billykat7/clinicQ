@@ -227,6 +227,14 @@ class Site(Base, TimestampMixin, ActiveMixin, SoftDeleteMixin):
     Off by default: a clinic switches it on when its manager wants patients waiting at home or nearby.
     While off, nobody is asked for a travel time and nobody is sent a "time to leave" alert."""
 
+    kiosk_walk_ins_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    """Whether the check-in tablet at the door may also start a walk-in ticket (Issue 83).
+
+    Off by default: the tablet then only checks in patients who already hold a ticket or a booking. A
+    clinic that wants patients to join at the door switches it on, and the tablet offers its open queues."""
+
     @property
     def sector_enum(self) -> SiteSector:
         """``sector`` as its enum member, for code that compares rather than renders."""

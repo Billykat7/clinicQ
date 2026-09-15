@@ -25,7 +25,7 @@ from sqlalchemy import JSON, DateTime, ForeignKey, Index, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.commons.enums import DbSchema
+from src.commons.enums import DbSchema, DisplayDeviceKind
 from src.commons.ids import new_id
 from src.database.models.base import Base
 from src.database.models.mixins import TimestampMixin
@@ -51,6 +51,16 @@ class DisplayDevice(Base, TimestampMixin):
         String(36), ForeignKey(f"{SCHEMA}.site.id", ondelete="CASCADE"), nullable=True
     )
     """The clinic whose board the box shows. ``None`` until a manager pairs it."""
+    kind: Mapped[str] = mapped_column(
+        String(10),
+        nullable=False,
+        default=DisplayDeviceKind.BOARD.value,
+        server_default=DisplayDeviceKind.BOARD.value,
+    )
+    """What this device is: the waiting-room board, or the check-in tablet at the door (Issue 83).
+
+    Chosen by the manager when they pair it, because the box itself is provisioned with one address and
+    knows nothing about the clinic. It decides only which page the device is sent to."""
     label: Mapped[str | None] = mapped_column(String(80), nullable=True)
     """What the manager calls it ("TV by reception"), so an alert says which screen."""
     queue_ids: Mapped[list[str] | None] = mapped_column(_QueueIdsType, nullable=True)
@@ -77,6 +87,12 @@ class DisplayDevice(Base, TimestampMixin):
         DateTime(timezone=True), nullable=True
     )
     """The box's last heartbeat (Africa/Johannesburg)."""
+
+    @property
+    def kind_enum(self) -> DisplayDeviceKind:
+        """``kind`` as its enum member, for code that compares rather than renders."""
+        return DisplayDeviceKind(self.kind)
+
     app_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
     """The application version the box's page was loaded from, as it last reported."""
     user_agent: Mapped[str | None] = mapped_column(String(200), nullable=True)
