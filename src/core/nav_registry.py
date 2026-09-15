@@ -169,6 +169,17 @@ NAV_DESTINATIONS: tuple[NavDestination, ...] = (
         scope=GrantScope.ASSIGNED,
         shortcut="w",
     ),
+    # Finding a ticket by its QR or code at reception (Issue 70): reading the clinic's tickets, the grant the
+    # lookup API checks, at ``assigned``, like the front desk.
+    NavDestination(
+        key="ticket_lookup",
+        label="Find ticket",
+        href="/dashboard/sites/{site_id}/lookup",
+        resource="queues.tickets",
+        verb=PermissionVerb.READ,
+        scope=GrantScope.ASSIGNED,
+        shortcut="f",
+    ),
     NavDestination(
         key="room",
         label="My room",

@@ -47,6 +47,17 @@
     </div>
   </section>
 
+  {# The code for reception (Issue 70), drawn from the kept state: it works with no signal. #}
+  <section class="tk-code" id="off-code" aria-labelledby="off-code-title" hidden>
+    <h2 class="tk-code-title" id="off-code-title">At reception</h2>
+    <svg class="ticket-qr" id="off-qr" viewBox="0 0 29 29" role="img" aria-label="QR code for your ticket code" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
+      <rect id="off-qr-ground" width="29" height="29" fill="#ffffff"/>
+      <path id="off-qr-path" d="" fill="#000000"/>
+    </svg>
+    <p class="tk-ref">Show this, or say your code <b data-fill="reference_code"></b></p>
+    <p class="tk-hint" data-fill="reference_spoken"></p>
+  </section>
+
   <p class="tk-updated" id="off-updated" hidden>
     Last updated <time id="off-as-of"></time> · <b id="off-age"></b> ago
   </p>

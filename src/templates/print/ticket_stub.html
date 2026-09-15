@@ -30,7 +30,10 @@
   <p class="stub-standing">
     {{ stub.standing }}<br>{{ stub.wait.label }}
   </p>
+  {% from "queue/_qr.html" import qr %}
+  {{ qr(stub.reference_qr, stub.reference_code, class_name="ticket-qr stub-qr") }}
   <p class="stub-ref">Reference <strong>{{ stub.reference_code }}</strong></p>
+  <p class="stub-spoken">{{ stub.reference_spoken }}</p>
   <p class="stub-time">Issued {{ stub.issued_at.strftime('%d %b %Y, %H:%M') }}</p>
   <p class="stub-note">Keep this ticket. Listen and watch the screen for your number.</p>
 </article>

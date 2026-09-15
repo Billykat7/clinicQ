@@ -116,11 +116,18 @@ def test_with_no_network_the_last_known_place_shows_with_its_age(
                 updated: document.getElementById('off-updated').innerText.replace(/\\s+/g, ' '),
                 age: document.getElementById('off-age').textContent,
                 live: document.querySelector('#off .tk-live').textContent,
+                qr: document.getElementById('off-qr-path').getAttribute('d'),
+                code: !document.getElementById('off-code').hidden,
                 wide: document.documentElement.scrollWidth,
             })"""
         )
         assert shown["number"] == mine.number and shown["position"] == "3"
         assert shown["live"] == "Offline"
+        # The code for reception (Issue 70) is drawn from the kept state, with no network.
+        kept_qr = page.evaluate(
+            "async () => (await window.BKPTickets.latest()).state.reference_qr.path"
+        )
+        assert shown["code"] and shown["qr"] == kept_qr and kept_qr.startswith("M")
         assert shown["updated"].startswith("Last updated ") and shown[
             "updated"
         ].endswith(" ago")

@@ -1,0 +1,12 @@
+{#- A ticket's QR (Issue 70), drawn from its data: the same on the ticket page, the printed stub and, filled in
+    by ticket-offline.js from the state the phone kept, the offline page.
+
+    qr(code_qr, code) takes a TicketQrOut (or the TicketQr it is made from) and the code as printed. The SVG is
+    black on white with its quiet margin, whatever the theme: a scanner needs the contrast, and dark mode
+    must not invert it. crispEdges keeps every module a sharp square at any size. -#}
+{% macro qr(code_qr, code, id=None, class_name="ticket-qr") -%}
+<svg class="{{ class_name }}"{% if id %} id="{{ id }}"{% endif %} viewBox="0 0 {{ code_qr.size }} {{ code_qr.size }}" role="img" aria-label="QR code for ticket code {{ code }}" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
+  <rect width="{{ code_qr.size }}" height="{{ code_qr.size }}" fill="#ffffff"/>
+  <path d="{{ code_qr.path }}" fill="#000000"/>
+</svg>
+{%- endmacro %}

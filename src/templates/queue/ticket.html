@@ -175,6 +175,13 @@
   </details>
   {% endif %}
 
-  <p class="tk-ref">Reference at the desk: <b data-fill="reference_code">{{ ticket.reference_code }}</b></p>
+  {# The code for reception (Issue 70): the QR a desk scanner reads, and the same code to say aloud. #}
+  {% from "queue/_qr.html" import qr %}
+  <section class="tk-code" aria-labelledby="tk-code-title">
+    <h2 class="tk-code-title" id="tk-code-title">At reception</h2>
+    {{ qr(ticket.reference_qr, ticket.reference_code, id="tk-qr") }}
+    <p class="tk-ref">Show this, or say your code <b data-fill="reference_code">{{ ticket.reference_code }}</b></p>
+    <p class="tk-hint">{{ ticket.reference_spoken }}</p>
+  </section>
 </div>
 {% endblock %}

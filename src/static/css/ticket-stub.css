@@ -30,6 +30,9 @@
 .stub-time,
 .stub-note { color: var(--muted); }
 .stub-actions { display: flex; gap: .75rem; }
+/* The QR (Issue 70): black on white in any theme, the same code the patient's ticket page shows. */
+.stub-qr { display: block; width: 10rem; height: auto; aspect-ratio: 1; }
+.stub-spoken { font-size: var(--step--1); color: var(--muted); }
 
 @media print {
   @page { size: 58mm auto; margin: 3mm 5mm; }
@@ -43,6 +46,8 @@
   .stub-number { font-size: 34pt; line-height: 1; }
   .stub-standing { font-size: 9pt; }
   .stub-ref { font-size: 10pt; }
+  .stub-qr { width: 26mm; }
+  .stub-spoken { font-size: 7pt; color: #000; }
   .stub-time,
   .stub-note { font-size: 7pt; color: #000; }
   .stub-note { margin-top: 1.5mm; border-top: .3mm dashed #000; padding-top: 1.5mm; }

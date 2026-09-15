@@ -37,6 +37,7 @@ from src.modules.patients.consent_text import CONSENT_WORDING
 from src.modules.queue.estimate import WaitEstimate
 from src.modules.queue.sequence import format_reference_code
 from src.modules.queue.service import describe_ticket
+from src.modules.queue.ticket_codes import TicketQr, qr_for, spoken
 from src.modules.queue.walk_ins import RecentWalkIn, recent_walk_ins
 from src.web.context import require_authenticated_html
 from src.web.dashboard.board import BoardCard, read_board
@@ -149,6 +150,9 @@ class TicketStub:
 
     number: str
     reference_code: str
+    #: The QR and the spoken code (Issue 70): the same code the patient's ticket page shows.
+    reference_qr: TicketQr
+    reference_spoken: str
     clinic: str
     queue: str
     room_label: str | None
@@ -190,6 +194,8 @@ async def ticket_stub(
     opened.context["stub"] = TicketStub(
         number=ticket.number,
         reference_code=format_reference_code(ticket.reference_code),
+        reference_qr=qr_for(ticket.reference_code),
+        reference_spoken=spoken(ticket.reference_code),
         clinic=opened.shell.site.name,
         queue=queue.name,
         room_label=queue.room_label,

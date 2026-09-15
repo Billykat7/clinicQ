@@ -99,6 +99,7 @@ from src.modules.queue.schemas import (
     ReorderTrailOut,
     StaffOverrideCountOut,
     TicketListOut,
+    TicketLookupOut,
     TicketOut,
     TicketPageOut,
     TransferIn,
@@ -111,6 +112,7 @@ from src.modules.queue.schemas import (
     WalkInIn,
 )
 from src.modules.queue.service import JoinRefusedError, JoinResult
+from src.modules.queue.ticket_codes import lookup_view
 from src.modules.queue.ticket_page import find_by_page_token, page_state, page_url_for
 from src.modules.queue.tickets import (
     CALL_ORDER,
@@ -354,6 +356,27 @@ def site_tickets(
         total=len(rows),
         items=[TicketOut.of(row) for row in rows],
     )
+
+
+@router.get(
+    "/sites/{site_id}/tickets/lookup",
+    response_model=TicketLookupOut,
+    operation_id="queueTicketLookup",
+    summary="The ticket a scanned QR or a typed reference code opens (Issue 70)",
+)
+def lookup_ticket(
+    access: TicketsRead,
+    db: DbSession,
+    code: Annotated[str, Query(min_length=1, max_length=64)],
+) -> TicketLookupOut:
+    """Resolve what a desk scanner or a receptionist typed: ``CLINICQ:K7M-4QP``, ``K7M-4QP`` or ``k7m 4qp``.
+
+    Only this clinic's tickets, and only today's. A refusal is the error envelope with ``code``
+    ``queue.lookup.<reason>``: ``not_a_code`` (422), ``not_found`` (404, also for another clinic's code),
+    ``expired`` (422, a code from an earlier day, naming it) or ``ended`` (409). A transferred ticket's code
+    opens the leg the visit is in now.
+    """
+    return lookup_view(db, access, code, today=business_date())
 
 
 @router.get(

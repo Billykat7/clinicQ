@@ -153,6 +153,21 @@ class TicketPageQueue(BaseModel):
     room: str | None
 
 
+class TicketQrOut(BaseModel):
+    """A ticket's QR as drawable data (Issue 70): ``<svg viewBox="0 0 {size} {size}"><path d="{path}"/></svg>``.
+
+    Data rather than an image, so the ticket page, its offline copy on the phone and the printed stub draw the
+    same QR without a network or a QR library.
+    """
+
+    payload: str
+    """What the QR says: ``CLINICQ:K7M-4QP``, the reference code behind ClinicQ's prefix."""
+    size: int = Field(gt=0)
+    """The side of the square, in modules, including the quiet margin."""
+    path: str
+    """The dark modules as one SVG path, drawn in ``size`` units."""
+
+
 class TicketPageOut(BaseModel):
     """Everything a patient's ticket page shows, derived on every read (Issue 68).
 
@@ -192,12 +207,32 @@ class TicketPageOut(BaseModel):
     signed-in patient, while the ticket is still in its day and web push is configured."""
     push_subscribe_url: str | None = None
     """Where that subscription is sent; set exactly when ``push_key`` is."""
+    reference_qr: TicketQrOut
+    """The QR a patient shows at reception (Issue 70), encoding :attr:`reference_code`."""
+    reference_spoken: str
+    """:attr:`reference_code` as read aloud: ``Kilo 7 Mike, 4 Quebec Papa``."""
     offer_install: bool = False
     """Whether to offer adding the app to the home screen (Issue 69): only to the ticket's own signed-in
     patient, who has just joined, and only while the ticket is open. Never on a shared link."""
     preferences_url: str | None = None
     """Where the patient's message preferences are read and changed by this link (Issue 67); ``None`` for a
     walk-in with no patient."""
+
+
+class TicketLookupOut(BaseModel):
+    """The ticket a scanned or typed code opens at reception (Issue 70)."""
+
+    ticket: TicketOut
+    queue_name: str
+    room_label: str | None
+    waiting_ahead: int | None = Field(default=None, ge=0)
+    """How many are ahead while the ticket waits; ``None`` once it has been called."""
+    wait: WaitOut | None = None
+    reference_spoken: str
+    followed_from: str | None = None
+    """The number of the ticket whose code this was, when the visit had moved on to this ticket by transfer."""
+    message: str
+    """A sentence for the desk: ``T004 is waiting in Triage, 3 ahead.``"""
 
 
 class JoinOut(BaseModel):

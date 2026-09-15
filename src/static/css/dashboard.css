@@ -711,3 +711,39 @@ li.with-staff-ticket[data-pending-call] { font-weight: 600; color: var(--muted);
 /* Offline is louder than reconnecting: nothing new can arrive at all. */
 .board-connection[data-state="offline"] { border-color: var(--danger-ink); background: var(--danger-soft); color: var(--danger-ink); }
 .board-connection[data-state="offline"] .board-connection-dot { background: var(--danger-ink); }
+
+/* ── Find a ticket by its code (Issue 70) ─────────────────────── */
+
+.lookup { display: grid; gap: 1rem; max-width: 42rem; }
+.lookup-form { display: grid; gap: .5rem; }
+.lookup-form label { font-weight: 600; }
+.lookup-row { display: flex; flex-wrap: wrap; gap: .5rem; }
+.lookup-row input {
+  flex: 1 1 12rem;
+  min-width: 0;
+  min-height: 3rem;
+  font-size: var(--step-1);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-variant-numeric: slashed-zero;
+}
+.lookup-row .btn { min-height: 3rem; }
+.lookup-form .hint { margin: 0; }
+.lookup-result { display: grid; gap: .35rem; text-align: center; border-color: var(--brand); }
+.lookup-queue { margin: 0; font-weight: 600; color: var(--muted); }
+.lookup-number {
+  margin: 0;
+  font-size: clamp(3.5rem, 10vw, 6rem);
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums slashed-zero;
+  color: var(--brand-deep);
+}
+.lookup-message { margin: 0; font-size: var(--step-1); }
+.lookup-facts { display: grid; gap: .35rem; margin: .5rem 0 0; text-align: left; }
+.lookup-facts div { display: grid; grid-template-columns: minmax(7rem, auto) 1fr; gap: .75rem; }
+.lookup-facts dt { color: var(--muted); }
+.lookup-facts dd { margin: 0; overflow-wrap: anywhere; }
+.lookup-refused { border-color: var(--warn-ink); }
+.lookup-refused h2 { margin: 0 0 .35rem; }
+.lookup-refused p { margin: 0; }
