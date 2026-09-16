@@ -49,6 +49,7 @@ from src.database.models.notification_template import NotificationTemplateVersio
 # as a table to *drop*.
 from src.database.models.patient import Patient
 from src.database.models.patient_consent import PatientConsent, PatientConsentEvent
+from src.database.models.patient_link import PatientLink
 from src.database.models.patient_notification_preference import (
     PatientNotificationPreference,
 )
@@ -137,6 +138,7 @@ __all__ = [
     "Patient",
     "PatientConsent",
     "PatientConsentEvent",
+    "PatientLink",
     "PatientNotificationPreference",
     "PatientRecentArea",
     "PaystackEvent",

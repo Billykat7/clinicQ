@@ -190,6 +190,7 @@ def book(
     patient: Patient,
     source: TicketSource,
     actor: str,
+    proxy: Patient | None = None,
     moment: datetime | None = None,
 ) -> Booked:
     """Book a place for ``patient`` in a slot, from any channel. The caller commits.
@@ -204,6 +205,9 @@ def book(
     appointment = capacity.claim_place(
         db, slot=slot, queue=queue, patient_id=patient.id, source=source, moment=moment
     )
+    # Who pressed the button, when it was not the patient themselves (Issue 84). The booking, its
+    # reference and its ticket are still the patient's.
+    appointment.proxy_patient_id = proxy.id if proxy is not None else None
     site = db.get(Site, site_id)
     assert site is not None
     booked = Booked(appointment, slot, queue, site)
@@ -212,7 +216,8 @@ def book(
         appointment,
         action=AuditAction.CREATE,
         actor=actor,
-        context=f"booked {queue.name} {booked.when} as {booked.reference} via {source.value}",
+        context=f"booked {queue.name} {booked.when} as {booked.reference} via {source.value}"
+        + (" on behalf of the patient" if proxy is not None else ""),
     )
     _tell_booked(db, booked, moment=moment)
     return booked

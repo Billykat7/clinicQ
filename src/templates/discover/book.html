@@ -14,6 +14,7 @@
 
 {% block scripts %}
   <script src="/static/js/patient-sign-in.js" defer></script>
+  <script src="/static/js/patient-dependants.js" defer></script>
   <script src="/static/js/patient-book.js" defer></script>
 {% endblock %}
 
@@ -48,6 +49,8 @@
       <button class="btn btn-block" type="submit" id="book-consent-save">Continue</button>
     </form>
   </section>
+
+  {% include "patient/_who.html" %}
 
   <section class="card join-step" id="book-choose" aria-labelledby="book-choose-heading"{% if not page.signed_in %} hidden{% endif %}>
     <h2 id="book-choose-heading" tabindex="-1">Choose a day and a time</h2>

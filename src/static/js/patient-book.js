@@ -71,9 +71,14 @@
   function showSignedIn() {
     document.getElementById("book-choose").hidden = false;
     document.getElementById("book-mine").hidden = false;
+    if (window.BKPWho) window.BKPWho.mount(signIn);
     loadTimes();
     loadMine();
   }
+
+  // Changing who the visit is for re-reads their bookings, so the list is always the chosen person's.
+  var whoPicker = document.getElementById("who-for");
+  if (whoPicker) whoPicker.addEventListener("change", loadMine);
 
   function loadTimes() {
     times.textContent = "";
@@ -99,8 +104,8 @@
     say("");
     button.disabled = true;
     var request = moving
-      ? signIn.call("POST", "/api/v1/patients/me/appointments/" + encodeURIComponent(moving) + "/reschedule", { slot_id: slotId })
-      : signIn.call("POST", "/api/v1/clinics/" + encodeURIComponent(site) + "/appointments", { slot_id: slotId });
+      ? signIn.call("POST", "/api/v1/patients/me/appointments/" + encodeURIComponent(moving) + "/reschedule" + forWhom("?"), { slot_id: slotId, for_patient_id: whom() })
+      : signIn.call("POST", "/api/v1/clinics/" + encodeURIComponent(site) + "/appointments", { slot_id: slotId, for_patient_id: whom() });
     request.then(function (answer) {
       button.disabled = false;
       if (answer.status === 401) return signIn.restart("Your sign-in has ended. Sign in again to book.");
@@ -119,9 +124,19 @@
     document.getElementById("book-moving").hidden = true;
   }
 
+  // Who the booking is for (Issue 84): null when the patient is booking for themselves.
+  function whom() {
+    return window.BKPWho ? window.BKPWho.selected() : null;
+  }
+
+  function forWhom(prefix) {
+    var chosen = whom();
+    return chosen ? prefix + "for_patient_id=" + encodeURIComponent(chosen) : "";
+  }
+
   function loadMine() {
     list.textContent = "";
-    signIn.call("GET", "/api/v1/patients/me/appointments").then(function (answer) {
+    signIn.call("GET", "/api/v1/patients/me/appointments" + forWhom("?")).then(function (answer) {
       if (!answer.ok) return;
       var items = answer.body.items.filter(function (item) { return item.status === "booked" || item.status === "converted"; });
       listEmpty.hidden = items.length > 0;
@@ -147,7 +162,7 @@
           cancel.type = "button";
           cancel.addEventListener("click", function () {
             cancel.disabled = true;
-            signIn.call("POST", "/api/v1/patients/me/appointments/" + encodeURIComponent(item.id) + "/cancel").then(function (result) {
+            signIn.call("POST", "/api/v1/patients/me/appointments/" + encodeURIComponent(item.id) + "/cancel" + forWhom("?")).then(function (result) {
               cancel.disabled = false;
               if (!result.ok) return say(signIn.sentence(result));
               loadTimes();

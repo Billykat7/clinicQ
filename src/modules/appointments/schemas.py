@@ -272,6 +272,8 @@ class BookIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     slot_id: str = Field(min_length=1, max_length=36)
+    for_patient_id: str | None = Field(default=None, max_length=36)
+    """The dependant this time is for (Issue 84). Omitted, or the caller's own id, means the caller."""
 
 
 class RescheduleIn(BookIn):

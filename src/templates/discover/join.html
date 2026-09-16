@@ -18,6 +18,7 @@
 {% block scripts %}
   {% if page.step != "unavailable" %}
   <script src="/static/js/patient-sign-in.js" defer></script>
+  <script src="/static/js/patient-dependants.js" defer></script>
   <script src="/static/js/patient-join.js" defer></script>
   {% endif %}
 {% endblock %}
@@ -67,6 +68,8 @@
       <button class="btn btn-block" type="submit" id="join-consent-save">Continue</button>
     </form>
   </section>
+
+  {% include "patient/_who.html" %}
 
   <section class="card join-step" data-join-step="queue" aria-labelledby="join-queue-heading"{% if page.step != "queue" %} hidden{% endif %}>
     <h2 id="join-queue-heading" tabindex="-1">Choose a queue</h2>

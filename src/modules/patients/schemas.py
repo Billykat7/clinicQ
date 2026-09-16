@@ -10,7 +10,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.commons.enums import ConsentPurpose
+from src.commons.enums import ConsentPurpose, ProxyRelationship
 
 
 class OtpRequestIn(BaseModel):
@@ -97,3 +97,44 @@ class ConsentUpdateIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     granted: bool
+
+
+class DependantCodeIn(BaseModel):
+    """Ask for a code on the number of somebody this patient wants to act for (Issue 84)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    phone: str = Field(min_length=6, max_length=32)
+
+
+class DependantIn(BaseModel):
+    """Finish a link: with the code sent to their number, or for somebody who has no phone."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, max_length=80)
+    """What to call them on the patient's own screens. Required for somebody with no phone."""
+    relationship: ProxyRelationship
+    phone: str | None = Field(default=None, max_length=32)
+    """Their number. With it, ``code`` must be the code sent to that number."""
+    code: str | None = Field(default=None, min_length=4, max_length=8)
+
+
+class DependantOut(BaseModel):
+    """One person this patient may act for."""
+
+    link_id: str
+    patient_id: str
+    name: str
+    relationship: ProxyRelationship
+    has_phone: bool = Field(
+        description="True when they have a number of their own, proved with a code."
+    )
+
+
+class DependantListOut(BaseModel):
+    """Everyone this patient may act for, oldest link first."""
+
+    total: int
+    items: list[DependantOut]
+    max_dependants: int = Field(description="How many people one phone may act for.")

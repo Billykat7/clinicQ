@@ -47,6 +47,9 @@ class JoinIn(BaseModel):
     travel_minutes: int | None = Field(default=None, ge=0, le=MAX_TRAVEL_MINUTES)
     """How long the trip to the clinic takes, for a clinic with a virtual waiting room (Issue 86). ``0`` is
     "already here"; ``None`` takes the default. Not kept where the clinic has no virtual waiting room."""
+    for_patient_id: str | None = Field(default=None, max_length=36)
+    """The dependant this place is for (Issue 84), when one phone acts for a household. Omitted, or
+    the caller's own id, means the caller. The ticket belongs to whoever is named here."""
     _trim = field_validator("reason_text")(_blank_to_none)
 
 

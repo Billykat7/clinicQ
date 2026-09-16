@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Status** | 🚧 In progress: appointment slots with one daily limit shared with walk-ins (80) the virtual waiting room with travel-time call-forward (86) post-visit feedback with its report (87) booking with automatic conversion into a ticket (81) reminders answered by reply (82) and the check-in tablet at the door (83) delivered |
-| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩⬜⬜ **75%** (6/8 issues) |
+| **Status** | 🚧 In progress: appointment slots with one daily limit shared with walk-ins (80) the virtual waiting room with travel-time call-forward (86) post-visit feedback with its report (87) booking with automatic conversion into a ticket (81) reminders answered by reply (82) the check-in tablet at the door (83) and proxy booking for dependants (84) delivered |
+| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ **88%** (7/8 issues) |
 | **Sprints** | 11–12 (weeks 21–24), semester 2. The sprint plan spreads its issues over sprints 8–12: some start early against stubs (see the table) |
 | **Release tag** | `v0.11.0` |
 | **Primary owner** | A, Backend Lead · C, Frontend/Patient |

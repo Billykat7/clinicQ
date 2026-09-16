@@ -47,6 +47,11 @@ CONSENT_WORDING: Final[dict[ConsentPurpose, str]] = {
         "that same clinic. The notes are private, never shown to other patients, and deleted after "
         "a short time. If you say no, each visit's notes are seen only during that visit."
     ),
+    ConsentPurpose.PROXY_ACTIONS: (
+        "Let the person who asked for this link take my place in a queue for me, book times for me, "
+        "and receive my messages on their phone. The ticket and the visit stay mine. Either of us "
+        "can end this at any time, and ending it stops them acting for me straight away."
+    ),
 }
 
 #: The same questions for a USSD menu: one line each, GSM-7 characters only, well under 160.
@@ -56,6 +61,7 @@ USSD_CONSENT_WORDING: Final[dict[ConsentPurpose, str]] = {
     ConsentPurpose.NOTIFICATIONS: "Message me about my turn? 1 Yes 2 No",
     ConsentPurpose.FEEDBACK_SURVEY: "One message after the visit to ask how it went? 1 Yes 2 No",
     ConsentPurpose.VISIT_NOTE_HISTORY: "Let the clinic nurse see notes from my past visits here? 1 Yes 2 No",
+    ConsentPurpose.PROXY_ACTIONS: "Let this person join queues and book for me? 1 Yes 2 No",
 }
 
 #: Shown above the questions, wherever they are asked.

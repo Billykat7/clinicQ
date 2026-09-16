@@ -22,7 +22,7 @@ from src.core.config import Settings, get_settings
 from src.database.models import Patient
 from src.database.session import get_db
 from src.modules.patients import consent as consent_service
-from src.modules.patients import service
+from src.modules.patients import proxy, service
 from src.modules.patients.consent_text import (
     CONSENT_INTRO,
     CONSENT_WITHDRAWN_NOTICE,
@@ -33,6 +33,10 @@ from src.modules.patients.schemas import (
     ConsentAnswerOut,
     ConsentStateOut,
     ConsentUpdateIn,
+    DependantCodeIn,
+    DependantIn,
+    DependantListOut,
+    DependantOut,
     OtpRequestIn,
     OtpRequestOut,
     OtpVerifyIn,
@@ -68,7 +72,8 @@ def _out(patient: Patient) -> PatientOut:
     """The patient as their own session sees them, number masked."""
     return PatientOut(
         id=patient.id,
-        phone=mask_phone(patient.phone_e164),
+        # A dependant with no phone of their own (Issue 84) has no number to mask.
+        phone=mask_phone(patient.phone_e164) if patient.phone_e164 else "",
         display_name=patient.display_name,
         phone_verified_at=patient.phone_verified_at,
         created_at=patient.created_at,
@@ -211,3 +216,132 @@ def set_my_consent(
     return _consent_state(
         db, patient, notice=None if body.granted else CONSENT_WITHDRAWN_NOTICE
     )
+
+
+# --------------------------------------------------------------------------------------
+# One phone, a household: the people this patient may act for (Issue 84)
+# --------------------------------------------------------------------------------------
+
+
+def _dependants(db: Session, patient: Patient) -> DependantListOut:
+    rows = proxy.dependants(db, patient.id)
+    return DependantListOut(
+        total=len(rows),
+        items=[
+            DependantOut(
+                link_id=row.link_id,
+                patient_id=row.patient_id,
+                name=row.name,
+                relationship=row.relationship,
+                has_phone=row.has_phone,
+            )
+            for row in rows
+        ],
+        max_dependants=proxy.MAX_DEPENDANTS,
+    )
+
+
+@router.get(
+    "/me/dependants",
+    response_model=DependantListOut,
+    operation_id="patientsDependants",
+    summary="The people I may book and join queues for",
+)
+def my_dependants(patient: OwnRecordRead, db: DbSession) -> DependantListOut:
+    """Everyone this patient acts for, oldest link first. A link that was ended is not here."""
+    return _dependants(db, patient)
+
+
+@router.post(
+    "/me/dependants/code",
+    response_model=OtpRequestOut,
+    status_code=status.HTTP_202_ACCEPTED,
+    operation_id="patientsDependantCode",
+    summary="Send a code to the number of somebody I want to act for",
+)
+def request_dependant_code(
+    body: DependantCodeIn, request: Request, patient: OwnRecordUpdate, db: DbSession
+) -> OtpRequestOut:
+    """The verification step: only somebody holding that phone can finish the link.
+
+    422 for a number that cannot be read, 429 inside the cooldown or over the budget, 409 for the
+    caller's own number, a person they already act for, or more links than they may hold, and 503
+    while SMS is switched off.
+    """
+    try:
+        sent = proxy.send_link_code(
+            db, patient, raw_phone=body.phone, ip=client_ip_or_unknown(request)
+        )
+    except service.OtpThrottledError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(exc),
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        ) from exc
+    return OtpRequestOut(
+        expires_in_seconds=sent.expires_in_seconds,
+        resend_after_seconds=sent.resend_after_seconds,
+    )
+
+
+@router.post(
+    "/me/dependants",
+    response_model=DependantListOut,
+    status_code=status.HTTP_201_CREATED,
+    operation_id="patientsDependantAdd",
+    summary="Act for somebody: with the code sent to their phone, or for somebody who has none",
+)
+def add_dependant(
+    body: DependantIn, patient: OwnRecordUpdate, db: DbSession
+) -> DependantListOut:
+    """Make the link, record their consent to it, and audit both people.
+
+    With ``phone`` and ``code``: the code proves the number, and the person keeps their own record.
+    Without: a new record for somebody with no phone of their own, such as a small child, who can
+    never sign in and whose messages go to this patient's phone. 400 for a wrong or expired code.
+    """
+    if body.phone and body.code:
+        try:
+            proxy.link_with_code(
+                db,
+                patient,
+                raw_phone=body.phone,
+                code=body.code,
+                relationship=body.relationship,
+                name=body.name,
+            )
+        except service.OtpRejectedError as exc:
+            return JSONResponse(  # type: ignore[return-value]
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "detail": _REJECTED[exc.outcome],
+                    "code": f"patients.otp.{exc.outcome.value}",
+                    "attempts_left": exc.attempts_left,
+                },
+            )
+    elif body.name and not body.phone:
+        proxy.link_without_phone(
+            db, patient, name=body.name, relationship=body.relationship
+        )
+    else:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Give the code sent to their number, or a name for somebody with no phone.",
+        )
+    db.commit()
+    return _dependants(db, patient)
+
+
+@router.delete(
+    "/me/dependants/{link_id}",
+    response_model=DependantListOut,
+    operation_id="patientsDependantRevoke",
+    summary="Stop acting for somebody, or stop somebody acting for me",
+)
+def revoke_dependant(
+    link_id: str, patient: OwnRecordUpdate, db: DbSession
+) -> DependantListOut:
+    """End a link, from either side. The next action through it is refused; tickets already taken stay."""
+    proxy.revoke(db, patient, link_id)
+    db.commit()
+    return _dependants(db, patient)

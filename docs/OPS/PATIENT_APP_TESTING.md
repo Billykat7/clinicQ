@@ -25,6 +25,7 @@ of every front-door page and in the footer, opens `/t/`: the patient's open tick
 | Front desk: board, *Call next*, walk-ins, Find ticket | `/dashboard` | Yes |
 | **Book an appointment** for a time, move or cancel it | `/discover/clinics/{slug}/book` (a link on the join page) | Yes, once the clinic's manager has set appointment windows and generated slots (Issues 80, 81). The booking becomes a ticket about 30 minutes before the time |
 | **Check in at the clinic's door**, by scanning the QR or typing a phone number | The check-in tablet, on a paired device (Issue 83) | Yes, where the clinic has one. It takes the QR on `/t/{token}`, a booking's reference, or a phone number |
+| **Join a queue or book for somebody else** (a child, a parent) | *Who is this for?* on the join and booking pages | Yes (Issue 84). Linking a person who has a phone sends a code to it first; a child with no phone needs none |
 | Join by USSD or WhatsApp | | **Not built.** M10 |
 
 ## 1. Set up a local ClinicQ with demo data

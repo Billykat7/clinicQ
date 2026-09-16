@@ -428,13 +428,28 @@ def attempt_or_record(
 def _addresses(
     db: Session, patient: Patient, *, now: datetime | None = None
 ) -> PatientAddresses:
-    """Every way the service knows to reach ``patient``: number, WhatsApp id and push subscriptions."""
+    """Every way the service knows to reach ``patient``: number, WhatsApp id and push subscriptions.
+
+    For a **dependant** (Issue 84) that is their proxy's phone, browser and preferences: a small child
+    has no number of their own, and it is the parent's phone that rings. The message is still the
+    dependant's — the ledger row, the ticket and the board all name them — but it is delivered to the
+    phone that exists, under its owner's own quiet hours and opt-out. :func:`reachable_patient` is the
+    one place that redirection happens, so every send path and every fallback follows it.
+    """
+    reached = reachable_patient(db, patient)
     return PatientAddresses(
-        patient_id=patient.id,
-        phone_e164=patient.phone_e164,
-        whatsapp_id=patient.whatsapp_id,
-        push_targets=webpush.targets_for(db, patient.id, now=now),
+        patient_id=reached.id,
+        phone_e164=reached.phone_e164,
+        whatsapp_id=reached.whatsapp_id,
+        push_targets=webpush.targets_for(db, reached.id, now=now),
     )
+
+
+def reachable_patient(db: Session, patient: Patient) -> Patient:
+    """Whose phone ``patient``'s messages go to: their own, or their proxy's (Issue 84)."""
+    from src.modules.patients import proxy
+
+    return proxy.messages_for(db, patient)
 
 
 def _message_for(
@@ -598,11 +613,12 @@ def notify(
     plan = plan_transports(
         _addresses(db, patient, now=now),
         active_transports(),
-        preferred=preferred_channel(db, patient.id),
+        preferred=preferred_channel(db, reachable_patient(db, patient).id),
         exclude=switched_off_channels(settings),
     )
+    reached = reachable_patient(db, patient)
     channel, address = (
-        plan[0] if plan else (NotificationChannel.SMS, patient.phone_e164)
+        plan[0] if plan else (NotificationChannel.SMS, reached.phone_e164 or "")
     )
     decision = preferences.resolve(
         db,
@@ -610,7 +626,7 @@ def notify(
         template=template,
         channel=channel,
         now=now,
-        patient_id=patient.id,
+        patient_id=reached.id,
     )
     notification = Notification(
         channel=channel.value,
@@ -698,7 +714,7 @@ def _fall_back(
     plan = plan_transports(
         _addresses(db, patient, now=now),
         transports,
-        preferred=preferred_channel(db, patient.id),
+        preferred=preferred_channel(db, reachable_patient(db, patient).id),
         exclude=_tried_channels(db, failed) | switched_off_channels(),
     )
     if not plan:

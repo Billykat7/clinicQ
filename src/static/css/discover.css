@@ -338,3 +338,17 @@
 .book-item { display: grid; gap: .35rem; padding-block: .5rem; border-top: 1px solid var(--line); }
 .book-item:first-child { border-top: 0; }
 .book-item-when { font-weight: 600; margin: 0; }
+
+/* Who this visit is for (Issue 84): the picker, and the panel that adds somebody. */
+.who-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.who-add {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line-soft);
+}

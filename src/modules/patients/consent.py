@@ -93,6 +93,7 @@ def record_consent(
     granted: bool,
     channel: PatientChannel,
     recorded_by: str | None = None,
+    actor: str | None = None,
     site_id: str | None = None,
     wording_version: str = CONSENT_WORDING_VERSION,
 ) -> PatientConsent:
@@ -107,7 +108,11 @@ def record_consent(
         purpose: What they were asked.
         granted: What they said. ``False`` is a withdrawal (or a refusal).
         channel: Where they answered: their own device, the USSD menu, WhatsApp, or the desk.
-        recorded_by: The staff member who recorded it, when it was given at the desk.
+        recorded_by: The **staff member's user id**, when the answer was given at the desk. It is
+            written to the audit row's ``actor_id``, which names a user account.
+        actor: Who the audit row says acted, when that is neither the patient nor a staff account:
+            another patient acting for them through a link (Issue 84). The patient themselves is the
+            default.
         site_id: The clinic they answered at, when they answered at one.
         wording_version: Which wording they were shown; defaults to the current one.
     """
@@ -147,7 +152,8 @@ def record_consent(
         action=AuditAction.UPDATE,
         entity_type=AuditEntityType.PATIENT_CONSENT,
         entity_id=patient.id,
-        actor=f"patient:{patient.id}" if recorded_by is None else recorded_by,
+        actor=actor
+        or (f"patient:{patient.id}" if recorded_by is None else recorded_by),
         actor_id=recorded_by,
         site_id=site_id,
         # The purpose and the answer, never the patient's details: what changed, not who they are.
