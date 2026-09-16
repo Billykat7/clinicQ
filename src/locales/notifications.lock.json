@@ -47,6 +47,30 @@
     "sha256": "e124df66a6cabde1c9460f5f22e3ce077e7156cedddfc1de16331ce0e524e2a2",
     "version": 1
   },
+  "en/collection_due/sms": {
+    "sha256": "43d87ec6062425d27bc80919c57419c911d29e580ca83ce35a14cfea339862bc",
+    "version": 1
+  },
+  "en/collection_due/web_push": {
+    "sha256": "0455d225d5ede9325d8ef710546269557e1b1b55242f43d6eebde4abd7df9a03",
+    "version": 1
+  },
+  "en/collection_due/whatsapp": {
+    "sha256": "43d87ec6062425d27bc80919c57419c911d29e580ca83ce35a14cfea339862bc",
+    "version": 1
+  },
+  "en/collection_missed/sms": {
+    "sha256": "04edcb95f62ec8dcb076606c50f4b3e19f63f5b2d0bac44cb63866dd4a95f7cd",
+    "version": 1
+  },
+  "en/collection_missed/web_push": {
+    "sha256": "5b2e044a1a67c20988adeaf97d921e8b98cdc8c9c82816835d7d4708edbb85cc",
+    "version": 1
+  },
+  "en/collection_missed/whatsapp": {
+    "sha256": "04edcb95f62ec8dcb076606c50f4b3e19f63f5b2d0bac44cb63866dd4a95f7cd",
+    "version": 1
+  },
   "en/ticket_called/sms": {
     "sha256": "40931ca95a9c7ae9d26826d8ad3216d96ee29e1859adde105f1e54ce91a4d2a8",
     "version": 1

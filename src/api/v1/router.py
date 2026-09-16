@@ -15,6 +15,7 @@ from src.api.v1.routes.reference import router as reference_router
 from src.api.v1.routes.webhooks import router as webhooks_router
 from src.modules.alerts.router import router as alerts_router
 from src.modules.appointments.booking_router import router as booking_router
+from src.modules.appointments.chronic_router import router as chronic_router
 from src.modules.appointments.feedback_router import router as feedback_router
 from src.modules.appointments.router import router as appointments_router
 from src.modules.audit.router import router as audit_router
@@ -69,4 +70,5 @@ api_v1_router.include_router(discovery_router)
 api_v1_router.include_router(display_router)
 api_v1_router.include_router(appointments_router)
 api_v1_router.include_router(booking_router)
+api_v1_router.include_router(chronic_router)
 api_v1_router.include_router(feedback_router)

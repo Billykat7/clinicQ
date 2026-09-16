@@ -133,7 +133,10 @@ CONTRACTS: tuple[Contract, ...] = (
         prefix="/api/v1",
         pattern=(
             r"^/api/v1/((sites|clinics)/\{site_id\}/appointments(/|$)|patients/me/appointments(/|$)"
-            r"|appointments/replies/|sites/\{site_id\}/reports/reminders$)"
+            r"|appointments/replies/|sites/\{site_id\}/reports/reminders$"
+            # Repeating collections (Issue 85): the clinic's list, the patient's one tap, the report.
+            r"|sites/\{site_id\}/collection-schedules(/|$)|collections/joins/"
+            r"|sites/\{site_id\}/reports/collections$)"
         ),
     ),
 )

@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Status** | 🚧 In progress: appointment slots with one daily limit shared with walk-ins (80) the virtual waiting room with travel-time call-forward (86) post-visit feedback with its report (87) booking with automatic conversion into a ticket (81) reminders answered by reply (82) the check-in tablet at the door (83) and proxy booking for dependants (84) delivered |
-| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ **88%** (7/8 issues) |
+| **Status** | ✅ Done: appointment slots with one daily limit shared with walk-ins (80) the virtual waiting room with travel-time call-forward (86) post-visit feedback with its report (87) booking with automatic conversion into a ticket (81) reminders answered by reply (82) the check-in tablet at the door (83) proxy booking for dependants (84) and repeating medication collections (85) delivered. Release note: [`v0.11.0`](../RELEASES/RELEASE_v0_11_0.md) |
+| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (8/8 issues) |
 | **Sprints** | 11–12 (weeks 21–24), semester 2. The sprint plan spreads its issues over sprints 8–12: some start early against stubs (see the table) |
 | **Release tag** | `v0.11.0` |
 | **Primary owner** | A, Backend Lead · C, Frontend/Patient |
@@ -91,12 +91,31 @@ flowchart LR
 
 ## Exit criteria
 
-- [ ] A booked appointment becomes a live ticket automatically at the configured lead time
-- [ ] A patient can confirm or cancel a reminder by replying, without opening any app
-- [ ] Kiosk check-in moves a booked patient into the waiting state without reception involvement
-- [ ] A proxy booking records who booked for whom, with consent, and is visible in the audit log
-- [ ] The virtual waiting room warns a patient early enough to arrive, based on their stated travel time
-- [ ] Feedback scores roll up per clinic and per queue in the M12 reports
+Re-derived from the code at the end of the milestone, each against the test or the demo that shows it:
+
+- [x] **A booked appointment becomes a live ticket automatically at the configured lead time** —
+  `conversion.convert_due` at `appointment_policy.convert_lead_minutes` (30 by default), through Issue 40's
+  `join_queue`, so the ticket takes the next number in the same sequence; `uq_ticket_appointment` and the
+  conditional `booked → converted` move keep it to one however often the sweep runs (Issue 81, PR #210).
+- [x] **A patient can confirm or cancel a reminder by replying, without opening any app** — `CONFIRM`/`CANCEL`
+  by SMS and the web push's own Confirm and Cancel buttons; a cancellation frees the time in the same
+  request (Issue 82, PR #211).
+- [x] **Kiosk check-in moves a booked patient into the waiting state without reception involvement** — the
+  paired tablet at the door: a scan turns the booking into a waiting ticket and stamps the arrival, in
+  0.14 s on the demo server, and the board follows (Issue 83, PR #212).
+- [x] **A proxy booking records who booked for whom, with consent, and is visible in the audit log** —
+  `patient_link` with the dependant's own `proxy_actions` consent, `ticket.proxy_patient_id` and
+  `appointment.proxy_patient_id`, and an audit row per action whose actor is the proxy and whose entity is
+  the dependant (Issue 84, PR #213).
+- [x] **The virtual waiting room warns a patient early enough to arrive, based on their stated travel time** —
+  the call-forward sweep alerts when the wait's low end comes down to the patient's own trip plus ten
+  minutes, and an unanswered alert never costs the place (Issue 86, PR #208).
+- [x] **Feedback scores roll up per clinic and per queue in the M12 reports** — `GET /sites/{id}/reports/feedback`
+  gives scores and response rates per queue and per staff member (Issue 87, PR #209). The M12 **screens**
+  that draw it are Issues 89 and 90, and are not part of this milestone.
+
+Also delivered, beyond the list written at the start: one daily limit shared by walk-ins and bookings, held
+by the database (80); repeating medication collections with a one-tap join and exactly one follow-up (85).
 
 ## Demo at the end of the milestone
 

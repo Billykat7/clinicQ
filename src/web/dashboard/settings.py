@@ -42,11 +42,18 @@ from src.commons.enums import (
     SiteSector,
     UserRole,
 )
-from src.commons.time import stored_sast
+from src.commons.phone import mask_phone
+from src.commons.time import business_date, now_sast, stored_sast
 from src.core.config import get_settings
 from src.core.nav_visibility import NavVisibility
 from src.core.rbac_language import role_label
+from src.database.models import ChronicSchedule, Patient
+from src.database.models.chronic_schedule import (
+    DEFAULT_GRACE_DAYS,
+    DEFAULT_INTERVAL_DAYS,
+)
 from src.database.session import get_db
+from src.modules.appointments import chronic
 from src.modules.appointments.call_forward import VIRTUAL_WAITING_EXPLANATION
 from src.modules.appointments.checkin import KIOSK_WALK_INS_EXPLANATION
 from src.modules.display import devices as display_devices
@@ -89,6 +96,7 @@ class SettingsSection(StrEnum):
     STAFF = "staff"
     DISPLAY = "display"
     DEVICES = "devices"
+    COLLECTIONS = "collections"
     PAYMENT = "payment"
 
 
@@ -138,6 +146,12 @@ SETTINGS_TABS: Final[tuple[SettingsTab, ...]] = (
         SettingsSection.DEVICES,
         "Display boards",
         "sites.display",
+        PermissionVerb.READ,
+    ),
+    SettingsTab(
+        SettingsSection.COLLECTIONS,
+        "Repeat collections",
+        "appointments",
         PermissionVerb.READ,
     ),
     SettingsTab(
@@ -529,6 +543,58 @@ DEVICE_STATUS_WORDS: Final = {
     DisplayDeviceStatus.REVOKED: ("Removed", "badge-muted"),
     DisplayDeviceStatus.PAIRING: ("Waiting to pair", "badge-muted"),
 }
+
+
+@router.get(
+    "/dashboard/sites/{site_id}/settings/collections", response_class=HTMLResponse
+)
+async def settings_collections(
+    site_id: str, request: Request, db: DbSession
+) -> Response:
+    """The clinic's repeating medication collections: who is due, and when (Issue 85).
+
+    A server-rendered list, like the screens tab: the rows come from the same API the writes go to
+    (``/api/v1/sites/{site_id}/collection-schedules``), which checks the grant and audits every change.
+    The front desk reads it, because they are the ones a patient asks; the manager sets one up or stops
+    it. A patient is named by their masked number, never by name: a list of who is on chronic medication
+    is not a place for one.
+    """
+    opened = _open_settings(
+        request, db, site_id, SettingsSection.COLLECTIONS, "Repeat collections"
+    )
+    if not isinstance(opened, ClinicPage):
+        return opened
+    access = opened.access
+    queues = list_queues(db, access, include_inactive=False).items
+    rows = chronic.schedules_at(db, access)
+    names = {queue.id: queue.name for queue in queues}
+    opened.context.update(
+        schedules=[
+            {
+                "id": row.id,
+                "phone": mask_phone(_schedule_phone(db, row) or "") or "—",
+                "queue_name": names.get(row.queue_id, ""),
+                "service": row.service or "",
+                "interval_days": row.interval_days,
+                "next_due_on": row.next_due_on,
+                "last_collected_on": row.last_collected_on,
+                "reminded_for": row.reminded_for,
+                "followed_up_for": row.followed_up_for,
+            }
+            for row in rows
+        ],
+        queues=queues,
+        default_interval=DEFAULT_INTERVAL_DAYS,
+        default_grace=DEFAULT_GRACE_DAYS,
+        today=business_date(now_sast()),
+    )
+    return render_clinic_page(request, opened, "dashboard/settings_collections.html")
+
+
+def _schedule_phone(db: Session, schedule: ChronicSchedule) -> str | None:
+    """The number the desk typed for this collection; the only thing the list identifies them by."""
+    patient = db.get(Patient, schedule.patient_id)
+    return patient.phone_e164 if patient else None
 
 
 @router.get("/dashboard/sites/{site_id}/settings/devices", response_class=HTMLResponse)

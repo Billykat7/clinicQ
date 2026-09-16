@@ -176,6 +176,14 @@ def parse_reply(payload: bytes) -> Reply:
     )
 
 
+def _collects(text: str) -> bool:
+    """Whether this reply's first word asks for a place in the collection queue (Issue 85)."""
+    from src.commons.enums import SMS_COLLECT_KEYWORDS
+
+    words = text.strip().split()
+    return bool(words) and words[0].upper().strip(".!,") in SMS_COLLECT_KEYWORDS
+
+
 def process_reply(db: Session, reply: Reply) -> ProcessedReceipt:
     """Record the reply once and apply its keyword. The caller commits."""
     from src.database.models.sms_budget import SmsInboundEvent
@@ -204,6 +212,21 @@ def process_reply(db: Session, reply: Reply) -> ProcessedReceipt:
         result = patient_preferences.apply_reply(
             db, reply.phone, reply.text, now=moment
         )
+    if result.outcome is patient_preferences.ReplyOutcome.IGNORED and _collects(
+        reply.text
+    ):
+        # COLLECT on a chronic collection reminder (Issue 85): one word, one place in the queue.
+        from src.modules.appointments import chronic
+        from src.modules.queue.service import JoinRefusedError
+
+        try:
+            joined = chronic.join_by_phone(db, reply.phone, moment=moment)
+        except JoinRefusedError:
+            joined = None  # the clinic is closed or the queue is full: the patient is not told twice
+        if joined is not None:
+            result = patient_preferences.ReplyResult(
+                patient_preferences.ReplyOutcome.COLLECTING, result.patient_id
+            )
     if result.outcome is patient_preferences.ReplyOutcome.IGNORED:
         # Not STOP or START: perhaps an answer to the post-visit question (Issue 87). A keyword wins.
         from src.commons.enums import FeedbackChannel

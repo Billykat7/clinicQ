@@ -70,11 +70,11 @@ from src.core import permission_usage
 from src.core.config import Settings, get_settings
 from src.core.s3_logging import APP_TIMEZONE
 from src.database.session import get_db_context
+from src.modules.appointments import chronic, virtual_waiting
 from src.modules.appointments import conversion as appointments_conversion
 from src.modules.appointments import feedback as appointments_feedback
 from src.modules.appointments import reminders as appointments_reminders
 from src.modules.appointments import service as appointments_service
-from src.modules.appointments import virtual_waiting
 from src.modules.display import devices as display_devices
 from src.modules.documents import service as documents_service
 from src.modules.documents.storage import LocalObjectStorage
@@ -131,6 +131,9 @@ _APPOINTMENT_CONVERSION_LOCK_KEY: int = 881
 #: The appointment reminders (Issue 82). One runner, though each reminder's conditional claim and dedupe key keep it
 #: to one message even without the lock.
 _APPOINTMENT_REMINDERS_LOCK_KEY: int = 882
+#: The chronic collection reminders (Issue 85). One runner, though ``reminded_for`` and ``followed_up_for``
+#: keep each message to one per cycle even without the lock.
+_CHRONIC_COLLECTIONS_LOCK_KEY: int = 883
 #: The call-forward sweep (Issue 86). The lock keeps a slow run and the next from overlapping; the claim on
 #: ``leave_alert_at`` and the notification's dedupe key keep an alert to one even without it.
 _CALL_FORWARD_LOCK_KEY: int = 886
@@ -153,6 +156,7 @@ _NOTIFICATION_FAILURE_WATCH_JOB_ID = "notification_failure_watch"
 _APPOINTMENT_SLOTS_JOB_ID = "appointment_slot_generation"
 _APPOINTMENT_CONVERSION_JOB_ID = "appointment_conversion"
 _APPOINTMENT_REMINDERS_JOB_ID = "appointment_reminders"
+_CHRONIC_COLLECTIONS_JOB_ID = "chronic_collections"
 _CALL_FORWARD_JOB_ID = "virtual_waiting_call_forward"
 _FEEDBACK_RETENTION_JOB_ID = "feedback_comment_retention_sweep"
 
@@ -482,6 +486,34 @@ def run_appointment_reminders(*, moment: datetime | None = None) -> int:
         return total
 
 
+def run_chronic_collections(*, moment: datetime | None = None) -> int:
+    """Remind every collection that is due, and follow up each missed one once; return how many (Issue 85).
+
+    Elects a single runner across instances via the advisory lock, then delegates to
+    :func:`src.modules.appointments.chronic.run_due`. Safe to call directly.
+    """
+    with (
+        get_db_context() as db,
+        _advisory_lock(db, _CHRONIC_COLLECTIONS_LOCK_KEY) as acquired,
+    ):
+        if not acquired:
+            logger.debug(
+                "Chronic collection reminders skipped: another instance holds the lock."
+            )
+            return 0
+        done = chronic.run_due(db, moment=moment)
+        db.commit()
+        total = len(done.reminded) + len(done.followed_up)
+        if total:
+            logger.info(
+                "Chronic collections: %d reminded, %d followed up, %d cycles rolled forward.",
+                len(done.reminded),
+                len(done.followed_up),
+                len(done.rolled),
+            )
+        return total
+
+
 def run_appointment_conversion(*, moment: datetime | None = None) -> int:
     """Turn every due booking into a ticket once, and lapse the ones whose day has ended (Issue 81).
 
@@ -681,6 +713,16 @@ def start_scheduler(settings: Settings | None = None) -> BackgroundScheduler | N
         name="Nightly feedback comment retention sweep",
         # The same night as the visit notes (Issue 53), a quarter of an hour later. A missed night is
         # coalesced: the sweep empties whatever is past its expiry, so one late run catches up.
+        misfire_grace_time=3600,
+        coalesce=True,
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        run_chronic_collections,
+        trigger=IntervalTrigger(minutes=15, timezone=APP_TIMEZONE),
+        id=_CHRONIC_COLLECTIONS_JOB_ID,
+        name="Chronic collection reminders",
+        # A collection has a day, not a minute: a missed run is coalesced and catches up, once.
         misfire_grace_time=3600,
         coalesce=True,
         replace_existing=True,

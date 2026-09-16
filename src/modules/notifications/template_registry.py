@@ -92,10 +92,14 @@ VARIABLES: Final[Mapping[NotificationTemplate, frozenset[str]]] = {
     NotificationTemplate.APPOINTMENT_LAPSED: _TICKET_BLANKS | {"when"},
     NotificationTemplate.APPOINTMENT_REMINDER_24H: _TICKET_BLANKS | {"when"},
     NotificationTemplate.APPOINTMENT_REMINDER_2H: _TICKET_BLANKS | {"when"},
+    # A collection reminder is about a repeat, not a ticket: it has no number to say (Issue 85).
+    NotificationTemplate.COLLECTION_DUE: (_TICKET_BLANKS - {"number"}) | {"when"},
+    NotificationTemplate.COLLECTION_MISSED: (_TICKET_BLANKS - {"number"}) | {"when"},
 }
 #: What a web push may say, whatever the template: a lock screen is public (Issue 64).
 PUSH_VARIABLES: Final = frozenset({"number", "clinic"})
-#: What every message must say.
+#: What every message that **has** a ticket number must say. A message about something that is not one
+#: ticket — a repeating collection (Issue 85) — has no number in its variables and is not asked for one.
 REQUIRED: Final = frozenset({"number"})
 
 #: How long a clinic, and a queue or room, may be inside an SMS (Issue 65).
@@ -257,7 +261,7 @@ def validate(text: TemplateText) -> SegmentCount | None:
         raise TemplateError(
             f"{names} cannot be used in {where}: it is not in the message's variables."
         )
-    missing = REQUIRED - blanks(text.body)
+    missing = (REQUIRED & VARIABLES[text.template]) - blanks(text.body)
     if missing:
         raise TemplateError("The message must say the ticket number: add {number}.")
     if (

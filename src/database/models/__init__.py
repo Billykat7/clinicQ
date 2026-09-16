@@ -22,6 +22,7 @@ from src.database.models.appointment_slot import (
 from src.database.models.area import Area, AreaName, PatientRecentArea
 from src.database.models.audit_event import AuditEvent
 from src.database.models.base import Base, metadata
+from src.database.models.chronic_schedule import ChronicSchedule
 from src.database.models.clinic_service import ClinicService, queue_clinic_service
 from src.database.models.discovery_event import DiscoveryEvent
 from src.database.models.display_device import DisplayDevice
@@ -117,6 +118,7 @@ __all__ = [
     "AreaName",
     "AuditEvent",
     "Base",
+    "ChronicSchedule",
     "ClinicService",
     "DiscoveryEvent",
     "DisplayDevice",

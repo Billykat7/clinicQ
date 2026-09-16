@@ -586,6 +586,168 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
+  # ── Repeating collections (Issue 85) ─────────────────────────────────────────────────────
+  /sites/{site_id}/collection-schedules:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    get:
+      tags: [appointments]
+      operationId: collectionsList
+      summary: This clinic's repeating collections
+      description: |
+        `appointments:read`. Soonest due first. A patient is named by their **masked number**, never by
+        name: a list of who is due for chronic medication is not a place for one (Issue 21).
+      parameters:
+        - name: include_stopped
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: The clinic's schedules.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScheduleListOut" }
+              example:
+                site_id: 0199b0c0-0000-7000-8000-0000000c1a01
+                total: 1
+                items:
+                  - id: 01a0a7b0-0000-7000-8000-00000000c001
+                    patient_id: 01a0a7b0-0000-7000-8000-00000000d001
+                    patient_phone: "+27 ** *** 0851"
+                    queue_id: 0199b0c0-0000-7000-8000-0000000c1a11
+                    queue_name: Chronic collection
+                    service: ARV refill
+                    interval_days: 28
+                    grace_days: 3
+                    next_due_on: "2026-10-14"
+                    last_collected_on: "2026-09-16"
+                    reminded_for: "2026-09-16"
+                    followed_up_for: null
+                    active: true
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    post:
+      tags: [appointments]
+      operationId: collectionsCreate
+      summary: Set up or correct a patient's repeating collection
+      description: |
+        `appointments:update`. Setting one up twice for the same patient and queue **corrects** the first
+        rather than making a second. The patient's record is created on first use, as a walk-in's is.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ScheduleIn" }
+            example: { phone: "0825550851", queue_id: 0199b0c0-0000-7000-8000-0000000c1a11, next_due_on: "2026-10-14", interval_days: 28, grace_days: 3, service: ARV refill }
+      responses:
+        "201":
+          description: The clinic's schedules, including the new one.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScheduleListOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: The repeat or the grace period is outside what a clinic may set.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/collection-schedules/{schedule_id}/stop:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+      - name: schedule_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [appointments]
+      operationId: collectionsStop
+      summary: Stop a patient's collection reminders
+      description: "`appointments:update`. Nothing more is sent; the record of what was stays."
+      responses:
+        "200":
+          description: The clinic's schedules, without this one.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScheduleListOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /collections/joins/{token}:
+    parameters:
+      - name: token
+        in: path
+        required: true
+        schema: { type: string, maxLength: 64 }
+    post:
+      tags: [appointments]
+      operationId: collectionsJoin
+      summary: Take a place in the collection queue from a reminder
+      description: |
+        **Public**, because a notification carries no session: the token is 256 random bits, sent only in
+        that patient's own reminder, and it takes their place in that one queue and nothing else. One
+        interaction: the push notification's own button posts this, and an SMS reply of `COLLECT` reaches
+        the same code. A second tap answers with the place they already have.
+      responses:
+        "200":
+          description: The place taken, or the one they already had.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CollectionJoinOut" }
+              example: { number: C014, queue_name: Chronic collection, room_label: Room 3, waiting_ahead: 4, already: false, message: "You have a place in the queue: C014 in Chronic collection." }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: The reminders were stopped, or the queue cannot take a place now.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/reports/collections:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    get:
+      tags: [appointments]
+      operationId: collectionsAdherence
+      summary: How many collections happen on time at this clinic
+      description: |
+        `sites.reports:read`. Per collection queue over a range of service days: schedules, cycles due,
+        collected on time (by the due day plus the grace period), collected late, and missed. What Issue
+        90's adherence dashboard reads. The last 30 days by default, at most 366.
+      parameters:
+        - name: start
+          in: query
+          required: false
+          schema: { type: string, format: date }
+        - name: end
+          in: query
+          required: false
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: One row per collection queue.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdherenceReportOut" }
+              example:
+                site_id: 0199b0c0-0000-7000-8000-0000000c1a01
+                start: "2026-08-18"
+                end: "2026-09-16"
+                queues:
+                  - { queue_id: 0199b0c0-0000-7000-8000-0000000c1a11, queue_name: Chronic collection, schedules: 42, due: 38, collected_on_time: 29, collected_late: 5, missed: 4 }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
 components:
   parameters:
     SiteId:
@@ -625,6 +787,72 @@ components:
           schema: { $ref: "#/components/schemas/ValidationError" }
 
   schemas:
+    ScheduleIn:
+      type: object
+      additionalProperties: false
+      required: [phone, queue_id, next_due_on]
+      properties:
+        phone: { type: string, minLength: 6, maxLength: 32 }
+        queue_id: { type: string, minLength: 1, maxLength: 36 }
+        next_due_on: { type: string, format: date }
+        interval_days: { type: integer, minimum: 7, maximum: 180, default: 28 }
+        grace_days: { type: integer, minimum: 0, maximum: 30, default: 3 }
+        service: { type: [string, "null"], maxLength: 60 }
+      example: { phone: "0825550851", queue_id: 0199b0c0-0000-7000-8000-0000000c1a11, next_due_on: "2026-10-14", interval_days: 28, grace_days: 3, service: ARV refill }
+    ScheduleOut:
+      type: object
+      required: [id, patient_id, patient_phone, queue_id, queue_name, service, interval_days, grace_days, next_due_on, last_collected_on, reminded_for, followed_up_for, active]
+      properties:
+        id: { type: string, format: uuid }
+        patient_id: { type: string, format: uuid }
+        patient_phone: { type: string, description: "The patient's number, masked. Never their name." }
+        queue_id: { type: string, format: uuid }
+        queue_name: { type: string }
+        service: { type: [string, "null"], maxLength: 60 }
+        interval_days: { type: integer }
+        grace_days: { type: integer }
+        next_due_on: { type: string, format: date }
+        last_collected_on: { type: [string, "null"], format: date }
+        reminded_for: { type: [string, "null"], format: date }
+        followed_up_for: { type: [string, "null"], format: date }
+        active: { type: boolean }
+    ScheduleListOut:
+      type: object
+      required: [site_id, total, items]
+      properties:
+        site_id: { type: string, format: uuid }
+        total: { type: integer, minimum: 0 }
+        items: { type: array, items: { $ref: "#/components/schemas/ScheduleOut" } }
+    CollectionJoinOut:
+      type: object
+      required: [number, queue_name, room_label, waiting_ahead, already, message]
+      properties:
+        number: { type: string }
+        queue_name: { type: string }
+        room_label: { type: [string, "null"] }
+        waiting_ahead: { type: integer, minimum: 0 }
+        already: { type: boolean }
+        message: { type: string }
+      example: { number: C014, queue_name: Chronic collection, room_label: Room 3, waiting_ahead: 4, already: false, message: "You have a place in the queue: C014 in Chronic collection." }
+    AdherenceOut:
+      type: object
+      required: [queue_id, queue_name, schedules, due, collected_on_time, collected_late, missed]
+      properties:
+        queue_id: { type: string, format: uuid }
+        queue_name: { type: string }
+        schedules: { type: integer, minimum: 0 }
+        due: { type: integer, minimum: 0 }
+        collected_on_time: { type: integer, minimum: 0 }
+        collected_late: { type: integer, minimum: 0 }
+        missed: { type: integer, minimum: 0 }
+    AdherenceReportOut:
+      type: object
+      required: [site_id, start, end, queues]
+      properties:
+        site_id: { type: string, format: uuid }
+        start: { type: string, format: date }
+        end: { type: string, format: date }
+        queues: { type: array, items: { $ref: "#/components/schemas/AdherenceOut" } }
     Error:
       type: object
       required: [detail]

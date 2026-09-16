@@ -13,7 +13,7 @@ import json
 import pytest
 
 from src.commons.enums import PATIENT_EVENT_TEMPLATE, NotificationChannel, PatientEvent
-from src.modules.notifications import templates
+from src.modules.notifications import template_registry, templates
 from src.modules.notifications.transports.webpush import PAYLOAD_KEYS, payload_for
 
 _CONTEXT = {
@@ -41,7 +41,10 @@ def test_a_push_payload_carries_only_the_number_and_the_clinic(
     payload = payload_for(message)
     assert set(payload) <= PAYLOAD_KEYS
     wire = json.dumps(payload, ensure_ascii=False)
-    assert "T004" in payload["body"] and "Zola Community Clinic" in payload["body"]
+    # A message about a repeating collection (Issue 85) is about no one ticket: it has no number.
+    if "number" in template_registry.VARIABLES[PATIENT_EVENT_TEMPLATE[event]]:
+        assert "T004" in payload["body"]
+    assert "Zola Community Clinic" in payload["body"]
     assert not [word for word in _NEVER if word in wire], wire
     assert payload["url"] == _CONTEXT["page_url"]
 
