@@ -24,7 +24,9 @@ docs/
     ├── PR/                       # PR_<N>_DESCRIPTION.md per merged issue
     ├── RELEASES/                 # RELEASE_v<major>_<minor>_<patch>.md
     ├── LABELS/labels.yml         # single source of truth for issue labels
-    └── RUNNER/                   # self-hosted runner notes
+    └── RUNNER/
+        ├── README.md             # self-hosted runner as a systemd service: when, install, day-2
+        └── clinicq.md            # ClinicQ's runner on a host that already runs another one
 ```
 
 ## Milestone summary
@@ -144,3 +146,9 @@ The local gate is the primary one. CI on pull requests is the enforcement, and d
 tag-only: the shape that keeps the team inside the 2,000 free Actions minutes a month.
 [`docs/CICD/PIPELINES.md`](../CICD/PIPELINES.md) describes each CI job, the one required check
 (**CI gate**) and the measured minutes behind that claim.
+
+Every job runs on a GitHub-hosted `ubuntu-24.04`, and the deploy reaches its host over SSH.
+[`RUNNER/`](RUNNER/README.md) covers the case that would change that — a deploy target no
+GitHub-hosted runner can reach — and how to install a self-hosted runner as a systemd service that
+survives a reboot. It is not needed today: such a runner buys reachability, not minutes — GitHub
+does not bill standard runners for a public repository at all.
