@@ -125,9 +125,13 @@ assumes no issue closed.
 
 - [x] Facts checked against the repository and against upstream, as above
 - [x] Links and anchors resolve
-- [ ] `./scripts/ci-local.sh` — not run: no code, workflow or configuration file changed. Every path
-      here is in `ci.yml`'s `PROSE_PATHS` (`docs/GITHUB/RUNNER/`, `docs/GITHUB/README.md`), so CI
-      takes the prose fast path and the test suite has nothing to say about it.
+- [x] CI green on the pull request: all ten checks pass, including `Conventions`
+      ([run 35071125042](https://github.com/Billykat7/clinicQ/actions/runs/35071125042)). The full
+      suite ran rather than the prose fast path: the three documentation files are in `ci.yml`'s
+      `PROSE_PATHS`, but `docs/GITHUB/PR/` is not, so this file makes every pull request that
+      carries its own description a full run.
+- [ ] `./scripts/ci-local.sh` — not run locally: no code, workflow or configuration file changed,
+      and CI ran the same suite above.
 - [ ] **Not checked by hand:** nobody installed a runner from these steps. There is no host to
       install one on, and the repository needs none today. The commands are the ones
       `scripts/cd/server-initial-setup.sh` already runs unattended, plus GitHub's documented
