@@ -9,7 +9,7 @@ into shards that run as parallel jobs — and removes the reason the integration
 before sharding them: **every test that wanted a schema ran the whole Alembic migration history
 first**, about two seconds each.
 
-A run is now **3m40s**, measured end to end on this branch.
+A run is now **4m07s**, measured end to end on this branch, green.
 
 ## Scope
 
@@ -110,17 +110,24 @@ after:  20 passed in 36.37s   slowest setup 3.44s, typical setup 0.73s
 |-----|-------:|-----------:|-----------------:|--------------------:|
 | [35071125042](https://github.com/Billykat7/clinicQ/actions/runs/35071125042) (before, on `main`) | 4 | 8m42s | 7m45s `integration` | 23 min |
 | [35077177536](https://github.com/Billykat7/clinicQ/actions/runs/35077177536) | 14 | 3m57s | 3m11s `board-resilience` | 38 min |
-| [35078037257](https://github.com/Billykat7/clinicQ/actions/runs/35078037257) | 16 | **3m40s** | 2m46s `board-resilience` | 39 min |
+| [35078037257](https://github.com/Billykat7/clinicQ/actions/runs/35078037257) | 16 | 3m40s | 2m46s `board-resilience` | 39 min |
+| [35078698525](https://github.com/Billykat7/clinicQ/actions/runs/35078698525) | 16 | 3m30s | **red**: the board's leak test, 45 listeners against 39 | 39 min |
+| [35079359435](https://github.com/Billykat7/clinicQ/actions/runs/35079359435) | 17 | 3m31s | **red**: the same test, the same two numbers | 40 min |
+| [35079919283](https://github.com/Billykat7/clinicQ/actions/runs/35079919283) | 17 | **4m07s** | 3m20s `board-measured`, one worker | 41 min |
 
-Every job in the last run, in order:
+Every job in the green run, in order:
 
 ```text
-166s board-resilience   121s int-queue      115s int-platform   102s int-sites
-102s int-notifications  100s int-appointments  100s board-pages  98s int-discovery
- 96s int-admin           89s unit-queue      87s browser-app     82s int-dashboard
- 77s unit-security       62s unit-rest       56s flows           28s report
- 18s quality             10s conventions      7s changes          5s gate
+200s board-measured     195s board-resilience  117s int-queue     112s unit-queue
+111s int-notifications  108s int-platform      105s int-admin     104s browser-app
+ 99s int-sites           98s int-discovery      92s int-appointments  92s board-pages
+ 89s unit-security       85s int-dashboard      68s unit-rest     57s flows
+ 25s quality             21s report              8s conventions    8s changes   4s gate
 ```
+
+The last two runs cost 36 seconds: `board-measured` on one worker is slower than the same tests
+spread over four, and it is the difference between a gate that is green and a gate that is usually
+green.
 
 **Queue time is not hiding anything:** with sixteen shards the jobs waited 2–3 seconds each for a
 runner (one waited 38 s), so the matrix is inside the Free plan's 20 concurrent jobs.
@@ -133,7 +140,7 @@ month against a 2,000 allowance — and says what to do about it if that ever be
       the whole suite locally as above)
 - [x] CI green on this pull request, three times, at three different matrix shapes
 - [x] New guard tests cover the new failure mode (a shard that claims nothing, or claims twice)
-- [ ] **Not done:** the gate is 3m40s, not the one minute asked for. The browser board shards are
+- [ ] **Not done:** the gate is 4m07s, not the one minute asked for. The browser board shards are
       the floor; taking them off the pull-request gate would put it at about **1m20s**, and that is
       a decision about when a board regression is found, not a tuning knob. Left for the team.
 

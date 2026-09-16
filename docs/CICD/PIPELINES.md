@@ -45,26 +45,26 @@ for the run.
 | Shard | Collects | Test time | Job |
 |-------|----------|----------:|----:|
 | `int-discovery` | `tests/integration/discovery` | 166 s | 98 s |
-| `int-queue` | `tests/integration/queue`; then the 07:30 rush, alone | 156 s | 121 s |
-| `int-sites` | `tests/integration/sites`, `auth`, `alerts`, `public` | 169 s | 102 s |
-| `int-platform` | `tests/integration/platform`, `database`; the deploy sequence first | 164 s | 115 s |
-| `int-appointments` | `tests/integration/appointments`, `patients`, `staff` | 158 s | 100 s |
-| `int-notifications` | `tests/integration/notifications`, `contracts` | 116 s | 102 s |
-| `int-admin` | `tests/integration/admin`, `security` | 120 s | 96 s |
-| `int-dashboard` | `tests/integration/dashboard`, `display` | 67 s | 82 s |
-| `unit-queue` | `tests/unit/queue` | 47 s | 89 s |
-| `unit-security` | `tests/unit/security` | 54 s | 77 s |
-| `unit-rest` | the other eleven `tests/unit/` directories | 25 s | 62 s |
-| `flows` | `tests --ignore=tests/unit --ignore=tests/integration --ignore=tests/e2e` | 4 s | 56 s |
-| `board-resilience` | `tests/e2e/display/test_board_resilience.py` bar the leak test, by test | 235 s | 166 s |
-| `board-measured` | the board's contrast and leak tests, one at a time | 113 s | 135 s |
-| `board-pages` | the rest of `tests/e2e/display` | 104 s | 100 s |
-| `browser-app` | `tests/e2e/patient`, `tests/e2e/dashboard` | 101 s | 87 s |
+| `int-queue` | `tests/integration/queue`; then the 07:30 rush, alone | 156 s | 117 s |
+| `int-sites` | `tests/integration/sites`, `auth`, `alerts`, `public` | 169 s | 99 s |
+| `int-platform` | `tests/integration/platform`, `database`; the deploy sequence first | 164 s | 108 s |
+| `int-appointments` | `tests/integration/appointments`, `patients`, `staff` | 158 s | 92 s |
+| `int-notifications` | `tests/integration/notifications`, `contracts` | 116 s | 111 s |
+| `int-admin` | `tests/integration/admin`, `security` | 120 s | 105 s |
+| `int-dashboard` | `tests/integration/dashboard`, `display` | 67 s | 85 s |
+| `unit-queue` | `tests/unit/queue` | 47 s | 112 s |
+| `unit-security` | `tests/unit/security` | 54 s | 89 s |
+| `unit-rest` | the other eleven `tests/unit/` directories | 25 s | 68 s |
+| `flows` | `tests --ignore=tests/unit --ignore=tests/integration --ignore=tests/e2e` | 4 s | 57 s |
+| `board-resilience` | `tests/e2e/display/test_board_resilience.py` bar the leak test, by test | 235 s | 195 s |
+| `board-measured` | the board's contrast and leak tests, **one worker** | 164 s | 200 s |
+| `board-pages` | the rest of `tests/e2e/display` | 104 s | 92 s |
+| `browser-app` | `tests/e2e/patient`, `tests/e2e/dashboard` | 101 s | 104 s |
 
 **Test time** is what the shard's own JUnit file reports, added up; it is what the balance is based
 on, and it is larger than the job because four workers run at once. **Job** is the wall clock,
 measured on run
-[35078037257](https://github.com/Billykat7/clinicQ/actions/runs/35078037257).
+[35079919283](https://github.com/Billykat7/clinicQ/actions/runs/35079919283).
 
 The gap between them is the fixed cost of a job: **about 35 seconds** of service containers (20),
 checkout, Python, uv and install, before pytest starts. That is why directories are grouped rather
@@ -84,8 +84,8 @@ beside `changes`, `conventions`, `quality` and `docker`. Queue time at sixteen i
 
 | | Before (4 shards) | Now (16 shards) |
 |---|---:|---:|
-| Whole run, wall clock | 8m42s | **3m40s** |
-| Slowest test job | 7m45s | 2m46s |
+| Whole run, wall clock | 8m42s | **4m07s** |
+| Slowest test job | 7m45s | 3m20s |
 | Jobs in the run | 9 | 21 |
 | Billable **if this repository went private** | 23 min | 39 min |
 
@@ -266,7 +266,7 @@ Measured on PR #217's runs, which changed the shape of the matrix (four shards t
 | Run | Wall clock | Jobs | Billable if private |
 |-----|-----------:|-----:|--------------------:|
 | Code change, four shards (before) | 8 min 42 s | 9 | **23 min** |
-| Code change, sixteen shards (now) | 3 min 40 s | 21 | **39 min** |
+| Code change, sixteen shards (now) | 4 min 07 s | 21 | **41 min** |
 | Draft or prose-only pull request | under 30 s | 3 | **3 min** |
 | Superseded push, cancelled | partial | — | about half a run |
 
@@ -277,12 +277,12 @@ about 17, plus follow-ups):
 
 | Item | Assumption | Minutes |
 |------|------------|--------:|
-| Code pushes | 20 PRs × 4 pushes that reach CI (each after `make check`) × 39 min | 3,120 |
+| Code pushes | 20 PRs × 4 pushes that reach CI (each after `make check`) × 41 min | 3,280 |
 | Image-input pushes | 10% of those again, at the cold price: 8 × 5 | 40 |
 | Superseded pushes | 1 in 10 pushes cancelled part-way: 8 × 20 min | 160 |
 | Prose-only and draft pushes | 15 pushes × 3 min | 45 |
 | Releases and deploys | 2 tags × (release, measured 4 min cold, + deploy) | 50 |
-| **Total** | | **≈ 3,400** |
+| **Total** | | **≈ 3,575** |
 
 **That is above the 2,000-minute Free-plan allowance, and it does not matter while the repository is
 public**, because GitHub bills none of it. It is written down so the trade is explicit: the same
