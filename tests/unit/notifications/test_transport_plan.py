@@ -13,7 +13,7 @@ from src.commons.enums import (
     NotificationChannel,
     PatientEvent,
 )
-from src.modules.notifications import templates
+from src.modules.notifications import template_registry, templates
 from src.modules.notifications.service import plan_transports
 from src.modules.notifications.transports import NoopTransport, PatientAddresses
 
@@ -110,4 +110,8 @@ def test_every_patient_event_has_a_template_that_renders_on_every_patient_channe
             NotificationChannel.WHATSAPP,
         ):
             message = templates.render(channel, template, _CONTEXT)
-            assert "T001" in message.text, (channel, template)
+            # Every message about a ticket says its number; a collection reminder (Issue 85) is about
+            # a repeat rather than a ticket, and has no number in its variables to say.
+            if "number" in template_registry.VARIABLES[template]:
+                assert "T001" in message.text, (channel, template)
+            assert message.text.strip(), (channel, template)

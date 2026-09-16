@@ -68,6 +68,8 @@ class ReplyOutcome(StrEnum):
     #: A reply to an appointment reminder (Issue 82).
     CONFIRMED = "confirmed"
     CANCELLED = "cancelled"
+    #: A reply of COLLECT to a chronic collection reminder, which took a place in the queue (Issue 85).
+    COLLECTING = "collecting"
     IGNORED = "ignored"
 
 

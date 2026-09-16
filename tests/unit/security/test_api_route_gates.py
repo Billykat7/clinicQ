@@ -93,6 +93,10 @@ PUBLIC: dict[str, str] = {
         "a reminder's own Confirm and Cancel buttons (Issue 82): a notification carries no session, and the token, 256 "
         "random bits sent only in that patient's reminder, can confirm or cancel that one booking and nothing else"
     ),
+    "POST /api/v1/collections/joins/{token}": (
+        "a collection reminder's own join button (Issue 85): the message carries no session, and the token, 256 "
+        "random bits sent only in that patient's reminder, takes their place in that one queue and nothing else"
+    ),
     "GET /api/v1/feedback/{token}": (
         "a post-visit question by its unguessable link (Issue 87): the patient has no account, and the link, "
         "256 random bits sent only to them, shows the question and whether it was answered, nothing about "

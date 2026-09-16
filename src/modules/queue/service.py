@@ -240,6 +240,7 @@ def join_queue(
     comment_consent: bool = False,
     travel_minutes: int | None = None,
     proxy: Patient | None = None,
+    invited: bool = False,
     appointment: Appointment | None = None,
     client_ip: str | None = None,
     discovery_session: str | None = None,
@@ -268,6 +269,10 @@ def join_queue(
             a household. The ticket stays the dependant's — their number, their name on the board under
             their own consent — and this only records who pressed the button, on the ticket and in the
             audit row. The per-phone abuse guard is keyed on the proxy's number, the one that exists.
+        invited: The clinic itself put this patient in this queue's list and asked them to come today
+            (Issue 85's repeating collection). The clinic's own invitation passes the walk-in-only rule
+            and the abuse guards, exactly as a booking does, because the clinic made it; the queue's
+            hours, its daily capacity and every other rule still apply.
         appointment: The booking this join converts (Issue 81). The ticket is issued from the same counter,
             in the same queue, as any other; the booking already passed the abuse guards and the clinic's
             own appointment book, so neither those nor the walk-in-only rule are asked again. The booking
@@ -311,7 +316,7 @@ def join_queue(
             gate.reason or QUEUE_CLOSED,
             next_open_at=gate.next_open_at,
         )
-    refusal = None if appointment is not None else refusal_for(queue, source)
+    refusal = None if appointment is not None or invited else refusal_for(queue, source)
     if refusal is not None:
         code = (
             JoinRefusal.WALK_IN_ONLY
@@ -321,7 +326,12 @@ def join_queue(
         raise JoinRefusedError(code, refusal)
 
     cap_key = None
-    if source in REMOTE_SOURCES and patient is not None and appointment is None:
+    if (
+        source in REMOTE_SOURCES
+        and patient is not None
+        and appointment is None
+        and not invited
+    ):
         cap_key = _guard_abuse(
             site=site,
             source=source,

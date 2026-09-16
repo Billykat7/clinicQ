@@ -41,7 +41,7 @@ docs/
 | **[M8: Waiting-room Display Monitor](MILESTONES/M8_display_monitor.md)** | Kiosk board, SSE, privacy modes, accessibility, audio call-out, device registry | 56–62 | Frontend (Clinic) | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** ✅ done |
 | **[M9: Notifications & Patient PWA](MILESTONES/M9_notifications_patient_pwa.md)** | Notification service, push, SMS, templates, preferences, ticket page, PWA, QR | 63–71, 200 | Backend (Integrations) | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** ✅ done |
 | **[M10: USSD & WhatsApp Channels](MILESTONES/M10_ussd_whatsapp_channels.md)** | Adapter framework, USSD menu, WhatsApp bot, 5 languages, simulators, parity | 72–79 | Backend (Integrations) | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** 📋 planned |
-| **[M11: Appointments, Check-in & Patient Care](MILESTONES/M11_appointments_checkin_patient_care.md)** | Slots, booking, reminders, kiosk check-in, proxy booking, chronic, feedback | 80–87 | Backend Lead | 🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ **88%** 🚧 in progress |
+| **[M11: Appointments, Check-in & Patient Care](MILESTONES/M11_appointments_checkin_patient_care.md)** | Slots, booking, reminders, kiosk check-in, proxy booking, chronic, feedback | 80–87 | Backend Lead | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** ✅ done |
 | **[M12: Reporting & Analytics](MILESTONES/M12_reporting_analytics.md)** | Stats worker, reports UI, KPIs, exports, district dashboard, no-show insight | 88–94 | Data & Research | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** 📋 planned |
 | **[M13: Security, Privacy & POPIA](MILESTONES/M13_security_privacy_compliance.md)** | Data map, retention, DSAR, hardening, encryption, audit chain, pen test, a11y | 95–101 | DevOps/QA | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** 📋 planned |
 | **[M14: Production, Pilot & Go-live](MILESTONES/M14_production_pilot_golive.md)** | Prod infra, shared S3 layout, backups, monitoring, load test, pilot kit, support, UAT, capstone | 102–109, 197 | DevOps/QA + all | 🟩⬜⬜⬜⬜⬜⬜⬜⬜⬜ **11%** 🚧 in progress |
@@ -49,7 +49,7 @@ docs/
 **Total: 111 tracked issues across M1–M14**, plus 6 parked
 [backlog items](ISSUES/BACKLOG/).
 
-**Progress:** 🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜ **72%** (80/111 issues) closed · **9 of 14 milestones done**
+**Progress:** 🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜ **73%** (81/111 issues) closed · **10 of 14 milestones done**
 
 > ⚠️ **M6 is the critical path.** Six of the seven milestones after it are consumers of the queue
 > engine. Anything that delays M6 delays the whole second half of the project, see the

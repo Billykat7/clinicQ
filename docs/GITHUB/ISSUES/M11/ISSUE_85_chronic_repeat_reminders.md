@@ -54,10 +54,13 @@ patients on treatment and smooths the clinic's week.
 
 ## Files touched
 
-- `src/modules/appointments/chronic.py`
-- `src/database/models/chronic_schedule.py`
-- `src/core/scheduler.py`
-- `tests/integration/appointments/test_chronic_reminders.py`
+- `src/modules/appointments/chronic.py` (the sweep, the one tap, adherence), `chronic_router.py`, `chronic_schemas.py`
+- `src/database/models/chronic_schedule.py`, `alembic/versions/0046_chronic_schedules.py`
+- `src/core/scheduler.py` (lock 883), `src/modules/queue/lifecycle.py` (a collection rolls its repeat forward)
+- `src/modules/queue/service.py` (`invited`), `src/core/webhook_gateways/africastalking.py` (COLLECT)
+- `src/modules/notifications/template_registry.py`, `src/locales/en/notifications.toml`
+- `src/web/dashboard/settings.py`, `src/templates/dashboard/settings_collections.html`
+- `contracts/appointments.yaml`, `tests/integration/appointments/test_chronic_reminders.py`
 
 ---
 

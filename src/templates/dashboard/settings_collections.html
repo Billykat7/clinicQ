@@ -1,0 +1,109 @@
+{% extends "dashboard/settings_base.html" %}
+{#- The clinic's repeating medication collections (Issue 85), as a server-rendered list.
+
+    Who is due, when, and what has already been sent for this cycle. Setting one up is a phone number,
+    a queue and a first date; the reminder then goes on the first open day from each due date, with one
+    follow-up if nobody comes. Every change is a request to the clinic's collection-schedules API, which
+    checks the manager's grant and records it.
+
+    A patient is identified by their **masked number**, never by name: a list of who is on chronic
+    medication is health information, and the board's own name rule (Issue 21) is not a licence for it. -#}
+
+{% set can_change = can('appointments', 'update') %}
+
+{% block settings_content %}
+<div class="settings-collections">
+  {% if can_change %}
+  <section class="card" aria-labelledby="cs-add-title">
+    <h2 id="cs-add-title">Set up a repeat collection</h2>
+    <p class="card-sub">The patient is reminded on the first day the clinic is open from each due date, and once more if they do not come. Setting one up again for the same patient and queue corrects it.</p>
+    <form class="settings-form" data-api="/api/v1/sites/{{ site.id }}/collection-schedules" data-method="POST">
+      <div class="field-row cols-2">
+        <div class="field">
+          <label for="cs-phone">Patient's phone number</label>
+          <input type="tel" id="cs-phone" name="phone" required maxlength="32" placeholder="082 555 0851" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="cs-queue">Collection queue</label>
+          <select id="cs-queue" name="queue_id" required>
+            {% for queue in queues %}
+            <option value="{{ queue.id }}">{{ queue.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="field-row cols-3">
+        <div class="field">
+          <label for="cs-due">First collection due</label>
+          <input type="date" id="cs-due" name="next_due_on" required value="{{ today.isoformat() }}">
+        </div>
+        <div class="field">
+          <label for="cs-interval">Repeat every (days)</label>
+          <input type="number" id="cs-interval" name="interval_days" min="7" max="180" value="{{ default_interval }}" data-type="number">
+        </div>
+        <div class="field">
+          <label for="cs-grace">Follow up after (days)</label>
+          <input type="number" id="cs-grace" name="grace_days" min="0" max="30" value="{{ default_grace }}" data-type="number">
+        </div>
+      </div>
+      <div class="field">
+        <label for="cs-service">What they collect (optional)</label>
+        <input type="text" id="cs-service" name="service" maxlength="60" data-empty="null" placeholder="For example: ARV refill">
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn">Save</button>
+        <span class="msg" data-api-msg aria-live="polite"></span>
+      </div>
+    </form>
+  </section>
+  {% endif %}
+
+  <div class="card">
+    <div class="table-wrap table-scroll">
+      <table class="data" id="cs-table">
+        <thead>
+          <tr>
+            <th>Patient</th>
+            <th>Queue</th>
+            <th>Collects</th>
+            <th>Every</th>
+            <th>Next due</th>
+            <th>Last collected</th>
+            <th>Reminded</th>
+            {% if can_change %}<th><span class="sr-only">Stop</span></th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in schedules %}
+          <tr>
+            <td>{{ row.phone }}</td>
+            <td>{{ row.queue_name }}</td>
+            <td>{{ row.service or '—' }}</td>
+            <td>{{ row.interval_days }} days</td>
+            <td>{{ row.next_due_on.strftime('%d %b') }}</td>
+            <td>{{ row.last_collected_on.strftime('%d %b') if row.last_collected_on else '—' }}</td>
+            <td>
+              {% if row.followed_up_for %}<span class="badge badge-warn">Missed, followed up</span>
+              {% elif row.reminded_for %}<span class="badge badge-ok">Reminded {{ row.reminded_for.strftime('%d %b') }}</span>
+              {% else %}—{% endif %}
+            </td>
+            {% if can_change %}
+            <td class="danger-zone" data-api-scope>
+              <button type="button" class="btn btn-danger btn-sm"
+                      data-api="/api/v1/sites/{{ site.id }}/collection-schedules/{{ row.id }}/stop" data-method="POST"
+                      data-confirm="Stop this patient's collection reminders? Nothing more is sent, and what has been sent stays on the record.">Stop</button>
+              <span class="msg" data-api-msg aria-live="polite"></span>
+            </td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if not schedules %}
+    <p class="empty">No repeat collections yet. Set one up above for a patient on chronic medication.</p>
+    {% endif %}
+    <p class="card-sub">{{ schedules | length }} repeat{{ '' if schedules | length == 1 else 's' }}. A patient who replies STOP to any message stops every message; the collection still shows here, because the pharmacy still has to plan for it.</p>
+  </div>
+</div>
+{% endblock %}

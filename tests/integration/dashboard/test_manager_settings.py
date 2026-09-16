@@ -129,9 +129,12 @@ def test_tabs_follow_the_grants_at_the_clinic(dashboard: SimpleNamespace) -> Non
             status.HTTP_403_FORBIDDEN
         ), section
     # The screen's two tabs share the display grant a receptionist reads: its setting and its screens.
+    # Repeat collections (Issue 85) is the third tab they read, because they are the ones a patient asks
+    # when their medication is due.
     assert _labels(desk.get(_settings(dashboard, "display"))) == [
         "Waiting-room screen",
         "Display boards",
+        "Repeat collections",
     ]
 
     nurse = dashboard.client("nurse.a")

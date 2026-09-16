@@ -867,6 +867,10 @@ class PatientEvent(StrEnum):
     #: The day before an appointment, and two hours before it, with confirm and cancel (Issue 82).
     REMINDER_24H = "reminder_24h"
     REMINDER_2H = "reminder_2h"
+    #: A chronic medication collection is due, with a one-tap way to join the queue (Issue 85).
+    COLLECTION_DUE = "collection_due"
+    #: A collection that was due and has not happened, once, after the grace period (Issue 85).
+    COLLECTION_MISSED = "collection_missed"
 
 
 class PatientChannel(StrEnum):
@@ -918,6 +922,11 @@ class ConsentPurpose(StrEnum):
     FEEDBACK_SURVEY = "feedback_survey"
     VISIT_NOTE_HISTORY = "visit_note_history"
     PROXY_ACTIONS = "proxy_actions"
+
+
+#: What a patient may reply to a collection reminder to take a place in the queue (Issue 85). One word,
+#: on any channel that carries words; the push notification's own button sends the same thing.
+SMS_COLLECT_KEYWORDS: frozenset[str] = frozenset({"COLLECT", "COLLECTION"})
 
 
 class ProxyRelationship(StrEnum):
@@ -1577,6 +1586,8 @@ class NotificationTemplate(StrEnum):
     APPOINTMENT_LAPSED = "appointment_lapsed"
     APPOINTMENT_REMINDER_24H = "appointment_reminder_24h"
     APPOINTMENT_REMINDER_2H = "appointment_reminder_2h"
+    COLLECTION_DUE = "collection_due"
+    COLLECTION_MISSED = "collection_missed"
     # Catch-all for a pre-rendered message with no dedicated key (kept small on purpose).
     GENERIC = "generic"
 
@@ -1743,6 +1754,8 @@ NOTIFICATION_TEMPLATE_CATEGORY: dict[NotificationTemplate, NotificationCategory]
     NotificationTemplate.APPOINTMENT_LAPSED: NotificationCategory.ACCOUNT,
     NotificationTemplate.APPOINTMENT_REMINDER_24H: NotificationCategory.ACCOUNT,
     NotificationTemplate.APPOINTMENT_REMINDER_2H: NotificationCategory.ACCOUNT,
+    NotificationTemplate.COLLECTION_DUE: NotificationCategory.ACCOUNT,
+    NotificationTemplate.COLLECTION_MISSED: NotificationCategory.ACCOUNT,
 }
 
 
@@ -1815,6 +1828,8 @@ PATIENT_EVENT_TEMPLATE: dict[PatientEvent, NotificationTemplate] = {
     PatientEvent.BOOKING_LAPSED: NotificationTemplate.APPOINTMENT_LAPSED,
     PatientEvent.REMINDER_24H: NotificationTemplate.APPOINTMENT_REMINDER_24H,
     PatientEvent.REMINDER_2H: NotificationTemplate.APPOINTMENT_REMINDER_2H,
+    PatientEvent.COLLECTION_DUE: NotificationTemplate.COLLECTION_DUE,
+    PatientEvent.COLLECTION_MISSED: NotificationTemplate.COLLECTION_MISSED,
 }
 
 #: The patient messages quiet hours never hold back (Issue 67), and the whole of that exception: each says

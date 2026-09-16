@@ -79,6 +79,7 @@ from src.core.audit import SYSTEM_ACTOR, record_audit_event
 from src.core.config import get_settings
 from src.database.models.queue import Queue
 from src.database.models.ticket import Ticket, status_write_permitted
+from src.modules.appointments import chronic
 from src.modules.appointments.feedback import request_after_visit
 from src.modules.queue import notices
 from src.modules.queue.snapshot import on_queue_changed
@@ -322,6 +323,8 @@ def transition_ticket(
             served_by=actor.user_id if actor.kind is ActorKind.STAFF else None,
             moment=moment,
         )
+        # A collection that happened moves its repeat on (Issue 85); it does nothing for other visits.
+        chronic.collected(db, ticket, moment=moment)
     record_audit_event(
         db,
         action=AuditAction.UPDATE,

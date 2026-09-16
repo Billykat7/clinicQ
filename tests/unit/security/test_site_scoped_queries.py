@@ -211,6 +211,41 @@ _UNSCOPED_BY_DESIGN: dict[str, str] = {
         "the queue a patient pressed on that tablet, by id, checked against the device's own clinic before "
         "anything is issued"
     ),
+    "modules/appointments/chronic.py::run_due": (
+        "the chronic collection sweep (Issue 85) is a scheduled system job with no caller and no clinic: it "
+        "reads every live schedule whose cycle is near, and tells each schedule's own patient"
+    ),
+    "modules/appointments/chronic.py::_collected_since": (
+        "the same system job asks whether that schedule's own patient collected in its own queue"
+    ),
+    "modules/appointments/chronic.py::_tell": (
+        "the same system job reads the schedule's own clinic and queue by id for the message's words"
+    ),
+    "modules/appointments/chronic.py::collected": (
+        "the lifecycle's done hook (Issue 85): the ticket was already scoped by the move that ended the "
+        "visit, and this reads the schedule of that ticket's own patient in that ticket's own queue"
+    ),
+    "modules/appointments/chronic.py::by_token": (
+        "a collection reminder's own join button (Issue 85): the patient has no session in a notification, and "
+        "the unguessable token, sent only in their reminder, finds that one schedule and nothing else"
+    ),
+    "modules/appointments/chronic.py::join_now": (
+        "the schedule's own clinic, queue and patient by id, to hand them to join_queue"
+    ),
+    "modules/appointments/chronic.py::join_by_phone": (
+        "an SMS reply of COLLECT (Issue 85): the gateway names the sender's number, which finds the patient, and "
+        "only that patient's own reminded schedule is read, as STOP finds its patient"
+    ),
+    "modules/appointments/chronic.py::create": (
+        "the clinic's own desk, already admitted to this clinic by the route's grant, correcting the schedule it "
+        "is creating: the patient and queue it names were scoped by the caller"
+    ),
+    "modules/appointments/chronic.py::holds_ticket_today": (
+        "whether that schedule's own patient already holds a place in its own queue today"
+    ),
+    "modules/appointments/chronic_router.py::_view": (
+        "the schedule's own queue by id, for its name; the schedule itself came from a site-scoped read"
+    ),
     "modules/appointments/reminders.py::send_due": (
         "the reminder sweep (Issue 82) is a scheduled system job with no caller and no clinic: it reads every "
         "booking still booked within the next day, to remind each booking's own patient"

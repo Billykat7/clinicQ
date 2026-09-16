@@ -276,6 +276,13 @@ CASES: dict[str, dict[str, object]] = {
             f"/api/v1/sites/{site}/appointments/queues/{_QUEUE_AT.get(site, _NOWHERE)}/template",
         ),
     },
+    "chronicschedule": {
+        # A clinic's repeating medication collections (Issue 85): the front desk reads who is due,
+        # under the same appointments grant; another clinic's list is a 404.
+        "resource": "appointments",
+        "reader": "a@clinicq.example",
+        "paths": lambda site, _row: (f"/api/v1/sites/{site}/collection-schedules",),
+    },
     "appointmentblock": {
         "resource": "appointments",
         "reader": "a@clinicq.example",

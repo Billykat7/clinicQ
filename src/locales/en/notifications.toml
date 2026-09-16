@@ -171,3 +171,29 @@ body = "{app}: in 2 hours, {when} at {clinic}, ref {number}. Reply CONFIRM or CA
 version = 1
 subject = "Your appointment is in 2 hours"
 body = "Ref {number} at {clinic}. Confirm or cancel below."
+
+[collection_due.sms]
+version = 1
+body = "{app}: your medicine collection at {clinic} is due {when}. Reply COLLECT to take a place in the queue today."
+
+[collection_due.whatsapp]
+version = 1
+body = "{app}: your medicine collection at {clinic} is due {when}. Reply COLLECT to take a place in the queue today."
+
+[collection_due.web_push]
+version = 1
+subject = "Your medicine collection is due"
+body = "At {clinic}. Tap below to take a place in the queue."
+
+[collection_missed.sms]
+version = 1
+body = "{app}: we did not see you for your collection at {clinic}. Please come in, or reply COLLECT for a place in the queue."
+
+[collection_missed.whatsapp]
+version = 1
+body = "{app}: we did not see you for your collection at {clinic}. Please come in, or reply COLLECT for a place in the queue."
+
+[collection_missed.web_push]
+version = 1
+subject = "You missed your collection"
+body = "At {clinic}. Tap below to take a place in the queue."
