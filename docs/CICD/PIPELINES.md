@@ -24,7 +24,7 @@ Each stage of `ci-local.sh` has a home in `ci.yml`, or is local-only on purpose:
 | — | `conventions` | branch name, commit prefixes, `Closes #N`, a screenshot for UI changes (Issue 13) | 3 min |
 | quality | `quality` | `ruff check .`, `ruff format --check .`, `mypy src/`, `scripts/check-ruff-pin.sh` | 10 min |
 | secrets | `quality` | `gitleaks detect` over the whole history, the exact command `ci-local.sh` runs | (same job) |
-| tests | `test` × 4 shards | `pytest -n auto --dist loadscope --cov`, after the deploy sequence (integration shard) | 15 min |
+| tests | `test` × 16 shards | `pytest -n auto --dist loadscope --cov`, in parallel; the deploy sequence first on `int-platform` | 10 min |
 | coverage | `report` | combines the shards, checks `fail_under`, posts the summary | 5 min |
 | docker | `docker` | `docker build -f infra/docker/Dockerfile .`, thrown away, never pushed | 15 min |
 | pip-audit | — | **local-only** (`scripts/README.md`); Issue 97 schedules it | — |
@@ -36,18 +36,87 @@ Each stage of `ci-local.sh` has a home in `ci.yml`, or is local-only on purpose:
 a place in this table, if a command stops appearing on both sides, or if pip-audit or Trivy appear
 in `ci.yml`.
 
-### The four test shards
+### The sixteen test shards
 
-| Shard | Collects | Why separate |
-|-------|----------|--------------|
-| `unit` | `tests/unit` | fast, no server needed |
-| `integration` | `tests/integration` | HTTP, the database layer, Redis; runs the deploy sequence first |
-| `flows` | `tests --ignore=tests/unit --ignore=tests/integration --ignore=tests/e2e` | the top-level cross-domain flow files, and any added later |
-| `browser` | `tests/e2e` | a real server and Chromium driven by Playwright (Issue 55): it installs the browser first |
+The suite runs as sixteen jobs side by side, so a pull request waits for the slowest shard rather
+than for the sum. Four shards used to mean waiting **7m45s** for `integration` alone, and **8m42s**
+for the run.
 
-The shards run in parallel, so the slowest one (integration, about 1.5 minutes) sets the wall
-clock. The guard test fails if the `flows` collector disappears, because those files sit in neither
-layer folder and would silently drop out of CI.
+| Shard | Collects | Test time | Job |
+|-------|----------|----------:|----:|
+| `int-discovery` | `tests/integration/discovery` | 166 s | 98 s |
+| `int-queue` | `tests/integration/queue`; then the 07:30 rush, alone | 156 s | 121 s |
+| `int-sites` | `tests/integration/sites`, `auth`, `alerts`, `public` | 169 s | 102 s |
+| `int-platform` | `tests/integration/platform`, `database`; the deploy sequence first | 164 s | 115 s |
+| `int-appointments` | `tests/integration/appointments`, `patients`, `staff` | 158 s | 100 s |
+| `int-notifications` | `tests/integration/notifications`, `contracts` | 116 s | 102 s |
+| `int-admin` | `tests/integration/admin`, `security` | 120 s | 96 s |
+| `int-dashboard` | `tests/integration/dashboard`, `display` | 67 s | 82 s |
+| `unit-queue` | `tests/unit/queue` | 47 s | 89 s |
+| `unit-security` | `tests/unit/security` | 54 s | 77 s |
+| `unit-rest` | the other eleven `tests/unit/` directories | 25 s | 62 s |
+| `flows` | `tests --ignore=tests/unit --ignore=tests/integration --ignore=tests/e2e` | 4 s | 56 s |
+| `board-resilience` | `tests/e2e/display/test_board_resilience.py`, by test | 270 s | 166 s |
+| `board-a11y` | `tests/e2e/display/test_board_accessibility.py`, one at a time | 77 s | 135 s |
+| `board-pages` | the rest of `tests/e2e/display` | 104 s | 100 s |
+| `browser-app` | `tests/e2e/patient`, `tests/e2e/dashboard` | 101 s | 87 s |
+
+**Test time** is what the shard's own JUnit file reports, added up; it is what the balance is based
+on, and it is larger than the job because four workers run at once. **Job** is the wall clock,
+measured on run
+[35078037257](https://github.com/Billykat7/clinicQ/actions/runs/35078037257).
+
+The gap between them is the fixed cost of a job: **about 35 seconds** of service containers (20),
+checkout, Python, uv and install, before pytest starts. That is why directories are grouped rather
+than given a job each: under about 20 seconds of tests, a shard is mostly overhead.
+
+**Two guards keep the matrix honest.** `test_every_test_file_runs_in_exactly_one_shard` expands
+every shard's paths (directories to files, `--ignore=` subtracted) and fails unless they partition
+the suite exactly: a test directory added without a shard to claim it would otherwise stop running
+the day it was created, silently and greenly, and a file in two shards costs minutes and doubles its
+coverage data. `test_the_shards_default_to_the_local_gates_distribution` holds every shard to
+`ci-local.sh`'s own `-n auto --dist loadscope` unless it is a browser shard.
+
+Sixteen is not a floor but a ceiling: it is what fits under the Free plan's **20 concurrent jobs**
+beside `changes`, `conventions`, `quality` and `docker`. Queue time at sixteen is 2–3 seconds a job.
+
+### What the run costs now
+
+| | Before (4 shards) | Now (16 shards) |
+|---|---:|---:|
+| Whole run, wall clock | 8m42s | **3m40s** |
+| Slowest test job | 7m45s | 2m46s |
+| Jobs in the run | 9 | 21 |
+| Billable **if this repository went private** | 23 min | 39 min |
+
+Sharding buys wall clock with minutes, and GitHub bills none of them while the repository is public
+(the run-timing API reports 0 billable milliseconds). The last row is the one to watch if that ever
+changes: at 39 minutes a run the projection below no longer fits the Free plan, and the answer would
+be to group the shards back up — the matrix is one edit, and the guard tests will hold it together.
+
+**What is left, and why.** The floor is the browser board suite: `board-resilience` spends about
+270 seconds of test time waiting out the product's own budgets — a stream dropped, backed off, and
+live again inside the 30-second recovery budget (Issue 57) — and four cores can only overlap so
+much of that. Taking those two board shards off the pull-request gate (nightly, or on demand) would
+put the gate at about **1m20s**; it would also mean a board regression is found the next morning
+rather than on the pull request, which is a decision for the team rather than a tuning knob.
+
+### A database copy, not a migration run
+
+Most of the integration suite's time used to be Alembic. Every test that asked for a schema
+(`migrated_database`, `migrated_engine`, and the `e2e_database` each browser module builds on) ran
+the whole migration history first: about two seconds a test.
+
+The migrations now run once per xdist worker, into a template database, and each test's database is
+a `CREATE DATABASE ... TEMPLATE` copy of it — a file copy PostgreSQL does in a fraction of a second.
+The contract is unchanged: a test still gets its own brand-new database at `head`, dropped
+afterwards, sharing nothing with anything else. One template per worker, because PostgreSQL refuses
+to copy a template another session is connected to.
+
+Measured on `tests/integration/discovery/test_nearby_search.py` (20 tests, one process, local
+PostgreSQL): **61.8 s to 36.4 s**, with per-test setup falling from 3.0 s to 0.73 s. In CI the
+discovery directory went from 318 s of test time to 168 s. Directories that mostly use the in-memory
+SQLite `session_factory` (Issue 3) barely moved, which is the expected shape of the win.
 
 ### The browser shard (Issue 55)
 
@@ -70,11 +139,18 @@ streams that vanish without closing.
   `python -m playwright install --with-deps chromium`, then the same pytest command as every shard.
   `REQUIRE_BROWSER_TESTS=1` turns "no browser" into a failure, as `REQUIRE_POSTGRES_TESTS` does for the
   database.
-- **Time budget:** the eight dashboard tests take about 30 seconds under `-n auto` (22 seconds in one
-  process), and the thirteen board tests about 40 seconds under `-n auto`. Installing Chromium with its system libraries about a minute, so the shard stays well
-  inside its 15-minute timeout and adds one to two billable minutes to a run. A browser test that needs
-  to wait uses Playwright's `expect` with a timeout, never a fixed sleep, except where waiting *is*
-  the test (an action held longer than the outbox allows, set to 8 seconds for the suite).
+- **Time budget:** these are the slowest shards in CI, and they are slow for a reason that no amount
+  of sharding removes: they wait out the product's own budgets. The board's seven resilience tests
+  spend about 250 seconds between them watching a stream drop, back off, and come back inside the
+  30-second recovery budget (Issue 57); the accessibility shard measures the board *as drawn*, which
+  is why it runs one test at a time — a busy machine changes what is on the screen when it looks.
+  A browser test that needs to wait uses Playwright's `expect` with a timeout, never a fixed sleep,
+  except where waiting *is* the test.
+- **Distribution:** the browser shards hand out tests one by one (`--dist load`) rather than by
+  module. Each xdist worker is its own process and builds its own module fixtures — its own
+  database, its own server on a free port, its own browser — so nothing is shared and the waits
+  overlap. Four workers, not more: seven on a four-core runner made every resilience test slower
+  than it is alone (312 seconds of test time against 250).
 
 Playwright and its `pyee` dependency are test-time only: the image build removes them with the other
 test tooling, so they add nothing to the shipped image.
@@ -88,12 +164,12 @@ Every shard gets two service containers, the exact images the dev stack pins:
 started cannot pass as green. `make test-services` runs the same markers locally against the
 compose stack.
 
-The integration shard also runs `scripts/db/deploy-sequence.sh` on the service database before the
-tests: `alembic upgrade head`, the RBAC seed and its `--check`. The deploy (Issue 11) runs the same
+The `int-platform` shard also runs `scripts/db/deploy-sequence.sh` on the service database before
+its tests: `alembic upgrade head`, the RBAC seed and its `--check`. The deploy (Issue 11) runs the same
 script inside the new image, so a migration or seed that breaks fails on the pull request, not
 during a release.
 
-After the parallel run, the integration shard runs one more step, **the 07:30 rush** (Issue 47), on
+After its parallel run, the `int-queue` shard runs one more step, **the 07:30 rush** (Issue 47), on
 its own. It asserts a latency budget, so the parallel run skips it: measured while every CPU is busy
 with other tests, it would measure the runner rather than the queue engine. It adds about 10–30
 seconds.
@@ -124,7 +200,7 @@ open PRs; the daily-rebase rule in `CONTRIBUTING.md` covers the risk more cheapl
 |--------------|---------------|------|
 | Draft | `changes` and `conventions` | green, with "runs when marked ready for review" on the summary |
 | Only prose files changed | `changes` and `conventions` | green |
-| Code changed | `changes`, `conventions`, `quality`, `test` × 3, `report` | green when all pass |
+| Code changed | `changes`, `conventions`, `quality`, `test` × 16, `report` | green when all pass |
 | `infra/docker/Dockerfile`, `requirements.txt` or `.dockerignore` changed | the above plus `docker` | green when all pass |
 
 Marking a draft ready for review starts a full run. Prose means the folders and files in
@@ -183,37 +259,39 @@ is what the same usage would cost if the repository became private, measured aga
 plan's 2,000 minutes. GitHub rounds each job **up to a whole minute**, which is why the short
 `changes` and `gate` jobs count as a minute each.
 
-Measured on PR #120 and its manual runs:
+Measured on PR #217's runs, which changed the shape of the matrix (four shards to sixteen):
 
-| Run | Wall clock | Jobs (rounded up) | Billable if private |
-|-----|-----------:|-------------------|--------------------:|
-| Code change, image not touched | 2 min 20 s | changes 1, conventions 1, quality 1, unit 1, integration 2, flows 1, report 1, gate 1 | **9 min** |
-| Code change touching the image inputs, warm cache | 2 min 6 s | the above + docker 1 | **10 min** |
-| The same, cold Docker cache | 5 min 12 s | the above + docker 5 | **14 min** |
-| Draft or prose-only pull request | under 30 s | changes 1, conventions 1, gate 1 | **3 min** |
-| Superseded push, cancelled | partial | about half a run | **~4 min** |
+| Run | Wall clock | Jobs | Billable if private |
+|-----|-----------:|-----:|--------------------:|
+| Code change, four shards (before) | 8 min 42 s | 9 | **23 min** |
+| Code change, sixteen shards (now) | 3 min 40 s | 21 | **39 min** |
+| Draft or prose-only pull request | under 30 s | 3 | **3 min** |
+| Superseded push, cancelled | partial | — | about half a run |
 
-A typical run finishes in under five minutes (the acceptance criterion); only a cold image build
-comes close to it.
+A cold image build adds a `docker` job of about 5 minutes to either shape.
 
 Projection for a month, for six people and about 20 pull requests (109 issues over 28 weeks is
 about 17, plus follow-ups):
 
 | Item | Assumption | Minutes |
 |------|------------|--------:|
-| Code pushes | 20 PRs × 4 pushes that reach CI (each after `make check`) × 9 min | 720 |
-| Image-input pushes | 10% of those again, at the cold price: 8 × (14 − 9) | 40 |
-| Superseded pushes | 1 in 10 pushes cancelled part-way: 8 × 4 min | 32 |
+| Code pushes | 20 PRs × 4 pushes that reach CI (each after `make check`) × 39 min | 3,120 |
+| Image-input pushes | 10% of those again, at the cold price: 8 × 5 | 40 |
+| Superseded pushes | 1 in 10 pushes cancelled part-way: 8 × 20 min | 160 |
 | Prose-only and draft pushes | 15 pushes × 3 min | 45 |
-| Releases and deploys | 2 tags × (release, measured 4 min cold, + deploy, reserved for Issue 11) | 50 |
-| **Total** | | **≈ 890 (45% of 2,000)** |
+| Releases and deploys | 2 tags × (release, measured 4 min cold, + deploy) | 50 |
+| **Total** | | **≈ 3,400** |
 
-Doubling the pushes (8 a pull request, nobody running `make check`) gives about 1,700 minutes,
-still inside the allowance. (Issue 13's `conventions` job added a minute to every run: 790 became
-890.) What protects the budget is written down as a test, not a habit: the
-timeouts (`timeout-minutes` on every job, 15 at most in CI, so a wedged job costs 15 minutes rather
-than 360), the concurrency group, the prose and draft fast paths, and the absence of any branch-push
-trigger.
+**That is above the 2,000-minute Free-plan allowance, and it does not matter while the repository is
+public**, because GitHub bills none of it. It is written down so the trade is explicit: the same
+work was 890 minutes over four shards and 8m42s a run. If ClinicQ ever goes private, the matrix is
+where to look first — grouping the sixteen shards back into six or seven would put the projection
+back inside the allowance at about six minutes a run.
+
+What still protects the budget is written down as a test, not a habit: the timeouts
+(`timeout-minutes` on every job, 10 at most on a test shard, so a wedged job costs 10 minutes rather
+than 360), the concurrency group, the prose and draft fast paths, and the absence of any
+branch-push trigger.
 
 Check the real figure at any time under **Settings → Billing → Usage**, or per run:
 
