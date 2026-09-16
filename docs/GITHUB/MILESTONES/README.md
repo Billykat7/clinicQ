@@ -40,6 +40,7 @@ flowchart LR
     M12["M12: Reporting, Analytics & District Dashboards"]
     M13["M13: Security, Privacy & POPIA Compliance"]
     M14["M14: Production Readiness, Pilot & Go-live"]
+    M15["M15: Clinic Onboarding & Patient Sign-in"]
     M1 --> M2
     M1 --> M3
     M3 --> M4
@@ -65,6 +66,10 @@ flowchart LR
     M8 --> M14
     M9 --> M14
     M13 --> M14
+    M3 --> M15
+    M4 --> M15
+    M9 --> M15
+    M15 --> M14
 ```
 
 ## All milestones
@@ -85,6 +90,7 @@ flowchart LR
 | [M12: Reporting, Analytics & District Dashboards](M12_reporting_analytics.md) | The numbers a clinic manager takes to their district: wait times, no-shows, channel mix and busiest hours, all checked against hand calculations. | 12 | 88–94 | `v0.12.0` |
 | [M13: Security, Privacy & POPIA Compliance](M13_security_privacy_compliance.md) | Everything a system holding health information must prove before real patients use it: retention, access and erasure, encryption, a hardened surface and an independent test. | 12–13 | 95–101 | `v0.13.0` |
 | [M14: Production Readiness, Pilot & Go-live](M14_production_pilot_golive.md) | Production, backups, monitoring, a load test, a pilot kit and real clinic staff using ClinicQ for a full day, then the capstone submission. | 13–14 | 102–109, 197 | `v0.14.0` |
+| [M15: Clinic Onboarding & Patient Sign-in](M15_clinic_onboarding_patient_sign_in.md) | A clinic is added and finishes its own setup from one link, and a patient can sign in with an email address as well as a phone number. | 15–16 | 219–223 | `v0.15.0` |
 
 ---
 

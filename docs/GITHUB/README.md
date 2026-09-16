@@ -16,10 +16,10 @@ docs/
 ├── DEMO/index.html               # visual walkthrough for the team
 └── GITHUB/
     ├── README.md                 # this file
-    ├── MILESTONES/               # M1 … M14, plus README.md: how to read a milestone
+    ├── MILESTONES/               # M1 … M15, plus README.md: how to read a milestone
     ├── ISSUES/
     │   ├── README.md             # how to read and pick up an issue, where code goes, open decisions
-    │   ├── M1/  … M14/           # Issues 1–109, 197 and 200
+    │   ├── M1/  … M15/           # Issues 1–109, 197, 200 and 219–223
     │   └── BACKLOG/              # deliberately parked, post-capstone
     ├── PR/                       # PR_<N>_DESCRIPTION.md per merged issue
     ├── RELEASES/                 # RELEASE_v<major>_<minor>_<patch>.md
@@ -47,11 +47,12 @@ docs/
 | **[M12: Reporting & Analytics](MILESTONES/M12_reporting_analytics.md)** | Stats worker, reports UI, KPIs, exports, district dashboard, no-show insight | 88–94 | Data & Research | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** 📋 planned |
 | **[M13: Security, Privacy & POPIA](MILESTONES/M13_security_privacy_compliance.md)** | Data map, retention, DSAR, hardening, encryption, audit chain, pen test, a11y | 95–101 | DevOps/QA | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** 📋 planned |
 | **[M14: Production, Pilot & Go-live](MILESTONES/M14_production_pilot_golive.md)** | Prod infra, shared S3 layout, backups, monitoring, load test, pilot kit, support, UAT, capstone | 102–109, 197 | DevOps/QA + all | 🟩⬜⬜⬜⬜⬜⬜⬜⬜⬜ **11%** 🚧 in progress |
+| **[M15: Clinic Onboarding & Patient Sign-in](MILESTONES/M15_clinic_onboarding_patient_sign_in.md)** | Patient email sign-in behind a flag, email transport, `sites.onboarding` RBAC, clinics console, clinic setup link | 219–223 | Backend Lead + Frontend/Clinic | 🟩🟩⬜⬜⬜⬜⬜⬜⬜⬜ **20%** 🚧 in progress |
 
-**Total: 111 tracked issues across M1–M14**, plus 6 parked
+**Total: 116 tracked issues across M1–M15**, plus 6 parked
 [backlog items](ISSUES/BACKLOG/).
 
-**Progress:** 🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜ **73%** (81/111 issues) closed · **10 of 14 milestones done**
+**Progress:** 🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜ **71%** (82/116 issues) closed · **10 of 15 milestones done**
 
 > ⚠️ **M6 is the critical path.** Six of the seven milestones after it are consumers of the queue
 > engine. Anything that delays M6 delays the whole second half of the project, see the

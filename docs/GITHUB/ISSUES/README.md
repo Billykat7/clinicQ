@@ -5,7 +5,7 @@ source of truth: scope, context, acceptance criteria and how to check them live 
 thread. This page explains what each part of a spec means, the steps for picking one up, where the
 code goes in *this* repository, and the decisions and inconsistencies the team still has to settle.
 
-- **111 issues** in `M1/` … `M14/`: 1–109 planned up front, 197 added to M14 when the projects moved to one shared S3 bucket, and 200 added to M9 when the patient testing guide found no web page to join a queue.
+- **116 issues** in `M1/` … `M15/`: 1–109 planned up front, 197 added to M14 when the projects moved to one shared S3 bucket, 200 added to M9 when the patient testing guide found no web page to join a queue, and 219–223 added as M15 when a review found that a clinic cannot be set up from the browser and a patient has only one way to sign in.
 - **[Backlog](BACKLOG/)**: six ideas deliberately parked until after the capstone.
 - **[Milestones](../MILESTONES/README.md)**: what each group of issues delivers, and in which order.
 
@@ -320,6 +320,11 @@ affected spec carries a **Note** saying the same thing.
 | [108](M14/ISSUE_108_uat_clinic_staff.md) | User acceptance testing with clinic staff and remediation | [M14](../MILESTONES/M14_production_pilot_golive.md) | F | 14 | 4 days | [106](M14/ISSUE_106_pilot_rollout_kit.md), [107](M14/ISSUE_107_support_incident_sla.md) |
 | [109](M14/ISSUE_109_capstone_deliverables.md) | Capstone deliverables: demo script, video, report, poster, presentation | [M14](../MILESTONES/M14_production_pilot_golive.md) | F | 14 | 5 days | [100](M13/ISSUE_100_pen_test_remediation.md), [105](M14/ISSUE_105_load_soak_testing.md), [108](M14/ISSUE_108_uat_clinic_staff.md) |
 | [197](M14/ISSUE_197_shared_s3_bucket_keys.md) | Shared S3 bucket: put the project slug first in every key | [M14](../MILESTONES/M14_production_pilot_golive.md) | E | 13 | 1 day | nothing |
+| [219](M15/ISSUE_219_patient_email_sign_in.md) | Patient sign-in by email address, behind a feature flag | [M15](../MILESTONES/M15_clinic_onboarding_patient_sign_in.md) | A | 15 | 3 days | [17](M3/ISSUE_17_patient_identity_otp.md), [200](M9/ISSUE_200_patient_join_page.md) |
+| [220](M15/ISSUE_220_patient_email_transport.md) | Email as a patient notification transport | [M15](../MILESTONES/M15_clinic_onboarding_patient_sign_in.md) | B | 15 | 2 days | [63](M9/ISSUE_63_notification_service_adapters.md), [219](M15/ISSUE_219_patient_email_sign_in.md) |
+| [221](M15/ISSUE_221_rbac_sites_onboarding.md) | RBAC review: a `sites.onboarding` resource and its grants | [M15](../MILESTONES/M15_clinic_onboarding_patient_sign_in.md) | A | 15 | 2 days | [18](M3/ISSUE_18_rbac_roles_enforcement.md), [29](M4/ISSUE_29_clinic_onboarding_verification.md) |
+| [222](M15/ISSUE_222_admin_clinics_console.md) | The platform admin's clinics console: create, edit, archive | [M15](../MILESTONES/M15_clinic_onboarding_patient_sign_in.md) | D | 15 | 3 days | [23](M4/ISSUE_23_sites_model_profile_crud.md), [221](M15/ISSUE_221_rbac_sites_onboarding.md) |
+| [223](M15/ISSUE_223_clinic_setup_link.md) | The clinic setup link and its guided setup journey | [M15](../MILESTONES/M15_clinic_onboarding_patient_sign_in.md) | A · D | 16 | 4 days | [22](M3/ISSUE_22_staff_invitations_account_settings.md), [221](M15/ISSUE_221_rbac_sites_onboarding.md), [222](M15/ISSUE_222_admin_clinics_console.md) |
 
 ---
 
