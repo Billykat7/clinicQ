@@ -185,11 +185,57 @@ def run_alembic(url: URL, *commands: tuple[str, ...]) -> Config:
     return config
 
 
+@pytest.fixture(scope="session")
+def migration_template(postgres_server_url: URL) -> Generator[str]:
+    """One database at ``head``, migrated once, that every test's database is copied from.
+
+    Running the whole migration history for each test cost about two seconds a test, which was most
+    of the integration suite's wall clock. PostgreSQL can copy a database file-by-file instead
+    (``CREATE DATABASE ... TEMPLATE``), so the migrations run once per worker and each test still
+    gets its own brand-new database with exactly the schema ``alembic upgrade head`` produces.
+
+    One template per xdist worker: the copy holds a lock on the template, and ``CREATE DATABASE``
+    refuses a template another session is connected to, so workers must not share one. The engine
+    that migrates it is disposed before any copy is taken, for the same reason.
+    """
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "main")
+    name = f"{_TEST_DB_PREFIX}tmpl_{worker}_{os.getpid()}"
+    admin = create_engine(postgres_server_url, isolation_level="AUTOCOMMIT")
+    with admin.connect() as conn:
+        conn.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+        conn.execute(text(f'CREATE DATABASE "{name}"'))
+    try:
+        run_alembic(postgres_server_url.set(database=name), ("upgrade", "head"))
+        yield name
+    finally:
+        with admin.connect() as conn:
+            conn.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+        admin.dispose()
+
+
 @pytest.fixture
-def migrated_database(empty_database: URL) -> URL:
-    """An empty database brought to ``head`` by the real migrations."""
-    run_alembic(empty_database, ("upgrade", "head"))
-    return empty_database
+def migrated_database(
+    postgres_server_url: URL, migration_template: str
+) -> Generator[URL]:
+    """A brand-new database at ``head``, copied from the template, dropped afterwards.
+
+    The same contract as ``empty_database`` plus the migrations: its own database, nothing shared
+    with another test, dropped connections and all. It is a copy rather than a migration run, which
+    is the difference between about two seconds and about a tenth of one.
+    """
+    name = f"{_TEST_DB_PREFIX}{new_id().replace('-', '')}"
+    admin = create_engine(postgres_server_url, isolation_level="AUTOCOMMIT")
+    with admin.connect() as conn:
+        conn.execute(text(f'CREATE DATABASE "{name}" TEMPLATE "{migration_template}"'))
+    try:
+        yield postgres_server_url.set(database=name)
+    finally:
+        assert name.startswith(
+            _TEST_DB_PREFIX
+        )  # never drop anything this fixture did not create
+        with admin.connect() as conn:
+            conn.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+        admin.dispose()
 
 
 @pytest.fixture

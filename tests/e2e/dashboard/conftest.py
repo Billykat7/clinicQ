@@ -34,7 +34,7 @@ from src.modules.queue.sequence import issue_ticket
 from src.modules.queue.snapshot import NoSnapshotCache, set_snapshot_cache
 from src.modules.staff.assignments import set_room_assignments
 from src.web.dashboard import routes as dashboard_routes
-from tests.conftest import _TEST_DB_PREFIX, run_alembic
+from tests.conftest import _TEST_DB_PREFIX
 from tests.e2e.conftest import empty_tables, serve
 from tests.factories import (
     FACTORY_STAFF_PASSWORD,
@@ -64,15 +64,18 @@ _DAY_TABLES = (
 
 
 @pytest.fixture(scope="module")
-def e2e_database(postgres_server_url: URL) -> Iterator[URL]:
-    """A migrated database for one module, dropped afterwards."""
+def e2e_database(postgres_server_url: URL, migration_template: str) -> Iterator[URL]:
+    """A migrated database for one module, dropped afterwards.
+
+    Copied from the session's template (``migration_template`` in ``tests/conftest.py``) rather than
+    migrated here: each worker running this module pays a database copy, not the whole history.
+    """
     name = f"{_TEST_DB_PREFIX}{new_id().replace('-', '')}"
     admin = create_engine(postgres_server_url, isolation_level="AUTOCOMMIT")
     with admin.connect() as conn:
-        conn.execute(text(f'CREATE DATABASE "{name}"'))
+        conn.execute(text(f'CREATE DATABASE "{name}" TEMPLATE "{migration_template}"'))
     url = postgres_server_url.set(database=name)
     try:
-        run_alembic(url, ("upgrade", "head"))
         yield url
     finally:
         with admin.connect() as conn:
