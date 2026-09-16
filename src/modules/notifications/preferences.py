@@ -230,6 +230,26 @@ def _patient_consent_denies(
     return not has_consent(db, patient.id, purpose)
 
 
+def answering_patient_id(db: Session, patient_id: str | None) -> str | None:
+    """Whose consent and preferences answer for ``patient_id`` (Issue 84).
+
+    Their own, except for a **dependant with no phone of their own**: a small child cannot agree to
+    be messaged or set quiet hours, and the message goes to their proxy's phone, so it is the proxy
+    who has agreed to it and the proxy's quiet hours that hold. A dependant who does have a number
+    answers for themselves like anyone else. Applied here, once, so every send path and every retry
+    reads the same answer — the first attempt, the retry sweep and the fallback alike.
+    """
+    if patient_id is None:
+        return None
+    from src.database.models import Patient
+    from src.modules.patients import proxy
+
+    patient = db.get(Patient, patient_id)
+    if patient is None:
+        return patient_id
+    return proxy.messages_for(db, patient).id
+
+
 def resolve(
     db: Session,
     *,
@@ -254,6 +274,7 @@ def resolve(
     preferences say how and when. Both are checked, in that order, for every send and every retry.
     """
     now = now or _now()
+    patient_id = answering_patient_id(db, patient_id)
     category = notification_category_for(template)
     essential = is_essential_category(category)
     if _patient_consent_denies(db, recipient_email, template, patient_id):

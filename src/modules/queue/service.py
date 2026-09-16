@@ -182,6 +182,7 @@ def _guard_abuse(
     site: Site,
     source: TicketSource,
     patient: Patient,
+    proxy: Patient | None,
     client_ip: str | None,
     service_day: date,
     settings: Settings,
@@ -196,8 +197,10 @@ def _guard_abuse(
         JoinRefusedError: ``RATE_LIMITED`` or ``SITE_DAILY_CAP``.
     """
     window = settings.queue_join_rate_limit_window_seconds
+    # A dependant has no number of their own; the phone doing the joining is the one to limit.
+    phone = (proxy or patient).phone_e164 or patient.id
     phone_ok = queue_join_limiter.check_and_record(
-        f"phone:{patient.phone_e164}",
+        f"phone:{phone}",
         limit=settings.queue_join_rate_limit_per_phone,
         window_seconds=window,
     )
@@ -236,6 +239,7 @@ def join_queue(
     reason_text: str | None = None,
     comment_consent: bool = False,
     travel_minutes: int | None = None,
+    proxy: Patient | None = None,
     appointment: Appointment | None = None,
     client_ip: str | None = None,
     discovery_session: str | None = None,
@@ -260,6 +264,10 @@ def join_queue(
         comment_consent: Per-visit consent, given now, to show the reason on the board.
         travel_minutes: The trip to the clinic the patient stated, for the virtual waiting room
             (Issue 86); kept only where the clinic runs one, and defaulted there when not stated.
+        proxy: The patient taking this place **for** ``patient`` (Issue 84), where one phone acts for
+            a household. The ticket stays the dependant's — their number, their name on the board under
+            their own consent — and this only records who pressed the button, on the ticket and in the
+            audit row. The per-phone abuse guard is keyed on the proxy's number, the one that exists.
         appointment: The booking this join converts (Issue 81). The ticket is issued from the same counter,
             in the same queue, as any other; the booking already passed the abuse guards and the clinic's
             own appointment book, so neither those nor the walk-in-only rule are asked again. The booking
@@ -318,6 +326,7 @@ def join_queue(
             site=site,
             source=source,
             patient=patient,
+            proxy=proxy,
             client_ip=client_ip,
             service_day=service_day,
             settings=cfg,
@@ -343,6 +352,7 @@ def join_queue(
                     raise BookingAlreadyConvertedError
             if day_is_over(db, queue, service_day):
                 raise _QueueFullError
+            ticket.proxy_patient_id = proxy.id if proxy is not None else None
             ticket.travel_minutes = stated_travel(
                 enabled=site.virtual_waiting_enabled,
                 source=source,
@@ -379,7 +389,8 @@ def join_queue(
             "comment_consent": ticket.comment_consent,
             "travel_minutes": ticket.travel_minutes,
         },
-        context=f"joined {queue.name} as {ticket.number} via {source.value}",
+        context=f"joined {queue.name} as {ticket.number} via {source.value}"
+        + (" on behalf of the patient" if proxy is not None else ""),
     )
     if source in _ANALYTICS_CHANNEL:
         analytics.record_join_completed(

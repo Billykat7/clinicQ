@@ -46,6 +46,11 @@ NOT_AUDITED: dict[str, str] = {
         "the patient record it creates is audited inside the service (service.verify_code)"
     ),
     "patients.router:logout": "ends a session; it changes no record",
+    "patients.router:request_dependant_code": (
+        "sends a code to a number somebody wants to act for (Issue 84) and records nothing yet: no "
+        "link exists until the code comes back, and a row for every number typed would itself be a "
+        "log of who tried. The link that follows is audited (proxy.link_with_code)"
+    ),
     "sites.router:geocode": (
         "a POST because an address is a body rather than a query string, but it is a lookup: it "
         "reads a typed address and returns candidate coordinates, and changes no record. The "

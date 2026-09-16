@@ -313,6 +313,15 @@ class Ticket(Base, TimestampMixin):
     on_my_way_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    proxy_patient_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(f"{SCHEMA}.patient.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    """The patient who took this place for the patient it belongs to (Issue 84); ``None`` normally.
+
+    The ticket is the dependant's: their number, their name on the board under their own consent. This
+    only records who pressed the button, so the front desk and the audit trail know."""
     arrived_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

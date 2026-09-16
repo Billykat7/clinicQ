@@ -411,6 +411,12 @@ paths:
       operationId: appointmentsMine
       summary: My bookings from today on
       security: [{ bearerAuth: [] }, { sessionCookie: [] }]
+      parameters:
+        - name: for_patient_id
+          in: query
+          required: false
+          schema: { type: string, maxLength: 36 }
+          description: A dependant's bookings instead of the caller's own (Issue 84).
       responses:
         "200":
           description: Soonest first, at every clinic.
@@ -847,6 +853,12 @@ components:
       required: [slot_id]
       properties:
         slot_id: { type: string, minLength: 1, maxLength: 36 }
+        for_patient_id:
+          type: [string, "null"]
+          maxLength: 36
+          description: |
+            The dependant this time is for (Issue 84). Omitted, or the caller's own id, means the
+            caller; the booking, its reference and the ticket it becomes are the dependant's.
     BookingStatus:
       type: string
       enum: [booked, cancelled, rescheduled, converted, lapsed]

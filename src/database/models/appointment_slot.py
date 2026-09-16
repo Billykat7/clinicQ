@@ -376,6 +376,12 @@ class Appointment(Base, TimestampMixin):
         DateTime(timezone=True), nullable=True
     )
     """When the patient confirmed by replying to a reminder (Issue 82)."""
+    proxy_patient_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(f"{SCHEMA}.patient.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    """The patient who booked this for the patient it belongs to (Issue 84); ``None`` normally."""
     reply_token: Mapped[str | None] = mapped_column(String(43), nullable=True)
     """The secret a web push's Confirm and Cancel buttons send, 256 random bits (Issue 82)."""
     cancelled_via: Mapped[str | None] = mapped_column(String(16), nullable=True)

@@ -66,6 +66,7 @@
   }
 
   signIn.start(function () {
+    if (window.BKPWho) window.BKPWho.mount(signIn);
     say("");
     signIn.call("GET", "/api/v1/patients/me/consents").then(function (answer) {
       var current = ((answer.ok && answer.body.answers) || []).filter(function (item) {
@@ -123,6 +124,8 @@
     // Asked only where the clinic runs a virtual waiting room (Issue 86).
     var travel = document.getElementById("join-travel");
     var body = { reason_text: reason || null };
+    // Who the place is for (Issue 84): null when the patient is joining for themselves.
+    if (window.BKPWho) body.for_patient_id = window.BKPWho.selected();
     if (travel) body.travel_minutes = Number(travel.value);
     say("");
     busy(submit, true, "Joining…");

@@ -39,6 +39,7 @@ from src.modules.appointments.schemas import (
     RescheduleIn,
 )
 from src.modules.discovery.analytics import DEFAULT_REPORT_DAYS, MAX_REPORT_DAYS
+from src.modules.patients import proxy as proxy_links
 from src.modules.sites.hours import published_schedules
 
 router = APIRouter(tags=["appointments"])
@@ -120,15 +121,25 @@ def public_availability(
 def book(
     site_id: str, payload: BookIn, patient: PatientBooking, db: DbSession
 ) -> BookingOut:
-    """Book a time. 409 ``appointments.slot.<reason>`` when it is not on offer or has no room."""
+    """Book a time. 409 ``appointments.slot.<reason>`` when it is not on offer or has no room.
+
+    A patient who acts for a dependant (Issue 84) names them in ``for_patient_id``; the booking, its
+    reference and the ticket it becomes are the dependant's.
+    """
+    seen, proxy = proxy_links.patient_or_dependant(db, patient, payload.for_patient_id)
     booked = booking.book(
         db,
         site_id=site_id,
         slot_id=payload.slot_id,
-        patient=patient,
+        patient=seen,
         source=TicketSource.WEB,
         actor=f"patient:{patient.id}",
+        proxy=proxy,
     )
+    if proxy is not None:
+        proxy_links.record_action(
+            db, proxy, seen, f"booked {booked.reference}", site_id=site_id
+        )
     db.commit()
     return booking.view_by_id(db, booked.appointment.id, message=booked.confirmation)
 
@@ -139,9 +150,17 @@ def book(
     operation_id="appointmentsMine",
     summary="My bookings from today on",
 )
-def my_bookings(patient: PatientReading, db: DbSession) -> BookingListOut:
-    """The signed-in patient's bookings at every clinic, soonest first."""
-    rows = booking.patient_bookings(db, patient.id)
+def my_bookings(
+    patient: PatientReading,
+    db: DbSession,
+    for_patient_id: Annotated[str | None, Query(max_length=36)] = None,
+) -> BookingListOut:
+    """The signed-in patient's bookings at every clinic, soonest first.
+
+    ``for_patient_id`` reads a dependant's bookings instead (Issue 84), through the same one gate.
+    """
+    seen, _ = proxy_links.patient_or_dependant(db, patient, for_patient_id)
+    rows = booking.patient_bookings(db, seen.id)
     return BookingListOut(
         total=len(rows),
         items=[booking.booking_view(db, *row) for row in rows],
@@ -158,13 +177,22 @@ def reschedule(
     appointment_id: str, payload: RescheduleIn, patient: PatientBooking, db: DbSession
 ) -> BookingOut:
     """Move a booking at the same clinic. The original time is free at once; a refused move changes nothing."""
+    seen, proxy = proxy_links.patient_or_dependant(db, patient, payload.for_patient_id)
     moved = booking.reschedule(
         db,
-        patient=patient,
+        patient=seen,
         appointment_id=appointment_id,
         slot_id=payload.slot_id,
         actor=f"patient:{patient.id}",
     )
+    if proxy is not None:
+        proxy_links.record_action(
+            db,
+            proxy,
+            seen,
+            f"moved {moved.reference}",
+            site_id=moved.appointment.site_id,
+        )
     db.commit()
     return booking.view_by_id(db, moved.appointment.id, message=moved.confirmation)
 
@@ -175,14 +203,24 @@ def reschedule(
     operation_id="appointmentsCancel",
     summary="Cancel my booking",
 )
-def cancel(appointment_id: str, patient: PatientBooking, db: DbSession) -> BookingOut:
+def cancel(
+    appointment_id: str,
+    patient: PatientBooking,
+    db: DbSession,
+    for_patient_id: Annotated[str | None, Query(max_length=36)] = None,
+) -> BookingOut:
     """Cancel a booking. The time is free for someone else at once."""
+    seen, proxy = proxy_links.patient_or_dependant(db, patient, for_patient_id)
     cancelled = booking.cancel(
         db,
-        patient=patient,
+        patient=seen,
         appointment_id=appointment_id,
         actor=f"patient:{patient.id}",
     )
+    if proxy is not None:
+        proxy_links.record_action(
+            db, proxy, seen, "cancelled a booking", site_id=cancelled.site_id
+        )
     db.commit()
     return booking.view_by_id(db, cancelled.id)
 

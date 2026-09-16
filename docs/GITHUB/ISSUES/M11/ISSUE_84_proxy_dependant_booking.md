@@ -53,9 +53,12 @@ smartphone, and it needs a clear consent and audit trail to stay defensible.
 
 ## Files touched
 
-- `src/modules/patients/proxy.py`
-- `src/database/models/patient_link.py`
-- `alembic/versions/NNNN_patient_links.py`
+- `src/modules/patients/proxy.py` (links, the one gate, message routing), `router.py` (the dependant routes), `consent.py` (an actor that is another patient)
+- `src/database/models/patient_link.py`, `patient.py` (a dependant may have no phone), `ticket.py`, `appointment_slot.py` (`proxy_patient_id`)
+- `alembic/versions/0045_patient_links.py`
+- `src/modules/queue/service.py` and `router.py`, `src/modules/appointments/booking.py` and `booking_router.py` (acting for a dependant)
+- `src/modules/notifications/service.py` and `preferences.py` (the phone that exists answers)
+- `src/templates/patient/_who.html`, `src/static/js/patient-dependants.js`, the join and booking pages
 - `tests/integration/patients/test_proxy_booking.py`
 
 ---

@@ -1,0 +1,44 @@
+{#- Who this visit is for (Issue 84): the patient, or somebody they act for.
+
+    One phone often serves a household: a parent for a child, a daughter for her mother. The picker is
+    the whole of the choice; the panel under it adds somebody, with a code sent to their phone when they
+    have one. The ticket and the booking belong to whoever is chosen here, never to the phone.
+
+    Hidden until the patient is signed in and the list has loaded (patient-dependants.js). -#}
+<section class="card join-step who-box" id="who-box" aria-labelledby="who-heading" hidden>
+  <h2 id="who-heading">Who is this for?</h2>
+  <label class="sign-in-label" for="who-for">Person</label>
+  <select class="sign-in-input" id="who-for">
+    <option value="">Me</option>
+  </select>
+  <div class="who-actions">
+    <button class="btn btn-quiet btn-sm" type="button" id="who-open">Someone I care for</button>
+    <button class="btn btn-quiet btn-sm" type="button" id="who-remove">Stop acting for them</button>
+  </div>
+
+  <div class="who-add" id="who-add" hidden>
+    <label class="sign-in-label" for="who-name">Their name</label>
+    <input class="sign-in-input" id="who-name" type="text" maxlength="80" autocomplete="off">
+    <label class="sign-in-label" for="who-relationship">They are my</label>
+    <select class="sign-in-input" id="who-relationship">
+      <option value="child">child</option>
+      <option value="parent">parent</option>
+      <option value="spouse">husband or wife</option>
+      <option value="sibling">brother or sister</option>
+      <option value="other">someone I care for</option>
+    </select>
+    <label class="sign-in-label" for="who-phone">Their phone number (leave empty for a child with no phone)</label>
+    <input class="sign-in-input" id="who-phone" type="tel" inputmode="tel" maxlength="20" autocomplete="off">
+    <button class="btn btn-quiet btn-block btn-sm" type="button" id="who-send-code">Send them a code</button>
+    <div id="who-code-step" hidden>
+      <label class="sign-in-label" for="who-code">The code on their phone</label>
+      <input class="sign-in-input" id="who-code" type="text" inputmode="numeric" maxlength="8" autocomplete="one-time-code">
+    </div>
+    <button class="btn btn-block" type="button" id="who-save">Save</button>
+    <p class="clinic-hint">
+      We send a code to their phone so that nobody can act for a person without asking them. Someone with no
+      phone of their own, such as a small child, needs no code. Either of you can stop this at any time.
+    </p>
+  </div>
+  <p class="clinic-hint" id="who-message" role="status" hidden></p>
+</section>

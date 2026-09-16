@@ -907,6 +907,9 @@ class ConsentPurpose(StrEnum):
     - ``VISIT_NOTE_HISTORY``: let the nurse or doctor at a clinic read the short notes written at my
       earlier visits to that clinic (Issue 53). Without it, each visit's notes are seen only at that
       visit.
+    - ``PROXY_ACTIONS``: let the person who holds this phone take my place in a queue for me, book for
+      me, and receive my messages on their phone (Issue 84). Recorded against the person being seen,
+      by the person acting, when the link is made; withdrawing it ends the link.
     """
 
     DISPLAY_NAME = "display_name"
@@ -914,6 +917,21 @@ class ConsentPurpose(StrEnum):
     NOTIFICATIONS = "notifications"
     FEEDBACK_SURVEY = "feedback_survey"
     VISIT_NOTE_HISTORY = "visit_note_history"
+    PROXY_ACTIONS = "proxy_actions"
+
+
+class ProxyRelationship(StrEnum):
+    """How a proxy is related to the person they act for (Issue 84), as the proxy describes it.
+
+    Recorded for the clinic's own record and the audit trail; it changes nothing the system does. The
+    list is short and household-shaped on purpose, and ``OTHER`` covers a neighbour or a carer.
+    """
+
+    CHILD = "child"
+    PARENT = "parent"
+    SPOUSE = "spouse"
+    SIBLING = "sibling"
+    OTHER = "other"
 
 
 class OtpSubjectKind(StrEnum):

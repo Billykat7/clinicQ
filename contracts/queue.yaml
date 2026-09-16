@@ -1269,7 +1269,14 @@ components:
           description: |
             How long the trip to the clinic takes, at a clinic with a virtual waiting room (Issue 86).
             `0` is "already here"; null takes the default (15). Not kept at a clinic without one.
-      example: { reason_text: null, comment_consent: false, travel_minutes: 30 }
+        for_patient_id:
+          type: [string, "null"]
+          maxLength: 36
+          description: |
+            The dependant this place is for (Issue 84), where one phone acts for a household. Omitted,
+            or the caller's own id, means the caller. The ticket belongs to whoever is named here; 404
+            `patients.link.not_found` when there is no link, 403 `patients.link.revoked` once it ends.
+      example: { reason_text: null, comment_consent: false, travel_minutes: 30, for_patient_id: null }
     WalkInIn:
       type: object
       properties:

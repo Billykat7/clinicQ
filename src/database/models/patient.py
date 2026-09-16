@@ -35,8 +35,14 @@ class Patient(Base, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "patient"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    phone_e164: Mapped[str] = mapped_column(String(16), nullable=False, unique=True)
-    """The normalised number (``+27821234567``): the patient's identity. E.164 is at most 15 digits."""
+    phone_e164: Mapped[str | None] = mapped_column(
+        String(16), nullable=True, unique=True
+    )
+    """The normalised number (``+27821234567``): the patient's identity. E.164 is at most 15 digits.
+
+    ``None`` only for a **dependant with no phone of their own** (Issue 84): a small child whose parent
+    holds the phone. Such a record is created by the person who acts for them, can never sign in, and
+    its messages go to that person's phone. Everyone else has a number, and it is unique."""
     whatsapp_id: Mapped[str | None] = mapped_column(
         String(32), nullable=True, unique=True
     )

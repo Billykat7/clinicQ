@@ -69,6 +69,7 @@ from src.core.site_scope import (
 from src.database.models import Patient, Queue, Site, Ticket, Visit
 from src.database.session import get_db
 from src.modules.appointments import virtual_waiting
+from src.modules.patients import proxy as proxy_links
 from src.modules.patients.consent import record_consent
 from src.modules.patients.service import get_or_create_patient
 from src.modules.patients.sessions import signed_in_patient_id
@@ -210,7 +211,12 @@ def join_as_patient(
     db: DbSession,
     settings: SettingsDep,
 ) -> JoinOut:
-    """Join a queue from the web. Returns the patient's existing ticket if they already hold one."""
+    """Join a queue from the web. Returns the patient's existing ticket if they already hold one.
+
+    A patient who acts for a dependant (Issue 84) names them in ``for_patient_id``: the ticket is the
+    dependant's, and the audit row and the ticket both say who took it.
+    """
+    seen, proxy = proxy_links.patient_or_dependant(db, patient, payload.for_patient_id)
     site = db.execute(
         select(Site).where(Site.id == site_id, *publicly_visible_site_clauses())
     ).scalar_one_or_none()
@@ -229,7 +235,8 @@ def join_as_patient(
             queue=queue,
             schedule=schedule,
             source=TicketSource.WEB,
-            patient=patient,
+            patient=seen,
+            proxy=proxy,
             actor=f"patient:{patient.id}",
             reason_text=payload.reason_text,
             comment_consent=payload.comment_consent,
@@ -242,6 +249,14 @@ def join_as_patient(
         if error.refusal is JoinRefusal.RATE_LIMITED:
             raise _too_many(error) from error
         raise
+    if proxy is not None:
+        proxy_links.record_action(
+            db,
+            proxy,
+            seen,
+            f"joined {queue.name} as {result.ticket.number}",
+            site_id=site.id,
+        )
     # A patient whose trip is already longer than the wait is told to leave now, not at the next sweep.
     virtual_waiting.check_ticket(db, result.ticket)
     db.commit()
