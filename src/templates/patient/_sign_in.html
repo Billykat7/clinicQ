@@ -1,17 +1,51 @@
-{#- Signing in with a phone number and a code (Issue 200): the join page and the installed app's start page.
+{#- Signing in with a phone number and a code (Issue 200), or an email address and a code (Issue 219):
+    the join page and the installed app's start page.
 
     Two steps, both driven by patient-sign-in.js over /api/v1/patients/otp/request and /otp/verify. The first
     step shows unless `sign_in_hidden` is true. Every refusal is the API's own sentence, put in
-    #sign-in-error, which is announced. `sign_in` is a src.web.join.SignInView. -#}
+    #sign-in-error, which is announced. `sign_in` is a src.web.join.SignInView.
+
+    With `sign_in.email_enabled` false this renders exactly what it rendered before Issue 219: the phone
+    field, no tabs, and nothing about an address anywhere in the markup. With it true the first step carries
+    two tabs; the phone one is selected, because a number is still how most patients get in. Which tab is
+    open is the only thing the page decides — the field that is hidden is also disabled, so the form has one
+    contact in it whatever the browser does with `hidden`. -#}
 <section class="card sign-in-step" data-sign-in-step="phone" aria-labelledby="sign-in-phone-heading"{% if sign_in_hidden %} hidden{% endif %}>
+  {% if sign_in.email_enabled %}
+  <h2 id="sign-in-phone-heading" tabindex="-1">Sign in</h2>
+  <div class="sign-in-tabs" role="tablist" aria-label="How to sign in">
+    <button class="sign-in-tab" type="button" role="tab" id="sign-in-tab-phone"
+            data-sign-in-tab="phone" aria-controls="sign-in-panel-phone" aria-selected="true">Phone number</button>
+    <button class="sign-in-tab" type="button" role="tab" id="sign-in-tab-email"
+            data-sign-in-tab="email" aria-controls="sign-in-panel-email" aria-selected="false">Email address</button>
+  </div>
+  {% else %}
   <h2 id="sign-in-phone-heading" tabindex="-1">Sign in with your phone number</h2>
-  <p class="card-sub">We send you a code by SMS. {{ sign_in.phone_notice }}</p>
-  <form class="sign-in-form" id="sign-in-phone-form" data-invalid="{{ sign_in.invalid_phone }}" novalidate>
-    <label class="sign-in-label" for="sign-in-phone">Mobile number</label>
-    <input class="sign-in-input" id="sign-in-phone" name="phone" type="tel" inputmode="tel"
-           autocomplete="tel" maxlength="20" placeholder="082 123 4567" required>
-    <button class="btn btn-block" type="submit" id="sign-in-send">Send me a code</button>
-  </form>
+  {% endif %}
+
+  <div class="sign-in-panel" id="sign-in-panel-phone" data-sign-in-panel="phone"
+       {% if sign_in.email_enabled %}role="tabpanel" aria-labelledby="sign-in-tab-phone"{% endif %}>
+    <p class="card-sub">We send you a code by SMS. {{ sign_in.phone_notice }}</p>
+    <form class="sign-in-form" id="sign-in-phone-form" data-invalid="{{ sign_in.invalid_phone }}" novalidate>
+      <label class="sign-in-label" for="sign-in-phone">Mobile number</label>
+      <input class="sign-in-input" id="sign-in-phone" name="phone" type="tel" inputmode="tel"
+             autocomplete="tel" maxlength="20" placeholder="082 123 4567" required>
+      <button class="btn btn-block" type="submit" id="sign-in-send">Send me a code</button>
+    </form>
+  </div>
+
+  {% if sign_in.email_enabled %}
+  <div class="sign-in-panel" id="sign-in-panel-email" data-sign-in-panel="email"
+       role="tabpanel" aria-labelledby="sign-in-tab-email" hidden>
+    <p class="card-sub">We send you a code by email. {{ sign_in.email_notice }}</p>
+    <form class="sign-in-form" id="sign-in-email-form" data-invalid="{{ sign_in.invalid_email }}" novalidate>
+      <label class="sign-in-label" for="sign-in-email">Email address</label>
+      <input class="sign-in-input" id="sign-in-email" name="email" type="email" inputmode="email"
+             autocomplete="email" maxlength="254" placeholder="name@example.com" required disabled>
+      <button class="btn btn-block" type="submit" id="sign-in-send-email">Send me a code</button>
+    </form>
+  </div>
+  {% endif %}
 </section>
 
 <section class="card sign-in-step" data-sign-in-step="code" aria-labelledby="sign-in-code-heading" hidden>

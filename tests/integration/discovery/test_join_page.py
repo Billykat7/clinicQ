@@ -19,6 +19,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete, select, update
 from starlette import status
 
+from src.commons.email_address import INVALID_EMAIL_MESSAGE
 from src.commons.enums import ConsentPurpose, PatientChannel, SiteStatus
 from src.commons.phone import INVALID_PHONE_MESSAGE
 from src.commons.time import APP_TIMEZONE
@@ -31,7 +32,7 @@ from src.modules.notifications.sms import FakeSmsProvider
 from src.modules.patients import service as patient_service
 from src.modules.patients.consent import has_consent, record_consent
 from src.modules.patients.consent_text import CONSENT_WORDING
-from src.modules.patients.schemas import PHONE_NOTICE
+from src.modules.patients.schemas import EMAIL_NOTICE, PHONE_NOTICE
 from src.web import join
 from src.web.discover import JOIN_NOT_SWITCHED_ON, live_view
 from src.web.join import JoinStep, join_page
@@ -69,6 +70,13 @@ def join_on(
     monkeypatch.setattr(notification_service, "build_sms_provider", lambda: sms)
     otp_store.reset_otp_state()
     return SimpleNamespace(settings=on, site_id=site_id, sms=sms)
+
+
+def _email_on():  # type: ignore[no-untyped-def]
+    """This deployment's settings with the second way in switched on (Issue 219)."""
+    return get_settings().model_copy(
+        update={"patient_join_enabled": True, "patient_email_sign_in_enabled": True}
+    )
 
 
 def _profile(
@@ -399,3 +407,45 @@ def test_the_app_start_page_offers_the_sign_in_to_nobody_and_not_to_a_signed_in_
         signed_in.status_code == status.HTTP_200_OK
     )  # no open ticket today: the page, not a redirect
     assert signed_in.context["signed_in"] is True  # type: ignore[attr-defined]
+
+
+# --- the second way in, behind its flag (Issue 219) ---------------------------------------------
+
+
+def test_with_the_email_flag_off_the_sign_in_offers_one_way_in(
+    directory: SimpleNamespace,
+) -> None:
+    """Off by default: the page is what it was before Issue 219, and says so as data."""
+    view = join_page(_profile(directory), join_enabled=True, signed_in=False).sign_in
+
+    assert view.email_enabled is False
+    assert view.phone_notice == PHONE_NOTICE
+
+
+def test_with_the_email_flag_on_the_sign_in_offers_both_ways_in(
+    directory: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Switched on, the page carries the address's own notice and its own refusal sentence."""
+    monkeypatch.setattr(join, "get_settings", lambda: _email_on())
+
+    view = join_page(_profile(directory), join_enabled=True, signed_in=False).sign_in
+
+    assert view.email_enabled is True
+    assert view.email_notice == EMAIL_NOTICE
+    assert view.invalid_email == INVALID_EMAIL_MESSAGE
+    # The number is still offered, and still first: it is how most patients get in.
+    assert view.phone_notice == PHONE_NOTICE
+
+
+def test_the_app_start_page_follows_the_same_flag(
+    directory: SimpleNamespace,
+    join_on: SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``/t/`` and the join page offer the same ways in, because they render the same view."""
+    off = directory.client.get("/t/")
+    assert off.context["sign_in"].email_enabled is False  # type: ignore[attr-defined]
+
+    monkeypatch.setattr(join, "get_settings", lambda: _email_on())
+    on = directory.client.get("/t/")
+    assert on.context["sign_in"].email_enabled is True  # type: ignore[attr-defined]

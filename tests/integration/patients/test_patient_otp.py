@@ -12,105 +12,30 @@ Every acceptance criterion, each through the API against an in-memory database:
   web session;
 * a patient session opens patient routes only, and a staff token opens none of them.
 
-Settings are built with ``_env_file=None`` so a local ``.env`` cannot change the outcome.
+The fixture every test here builds on is ``make_ctx``, in this package's ``conftest.py``; the
+email half of the same sign-in is ``test_patient_email_sign_in.py``.
 """
 
 from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Generator, Iterator
 from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, func, inspect, select, text
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import inspect, select, text
+from sqlalchemy.orm import Session
 from starlette import status
 
 from src.commons.enums import AppEnvironment, PatientChannel
-from src.core import email_send, otp_store, refresh_token_policy, security
-from src.core.config import Settings, get_settings
-from src.core.rbac_manifest_sync import sync_rbac_catalog
+from src.core import otp_store
 from src.database.models import Base, Patient
-from src.database.schema import sqlite_schema_translate_map
-from src.database.session import get_db
-from src.main import create_app
 from src.modules.notifications import dev_outbox
 from src.modules.notifications import service as notification_service
-from src.modules.notifications.sms import FakeSmsProvider
 from src.modules.patients import service as patient_service
 from tests.factories import FACTORY_STAFF_PASSWORD, StaffFactory
-
-_SECRET = "patient-otp-test-secret-min-32-characters!"
-_OTP = "/api/v1/patients/otp"
-_NUMBER = "0821234567"
-_E164 = "+27821234567"
-
-
-def _settings(**overrides: object) -> Settings:
-    """Isolated settings: development, a known secret, the shipped OTP defaults."""
-    base: dict[str, object] = {
-        "_env_file": None,
-        "environment": AppEnvironment.DEVELOPMENT,
-        "jwt_secret": _SECRET,
-        "smtp_host": "",
-        "auth_password_login_enabled": True,
-    }
-    base.update(overrides)
-    return Settings(**base)  # type: ignore[arg-type]
-
-
-@pytest.fixture
-def make_ctx(monkeypatch: pytest.MonkeyPatch) -> Iterator[object]:
-    """Factory: an app on a fresh SQLite database; SMS goes to a fake the test can read."""
-    engines = []
-
-    def _make(**overrides: object) -> SimpleNamespace:
-        settings = _settings(**overrides)
-        engine = create_engine(
-            "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-        ).execution_options(schema_translate_map=sqlite_schema_translate_map())
-        Base.metadata.create_all(engine)
-        engines.append(engine)
-        factory = sessionmaker(bind=engine, autocommit=False, autoflush=False)
-        with (
-            factory() as db
-        ):  # the catalog and grants a deployment has (make seed-rbac)
-            sync_rbac_catalog(db)
-            db.commit()
-
-        def _db() -> Generator[Session]:
-            with factory() as db:
-                yield db
-
-        sms = FakeSmsProvider()
-        # Every module that reads settings directly, email included: a developer's .env may name
-        # a real SMTP server, and no test may send mail through it.
-        for module in (
-            security,
-            otp_store,
-            refresh_token_policy,
-            dev_outbox,
-            email_send,
-        ):
-            monkeypatch.setattr(module, "get_settings", lambda: settings)
-        monkeypatch.setattr(notification_service, "get_settings", lambda: settings)
-        monkeypatch.setattr(notification_service, "build_sms_provider", lambda: sms)
-        otp_store.reset_otp_state()
-        dev_outbox.clear()
-        app = create_app(settings)
-        app.dependency_overrides[get_db] = _db
-        app.dependency_overrides[get_settings] = lambda: settings
-        return SimpleNamespace(
-            client=TestClient(app), settings=settings, session=factory, sms=sms
-        )
-
-    yield _make
-    for engine in engines:
-        Base.metadata.drop_all(engine)
-        engine.dispose()
+from tests.integration.patients.conftest import _E164, _NUMBER, _OTP, patient_count
 
 
 def _code(ctx: SimpleNamespace) -> str:
@@ -130,12 +55,6 @@ def _verify(ctx: SimpleNamespace, code: str, phone: str = _NUMBER, client=None):
     return (client or ctx.client).post(
         f"{_OTP}/verify", json={"phone": phone, "code": code}
     )
-
-
-def _patients(ctx: SimpleNamespace) -> int:
-    """How many patient rows exist."""
-    with ctx.session() as db:
-        return int(db.scalar(select(func.count(Patient.id))) or 0)
 
 
 # --- one number, one patient, no password ---------------------------------------------------
@@ -163,7 +82,7 @@ def test_one_number_written_three_ways_is_one_patient_signed_in_with_a_code(
     )
     again = _verify(ctx, _code(ctx), phone="27821234567", client=returning)
     assert again.json()["id"] == first.json()["id"]
-    assert _patients(ctx) == 1
+    assert patient_count(ctx) == 1
     with ctx.session() as db:
         assert db.scalar(select(Patient.phone_e164)) == _E164
 
@@ -172,7 +91,7 @@ def test_no_patient_exists_until_the_code_is_verified(make_ctx) -> None:  # type
     """Asking for a code creates nothing: an unverified number is not somebody's record."""
     ctx = make_ctx()
     assert _request(ctx).status_code == status.HTTP_202_ACCEPTED
-    assert _patients(ctx) == 0
+    assert patient_count(ctx) == 0
 
 
 def test_a_patient_has_no_password_on_any_channel(make_ctx) -> None:  # type: ignore[no-untyped-def]
@@ -229,7 +148,7 @@ def test_a_code_expires_within_the_configured_window(
     late = _verify(ctx, code)
     assert late.status_code == status.HTTP_400_BAD_REQUEST
     assert late.json()["code"] == "patients.otp.expired"
-    assert _patients(ctx) == 0
+    assert patient_count(ctx) == 0
 
 
 def test_a_code_works_once(make_ctx) -> None:  # type: ignore[no-untyped-def]
@@ -526,7 +445,7 @@ def test_ussd_and_whatsapp_resolve_the_patient_from_the_gateway_number_without_a
                 db, msisdn="27821234567", channel=PatientChannel.WEB
             )
     assert len(ctx.sms.sent) == sent_before
-    assert _patients(ctx) == 2
+    assert patient_count(ctx) == 2
 
 
 def test_two_sign_ins_racing_for_a_new_number_make_one_patient(make_ctx) -> None:  # type: ignore[no-untyped-def]
@@ -558,4 +477,4 @@ def test_two_sign_ins_racing_for_a_new_number_make_one_patient(make_ctx) -> None
         )
         assert created is False and patient.phone_e164 == _E164
         db.commit()
-    assert _patients(ctx) == 1
+    assert patient_count(ctx) == 1

@@ -2,10 +2,10 @@
 {#- Where the installed app opens (Issue 69), when no signed-in patient on this phone has an open ticket.
 
     patient-home.js opens the last ticket this phone followed, if it is from today and has not ended. With
-    none, the page says how to get one, and offers to sign in by phone (Issue 200): an iPhone Home Screen
-    app keeps its own storage, so a patient who joined in Safari signs in here to find their ticket. A
-    successful sign-in comes back to /t/, which opens the patient's open ticket. Nothing here asks to
-    install anything. -#}
+    none, the page says how to get one, and offers to sign in by phone (Issue 200) -- and by email address
+    too where PATIENT_EMAIL_SIGN_IN_ENABLED is on (Issue 219): an iPhone Home Screen app keeps its own
+    storage, so a patient who joined in Safari signs in here to find their ticket. A successful sign-in
+    comes back to /t/, which opens the patient's open ticket. Nothing here asks to install anything. -#}
 
 {% block title %}Your ticket · {{ app_name }}{% endblock %}
 
@@ -33,7 +33,8 @@
     Join a clinic's queue and your ticket opens here, with your place in line.
   </p>
   <p><a class="btn" href="/discover">Find a clinic</a></p>
-  <p id="home-sign-in-lead">Joined in another browser? Sign in with the same number and your ticket opens
+  <p id="home-sign-in-lead">Joined in another browser? Sign in
+    {% if sign_in.email_enabled %}the same way{% else %}with the same number{% endif %} and your ticket opens
     here.</p>
   {% include "patient/_sign_in.html" %}
   {% endif %}
