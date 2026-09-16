@@ -1,9 +1,15 @@
 # Deploy (Issue 11): put a released image on staging or production, safely.
 #
-#   A release (release.yml) succeeds  →  staging, with no human action
+#   Run workflow, environment=staging  →  deploys staging
 #   Run workflow, environment=production  →  waits for the DevOps/QA Lead's approval (the GitHub
 #                                             Environment "production"), then deploys
 #   Run workflow with an older version and "rollback"  →  that tag, without its migrations
+#
+# **Every deploy is a manual run**, the same shape as BK Properties' CD: release.yml publishes the
+# image on a tag, and a person decides when that image reaches an environment. Nothing here starts
+# by itself, so a release is never also a deploy, and "what is running where" only changes when
+# somebody chose it. Deploying a fresh release is therefore two steps, not one: push the tag, wait
+# for Release to publish the image, then run this with that version.
 #
 # The work happens on the host, in scripts/cd/deploy.sh, one visible step at a time: pre-flight (the
 # image's own settings check), the migrations as their own step before any traffic, a candidate on a
@@ -17,10 +23,11 @@
 
 name: Deploy
 
+# What the Actions list shows for this run, so a deploy is told apart from a release at a glance,
+# and one deploy from another: "Deploy ClinicQ 0.2.0". The environment is on the job below it.
+run-name: Deploy ClinicQ ${{ inputs.version }}
+
 on:
-  workflow_run:
-    workflows: [Release]
-    types: [completed]
   workflow_dispatch:
     inputs:
       environment:
@@ -40,7 +47,7 @@ on:
 # One deploy per environment at a time, never cancelled half-way: a half-applied deploy is worse than
 # a slow one. The group names the environment, not the ref, so two tags queue for the same host.
 concurrency:
-  group: deploy-${{ inputs.environment || 'staging' }}
+  group: deploy-${{ inputs.environment }}
   cancel-in-progress: false
 
 permissions:
@@ -52,19 +59,15 @@ defaults:
 
 jobs:
   deploy:
-    name: Deploy ${{ inputs.version || github.event.workflow_run.head_branch }} to ${{ inputs.environment || 'staging' }}
-    # A manual run, or a release that published successfully from a tag push.
-    if: >-
-      github.event_name == 'workflow_dispatch'
-      || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    name: Deploy ${{ inputs.version }} to ${{ inputs.environment }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment:
-      name: ${{ inputs.environment || 'staging' }}
+      name: ${{ inputs.environment }}
       url: ${{ vars.PUBLIC_URL }}
     env:
-      ENVIRONMENT: ${{ inputs.environment || 'staging' }}
-      ROLLBACK: ${{ inputs.rollback || false }}
+      ENVIRONMENT: ${{ inputs.environment }}
+      ROLLBACK: ${{ inputs.rollback }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
       - name: Check out the deploy scripts
@@ -81,9 +84,8 @@ jobs:
         id: release
         env:
           INPUT_VERSION: ${{ inputs.version }}
-          TAG: ${{ github.event.workflow_run.head_branch }}
         run: |
-          version="${INPUT_VERSION:-${TAG#v}}"
+          version="${INPUT_VERSION#v}"   # v0.2.0 and 0.2.0 both name the same release
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]; then
             echo "::error title=Not a version::'$version' is not a released version (e.g. 0.2.0)"
             exit 1
@@ -180,7 +182,7 @@ jobs:
           TEAM_WEBHOOK_URL: ${{ secrets.TEAM_WEBHOOK_URL }}
           TEAM_WEBHOOK_KIND: ${{ vars.TEAM_WEBHOOK_KIND }}
           VERSION: ${{ steps.release.outputs.version }}
-          SHA: ${{ github.event.workflow_run.head_sha }}
+          SHA: ${{ github.sha }}
           RESULT: ${{ steps.target.outputs.provisioned == 'false' && 'skipped' || job.status }}
         run: >-
           python scripts/cd/notify_deploy.py --environment "$ENVIRONMENT" --version "$VERSION"
