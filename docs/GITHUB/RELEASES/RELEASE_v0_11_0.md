@@ -41,7 +41,7 @@ Four rules shape the release, and each is enforced where a bug cannot get round 
 
 Eight pull requests merged on 15 and 16 September 2026, each after its checks were green and before the
 next branched from `main`: #207 (80) → #208 (86) → #209 (87) → #210 (81) → #211 (82) → #212 (83) → #213
-(84) → the pull request for Issue 85, which carries this note. The tag is cut from `main` after that merge.
+(84) → #214 (85), which carries this note. The tag is cut from `main` after that merge.
 
 ## What shipped
 
@@ -97,7 +97,7 @@ next branched from `main`: #207 (80) → #208 (86) → #209 (87) → #210 (81) �
   - The ticket and the booking belong to the dependant, the board shows them under their own consent, and
     `ticket.proxy_patient_id` and the audit trail name who acted. Ending the link refuses the next action at
     once, from either side.
-- **Repeating medication collections** (Issue 85, this release's last pull request; migration `0046`).
+- **Repeating medication collections** (Issue 85, PR #214; migration `0046`).
   - `chronic_schedule`: the queue, the interval, the next due day, the grace period and the join token.
   - The sweep (lock 883, every quarter of an hour) reminds once per cycle, on the first day from the due
     date the clinic **opens**, and never before 08:00; a missed cycle gets **exactly one** follow-up and
@@ -170,8 +170,7 @@ clean at every step.
 
 ## Verification
 
-Run on the Issue 85 branch based on `main` after #213, which is `main` as this milestone's last pull
-request will leave it. PostgreSQL 18 and Redis in Docker, and Playwright's Chromium:
+Run on the Issue 85 branch based on `main` after #213, which is `main` as #214 will leave it. PostgreSQL 18 and Redis in Docker, and Playwright's Chromium:
 
 ```text
 TZ=UTC pytest -q -n auto --dist loadscope tests      2654 passed, 1 skipped, 9 xfailed in 450 s
@@ -199,7 +198,7 @@ green. Each pull request carries its own evidence, and it is worth reading besid
   number, the audit trail naming both, and the link ended refusing the next action. Its demo found two
   PostgreSQL-only bugs (an over-long audit `actor_id`, then its foreign key) that the SQLite suite cannot
   see.
-- **Issue 85's pull request:** a 28-day repeat reminded once at 09:00, `COLLECT` taking a place in a
+- **#214 (85):** a 28-day repeat reminded once at 09:00, `COLLECT` taking a place in a
   walk-in-only collection queue, the repeat rolling forward from the day the patient actually collected,
   exactly one follow-up for the patient who did not come (three more sweeps sending nothing), and the
   clinic's own list.

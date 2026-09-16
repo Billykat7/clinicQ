@@ -3,7 +3,7 @@
 **Milestone:** [Milestone 11: Appointments, Check-in & Patient Care Extras](https://github.com/Billykat7/clinicQ/milestone/11) ·
 **Issue:** [#85](https://github.com/Billykat7/clinicQ/issues/85) · **Builds on:** #63 (the notification
 service), #82 (reminders answered by reply, PR #211), #40 (the join service), all merged · **Closes the
-milestone:** this pull request also carries the [`v0.11.0` release note](../../RELEASES/RELEASE_v0_11_0.md)
+milestone:** this pull request (#214) also carries the [`v0.11.0` release note](../../RELEASES/RELEASE_v0_11_0.md)
 
 A patient on chronic treatment comes back every 28 days, forever, and missing one collection is how people
 fall off treatment. With this PR:
