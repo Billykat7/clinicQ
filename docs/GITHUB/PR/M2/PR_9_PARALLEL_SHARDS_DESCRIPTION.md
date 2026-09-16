@@ -29,8 +29,9 @@ A run is now **3m40s**, measured end to end on this branch.
   `tests/integration/discovery` went from 318 s of test time to 166 s.
 - **Two guard tests** hold the matrix together (below).
 - **The browser shards hand out tests one by one** (`--dist load`) where their time is spent
-  waiting on a page rather than on a CPU, and **`--with-deps` is gone** from the Chromium install:
-  it spent 22 seconds a shard on apt, on a runner image that already ships Chrome.
+  waiting on a page rather than on a CPU — except `board-measured`, which runs one test at a time
+  because its tests measure the board rather than exercise it. **`--with-deps` is gone** from the
+  Chromium install: it spent 22 seconds a shard on apt, on a runner image that already ships Chrome.
 - **`timeout-minutes` on a test shard is 10, not 15**, now that the slowest measures 2m46s.
 
 ## Design notes
@@ -46,6 +47,21 @@ mode that matters: a directory nobody claims stops running, silently, and CI sta
 `test_every_test_file_runs_in_exactly_one_shard` expands every shard's paths — directories to files,
 `--ignore=` subtracted — and fails unless they partition the suite exactly. A file claimed twice
 fails too: it costs minutes and doubles its coverage data.
+
+**A flake, found by the change itself.** The third CI run went red: the board's leak test
+(`test_a_day_offline_leaves_the_heap_the_listeners_and_the_layout_where_they_were`) counted 45
+listeners where it had 39, and did it again on the next run with the same two numbers. It measures
+the page after a simulated day offline: one extra reconnect on a slower machine attaches a fixed six
+listeners, and the assertion carries no tolerance — unlike its siblings in the same test, which
+allow heap 10% + 512 KB and nodes 5%. It now sits beside the contrast tests in `board-measured`,
+which runs on **one worker**, the same rule stated once: **a test that measures the board does not
+share a machine.** The six that merely wait still overlap.
+
+The test passed three times and failed twice today across shard layouts that were otherwise
+identical, so this is a pre-existing sensitivity that a faster pipeline exposes rather than
+something the sharding caused. If it fails again, the fix is a tolerance on that one assertion to
+match the two beside it — a decision for whoever owns the board, not something to slip into a CI
+pull request.
 
 **The shards are not allowed to quietly run a different suite.**
 `test_the_shards_default_to_the_local_gates_distribution` checks that a shard saying nothing runs
@@ -67,7 +83,9 @@ by contention), which is why it runs on four. Those tests are the floor under th
   `migrated_database` rewritten as a copy of it.
 - **`tests/e2e/dashboard/conftest.py`:** `e2e_database` copies the same template.
 - **`tests/unit/platform/test_workflow_guardrails.py`:** the two guards above, plus `STAGE_COMMANDS`
-  updated where the distribution flags became per-shard.
+  updated where the distribution flags became per-shard. The partition guard works test by test, not
+  file by file: it reads each file's tests with `ast` (never importing them — it runs in the unit
+  shard, which has no browser and no database) and understands `--deselect` beside `--ignore=`.
 - **`docs/CICD/PIPELINES.md`:** the shard table with measured numbers, what a run costs now, the
   database-copy section, and the minutes projection.
 

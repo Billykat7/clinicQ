@@ -329,6 +329,9 @@ jobs:
             paths: >-
               tests/e2e/display/test_board_accessibility.py
               tests/e2e/display/test_board_resilience.py::test_a_day_offline_leaves_the_heap_the_listeners_and_the_layout_where_they_were
+            # One worker, not "-n auto": four workers would still run these two modules side by
+            # side, which is the thing they cannot tolerate.
+            workers: "0"
           - name: board-pages
             browser: "1"
             paths: >-
