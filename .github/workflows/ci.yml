@@ -315,13 +315,20 @@ jobs:
           # tests one by one instead and the waits overlap.
           - name: board-resilience
             browser: "1"
-            paths: tests/e2e/display/test_board_resilience.py
+            paths: >-
+              tests/e2e/display/test_board_resilience.py
+              --deselect tests/e2e/display/test_board_resilience.py::test_a_day_offline_leaves_the_heap_the_listeners_and_the_layout_where_they_were
             dist: load
-          # Kept out of the shard above: these tests measure the board as drawn (contrast, motion),
-          # and a busy machine changes what is on the screen when they look. They run one at a time.
-          - name: board-a11y
+          # Kept out of the shard above, and out of each other's way: these tests measure the board
+          # rather than exercise it — the contrast of every text as drawn, and whether a day offline
+          # leaked listeners or heap — and a busy machine changes the answer. The leak test failed
+          # exactly this way beside its six neighbours (45 listeners against 39), so this shard runs
+          # one test at a time.
+          - name: board-measured
             browser: "1"
-            paths: tests/e2e/display/test_board_accessibility.py
+            paths: >-
+              tests/e2e/display/test_board_accessibility.py
+              tests/e2e/display/test_board_resilience.py::test_a_day_offline_leaves_the_heap_the_listeners_and_the_layout_where_they_were
           - name: board-pages
             browser: "1"
             paths: >-

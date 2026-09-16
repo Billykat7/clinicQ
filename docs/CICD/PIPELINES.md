@@ -56,8 +56,8 @@ for the run.
 | `unit-security` | `tests/unit/security` | 54 s | 77 s |
 | `unit-rest` | the other eleven `tests/unit/` directories | 25 s | 62 s |
 | `flows` | `tests --ignore=tests/unit --ignore=tests/integration --ignore=tests/e2e` | 4 s | 56 s |
-| `board-resilience` | `tests/e2e/display/test_board_resilience.py`, by test | 270 s | 166 s |
-| `board-a11y` | `tests/e2e/display/test_board_accessibility.py`, one at a time | 77 s | 135 s |
+| `board-resilience` | `tests/e2e/display/test_board_resilience.py` bar the leak test, by test | 235 s | 166 s |
+| `board-measured` | the board's contrast and leak tests, one at a time | 113 s | 135 s |
 | `board-pages` | the rest of `tests/e2e/display` | 104 s | 100 s |
 | `browser-app` | `tests/e2e/patient`, `tests/e2e/dashboard` | 101 s | 87 s |
 
@@ -142,8 +142,10 @@ streams that vanish without closing.
 - **Time budget:** these are the slowest shards in CI, and they are slow for a reason that no amount
   of sharding removes: they wait out the product's own budgets. The board's seven resilience tests
   spend about 250 seconds between them watching a stream drop, back off, and come back inside the
-  30-second recovery budget (Issue 57); the accessibility shard measures the board *as drawn*, which
-  is why it runs one test at a time — a busy machine changes what is on the screen when it looks.
+  30-second recovery budget (Issue 57). The `board-measured` shard runs one test at a time because
+  its tests measure the board rather than exercise it — the contrast of every text as drawn, and
+  whether a day offline leaked listeners or heap — and a busy machine changes the answer. The leak
+  test proved it: run beside its six neighbours it reported 45 listeners where it had 39.
   A browser test that needs to wait uses Playwright's `expect` with a timeout, never a fixed sleep,
   except where waiting *is* the test.
 - **Distribution:** the browser shards hand out tests one by one (`--dist load`) rather than by

@@ -439,16 +439,57 @@ def _ci_shard_tokens(workflows: dict[Workflow, dict[str, Any]]) -> list[str]:
     return [token for shard in matrix["include"] for token in shard["paths"].split()]
 
 
-def _shard_files(tokens: list[str]) -> set[str]:
-    """The test files one shard's `paths` collect: directories expanded, `--ignore=` subtracted."""
+def _tests_in_file(path: str) -> set[tuple[str, str]]:
+    """Every test pytest would collect from one file, as (file, function name) pairs.
+
+    Read from the source rather than by importing it: this guard runs in the unit shard, which has
+    no browser and no database, and must not need what the files it reads need.
+    """
+    tree = ast.parse((REPO_ROOT / path).read_text(encoding="utf-8"))
+    bodies = [tree.body] + [
+        node.body
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name.startswith("Test")
+    ]
+    return {
+        (path, child.name)
+        for body in bodies
+        for child in body
+        if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef)
+        and child.name.startswith("test")
+    }
+
+
+def _shard_tests(tokens: list[str]) -> set[tuple[str, str]]:
+    """The tests one shard's `paths` collect, as (file, function name) pairs.
+
+    Understands the four kinds of token the matrix uses: a directory, a file, one test
+    (`file.py::name`), and the two exclusions — `--ignore=<path>` for a subtree or file, and
+    `--deselect <file.py::name>` for a single test.
+    """
     ignored = [
         token.removeprefix("--ignore=")
         for token in tokens
         if token.startswith("--ignore=")
     ]
+    deselected: set[tuple[str, str]] = set()
     files: set[str] = set()
+    tests: set[tuple[str, str]] = set()
+    expect_deselect = False
     for token in tokens:
+        if expect_deselect:
+            path, _, name = token.partition("::")
+            deselected.add((path, name))
+            expect_deselect = False
+            continue
+        if token == "--deselect":
+            expect_deselect = True
+            continue
         if token.startswith("-"):
+            continue
+        if "::" in token:
+            path, _, name = token.partition("::")
+            tests.add((path, name))
             continue
         target = REPO_ROOT / token
         if target.is_dir():
@@ -456,29 +497,34 @@ def _shard_files(tokens: list[str]) -> set[str]:
                 path.relative_to(REPO_ROOT).as_posix()
                 for pattern in ("test_*.py", "*_test.py")
                 for path in target.rglob(pattern)
+                if "__pycache__" not in path.parts
             }
         else:
             files.add(token)
-    return {
+    kept = [
         path
         for path in files
         if not any(
             path == prefix or path.startswith(f"{prefix}/") for prefix in ignored
         )
-    }
+    ]
+    for path in kept:
+        tests |= _tests_in_file(path)
+    return tests - deselected
 
 
-def _test_files_on_disk() -> set[str]:
-    """Every file pytest would collect under `tests/`, relative to the repository root."""
-    return {
+def _tests_on_disk() -> set[tuple[str, str]]:
+    """Every test pytest would collect under `tests/`, as (file, function name) pairs."""
+    files = {
         path.relative_to(REPO_ROOT).as_posix()
         for pattern in ("test_*.py", "*_test.py")
         for path in TESTS_DIR.rglob(pattern)
         if "__pycache__" not in path.parts
     }
+    return {test for path in files for test in _tests_in_file(path)}
 
 
-def test_every_test_file_runs_in_exactly_one_shard(
+def test_every_test_runs_in_exactly_one_shard(
     workflows: dict[Workflow, dict[str, Any]],
 ) -> None:
     """The shards partition the suite: nothing is left out, nothing is run twice.
@@ -491,30 +537,31 @@ def test_every_test_file_runs_in_exactly_one_shard(
     """
     matrix = _jobs(workflows[Workflow.CI])[CiJob.TEST]["strategy"]["matrix"]
     shards = {
-        shard["name"]: _shard_files(shard["paths"].split())
+        shard["name"]: _shard_tests(shard["paths"].split())
         for shard in matrix["include"]
     }
+    on_disk = _tests_on_disk()
 
-    claimed: set[str] = set()
-    twice: dict[str, list[str]] = {}
-    for files in shards.values():
-        for path in files & claimed:
-            twice.setdefault(path, [n for n, f in shards.items() if path in f])
-        claimed |= files
-    assert not twice, f"test files claimed by more than one shard: {twice}"
+    claimed: set[tuple[str, str]] = set()
+    twice: dict[tuple[str, str], list[str]] = {}
+    for tests in shards.values():
+        for test in tests & claimed:
+            twice.setdefault(test, [n for n, t in shards.items() if test in t])
+        claimed |= tests
+    assert not twice, f"tests claimed by more than one shard: {twice}"
 
-    missing = _test_files_on_disk() - claimed
-    assert not missing, f"test files no shard runs: {sorted(missing)}"
+    missing = on_disk - claimed
+    assert not missing, f"tests no shard runs: {sorted(missing)}"
 
-    unknown = claimed - _test_files_on_disk()
-    assert not unknown, f"shards name paths that do not exist: {sorted(unknown)}"
+    unknown = claimed - on_disk
+    assert not unknown, f"shards name tests that do not exist: {sorted(unknown)}"
 
 
 def test_no_shard_is_empty(workflows: dict[Workflow, dict[str, Any]]) -> None:
     """A shard whose paths collect nothing is a job that pays its overhead to run no tests."""
     matrix = _jobs(workflows[Workflow.CI])[CiJob.TEST]["strategy"]["matrix"]
     for shard in matrix["include"]:
-        assert _shard_files(shard["paths"].split()), shard["name"]
+        assert _shard_tests(shard["paths"].split()), shard["name"]
 
 
 def test_ci_still_runs_the_top_level_flow_tests(
