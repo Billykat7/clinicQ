@@ -291,7 +291,9 @@ jobs:
             paths: tests/integration/dashboard tests/integration/display
           # ── unit: fast, but queue and security are two thirds of it between them.
           - name: unit-queue
-            paths: tests/unit/queue tests/unit/security
+            paths: tests/unit/queue
+          - name: unit-security
+            paths: tests/unit/security
           - name: unit-rest
             paths: >-
               tests/unit/appointments tests/unit/commons tests/unit/discovery
@@ -315,7 +317,6 @@ jobs:
             browser: "1"
             paths: tests/e2e/display/test_board_resilience.py
             dist: load
-            workers: "7"
           # Kept out of the shard above: these tests measure the board as drawn (contrast, motion),
           # and a busy machine changes what is on the screen when they look. They run one at a time.
           - name: board-a11y
@@ -395,9 +396,13 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+      # Without `--with-deps`: that flag spent 22 seconds a shard on apt, and the ubuntu-24.04
+      # image already ships Chrome and its libraries. The browser is cached above, so this step is
+      # the browser being unpacked. If a future runner image drops those libraries, Chromium fails
+      # to launch and the shard fails loudly (REQUIRE_BROWSER_TESTS=1) rather than skipping.
       - name: Install Chromium for Playwright
         if: matrix.browser
-        run: python -m playwright install --with-deps chromium
+        run: python -m playwright install chromium
 
       - name: pytest ${{ matrix.paths }}
         env:
