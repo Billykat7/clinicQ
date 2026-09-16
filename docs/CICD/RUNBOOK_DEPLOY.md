@@ -8,13 +8,18 @@ roll back in under a minute. Images come from [`RELEASE.md`](RELEASE.md); settin
 
 | I want to | Do |
 |-----------|----|
-| Deploy to staging | Push a release tag. Staging deploys itself once the release publishes. |
+| Deploy to staging | **Actions → Deploy → Run workflow**: `staging`, the version (e.g. `0.2.0`). Nothing to approve; it starts at once. |
 | Deploy to production | **Actions → Deploy → Run workflow**: `production`, the version (e.g. `0.2.0`). The DevOps/QA Lead approves it under the run's *Review deployments*. |
 | Roll back **now** | On the host: `cd /opt/btk/clinicq && DEPLOY_ENV=production ./deploy.sh rollback`. **Measured: 9.4 s** (below). |
 | Roll back to a chosen version | **Run workflow**: the environment, that version, tick **rollback** (it skips the migrations). |
 | See what runs | `curl https://<host>/health` (version and commit), or `./deploy.sh status` on the host. |
 
 ## What a deploy does
+
+**Every deploy is a manual run.** Pushing a tag publishes an image ([`RELEASE.md`](RELEASE.md)) and
+stops there; a person then decides when that version reaches staging or production. Shipping a
+release is two steps, not one — push the tag, then run Deploy with that version — and nothing on a
+host changes unless somebody asked for it.
 
 [`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml) runs one job for one environment,
 one deploy per environment at a time, never cancelled half-way. It copies

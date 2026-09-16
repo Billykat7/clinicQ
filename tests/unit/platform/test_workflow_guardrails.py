@@ -890,20 +890,40 @@ def _deploy_steps(workflows: dict[Workflow, dict[str, Any]]) -> list[dict[str, A
     return job["steps"]
 
 
-def test_only_staging_deploys_by_itself_and_only_after_a_release(
+def test_nothing_deploys_itself_every_deploy_is_a_manual_run(
     workflows: dict[Workflow, dict[str, Any]],
 ) -> None:
-    """A successful Release run deploys staging; production is only ever a manual, approved run."""
+    """A person chooses every deploy: the workflow has one trigger, and it is `Run workflow`.
+
+    **Rewritten by the manual-only change.** Staging used to deploy itself from a successful
+    Release (`workflow_run`), which made pushing a tag both a release and a deploy. It no longer
+    does: release.yml publishes the image, and this workflow puts a chosen version on a chosen
+    environment. No fallback may creep back in either — an `inputs.environment || 'staging'`
+    default is the automatic staging deploy wearing a different hat, and it would silently deploy
+    to staging if the choice were ever missing.
+    """
     deploy = workflows[Workflow.DEPLOY]
-    triggers = _triggers(deploy)
-    assert set(triggers) == {"workflow_run", Trigger.WORKFLOW_DISPATCH}
-    assert triggers["workflow_run"] == {
-        "workflows": ["Release"],
-        "types": ["completed"],
-    }
+    assert set(_triggers(deploy)) == {Trigger.WORKFLOW_DISPATCH}
     (job,) = _jobs(deploy).values()
-    assert job["environment"]["name"] == "${{ inputs.environment || 'staging' }}"
-    assert "github.event.workflow_run.conclusion == 'success'" in job["if"]
+    assert job["environment"]["name"] == "${{ inputs.environment }}"
+    assert "if" not in job, "a manual run needs no condition to tell the events apart"
+    raw = (WORKFLOW_DIR / Workflow.DEPLOY).read_text(encoding="utf-8")
+    assert "workflow_run" not in raw, (
+        "a leftover github.event.workflow_run.* expression is empty on a manual run"
+    )
+
+
+def test_the_deploy_run_names_the_product_and_the_version(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """`run-name` is what the Actions list shows: "Deploy ClinicQ 0.2.0", never a bare "Deploy".
+
+    Release and Deploy runs sit in the same list, several of each per version; a run that does not
+    say which product and which version it carries has to be opened to be identified.
+    """
+    assert (
+        workflows[Workflow.DEPLOY]["run-name"] == "Deploy ClinicQ ${{ inputs.version }}"
+    )
 
 
 def test_migrations_run_before_the_new_image_serves_and_never_on_a_rollback(

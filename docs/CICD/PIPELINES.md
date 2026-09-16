@@ -2,16 +2,17 @@
 
 ClinicQ has one quality gate written twice: `./scripts/ci-local.sh` (`make check`), which every
 developer runs before pushing, and `.github/workflows/ci.yml`, which runs the same checks on every
-pull request to `main` and blocks the merge when one of them fails. Deployment happens on tags only
-(Issues 10 and 11). Nothing runs on a push to a branch.
+pull request to `main` and blocks the merge when one of them fails. An image is published on tags
+only, and deploying one is always a manual run (Issues 10 and 11). Nothing runs on a push to a
+branch.
 
 | Trigger | What runs | Where |
 |---------|-----------|-------|
 | Before every push | `make check`: quality, pip-audit, secrets, tests, coverage, docker + Trivy | your machine |
 | Pull request to `main` | **CI**: the same stages minus pip-audit, Trivy and the compose smoke | GitHub Actions |
 | Push to any branch, including `main` | nothing | — |
-| Tag `v*.*.*` | `release.yml`: build once, check, publish to GHCR ([`RELEASE.md`](RELEASE.md)); then `deploy.yml` deploys staging ([`RUNBOOK_DEPLOY.md`](RUNBOOK_DEPLOY.md)) | GitHub Actions |
-| Manual (`Run workflow` on Deploy) | production (after the DevOps/QA Lead approves), or a rollback | GitHub Actions |
+| Tag `v*.*.*` | `release.yml`: build once, check, publish to GHCR ([`RELEASE.md`](RELEASE.md)). It publishes the image and stops: no deploy follows a tag | GitHub Actions |
+| Manual (`Run workflow` on Deploy) | `deploy.yml`: the chosen version onto staging, or production after the DevOps/QA Lead approves, or a rollback ([`RUNBOOK_DEPLOY.md`](RUNBOOK_DEPLOY.md)) | GitHub Actions |
 | Manual (`Run workflow` on CI) | the whole CI run, image build included | GitHub Actions |
 
 ## The CI workflow, job by job
