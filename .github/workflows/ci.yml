@@ -5,7 +5,7 @@
 #   ci-local.sh stage  →  job here          what runs
 #   quality            →  quality           ruff check, ruff format --check, mypy src/, ruff pin
 #   secrets            →  quality           gitleaks over the whole history, the same command
-#   tests              →  test (4 shards)   pytest with coverage; the deploy sequence first
+#   tests              →  test (14 shards)  pytest with coverage, in parallel; deploy sequence too
 #   coverage           →  report            the fail_under floor, over the combined shards
 #   docker             →  docker            the image builds, when one of its inputs changed
 #   pip-audit, Trivy and the --compose smoke stay local-only by design (scripts/README.md).
@@ -241,24 +241,95 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # Every shard measured under a minute; the ceiling is here to cap a wedged job, not as a target.
+    timeout-minutes: 10
+    # The suite is split into shards that run as parallel jobs, so the pull request waits for the
+    # slowest shard rather than for the sum. Four shards (unit, integration, flows, browser) took
+    # 7m45s, because "integration" alone was 1,444 seconds of work on four cores; the shards below
+    # are balanced by each directory's *measured* cost, from the JUnit files CI itself uploads, to
+    # land inside a minute each.
+    #
+    # The per-shard fixed cost is what limits how fine this can usefully go: about 30 seconds of
+    # service containers, checkout, Python, uv and install before pytest starts. A shard under
+    # ~20 seconds of tests is mostly that overhead, so directories are grouped until they are worth
+    # a job. Going finer still works and costs nothing on a public repository (GitHub bills no
+    # minutes for one), but each job is billed rounded up to the minute if this repository ever
+    # goes private — docs/CICD/PIPELINES.md carries that projection.
+    #
+    # Every test file must be claimed by exactly one shard, or it silently stops running:
+    # `test_every_test_file_runs_in_exactly_one_shard` in tests/unit/platform/ expands these paths
+    # and fails when a file is missing or claimed twice. Add a new test directory to a shard in the
+    # same pull request that creates it.
     strategy:
       # Every shard reports, so one red shard does not hide another's failures.
       fail-fast: false
       matrix:
         include:
-          - name: unit
-            paths: tests/unit
-          - name: integration
-            paths: tests/integration
+          # ── integration: the slow half. Each entry is whole directories, grouped to ~100 seconds
+          # of measured work; discovery and queue are heavy enough to sit alone.
+          - name: int-discovery
+            paths: tests/integration/discovery
+          # Carries the 07:30 rush budget (Issue 47), which runs alone after the parallel pass.
+          - name: int-queue
+            paths: tests/integration/queue
+          - name: int-sites
+            paths: >-
+              tests/integration/sites tests/integration/auth
+              tests/integration/alerts tests/integration/public
+          # Carries the deploy sequence (Issue 11) against the service database.
+          - name: int-platform
+            paths: tests/integration/platform tests/integration/database
+          - name: int-appointments
+            paths: >-
+              tests/integration/appointments tests/integration/patients
+              tests/integration/staff
+          - name: int-notifications
+            paths: tests/integration/notifications tests/integration/contracts
+          - name: int-admin
+            paths: tests/integration/admin tests/integration/security
+          - name: int-dashboard
+            paths: tests/integration/dashboard tests/integration/display
+          # ── unit: fast, but queue and security are two thirds of it between them.
+          - name: unit-queue
+            paths: tests/unit/queue tests/unit/security
+          - name: unit-rest
+            paths: >-
+              tests/unit/appointments tests/unit/commons tests/unit/discovery
+              tests/unit/display tests/unit/documents tests/unit/messaging
+              tests/unit/notifications tests/unit/platform tests/unit/scripts
+              tests/unit/seed tests/unit/sites
           # The cross-domain flow files at the top of tests/, and any added later: the whole tree
-          # with both layer folders ignored. The guard test fails if this shard disappears.
+          # with the three layer folders ignored. The guard test fails if this shard disappears.
           - name: flows
             paths: tests --ignore=tests/unit --ignore=tests/integration --ignore=tests/e2e
-          # The browser tests (Issue 55): a real server and Chromium, driven by Playwright. Their own
-          # shard, because they need the browser installed and they measure the page, not the CPU.
-          - name: browser
-            paths: tests/e2e
+          # ── browser (Issue 55): a real server and Chromium, driven by Playwright. Each xdist
+          # worker is its own process and builds its own module fixtures — its own database, its own
+          # server on a free port, its own browser — so nothing is shared between workers and the
+          # only question is how a shard's tests are handed out.
+          #
+          # By module (the default) is enough for a shard holding several files, which is what the
+          # last two do. The seven resilience tests are one file and 250 seconds between them,
+          # almost all of it waiting out real backoff and recovery budgets, so that shard hands out
+          # tests one by one instead and the waits overlap.
+          - name: board-resilience
+            browser: "1"
+            paths: tests/e2e/display/test_board_resilience.py
+            dist: load
+            workers: "7"
+          # Kept out of the shard above: these tests measure the board as drawn (contrast, motion),
+          # and a busy machine changes what is on the screen when they look. They run one at a time.
+          - name: board-a11y
+            browser: "1"
+            paths: tests/e2e/display/test_board_accessibility.py
+          - name: board-pages
+            browser: "1"
+            paths: >-
+              tests/e2e/display
+              --ignore=tests/e2e/display/test_board_resilience.py
+              --ignore=tests/e2e/display/test_board_accessibility.py
+          - name: browser-app
+            browser: "1"
+            paths: tests/e2e/patient tests/e2e/dashboard
     services:
       # The images the dev stack pins (decision 4; infra/docker/docker-compose.db.yml), with its
       # default credentials. test_dev_stack_compose.py fails if the PostgreSQL image differs, and
@@ -296,8 +367,8 @@ jobs:
       TEST_REDIS_URL: redis://localhost:6379/15
       REQUIRE_POSTGRES_TESTS: "1"
       REQUIRE_REDIS_TESTS: "1"
-      # The browser shard fails, rather than skips, when Chromium is missing (tests/e2e/conftest.py).
-      REQUIRE_BROWSER_TESTS: ${{ matrix.name == 'browser' && '1' || '0' }}
+      # A browser shard fails, rather than skips, when Chromium is missing (tests/e2e/conftest.py).
+      REQUIRE_BROWSER_TESTS: ${{ matrix.browser || '0' }}
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -311,7 +382,7 @@ jobs:
       # What a deploy does to a database (Issue 11 runs the same script inside the new image), on
       # the service container: a migration or seed that fails, fails here, not during a release.
       - name: Deploy sequence on the service database
-        if: matrix.name == 'integration'
+        if: matrix.name == 'int-platform'
         env:
           DATABASE_URL: postgresql://btk_user:change-me@localhost:5432/btk
         run: ./scripts/db/deploy-sequence.sh
@@ -319,13 +390,13 @@ jobs:
       # Chromium for the browser shard, at the version requirements.txt pins Playwright to, with the
       # system libraries it needs. The download is cached; the libraries come from apt each run.
       - name: Cache Playwright's Chromium
-        if: matrix.name == 'browser'
+        if: matrix.browser
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
       - name: Install Chromium for Playwright
-        if: matrix.name == 'browser'
+        if: matrix.browser
         run: python -m playwright install --with-deps chromium
 
       - name: pytest ${{ matrix.paths }}
@@ -335,13 +406,14 @@ jobs:
         # PYTEST_PATHS is split on purpose: it holds paths and --ignore flags. Coverage is only
         # collected here; the report job checks the floor over all three shards together.
         run: >-
-          pytest $PYTEST_PATHS -q -n auto --dist loadscope
+          pytest $PYTEST_PATHS -q -n ${{ matrix.workers || 'auto' }}
+          --dist ${{ matrix.dist || 'loadscope' }}
           --cov --cov-report= --cov-fail-under=0 --junitxml="junit-$SHARD.xml"
 
       # The 07:30 rush (Issue 47) measures latency, so it runs alone after the parallel run, which
       # skips it: a budget judged while every CPU is busy with other tests measures the runner.
       - name: 07:30 rush, alone
-        if: matrix.name == 'integration'
+        if: matrix.name == 'int-queue'
         run: >-
           pytest tests/integration/queue/test_queue_concurrency.py::test_the_0730_rush_meets_the_budget
           -q --log-cli-level=INFO

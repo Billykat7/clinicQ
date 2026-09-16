@@ -135,7 +135,9 @@ STAGE_COMMANDS: dict[str, tuple[str, ...]] = {
         "gitleaks detect --source . --config .gitleaks.toml "
         "--baseline-path .gitleaks-baseline.json --redact --no-banner",
     ),
-    "tests": ("pytest", "--cov", "-n auto --dist loadscope"),
+    # The distribution flags are per-shard in CI (`matrix.workers` / `matrix.dist`, defaulting to
+    # ci-local.sh's own `-n auto --dist loadscope`); the test below checks those defaults.
+    "tests": ("pytest", "--cov"),
     "coverage": ("coverage report",),
     "docker": ("infra/docker/Dockerfile",),
 }
@@ -437,6 +439,84 @@ def _ci_shard_tokens(workflows: dict[Workflow, dict[str, Any]]) -> list[str]:
     return [token for shard in matrix["include"] for token in shard["paths"].split()]
 
 
+def _shard_files(tokens: list[str]) -> set[str]:
+    """The test files one shard's `paths` collect: directories expanded, `--ignore=` subtracted."""
+    ignored = [
+        token.removeprefix("--ignore=")
+        for token in tokens
+        if token.startswith("--ignore=")
+    ]
+    files: set[str] = set()
+    for token in tokens:
+        if token.startswith("-"):
+            continue
+        target = REPO_ROOT / token
+        if target.is_dir():
+            files |= {
+                path.relative_to(REPO_ROOT).as_posix()
+                for pattern in ("test_*.py", "*_test.py")
+                for path in target.rglob(pattern)
+            }
+        else:
+            files.add(token)
+    return {
+        path
+        for path in files
+        if not any(
+            path == prefix or path.startswith(f"{prefix}/") for prefix in ignored
+        )
+    }
+
+
+def _test_files_on_disk() -> set[str]:
+    """Every file pytest would collect under `tests/`, relative to the repository root."""
+    return {
+        path.relative_to(REPO_ROOT).as_posix()
+        for pattern in ("test_*.py", "*_test.py")
+        for path in TESTS_DIR.rglob(pattern)
+        if "__pycache__" not in path.parts
+    }
+
+
+def test_every_test_file_runs_in_exactly_one_shard(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """The shards partition the suite: nothing is left out, nothing is run twice.
+
+    The `test` job trades Actions minutes for wall clock by running its shards side by side, which
+    only works if every file has exactly one owner. A test directory added without a shard to claim
+    it would otherwise stop running the day it is created, silently and greenly. A file claimed by
+    two shards is the cheaper mistake — it only costs minutes and doubles the coverage data — but it
+    is still a mistake, and both are one edit of the matrix away.
+    """
+    matrix = _jobs(workflows[Workflow.CI])[CiJob.TEST]["strategy"]["matrix"]
+    shards = {
+        shard["name"]: _shard_files(shard["paths"].split())
+        for shard in matrix["include"]
+    }
+
+    claimed: set[str] = set()
+    twice: dict[str, list[str]] = {}
+    for files in shards.values():
+        for path in files & claimed:
+            twice.setdefault(path, [n for n, f in shards.items() if path in f])
+        claimed |= files
+    assert not twice, f"test files claimed by more than one shard: {twice}"
+
+    missing = _test_files_on_disk() - claimed
+    assert not missing, f"test files no shard runs: {sorted(missing)}"
+
+    unknown = claimed - _test_files_on_disk()
+    assert not unknown, f"shards name paths that do not exist: {sorted(unknown)}"
+
+
+def test_no_shard_is_empty(workflows: dict[Workflow, dict[str, Any]]) -> None:
+    """A shard whose paths collect nothing is a job that pays its overhead to run no tests."""
+    matrix = _jobs(workflows[Workflow.CI])[CiJob.TEST]["strategy"]["matrix"]
+    for shard in matrix["include"]:
+        assert _shard_files(shard["paths"].split()), shard["name"]
+
+
 def test_ci_still_runs_the_top_level_flow_tests(
     workflows: dict[Workflow, dict[str, Any]],
 ) -> None:
@@ -483,6 +563,32 @@ def test_ci_runs_the_same_commands_as_ci_local(
             )
             assert command in job_text, (
                 f"ci.yml:{job} does not run {command!r} ({stage})"
+            )
+
+
+def test_the_shards_default_to_the_local_gates_distribution(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """A shard that says nothing runs pytest exactly as `ci-local.sh` does, and only the browser
+    shards say anything.
+
+    The shards exist to spend Actions minutes on wall clock, not to run a different suite in a
+    different way. `-n auto --dist loadscope` stays the default on both sides, so the only
+    deviations are the browser shards, whose tests spend their time waiting on a page rather than
+    on a CPU and therefore distribute by test instead of by module.
+    """
+    assert "-n auto --dist loadscope" in CI_LOCAL.read_text(encoding="utf-8")
+
+    test_job = _jobs(workflows[Workflow.CI])[CiJob.TEST]
+    job_text = _job_text(test_job)
+    assert "-n ${{ matrix.workers || 'auto' }}" in job_text
+    assert "--dist ${{ matrix.dist || 'loadscope' }}" in job_text
+
+    for shard in test_job["strategy"]["matrix"]["include"]:
+        if {"dist", "workers"} & set(shard):
+            assert shard.get("browser"), (
+                f"{shard['name']} runs pytest differently from the local gate without being a "
+                "browser shard"
             )
 
 
