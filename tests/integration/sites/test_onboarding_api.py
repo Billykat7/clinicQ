@@ -15,18 +15,28 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from starlette import status
 
 from src.commons.enums import (
     AuditAction,
+    GrantScope,
+    PermissionVerb,
     SiteSector,
     SiteStatus,
     TicketSource,
+    UserRole,
 )
 from src.core import domain_events
 from src.core.domain_events import SiteStatusChanged
+from src.core.rbac_simulator import (
+    SimulationDecision,
+    SimulationPrincipal,
+    SimulationTarget,
+    simulate,
+)
 from src.database.models import AuditEvent, ClinicService, Queue, Site
+from src.database.models.role_permission import RolePermission
 from src.modules.sites.availability import NOT_ACCEPTING, join_gate
 from src.modules.sites.discovery import search_sites
 from src.modules.sites.hours import OpeningSchedule, TimeSpan
@@ -393,3 +403,155 @@ def test_a_clinic_waiting_to_be_checked_can_walk_through_its_own_queue(
         site = db.get(Site, site_id)
         assert site is not None
         assert join_gate(site, _ALWAYS_OPEN).allowed is False
+
+
+# --- who may decide, and who may remove (Issue 221) -------------------------------------------
+
+
+def _narrow_operator_to_onboarding(clinics: SimpleNamespace) -> None:
+    """Make ``platform_admin`` a verification officer: it decides listings and removes nothing.
+
+    Swaps its one grant — ``sites`` + ``delete`` at ``business``, which cascades to everything under
+    ``sites`` — for ``sites.onboarding`` + ``update`` at the same tier. That is a grant nobody could
+    write before this issue, because deciding a clinic's listing *was* ``sites:delete``.
+    """
+    with clinics.session() as db:
+        db.execute(
+            delete(RolePermission).where(
+                RolePermission.role == UserRole.PLATFORM_ADMIN.value,
+                RolePermission.resource == "sites",
+            )
+        )
+        db.add(
+            RolePermission(
+                role=UserRole.PLATFORM_ADMIN.value,
+                resource="sites.onboarding",
+                max_verb=PermissionVerb.UPDATE.value,
+                scope=GrantScope.BUSINESS.value,
+            )
+        )
+        db.commit()
+
+
+def test_deciding_a_listing_no_longer_needs_the_grant_that_deletes_clinics(
+    clinics: SimpleNamespace,
+) -> None:
+    """The whole point of ``sites.onboarding``: a verification officer is expressible.
+
+    Before this issue the verification routes asked for ``sites`` + ``delete``, so authority to
+    check clinics could not be handed out without authority to remove them.
+    """
+    site_id = _submit(clinics).json()["id"]
+    _narrow_operator_to_onboarding(clinics)
+    officer = _operator(clinics)
+
+    assert officer.get("/api/v1/sites/verification").status_code == status.HTTP_200_OK
+    decided = officer.put(
+        f"/api/v1/sites/{site_id}/verification",
+        json={"status": SiteStatus.VERIFIED.value},
+    )
+    assert decided.status_code == status.HTTP_200_OK, decided.text
+    assert decided.json()["status"] == SiteStatus.VERIFIED.value
+
+    # …and the clinic it just approved, it cannot remove.
+    assert (
+        officer.delete(f"/api/v1/sites/{site_id}").status_code
+        == status.HTTP_403_FORBIDDEN
+    )
+
+
+def test_a_platform_admin_decides_and_removes_exactly_as_before(
+    clinics: SimpleNamespace,
+) -> None:
+    """The split takes nothing away: the shipped grant still reaches both, through the cascade."""
+    site_id = _submit(clinics).json()["id"]
+    operator = _operator(clinics)
+
+    assert operator.get("/api/v1/sites/verification").status_code == status.HTTP_200_OK
+    assert (
+        operator.put(
+            f"/api/v1/sites/{site_id}/verification",
+            json={"status": SiteStatus.VERIFIED.value},
+        ).status_code
+        == status.HTTP_200_OK
+    )
+    assert (
+        operator.delete(f"/api/v1/sites/{site_id}").status_code
+        == status.HTTP_204_NO_CONTENT
+    )
+
+
+def test_a_clinic_reads_where_its_own_listing_stands_and_what_the_admin_wrote(
+    clinics: SimpleNamespace,
+) -> None:
+    """The clinic side of the workflow: the review note is written for them, so they can read it.
+
+    Read by the clinic's **own** manager, not by the operator: this route is site-scoped, and a
+    platform admin is assigned to no clinic (Issue 19), so they reach one clinic's onboarding the
+    way they reach anything else of one clinic's — through the audited cross-site hatch.
+    """
+    _decide(
+        clinics,
+        clinics.site_a,
+        status=SiteStatus.PENDING_VERIFICATION.value,
+        note="The street number does not match the one on your practice licence.",
+    )
+
+    state = (
+        clinics.client("manager.a@clinicq.example")
+        .get(f"/api/v1/sites/{clinics.site_a}/onboarding")
+        .json()
+    )
+
+    assert state["status"] == SiteStatus.PENDING_VERIFICATION.value
+    assert state["visible_to_patients"] is False
+    assert state["can_submit_for_checking"] is False
+    assert state["review_note"].startswith("The street number")
+    assert state["reviewed_at"] is not None
+
+
+def test_a_manager_reads_their_own_clinics_listing_and_no_other(
+    clinics: SimpleNamespace,
+) -> None:
+    """``sites.onboarding`` at ``assigned``, through the cascade, and the guard does the rest."""
+    manager = clinics.client("manager.a@clinicq.example")
+
+    own = manager.get(f"/api/v1/sites/{clinics.site_a}/onboarding")
+    assert own.status_code == status.HTTP_200_OK
+    assert own.json()["visible_to_patients"] is True
+
+    assert (
+        manager.get(f"/api/v1/sites/{clinics.site_b}/onboarding").status_code
+        == status.HTTP_404_NOT_FOUND
+    )
+
+
+def test_a_clinic_manager_reaches_onboarding_but_never_at_the_deciding_tier(
+    clinics: SimpleNamespace,
+) -> None:
+    """A manager reads their own clinic's onboarding state; the decision asks for ``business``.
+
+    Their ``sites`` + ``update`` at ``assigned`` cascades to ``sites.onboarding`` at ``assigned`` —
+    which is what the setup link (Issue 223) will ask for — and the verification routes ask for
+    ``business``, which a manager holds nothing at.
+    """
+    with clinics.session() as db:
+        decided = simulate(
+            db,
+            SimulationPrincipal(role=UserRole.CLINIC_MANAGER.value),
+            SimulationTarget(
+                resource="sites.onboarding", verb=PermissionVerb.UPDATE.value
+            ),
+        )
+
+    assert decided.decision is SimulationDecision.ALLOW
+    assert decided.effective_tier is GrantScope.ASSIGNED
+
+    manager = clinics.client("manager.a@clinicq.example")
+    assert (
+        manager.put(
+            f"/api/v1/sites/{clinics.site_a}/verification",
+            json={"status": SiteStatus.SUSPENDED.value, "note": "closing for a week"},
+        ).status_code
+        == status.HTTP_403_FORBIDDEN
+    )

@@ -4,11 +4,13 @@ The shape is the widgets example's, with the one difference every ClinicQ module
 that names a clinic goes through the site guard**, not through the generic instance scope. So
 there are two groups here, and the split is the whole authorization story:
 
-* **Platform routes** — listing every clinic, creating one, deleting one, and the geocoding proxy.
-  These have no ``{site_id}`` to be scoped by, so they gate on a ``business``-tier grant
-  (:func:`~src.api.rbac_deps.require` with ``scope=BUSINESS``), which only ``platform_admin``
-  holds. The listing is still narrowed: a caller below that tier sees the clinics they hold a role
-  at, and nothing else.
+* **Platform routes** — listing every clinic, creating one, deleting one, deciding whether one is
+  listed, and the geocoding proxy. These have no ``{site_id}`` to be scoped by, so they gate on a
+  ``business``-tier grant (:func:`~src.api.rbac_deps.require` with ``scope=BUSINESS``), which only
+  ``platform_admin`` holds. The listing is still narrowed: a caller below that tier sees the clinics
+  they hold a role at, and nothing else. The **resource** differs by what the route decides:
+  ``sites`` for the directory itself, ``sites.onboarding`` for the verification queue and its
+  decision, because approving a clinic is not the authority to remove one (Issue 221).
 * **Clinic routes** — reading and editing one clinic. These take
   :func:`~src.core.site_scope.require_site_access`, so another clinic's id answers **404**, with
   the same body an id that never existed gets (non-negotiable 3), and the verb is resolved with the
@@ -102,6 +104,7 @@ from src.modules.sites.schemas import (
     SiteIn,
     SiteListOut,
     SiteLocationOut,
+    SiteOnboardingOut,
     SiteOut,
     SiteRegistrationIn,
     SiteRegistrationOut,
@@ -134,6 +137,18 @@ SitesDelete = Annotated[
     None, Depends(require("sites", "delete", scope=GrantScope.BUSINESS))
 ]
 
+#: Onboarding: the verification queue and the decision that moves a clinic's listing (Issue 29), and
+#: the setup link a clinic completes itself with (Issue 223). Its own resource, not a verb on
+#: ``sites``, because **deciding whether a clinic is listed is not the same authority as removing
+#: one** (Issue 221): these used to gate on ``SitesDelete``, so verification authority could not be
+#: granted without deletion authority, and the audit trail described an approval as a delete.
+SitesOnboardingRead = Annotated[
+    None, Depends(require("sites.onboarding", "read", scope=GrantScope.BUSINESS))
+]
+SitesOnboardingUpdate = Annotated[
+    None, Depends(require("sites.onboarding", "update", scope=GrantScope.BUSINESS))
+]
+
 #: One clinic, named in the path: the site guard answers "whose clinic" before the verb, and the
 #: verb is resolved with the roles the caller holds *at that clinic*.
 SiteProfileRead = Annotated[
@@ -141,6 +156,13 @@ SiteProfileRead = Annotated[
 ]
 SiteProfileUpdate = Annotated[
     SiteAccess, Depends(require_site_access("sites.profile", "update"))
+]
+
+#: One clinic's own view of the decision made about it (Issue 221). Site-scoped, unlike the two
+#: routes above: this is the clinic reading its **own** listing, so another clinic's id is the
+#: guard's 404 and a clinic manager reaches it at ``assigned`` through their grant on ``sites``.
+SiteOnboardingRead = Annotated[
+    SiteAccess, Depends(require_site_access("sites.onboarding", "read"))
 ]
 #: Opening hours, holiday rules and closures are the clinic's profile: a receptionist reads them,
 #: a clinic manager changes them, and closing the clinic is the same grant as changing its hours
@@ -337,7 +359,7 @@ def register_clinic(
 )
 def verification_queue(
     db: DbSession,
-    _authz: SitesDirectory,
+    _authz: SitesOnboardingRead,
     queue_status: Annotated[SiteStatus | None, Query(alias="status")] = None,
     q: Annotated[str | None, Query(max_length=120)] = None,
 ) -> VerificationQueueOut:
@@ -390,7 +412,7 @@ def decide_verification(
     request: Request,
     db: DbSession,
     staff: CurrentStaff,
-    _authz: SitesDelete,
+    _authz: SitesOnboardingUpdate,
 ) -> VerificationQueueItemOut:
     """Move one clinic's listing. The only route that writes ``site.status``.
 
@@ -418,6 +440,37 @@ def decide_verification(
     db.commit()
     db.refresh(site)
     return _queue_item(site)
+
+
+@router.get(
+    "/{site_id}/onboarding",
+    response_model=SiteOnboardingOut,
+    operation_id="sitesOnboardingState",
+    summary="Where this clinic's listing stands",
+)
+def get_onboarding_state(
+    access: SiteOnboardingRead, db: DbSession
+) -> SiteOnboardingOut:
+    """One clinic's own view of the decision made about it: its listing, and what the admin wrote.
+
+    The clinic side of Issue 29's workflow. A manager can answer "are we listed yet, and if not
+    what did they say?" without the operator's cross-clinic console, and without being able to
+    decide anything: this route reads, and the decision (:func:`decide_verification`) asks for the
+    ``business`` tier, which no clinic manager holds. Another clinic's id is the guard's 404.
+    """
+    site = _site_or_404(db, access)
+    return SiteOnboardingOut(
+        site_id=site.id,
+        status=site.status_enum,
+        submitted_at=site.submitted_at,
+        reviewed_at=site.reviewed_at,
+        review_note=site.review_note,
+        visible_to_patients=site.status_enum is SiteStatus.VERIFIED,
+        can_submit_for_checking=(
+            SiteStatus.PENDING_VERIFICATION
+            in onboarding.ALLOWED_TRANSITIONS.get(site.status_enum, frozenset())
+        ),
+    )
 
 
 @router.get("", response_model=SiteListOut, operation_id="sitesList")

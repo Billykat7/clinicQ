@@ -135,8 +135,8 @@ def pending_queue(
     """The platform admin's verification queue, oldest submission first.
 
     Not site-scoped, and that is the point: this is the **cross-clinic** console the operator works
-    in, reachable only through a ``business``-tier grant on ``sites``. The site guard's job is to
-    stop a clinic reading another clinic; it is not what gates the operator's own queue.
+    in, reachable only through a ``business``-tier grant on ``sites.onboarding``. The site guard's
+    job is to stop a clinic reading another clinic; it is not what gates the operator's own queue.
     """
     statement = select(Site).where(Site.is_deleted.is_(False))
     statement = statement.where(

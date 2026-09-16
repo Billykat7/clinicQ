@@ -229,9 +229,9 @@ paths:
       operationId: sitesVerificationQueue
       summary: Clinics waiting for a platform admin
       description: |
-        The operator's queue, oldest submission first. A `business`-tier grant on `sites`, so a
-        clinic manager is refused. Not behind the site guard: this is a cross-clinic console, and
-        the guard would 404 an operator who is assigned to no clinic.
+        The operator's queue, oldest submission first. A `business`-tier grant on
+        `sites.onboarding`, so a clinic manager is refused. Not behind the site guard: this is a
+        cross-clinic console, and the guard would 404 an operator who is assigned to no clinic.
       parameters:
         - name: status
           in: query
@@ -261,6 +261,10 @@ paths:
 
         Sending a clinic back (`draft`, `pending_verification`) or suspending it **requires** a
         note: the submitter is shown exactly what is written.
+
+        A `business`-tier grant on `sites.onboarding` (Issue 221). It used to ask for `sites` +
+        `delete`, so verification authority could not be granted without deletion authority; a
+        grant on `sites.onboarding` alone now approves clinics and removes none.
       parameters:
         - $ref: "#/components/parameters/SiteId"
       requestBody:
@@ -289,6 +293,32 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
               example: { detail: "Say what is wrong, or what more is needed. The person who submitted this clinic is shown exactly what you write here." }
+
+  /sites/{site_id}/onboarding:
+    get:
+      tags: [sites]
+      operationId: sitesOnboardingState
+      summary: Where this clinic's listing stands
+      description: |
+        The clinic's own view of the decision made about it: its listing status, when it was put
+        forward, when it was last looked at, and the note the reviewing admin wrote — which is
+        written for the submitter to read, so this is where they read it. It names no reviewer:
+        who decided is in the audit trail, which is the operator's.
+
+        Site-scoped, unlike the two routes above, so another clinic's id is a `404`. A clinic
+        manager reaches it through their `sites` grant at the `assigned` tier; deciding anything
+        still asks for `business`, which no clinic manager holds.
+      parameters:
+        - $ref: "#/components/parameters/SiteId"
+      responses:
+        "200":
+          description: Where this clinic's listing stands.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SiteOnboardingOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   # ── One clinic's profile (Issue 23) ─────────────────────────────────────────────────────
   /sites/{site_id}:
@@ -1903,6 +1933,27 @@ components:
         total: { type: integer, minimum: 0 }
         status: { $ref: "#/components/schemas/SiteStatus" }
         items: { type: array, items: { $ref: "#/components/schemas/VerificationQueueItemOut" } }
+    SiteOnboardingOut:
+      type: object
+      description: |
+        Where one clinic's listing stands, as the clinic itself sees it (Issue 221).
+      required:
+        [site_id, status, submitted_at, reviewed_at, review_note, visible_to_patients,
+         can_submit_for_checking]
+      properties:
+        site_id: { type: string }
+        status: { $ref: "#/components/schemas/SiteStatus" }
+        submitted_at: { type: [string, "null"], format: date-time }
+        reviewed_at: { type: [string, "null"], format: date-time }
+        review_note:
+          type: [string, "null"]
+          description: What the reviewing admin wrote, for the submitter to read.
+        visible_to_patients:
+          type: boolean
+          description: Whether patients can find this clinic now — `verified` and nothing else.
+        can_submit_for_checking:
+          type: boolean
+          description: Whether `pending_verification` is a move this listing may make from here.
 
     # ── Hours, holidays and closures ──────────────────────────────────────────────────────
     TimeSpanIn:

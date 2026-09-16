@@ -87,8 +87,11 @@ SITE_DISPLAY_RESOURCE = "sites.display"
 #: The clinic profile resource, which a clinic's payment profile belongs to (Issue 37).
 SITE_PROFILE_RESOURCE = "sites.profile"
 
-#: And the one gating the operator's clinic-verification console (Issue 29), at ``business`` tier.
+#: And the one gating the operator's cross-clinic consoles, at ``business`` tier.
 SITES_RESOURCE = "sites"
+#: The clinic-verification console's own resource (Issues 29, 221): the listing decision is not the
+#: authority to delete a clinic, so the console gates on what the API gates on, not on ``sites``.
+SITE_ONBOARDING_RESOURCE = "sites.onboarding"
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = PACKAGE_DIR / "templates"
@@ -419,10 +422,10 @@ async def admin_verification_section(
 ) -> HTMLResponse:
     """The platform admin's clinic-verification queue, one tab per listing status.
 
-    Gated on the same ``business``-tier grant on ``sites`` the API enforces — this is the operator's
-    cross-clinic console, so it is deliberately **not** behind the site guard, which would 404
-    somebody assigned to no clinic. The API re-checks the grant on every decision; this decides what
-    is offered.
+    Gated on the same ``business``-tier grant on ``sites.onboarding`` the API enforces — this is the
+    operator's cross-clinic console, so it is deliberately **not** behind the site guard, which would
+    404 somebody assigned to no clinic. The API re-checks the grant on every decision; this decides
+    what is offered.
     """
     if not require_authenticated_html(request, db):
         return _redirect_to_sign_in(request)  # type: ignore[return-value]
@@ -434,7 +437,7 @@ async def admin_verification_section(
         request, db, active_nav="verification", page_title="Clinic verification"
     )
     if not ctx["nav"].can_surface(
-        SITES_RESOURCE, PermissionVerb.READ, GrantScope.BUSINESS
+        SITE_ONBOARDING_RESOURCE, PermissionVerb.READ, GrantScope.BUSINESS
     ):
         return _forbidden_html(request, db)
 
