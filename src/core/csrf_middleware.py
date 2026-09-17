@@ -22,6 +22,20 @@ but ``/auth/refresh`` and ``/auth/logout``; when it has a CSRF cookie it must ec
 two routes check the binding against the refresh token's own family (:func:`csrf_token_is_bound`).
 ``Authorization: Bearer`` clients carry no ambient credential and skip the token check.
 
+One browser can hold **two** sessions at once — a staff one and a patient one (Issue 17) — and
+they share a single CSRF cookie, so whichever signed in last owns it. The binding is therefore
+checked against *every* session the request carries (:func:`_session_ids`): a token minted for
+either of them is this browser's own, because both session cookies are ``httpOnly`` and only this
+server sets them. Checking it against the staff session alone meant that signing in as a patient
+made every staff write fail, and vice versa, until a cookie expired (Issue 229).
+
+A request with **no session cookie at all** — signing in, signing up, asking for a reset link — is
+let through whatever is in the CSRF cookie. There is no ambient credential for a token to protect
+there, ``SameSite=Lax`` and the Fetch Metadata check above are what stop login CSRF, and requiring
+the echo meant that one stale cookie a page could not read locked the browser out of signing in at
+all, with no way back from the UI (Issue 229). A refresh cookie is still a session, so it still has
+to echo.
+
 Before Issue 16 the check was skipped whenever the CSRF cookie was absent, and compared with
 ``==``; the CSRF cookie also expired with the access token, 15 minutes in, while the refresh cookie
 lived a week.
@@ -73,6 +87,26 @@ def csrf_token_is_bound(token: str | None, session_id: str | None) -> bool:
     return hmac.compare_digest(signature, _signature(session_id, nonce))
 
 
+def _session_ids(request: Request) -> tuple[str, ...]:
+    """Every session id this request is authenticated as, staff and patient, in that order.
+
+    Both cookies are ``httpOnly`` and signed, so a session id that comes out of one is a session
+    the browser genuinely holds: an attacker can plant a CSRF cookie, never a session cookie.
+    """
+    from src.core.security import session_id_from_access_token
+
+    settings = get_settings()
+    candidates = (
+        request.cookies.get(settings.access_token_cookie_name),
+        request.cookies.get(settings.patient_session_cookie_name),
+    )
+    return tuple(
+        session_id
+        for token in candidates
+        if (session_id := session_id_from_access_token(token)) is not None
+    )
+
+
 def _csrf_protected_path(path: str) -> bool:
     """Return True for paths where the checks apply: the JSON API."""
     return path.startswith("/api/")
@@ -118,20 +152,28 @@ class CsrfProtectMiddleware(BaseHTTPMiddleware):
         if auth and auth.startswith("Bearer "):
             return await call_next(request)
 
-        from src.core.security import session_id_from_access_token
-
         settings = get_settings()
-        # The session a browser is signed in with: a staff access cookie, or a patient's session
-        # cookie (Issue 17). Either one makes the request cookie-authenticated.
-        access = request.cookies.get(
-            settings.access_token_cookie_name
-        ) or request.cookies.get(settings.patient_session_cookie_name)
+        # The session cookies a browser is signed in with: the staff access cookie, a patient's
+        # session cookie (Issue 17), or both at once. Either one makes the request
+        # cookie-authenticated.
+        signed_in = any(
+            request.cookies.get(name)
+            for name in (
+                settings.access_token_cookie_name,
+                settings.patient_session_cookie_name,
+            )
+        )
         csrf_cookie = request.cookies.get(settings.csrf_cookie_name)
-        if not access:
-            # No authenticated session on this request. With only a refresh cookie, the routes it
-            # can reach (refresh, logout) verify the binding themselves; the cookie still has to be
+        if not signed_in:
+            # No session cookie on this request. With only a refresh cookie, the routes it can
+            # reach (refresh, logout) verify the binding themselves; the cookie still has to be
             # echoed when there is one.
             if csrf_cookie is None:
+                return await call_next(request)
+            if request.cookies.get(settings.refresh_token_cookie_name) is None:
+                # Signing in, signing up, asking for a reset link: no ambient credential for a
+                # token to protect, and a leftover CSRF cookie the page cannot read must not be
+                # able to refuse it (see the module docs). Fetch Metadata above stops login CSRF.
                 return await call_next(request)
             submitted = await _submitted_token(request)
             if submitted is not None and hmac.compare_digest(submitted, csrf_cookie):
@@ -145,9 +187,11 @@ class CsrfProtectMiddleware(BaseHTTPMiddleware):
             or not hmac.compare_digest(submitted, csrf_cookie)
         ):
             return _forbidden("Invalid or missing CSRF token")
-        session_id = session_id_from_access_token(access)
-        # An access cookie that is not a genuine token (or predates sessions) leaves nothing to
+        session_ids = _session_ids(request)
+        # A session cookie that is not a genuine token (or predates sessions) leaves nothing to
         # bind to; the route's own authentication answers it with a 401.
-        if session_id is not None and not csrf_token_is_bound(submitted, session_id):
+        if session_ids and not any(
+            csrf_token_is_bound(submitted, session_id) for session_id in session_ids
+        ):
             return _forbidden("Invalid or missing CSRF token")
         return await call_next(request)

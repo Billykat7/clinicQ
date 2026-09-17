@@ -46,7 +46,7 @@ def start_session(response: Response, patient: Patient, settings: Settings) -> s
     """Set the patient's session and CSRF cookies on ``response``; return the session id."""
     sid = new_id()
     max_age = settings.patient_session_hours * 3600
-    secure = not settings.is_development
+    secure = settings.session_cookies_secure
     response.set_cookie(
         key=settings.patient_session_cookie_name,
         value=create_patient_session_token(patient.id, sid, patient.session_version),

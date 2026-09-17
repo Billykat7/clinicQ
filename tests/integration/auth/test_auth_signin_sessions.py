@@ -45,7 +45,11 @@ from src.commons.enums import AppEnvironment
 from src.core import otp_store, refresh_token_policy, security
 from src.core.config import Settings, get_settings
 from src.core.csrf_middleware import mint_csrf_token
-from src.core.security import create_access_token, hash_password
+from src.core.security import (
+    create_access_token,
+    create_patient_session_token,
+    hash_password,
+)
 from src.database.models import Base, RefreshToken, User
 from src.database.schema import sqlite_schema_translate_map
 from src.database.session import get_db
@@ -1054,3 +1058,198 @@ def test_a_password_reset_link_works_once(
         json={"email": _EMAIL, "password": "brand-new-passw0rd"},
     )
     assert login.status_code == status.HTTP_200_OK
+
+
+# --- Issue 229: the CSRF check that locked a browser out ------------------------
+
+
+def _patient_session_cookies(ctx: SimpleNamespace, client: TestClient) -> str:
+    """Sign ``client`` in as a patient as well, the way ``start_session`` does, and return the sid.
+
+    A patient's session and a staff session share one CSRF cookie name, so the second sign-in
+    overwrites the first one's token. This is exactly what a person does when they test the patient
+    pages in the browser they are already signed into the dashboard with.
+    """
+    sid = "patient-session-of-this-browser"
+    client.cookies.set(
+        ctx.settings.patient_session_cookie_name,
+        create_patient_session_token("patient-id", sid, 0),
+    )
+    # The server would overwrite the cookie it set at staff sign-in; the jar needs telling.
+    client.cookies.delete(ctx.settings.csrf_cookie_name)
+    client.cookies.set(ctx.settings.csrf_cookie_name, mint_csrf_token(sid))
+    return sid
+
+
+def test_signing_in_as_a_patient_leaves_staff_writes_working(
+    make_signin_client: Callable[..., SimpleNamespace],
+) -> None:
+    """Issue 229: the two sessions share a CSRF cookie, so the binding must accept either.
+
+    Before this, the check looked only at the staff access cookie, so the patient token in the
+    shared cookie failed the binding and every staff write answered "Invalid or missing CSRF
+    token" until one of the cookies expired.
+    """
+    ctx = make_signin_client()
+    _add_user(ctx.session, password=_PASSWORD)
+    _sign_in(ctx, ctx.client)
+    _patient_session_cookies(ctx, ctx.client)
+
+    response = ctx.client.patch(
+        "/api/v1/auth/me", json={"first_name": "Still"}, headers=_csrf(ctx)
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+
+
+def test_the_staff_token_still_works_while_a_patient_session_is_open(
+    make_signin_client: Callable[..., SimpleNamespace],
+) -> None:
+    """The other direction: the staff-bound token, echoed, is accepted with both cookies present."""
+    ctx = make_signin_client()
+    _add_user(ctx.session, password=_PASSWORD)
+    _sign_in(ctx, ctx.client)
+    staff_token = ctx.client.cookies.get(ctx.settings.csrf_cookie_name)
+    _patient_session_cookies(ctx, ctx.client)
+    ctx.client.cookies.set(ctx.settings.csrf_cookie_name, staff_token)
+
+    response = ctx.client.patch(
+        "/api/v1/auth/me",
+        json={"first_name": "Still"},
+        headers={"X-CSRF-Token": staff_token},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+
+
+def test_a_token_bound_to_neither_session_is_still_refused(
+    make_signin_client: Callable[..., SimpleNamespace],
+) -> None:
+    """Accepting either of *this browser's* sessions is not accepting anybody's session.
+
+    Both session cookies are ``httpOnly`` and only this server sets them, so a session id the
+    request can prove is one the browser genuinely holds. A token minted for a third session --
+    what an attacker on a sibling subdomain can plant -- still fails.
+    """
+    ctx = make_signin_client()
+    _add_user(ctx.session, password=_PASSWORD)
+    _sign_in(ctx, ctx.client)
+    _patient_session_cookies(ctx, ctx.client)
+    planted = mint_csrf_token("a-session-this-browser-does-not-hold")
+    ctx.client.cookies.set(ctx.settings.csrf_cookie_name, planted)
+
+    response = ctx.client.patch(
+        "/api/v1/auth/me",
+        json={"first_name": "Nope"},
+        headers={"X-CSRF-Token": planted},
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_a_leftover_csrf_cookie_does_not_block_signing_in(
+    make_signin_client: Callable[..., SimpleNamespace],
+) -> None:
+    """Issue 229: a CSRF cookie with no session behind it must not refuse a sign-in.
+
+    Sign-in carries no ambient credential for a token to protect -- ``SameSite=Lax`` and the
+    Fetch Metadata check are what stop login CSRF. Requiring the echo here meant that one cookie
+    the page could not read (a renamed cookie, a duplicate from a wider ``Domain``, a helper script
+    that did not load) locked the browser out of signing in, with no way back from the UI.
+    """
+    ctx = make_signin_client()
+    _add_user(ctx.session, password=_PASSWORD)
+    stale = TestClient(ctx.client.app)
+    stale.cookies.set(
+        ctx.settings.csrf_cookie_name, mint_csrf_token("long-gone-session")
+    )
+
+    response = stale.post(
+        "/api/v1/auth/password/login",
+        json={"email": _EMAIL, "password": _PASSWORD},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+
+
+def test_a_leftover_csrf_cookie_still_guards_refresh(
+    make_signin_client: Callable[..., SimpleNamespace],
+) -> None:
+    """A refresh cookie *is* a session: the echo is still required on the routes it can reach."""
+    ctx = make_signin_client()
+    _add_user(ctx.session, password=_PASSWORD)
+    _sign_in(ctx, ctx.client)
+    ctx.client.cookies.delete(ctx.settings.access_token_cookie_name)
+
+    response = ctx.client.post("/api/v1/auth/refresh")
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_a_cross_site_sign_in_is_still_refused_with_a_leftover_cookie(
+    make_signin_client: Callable[..., SimpleNamespace],
+) -> None:
+    """Letting sign-in past the token check does not let a cross-site sign-in past Fetch Metadata."""
+    ctx = make_signin_client()
+    _add_user(ctx.session, password=_PASSWORD)
+    stale = TestClient(ctx.client.app)
+    stale.cookies.set(
+        ctx.settings.csrf_cookie_name, mint_csrf_token("long-gone-session")
+    )
+
+    response = stale.post(
+        "/api/v1/auth/password/login",
+        json={"email": _EMAIL, "password": _PASSWORD},
+        headers={"Sec-Fetch-Site": "cross-site"},
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+# --- Issue 229: SESSION_COOKIE_SECURE ------------------------------------------
+
+
+def test_session_cookie_secure_false_serves_cookies_a_plain_http_browser_keeps(
+    make_signin_client: Callable[..., SimpleNamespace],
+) -> None:
+    """A production instance reachable only over ``http://`` can ask for cookies without Secure.
+
+    A browser silently discards a ``Secure`` cookie served over plain ``http://``, so the default
+    ("Secure outside development") signs a person in and then behaves as though they never signed
+    in. Turning it off is a deliberate, recorded choice for a host that has no TLS yet.
+    """
+    ctx = make_signin_client(
+        environment=AppEnvironment.PRODUCTION,
+        session_cookie_secure=False,
+        cors_origins="https://clinicq.example",
+        metrics_enabled=False,
+    )
+    _add_user(ctx.session, password=_PASSWORD)
+
+    response = ctx.client.post(
+        "/api/v1/auth/password/login",
+        json={"email": _EMAIL, "password": _PASSWORD},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    cookies = [header.lower() for header in response.headers.get_list("set-cookie")]
+    assert cookies and not any("; secure" in cookie for cookie in cookies)
+    # Everything else about the cookies is unchanged.
+    assert all("; samesite=lax" in cookie for cookie in cookies)
+
+
+def test_session_cookie_secure_true_forces_secure_in_development(
+    make_signin_client: Callable[..., SimpleNamespace],
+) -> None:
+    """The override works both ways: a dev instance behind TLS can ask for Secure."""
+    ctx = make_signin_client(session_cookie_secure=True)
+    _add_user(ctx.session, password=_PASSWORD)
+
+    response = ctx.client.post(
+        "/api/v1/auth/password/login",
+        json={"email": _EMAIL, "password": _PASSWORD},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    cookies = [header.lower() for header in response.headers.get_list("set-cookie")]
+    assert cookies and all("; secure" in cookie for cookie in cookies)
