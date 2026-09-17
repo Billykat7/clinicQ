@@ -52,6 +52,7 @@ from src.commons.enums import (
     PermissionVerb,
     S3LogListingLevel,
     SaProvince,
+    SiteSector,
     SiteStatus,
 )
 from src.commons.time import APP_TIMEZONE
@@ -453,6 +454,85 @@ async def admin_verification_section(
         total=len(rows), status=wanted, items=[_queue_item(row) for row in rows]
     )
     return templates.TemplateResponse(request, "admin/verification.html", ctx)
+
+
+#: The clinics console's tabs (Issue 222): each its own URL, and ``all`` is the default. ``None`` is
+#: "every status", which is what makes ``all`` the tab an operator lands on and works from.
+_CLINIC_SECTIONS: dict[str, SiteStatus | None] = {
+    "all": None,
+    "draft": SiteStatus.DRAFT,
+    "pending": SiteStatus.PENDING_VERIFICATION,
+    "verified": SiteStatus.VERIFIED,
+    "suspended": SiteStatus.SUSPENDED,
+}
+#: How many clinics one page of the console shows. The directory is a few hundred rows at most, and
+#: the page is server-rendered in one request, so this is a guard against a runaway query rather than
+#: a paging design: the filter bar is how an operator narrows it.
+_CLINIC_PAGE = 200
+
+
+@router.get("/admin/clinics", response_class=HTMLResponse)
+async def admin_clinics(request: Request) -> RedirectResponse:
+    """Redirect the bare console URL to its default tab."""
+    return RedirectResponse(url="/admin/clinics/all", status_code=status.HTTP_302_FOUND)
+
+
+@router.get("/admin/clinics/{section}", response_class=HTMLResponse)
+async def admin_clinics_section(
+    section: str,
+    request: Request,
+    q: str = "",
+    # Not typed ``SiteSector``: a hand-edited or stale ``?sector=`` should show the unfiltered
+    # console, not answer 422 at somebody who is looking for a clinic. ``None`` is "any", and
+    # anything that is not a member is read as ``None`` below.
+    sector: str | None = None,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """The operator's clinics console: every clinic, and where each one is (Issue 222).
+
+    Every verb a clinic needs has existed in the sites API since Issue 23 and none of them had a
+    screen, so creating one on behalf of a clinic that phoned in, or fixing a typed address, meant
+    hand-writing JSON. This is that screen.
+
+    Gated on ``sites`` at the ``business`` tier, the same grant ``GET /api/v1/sites`` enforces —
+    the operator's cross-clinic console, deliberately **not** behind the site guard, which would
+    404 somebody assigned to no clinic. Every mutation is a real request to the API, which
+    re-checks the grant; this page decides what is *offered*.
+    """
+    if not require_authenticated_html(request, db):
+        return _redirect_to_sign_in(request)  # type: ignore[return-value]
+    if section not in _CLINIC_SECTIONS:
+        return RedirectResponse(  # type: ignore[return-value]
+            url="/admin/clinics/all", status_code=status.HTTP_302_FOUND
+        )
+    ctx = page_context(request, db, active_nav="clinics", page_title="Clinics")
+    if not ctx["nav"].can_surface(
+        SITES_RESOURCE, PermissionVerb.READ, GrantScope.BUSINESS
+    ):
+        return _forbidden_html(request, db)
+
+    from src.modules.sites import service as sites_service
+
+    chosen_sector = next(
+        (member for member in SiteSector if member.value == sector), None
+    )
+    listing = sites_service.list_sites(
+        db,
+        site_ids=None,  # the business tier: the whole directory
+        sector=chosen_sector,
+        status=_CLINIC_SECTIONS[section],
+        query=q.strip() or None,
+        limit=_CLINIC_PAGE,
+    )
+    ctx["section"] = section
+    ctx["query"] = q
+    ctx["sector"] = sector or ""
+    ctx["listing"] = listing
+    ctx["sectors"] = [member.value for member in SiteSector]
+    ctx["provinces"] = [province.value for province in SaProvince]
+    # Which buttons are drawn is decided in the template by ``can('sites', verb, 'business')`` —
+    # the same grant the API re-checks on every call, so there is no second copy of the rule here.
+    return templates.TemplateResponse(request, "admin/clinics.html", ctx)
 
 
 #: The operator's screen console tabs (Issue 61): each its own URL and its own set of statuses.

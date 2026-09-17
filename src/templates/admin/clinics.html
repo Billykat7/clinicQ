@@ -1,0 +1,256 @@
+{% extends "layouts/dashboard.html" %}
+
+{#
+  The platform admin's clinics console (Issue 222).
+
+  Every verb a clinic needs has been in the sites API since Issue 23 and none of them had a screen.
+  This is that screen: the whole directory, a clinic created on behalf of one that phoned in, a typed
+  address corrected, a clinic archived.
+
+  An admin console, so it follows docs/IDE/RULES/list-view-ui-pattern.mdc:
+
+  * every tab is its own URL (`/admin/clinics/{all|draft|pending|verified|suspended}`), so a refresh
+    or a deep link lands on the right view and the bare group URL redirects to the default;
+  * a collapsible filter bar with its own remembered state (`data-filter-key`), submitting as a real
+    navigation so the filtered state is part of the bookmarkable URL;
+  * click-to-sort columns (`data-sort-key`);
+  * clicking a row opens a slideover beside the list rather than navigating away.
+
+  Fully server-rendered, like the verification console beside it: the whole result set is in the HTML
+  for the request, so the sort and the quick view work client-side against the rows already in the
+  DOM. The *writes* are real requests to `/api/v1/sites`, because they change something — and the API
+  re-checks the grant on every one of them. `can_create` / `can_archive` only decide which buttons
+  are drawn.
+#}
+
+{% set section = section | default('all') %}
+
+{% block layout_head %}
+  {{ super() }}
+  {# The kernel's console toolkit: the filter bar, the sortable headers and the anchored slideover
+     this page uses are all its, so the console behaves like every other one. #}
+  <script src="/static/js/admin-crud.js" defer></script>
+  <script src="/static/js/admin-clinics.js" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Clinics</h1>
+  <p class="lead">Every clinic on the platform. Add one on behalf of a clinic that asked, correct
+  what is on its entry, or take it out of the directory. A new clinic starts as a draft, invisible to
+  patients, until it is <a href="/admin/verification/pending">checked</a>.</p>
+  {% include "partials/breadcrumbs.html" %}
+</div>
+
+<div class="tabs-branch">
+  <div class="tabs-scroll">
+    <div class="tabs tabs-sub" role="tablist">
+      {% for key, label in [('all', 'All'), ('draft', 'Drafts'), ('pending', 'Waiting'),
+                            ('verified', 'Verified'), ('suspended', 'Suspended')] %}
+      <a class="tab{% if section == key %} active{% endif %}" href="/admin/clinics/{{ key }}"
+         role="tab"{% if section == key %} aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<form class="filter-bar" data-filter-key="clinics" method="get">
+  <div class="field">
+    <label for="cl-q">Name or suburb</label>
+    <input type="search" id="cl-q" name="q" value="{{ query or '' }}" maxlength="120">
+  </div>
+  <div class="field">
+    <label for="cl-sector">Type</label>
+    <select id="cl-sector" name="sector">
+      <option value="">Any</option>
+      {% for value in sectors %}
+      <option value="{{ value }}"{% if sector == value %} selected{% endif %}>{{ value }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="form-actions">
+    <button type="submit" class="btn btn-sm">Filter</button>
+    <a class="btn btn-quiet btn-sm" href="/admin/clinics/{{ section }}">Clear</a>
+  </div>
+</form>
+
+<div class="split split-full" id="cl-split">
+  <div class="card">
+    <div class="toolbar">
+      <span class="spacer"></span>
+      {% if can('sites', 'create', 'business') %}
+      <button type="button" class="btn btn-sm" id="cl-new">New clinic</button>
+      {% endif %}
+      <a class="btn btn-quiet btn-sm" href="/admin/verification/pending">Verification queue</a>
+    </div>
+    <div class="table-wrap table-scroll">
+      <table class="data" id="cl-table">
+        <thead>
+          <tr>
+            <th data-sort-key="name">Clinic</th>
+            <th data-sort-key="city">Where</th>
+            <th data-sort-key="sector">Type</th>
+            <th data-sort-key="status">Listing</th>
+          </tr>
+        </thead>
+        <tbody id="cl-body">
+          {% for item in listing.items %}
+          <tr data-id="{{ item.id }}"
+              data-name="{{ item.name }}"
+              data-slug="{{ item.slug }}"
+              data-sector="{{ item.sector.value }}"
+              data-status="{{ item.status.value }}"
+              data-address="{{ item.address_line }}"
+              data-suburb="{{ item.suburb or '' }}"
+              data-city="{{ item.city }}"
+              data-province="{{ item.province.value }}"
+              data-postal="{{ item.postal_code or '' }}"
+              data-phone="{{ item.phone_e164 or '' }}"
+              data-notes="{{ item.notes or '' }}"
+              data-latitude="{{ item.location.latitude }}"
+              data-longitude="{{ item.location.longitude }}">
+            <td>{{ item.name }}</td>
+            <td>{{ item.suburb ~ ', ' if item.suburb }}{{ item.city }}</td>
+            <td>{{ item.sector.value }}</td>
+            <td>{{ item.status.value }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if not listing.items %}
+    <p class="empty">No clinic matches. Clinics arrive here when an operator adds one, or when a
+      clinic submits itself through <a href="/register-clinic">the registration form</a>.</p>
+    {% endif %}
+    <p class="card-sub">
+      {{ listing.total }} clinic{{ '' if listing.total == 1 else 's' }}{% if listing.total > listing.items | length %},
+      showing the first {{ listing.items | length }} — narrow it with the filter{% endif %}.
+    </p>
+  </div>
+</div>
+
+{# The quick view. Read-only until Edit is pressed, which turns the same fields into the form: one
+   set of fields, so what an operator reads and what they change cannot disagree. #}
+<div class="slideover slideover-inset" id="cl-detail" data-anchor="#cl-split"
+     data-can-create="{{ 'true' if can('sites', 'create', 'business') else 'false' }}"
+     data-can-archive="{{ 'true' if can('sites', 'delete', 'business') else 'false' }}">
+  <div class="slideover-panel" role="dialog" aria-modal="false" aria-labelledby="cld-title" tabindex="-1">
+    <div class="slideover-head">
+      <div class="slideover-titles">
+        <p class="detail-eyebrow" id="cld-eyebrow">Clinic</p>
+        <h2 id="cld-title"></h2>
+        <p class="hint" id="cld-meta"></p>
+      </div>
+      <button type="button" class="btn btn-quiet btn-sm slideover-close" data-slideover-close
+              aria-label="Close clinic">Close</button>
+    </div>
+
+    <div class="slideover-body">
+      <form id="cl-form" novalidate>
+        <div class="field">
+          <label for="cld-name">Name</label>
+          <input id="cld-name" name="name" maxlength="200" required>
+        </div>
+        <div class="field">
+          <label for="cld-slug">Web address</label>
+          <input id="cld-slug" name="slug" maxlength="80" pattern="[a-z0-9]+(-[a-z0-9]+)*" required>
+          <p class="hint">Lowercase and hyphens: <code>hillbrow-chc</code>. It is the clinic's public
+            handle and does not change once patients have the link.</p>
+        </div>
+        <div class="field">
+          <label for="cld-sector">Type</label>
+          <select id="cld-sector" name="sector">
+            {% for value in sectors %}<option value="{{ value }}">{{ value }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="cld-address">Street address</label>
+          <input id="cld-address" name="address_line" maxlength="200" required>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="cld-suburb">Suburb</label>
+            <input id="cld-suburb" name="suburb" maxlength="120">
+          </div>
+          <div class="field">
+            <label for="cld-city">City</label>
+            <input id="cld-city" name="city" maxlength="120" required>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="cld-province">Province</label>
+            <select id="cld-province" name="province">
+              {% for value in provinces %}<option value="{{ value }}">{{ value }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label for="cld-postal">Postal code</label>
+            <input id="cld-postal" name="postal_code" maxlength="10">
+          </div>
+        </div>
+        <div class="field">
+          <label for="cld-phone">Switchboard</label>
+          <input id="cld-phone" name="phone_e164" maxlength="20" placeholder="+27115551234">
+          <p class="hint">The clinic's own number, in full international form. Not a patient's.</p>
+        </div>
+
+        {# The coordinate. Looked up from the address, and editable, because the operator is the
+           fallback when the geocoder cannot answer (`GeocodingUnavailableError`). #}
+        <fieldset class="field">
+          <legend>Where it is</legend>
+          <p class="hint" id="cld-geo-msg">Patients find a clinic by distance, so the point has to be
+            right. Look it up from the address, or type it in.</p>
+          <div class="form-actions">
+            <button type="button" class="btn btn-quiet btn-sm" id="cl-geocode">Find on the map</button>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="cld-lat">Latitude</label>
+              <input id="cld-lat" name="latitude" inputmode="decimal" required>
+            </div>
+            <div class="field">
+              <label for="cld-lng">Longitude</label>
+              <input id="cld-lng" name="longitude" inputmode="decimal" required>
+            </div>
+          </div>
+          <ul class="plain" id="cl-candidates" hidden></ul>
+        </fieldset>
+
+        <div class="field">
+          <label for="cld-notes">Notes for the operator</label>
+          <textarea id="cld-notes" name="notes" rows="2" maxlength="2000"></textarea>
+          <p class="hint">"Entrance on the Klein Street side", and the like. Never shown to a patient.</p>
+        </div>
+
+        <p class="form-msg" id="cld-msg" role="alert"></p>
+
+        <div class="form-actions">
+          {% if can('sites', 'update', 'business') %}
+          <button type="submit" class="btn" id="cl-save">Save</button>
+          {% endif %}
+          <button type="button" class="btn btn-quiet" id="cl-cancel">Cancel</button>
+        </div>
+      </form>
+
+      <div id="cl-links">
+        <h3>Elsewhere</h3>
+        <ul class="plain">
+          <li><a id="cld-link-public" href="#">The clinic's public page</a></li>
+          <li><a id="cld-link-dashboard" href="#">Its dashboard settings</a></li>
+          <li><a href="/admin/verification/pending">The verification queue</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="slideover-foot">
+      {% if can('sites', 'update', 'business') %}
+      <button type="button" class="btn btn-sm" id="cl-edit">Edit</button>
+      {% endif %}
+      {% if can('sites', 'delete', 'business') %}
+      <button type="button" class="btn btn-quiet btn-sm btn-danger" id="cl-archive">Archive</button>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

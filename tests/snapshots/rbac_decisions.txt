@@ -1250,6 +1250,7 @@ surface  | role=admin | key=alerts | path=/admin/alerts | allow | tier=business
 surface  | role=admin | key=announcements | path=/admin/announcements | allow | tier=business
 surface  | role=admin | key=board | path=/dashboard/sites/{site_id}/board | deny | tier=own
 surface  | role=admin | key=clinic_settings | path=/dashboard/sites/{site_id}/settings | deny | tier=own
+surface  | role=admin | key=clinics | path=/admin/clinics | deny | tier=own
 surface  | role=admin | key=communications.alerts | path=- | allow | tier=business
 surface  | role=admin | key=communications.alerts.deleted | path=- | allow | tier=business
 surface  | role=admin | key=communications.alerts.drafts | path=- | allow | tier=business
@@ -1280,6 +1281,7 @@ surface  | role=clinic_manager | key=alerts | path=/admin/alerts | deny | tier=o
 surface  | role=clinic_manager | key=announcements | path=/admin/announcements | deny | tier=own
 surface  | role=clinic_manager | key=board | path=/dashboard/sites/{site_id}/board | allow | tier=assigned
 surface  | role=clinic_manager | key=clinic_settings | path=/dashboard/sites/{site_id}/settings | allow | tier=assigned
+surface  | role=clinic_manager | key=clinics | path=/admin/clinics | deny | tier=assigned
 surface  | role=clinic_manager | key=communications.alerts | path=- | deny | tier=own
 surface  | role=clinic_manager | key=communications.alerts.deleted | path=- | deny | tier=own
 surface  | role=clinic_manager | key=communications.alerts.drafts | path=- | deny | tier=own
@@ -1310,6 +1312,7 @@ surface  | role=nurse_doctor | key=alerts | path=/admin/alerts | deny | tier=own
 surface  | role=nurse_doctor | key=announcements | path=/admin/announcements | deny | tier=own
 surface  | role=nurse_doctor | key=board | path=/dashboard/sites/{site_id}/board | deny | tier=own
 surface  | role=nurse_doctor | key=clinic_settings | path=/dashboard/sites/{site_id}/settings | deny | tier=own
+surface  | role=nurse_doctor | key=clinics | path=/admin/clinics | deny | tier=own
 surface  | role=nurse_doctor | key=communications.alerts | path=- | deny | tier=own
 surface  | role=nurse_doctor | key=communications.alerts.deleted | path=- | deny | tier=own
 surface  | role=nurse_doctor | key=communications.alerts.drafts | path=- | deny | tier=own
@@ -1340,6 +1343,7 @@ surface  | role=patient | key=alerts | path=/admin/alerts | deny | tier=own
 surface  | role=patient | key=announcements | path=/admin/announcements | deny | tier=own
 surface  | role=patient | key=board | path=/dashboard/sites/{site_id}/board | deny | tier=own
 surface  | role=patient | key=clinic_settings | path=/dashboard/sites/{site_id}/settings | deny | tier=own
+surface  | role=patient | key=clinics | path=/admin/clinics | deny | tier=own
 surface  | role=patient | key=communications.alerts | path=- | deny | tier=own
 surface  | role=patient | key=communications.alerts.deleted | path=- | deny | tier=own
 surface  | role=patient | key=communications.alerts.drafts | path=- | deny | tier=own
@@ -1370,6 +1374,7 @@ surface  | role=platform_admin | key=alerts | path=/admin/alerts | deny | tier=o
 surface  | role=platform_admin | key=announcements | path=/admin/announcements | deny | tier=own
 surface  | role=platform_admin | key=board | path=/dashboard/sites/{site_id}/board | allow | tier=business
 surface  | role=platform_admin | key=clinic_settings | path=/dashboard/sites/{site_id}/settings | allow | tier=business
+surface  | role=platform_admin | key=clinics | path=/admin/clinics | allow | tier=business
 surface  | role=platform_admin | key=communications.alerts | path=- | deny | tier=own
 surface  | role=platform_admin | key=communications.alerts.deleted | path=- | deny | tier=own
 surface  | role=platform_admin | key=communications.alerts.drafts | path=- | deny | tier=own
@@ -1400,6 +1405,7 @@ surface  | role=receptionist | key=alerts | path=/admin/alerts | deny | tier=own
 surface  | role=receptionist | key=announcements | path=/admin/announcements | deny | tier=own
 surface  | role=receptionist | key=board | path=/dashboard/sites/{site_id}/board | allow | tier=assigned
 surface  | role=receptionist | key=clinic_settings | path=/dashboard/sites/{site_id}/settings | deny | tier=own
+surface  | role=receptionist | key=clinics | path=/admin/clinics | deny | tier=own
 surface  | role=receptionist | key=communications.alerts | path=- | deny | tier=own
 surface  | role=receptionist | key=communications.alerts.deleted | path=- | deny | tier=own
 surface  | role=receptionist | key=communications.alerts.drafts | path=- | deny | tier=own
@@ -1430,6 +1436,7 @@ surface  | role=user | key=alerts | path=/admin/alerts | deny | tier=own
 surface  | role=user | key=announcements | path=/admin/announcements | deny | tier=own
 surface  | role=user | key=board | path=/dashboard/sites/{site_id}/board | deny | tier=own
 surface  | role=user | key=clinic_settings | path=/dashboard/sites/{site_id}/settings | deny | tier=own
+surface  | role=user | key=clinics | path=/admin/clinics | deny | tier=own
 surface  | role=user | key=communications.alerts | path=- | deny | tier=own
 surface  | role=user | key=communications.alerts.deleted | path=- | deny | tier=own
 surface  | role=user | key=communications.alerts.drafts | path=- | deny | tier=own
