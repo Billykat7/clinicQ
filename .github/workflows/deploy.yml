@@ -1,9 +1,18 @@
-# Deploy (Issue 11): put a released image on staging or production, safely.
+# Deploy (Issues 11, 230): put a released image on staging or production, safely.
 #
 #   Run workflow, environment=staging  →  deploys staging
 #   Run workflow, environment=production  →  waits for the DevOps/QA Lead's approval (the GitHub
 #                                             Environment "production"), then deploys
 #   Run workflow with an older version and "rollback"  →  that tag, without its migrations
+#
+# **The runner is the host.** ClinicQ runs on the BTK platform server, which hosts its own GitHub
+# Actions runner (labels `self-hosted, Linux, X64, clinicq, infra`), so this workflow runs *on the
+# machine it is deploying to*. There is nothing to SSH into and no key to hold: the steps below are
+# the same commands a person would type in `/opt/btk/clinicq`. That is the shape the other BTK
+# products use (`Billykat7/infra`'s `cd-product.yml`); ClinicQ keeps its own sequence rather than
+# calling that one, because its sequence runs the migrations before any traffic and smoke-tests a
+# candidate on a side port first, and because `write-prod-env.sh` there knows a shared key list that
+# does not include ClinicQ's own settings.
 #
 # **Every deploy is a manual run**, the same shape as BK Properties' CD: release.yml publishes the
 # image on a tag, and a person decides when that image reaches an environment. Nothing here starts
@@ -11,15 +20,24 @@
 # somebody chose it. Deploying a fresh release is therefore two steps, not one: push the tag, wait
 # for Release to publish the image, then run this with that version.
 #
-# The work happens on the host, in scripts/cd/deploy.sh, one visible step at a time: pre-flight (the
-# image's own settings check), the migrations as their own step before any traffic, a candidate on a
-# side port nothing routes to, the swap with a live smoke check that rolls back by itself, and a
-# message to the team channel. A failure at any step leaves the previous version serving.
+# The work happens in scripts/cd/deploy.sh, one visible step at a time: pre-flight (the image's own
+# settings check), the migrations as their own step before any traffic, a candidate on a side port
+# nothing routes to, the swap with a live smoke check that rolls back by itself, and a message to
+# the team channel. A failure at any step leaves the previous version serving.
 # docs/CICD/RUNBOOK_DEPLOY.md is the runbook, including the timed rollback.
 #
-# Each environment needs, in its GitHub Environment: secrets DEPLOY_HOST, DEPLOY_USER,
-# DEPLOY_SSH_KEY, DEPLOY_KNOWN_HOSTS and APP_ENV (the whole .env), optionally TEAM_WEBHOOK_URL; and
-# the variable DEPLOY_DIR. Until they exist the deploy says so and changes nothing.
+# **What has to be configured** (docs/CICD/ENVIRONMENTS.md):
+#
+#   * nothing, on a runner laid out by `btk-platform-layout.sh`. The deploy directory defaults to
+#     `/opt/btk/clinicq` (`-staging` for staging) and the app's settings are the `.env` already in
+#     it, maintained on the host.
+#   * `DEPLOY_DIR` (an Environment *variable*) overrides that directory.
+#   * `APP_ENV` (an Environment *secret*, the whole .env) replaces the host's `.env` on every
+#     deploy, for a team that would rather keep the settings in GitHub. Optional: without it the
+#     file on the host is used and never touched.
+#   * `TEAM_WEBHOOK_URL` (optional) posts the result to the team channel.
+#
+# Until the deploy directory exists the deploy says exactly what to do and changes nothing.
 
 name: Deploy
 
@@ -52,6 +70,7 @@ concurrency:
 
 permissions:
   contents: read
+  packages: read
 
 defaults:
   run:
@@ -60,7 +79,10 @@ defaults:
 jobs:
   deploy:
     name: Deploy ${{ inputs.version }} to ${{ inputs.environment }}
-    runs-on: ubuntu-24.04
+    # The platform server's own runner. `clinicq` is the label that pins it to the machine ClinicQ
+    # lives on; `DEPLOY_RUNNER_LABELS` (a repository variable, a JSON array) moves the deploy to a
+    # different runner without editing this file.
+    runs-on: ${{ fromJSON(vars.DEPLOY_RUNNER_LABELS || '["self-hosted","Linux","X64","clinicq"]') }}
     timeout-minutes: 20
     environment:
       name: ${{ inputs.environment }}
@@ -74,11 +96,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: Set up Python 3.14
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.14"
 
       - name: Which image
         id: release
@@ -95,86 +112,112 @@ jobs:
           echo "image=$image" >> "$GITHUB_OUTPUT"
           echo "### $ENVIRONMENT ← \`$image\`" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Is this environment provisioned?
+      # Where on this host the environment lives. The platform layout puts each product beside the
+      # gateway (/opt/btk/<slug>), so the default needs no configuration at all; DEPLOY_DIR and
+      # PRODUCTION_DEPLOY_PATH override it for a host laid out differently.
+      - name: Where this environment lives
         id: target
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-          APP_ENV: ${{ secrets.APP_ENV }}
           DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
+          PRODUCTION_DEPLOY_PATH: ${{ vars.PRODUCTION_DEPLOY_PATH || secrets.PRODUCTION_DEPLOY_PATH }}
         run: |
-          missing=()
-          for name in DEPLOY_HOST DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS APP_ENV DEPLOY_DIR; do
-            [[ -n "${!name}" ]] || missing+=("$name")
-          done
-          if (( ${#missing[@]} )); then
-            echo "provisioned=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=$ENVIRONMENT not provisioned::missing ${missing[*]}; nothing was deployed (docs/CICD/RUNBOOK_DEPLOY.md)"
-            echo "Not provisioned (missing ${missing[*]}): nothing was deployed." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "provisioned=true" >> "$GITHUB_OUTPUT"
+          suffix=""
+          [[ "$ENVIRONMENT" == "staging" ]] && suffix="-staging"
+          dir="$DEPLOY_DIR"
+          if [[ -z "$dir" && -n "$PRODUCTION_DEPLOY_PATH" ]]; then
+            dir="$(dirname "${PRODUCTION_DEPLOY_PATH%/}")/clinicq$suffix"
           fi
+          dir="${dir:-/opt/btk/clinicq$suffix}"
+          if [[ "$dir" != /* ]]; then
+            echo "::error title=DEPLOY_DIR must be absolute::got '$dir'"
+            exit 1
+          fi
+          if [[ ! -d "$dir" ]]; then
+            echo "provisioned=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=$ENVIRONMENT not provisioned::$dir does not exist on this runner; nothing was deployed (docs/CICD/RUNBOOK_DEPLOY.md)"
+            {
+              echo "**Not provisioned:** \`$dir\` does not exist on this runner, so nothing was deployed."
+              echo
+              echo "Create it once (\`mkdir -p $dir\`, put the app's \`.env\` in it), or set the"
+              echo "\`DEPLOY_DIR\` variable on the \`$ENVIRONMENT\` Environment to where it does live."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "provisioned=true" >> "$GITHUB_OUTPUT"
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+          echo "Deploy directory: \`$dir\`" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Connect to the host (pinned host key)
+      # Pulling the image is the deploy script's job (pre-flight), but the runner has to be able to
+      # read the package first. GITHUB_TOKEN can, for this repository's own package.
+      - name: Log in to GHCR
         if: steps.target.outputs.provisioned == 'true'
         env:
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-        run: |
-          install -m 700 -d ~/.ssh
-          install -m 600 /dev/null ~/.ssh/id_ed25519
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          printf 'Host target\n  HostName %s\n  User %s\n  IdentityFile ~/.ssh/id_ed25519\n  StrictHostKeyChecking yes\n  BatchMode yes\n  ConnectTimeout 15\n' \
-            "$DEPLOY_HOST" "${DEPLOY_USER:-deploy}" > ~/.ssh/config
-          ssh target true
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN || github.token }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
 
-      # The app's settings come from the Environment's APP_ENV secret, written straight to the host
-      # with mode 600; they are never echoed, and never on the runner's disk outside a private file.
-      - name: Copy the compose file, the deploy scripts and the settings
+      - name: Copy the compose file and the deploy scripts into place
+        if: steps.target.outputs.provisioned == 'true'
+        env:
+          DEPLOY_DIR: ${{ steps.target.outputs.dir }}
+        run: |
+          install -m 644 infra/docker/docker-compose.prod.yml "$DEPLOY_DIR/"
+          install -m 755 scripts/cd/deploy.sh scripts/cd/prune-old-app-images.sh "$DEPLOY_DIR/"
+
+      # The app's settings. APP_ENV (the whole .env, an Environment secret) replaces the file when
+      # it is set; otherwise the .env already on the host is the source of truth and is left alone.
+      # Either way it is never echoed and never leaves this directory.
+      - name: The app's settings
         if: steps.target.outputs.provisioned == 'true'
         env:
           APP_ENV: ${{ secrets.APP_ENV }}
-          DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
+          DEPLOY_DIR: ${{ steps.target.outputs.dir }}
         run: |
-          ssh target "mkdir -p '$DEPLOY_DIR'"
-          scp -q infra/docker/docker-compose.prod.yml scripts/cd/deploy.sh \
-            scripts/cd/prune-old-app-images.sh "target:$DEPLOY_DIR/"
-          printf '%s\n' "$APP_ENV" | ssh target "umask 077 && cat > '$DEPLOY_DIR/.env'"
+          if [[ -n "$APP_ENV" ]]; then
+            printf '%s\n' "$APP_ENV" | (umask 077 && cat > "$DEPLOY_DIR/.env")
+            echo "Settings: written from the APP_ENV secret ($(grep -c '^[A-Za-z_]' "$DEPLOY_DIR/.env") keys)."
+          elif [[ -s "$DEPLOY_DIR/.env" ]]; then
+            echo "Settings: the host's own $DEPLOY_DIR/.env ($(grep -c '^[A-Za-z_]' "$DEPLOY_DIR/.env") keys), left as it is."
+          else
+            echo "::error title=No settings::$DEPLOY_DIR/.env is missing or empty and no APP_ENV secret is set. Put the app's .env on the host, or add APP_ENV to the $ENVIRONMENT Environment."
+            exit 1
+          fi
+          chmod 600 "$DEPLOY_DIR/.env"
 
       - name: Pre-flight (pull the image, check the settings with its own rules)
         if: steps.target.outputs.provisioned == 'true'
+        working-directory: ${{ steps.target.outputs.dir }}
         env:
-          DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
+          DEPLOY_ENV: ${{ inputs.environment }}
           IMAGE: ${{ steps.release.outputs.image }}
-        run: ssh target "cd '$DEPLOY_DIR' && export DEPLOY_ENV='$ENVIRONMENT' && ./deploy.sh preflight '$IMAGE' '$ENVIRONMENT'"
+        run: ./deploy.sh preflight "$IMAGE" "$ENVIRONMENT"
 
       # Before the new image serves anything: the one deploy sequence CI also runs on every pull
       # request (Issue 9), inside the new image. Migrations must stay backward compatible with the
       # previous release, which keeps serving through this step and after a failed deploy.
       - name: Migrations (scripts/db/deploy-sequence.sh in the new image)
         if: steps.target.outputs.provisioned == 'true' && env.ROLLBACK != 'true'
+        working-directory: ${{ steps.target.outputs.dir }}
         env:
-          DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
+          DEPLOY_ENV: ${{ inputs.environment }}
           IMAGE: ${{ steps.release.outputs.image }}
-        run: ssh target "cd '$DEPLOY_DIR' && export DEPLOY_ENV='$ENVIRONMENT' && ./deploy.sh run-new '$IMAGE' ./scripts/db/deploy-sequence.sh"
+        run: ./deploy.sh run-new "$IMAGE" ./scripts/db/deploy-sequence.sh
 
       - name: Smoke-test the new image on a side port (no traffic)
         if: steps.target.outputs.provisioned == 'true'
+        working-directory: ${{ steps.target.outputs.dir }}
         env:
-          DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
+          DEPLOY_ENV: ${{ inputs.environment }}
           IMAGE: ${{ steps.release.outputs.image }}
-        run: ssh target "cd '$DEPLOY_DIR' && export DEPLOY_ENV='$ENVIRONMENT' && ./deploy.sh candidate '$IMAGE'"
+        run: ./deploy.sh candidate "$IMAGE"
 
       - name: Swap it in and smoke-test it live (rolls back by itself on failure)
         if: steps.target.outputs.provisioned == 'true'
+        working-directory: ${{ steps.target.outputs.dir }}
         env:
-          DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
+          DEPLOY_ENV: ${{ inputs.environment }}
           IMAGE: ${{ steps.release.outputs.image }}
-        run: ssh target "cd '$DEPLOY_DIR' && export DEPLOY_ENV='$ENVIRONMENT' && ./deploy.sh swap '$IMAGE' && ./deploy.sh status" | tee -a "$GITHUB_STEP_SUMMARY"
+        run: ./deploy.sh swap "$IMAGE" && ./deploy.sh status | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Tell the team channel
         if: ${{ always() && steps.release.outputs.version != '' }}
@@ -185,5 +228,5 @@ jobs:
           SHA: ${{ github.sha }}
           RESULT: ${{ steps.target.outputs.provisioned == 'false' && 'skipped' || job.status }}
         run: >-
-          python scripts/cd/notify_deploy.py --environment "$ENVIRONMENT" --version "$VERSION"
+          python3 scripts/cd/notify_deploy.py --environment "$ENVIRONMENT" --version "$VERSION"
           --sha "$SHA" --result "$RESULT" --run-url "$RUN_URL"

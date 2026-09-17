@@ -22,10 +22,11 @@ release is two steps, not one — push the tag, then run Deploy with that versio
 host changes unless somebody asked for it.
 
 [`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml) runs one job for one environment,
-one deploy per environment at a time, never cancelled half-way. It copies
-`docker-compose.prod.yml`, `scripts/cd/deploy.sh` and the settings (the Environment's `APP_ENV`
-secret, written with mode 600) to the deploy directory, then calls `deploy.sh` over SSH, one step
-at a time:
+one deploy per environment at a time, never cancelled half-way. **It runs on the host.** The BTK
+platform server hosts ClinicQ's own GitHub Actions runner (labels `self-hosted, Linux, X64, clinicq,
+infra`), so the job is already on the machine it is deploying to: there is nothing to SSH into, no
+key to hold and no host address to configure. It copies `docker-compose.prod.yml` and
+`scripts/cd/deploy.sh` into the deploy directory and calls `deploy.sh` there, one step at a time:
 
 | Step | `deploy.sh` | What it proves | If it fails |
 |------|-------------|----------------|-------------|
@@ -59,26 +60,40 @@ branch can never reach an environment's secrets. `make gh-sync-environments` app
 
 ## Setting up a host (once per environment)
 
-1. A Linux host with Docker and the compose plugin, `curl`, and a `deploy` user in the `docker` group
-   (`scripts/cd/setup-server.sh` does the base install). The deploy directory: `/opt/btk/clinicq` for
-   production, `/opt/btk/clinicq-staging` for staging, owned by `deploy`.
-2. In the GitHub Environment (**Settings → Environments → staging / production**):
+**On a host laid out by the platform, there is nothing to configure.** The runner is the host, the
+deploy directory defaults to `/opt/btk/clinicq` (`/opt/btk/clinicq-staging` for staging), and the
+app's settings are the `.env` already in it.
 
-   | Kind | Name | Value |
-   |------|------|-------|
-   | secret | `DEPLOY_HOST` | the host's name or address |
-   | secret | `DEPLOY_USER` | `deploy` |
-   | secret | `DEPLOY_SSH_KEY` | a private key made for this deploy only (`ssh-keygen -t ed25519`); its public half in `~deploy/.ssh/authorized_keys` |
-   | secret | `DEPLOY_KNOWN_HOSTS` | the host's key line, checked against the host itself (`ssh-keyscan <host>`, verified out of band) |
-   | secret | `APP_ENV` | the whole `.env`: the settings (check it first: `python scripts/check_config.py <file> --environment production`), plus `APP_PORT`, `DOMAIN` and `GATEWAY_COMPOSE_DIR` for the compose file |
-   | secret | `TEAM_WEBHOOK_URL` | optional: the Slack or Discord incoming webhook for deploy messages |
-   | variable | `DEPLOY_DIR` | `/opt/btk/clinicq` or `/opt/btk/clinicq-staging` |
+1. **The runner.** A self-hosted GitHub Actions runner on the host, registered against this
+   repository with the labels `self-hosted`, `Linux`, `X64` and **`clinicq`**. `clinicq` is what
+   pins the deploy to the machine ClinicQ lives on; add `infra` too if it is the shared platform
+   runner. Its user needs Docker (the `docker` group) and write access to the deploy directory.
+2. **The deploy directory.** `/opt/btk/clinicq` for production, `/opt/btk/clinicq-staging` for
+   staging, holding the app's `.env` (check it first:
+   `python scripts/check_config.py <file> --environment production`, and it needs `APP_PORT`,
+   `DOMAIN` and `GATEWAY_COMPOSE_DIR` for the compose file). `scripts/cd/setup-server.sh` does the
+   base install; `btk-platform-layout.sh` in `Billykat7/infra` creates the layout.
+3. **Optional**, in the GitHub Environment (**Settings → Environments → staging / production**):
+
+   | Kind | Name | When you need it |
+   |------|------|------------------|
+   | secret | `APP_ENV` | to keep the settings in GitHub instead of on the host: the whole `.env`, rewritten (mode 600) on every deploy. Without it the host's own `.env` is used and never touched. |
+   | secret | `TEAM_WEBHOOK_URL` | to post the result to Slack or Discord |
+   | variable | `DEPLOY_DIR` | a deploy directory that is not `/opt/btk/clinicq[-staging]` |
    | variable | `PUBLIC_URL` | the environment's URL, shown on the run |
    | variable | `TEAM_WEBHOOK_KIND` | `slack` (default) or `discord` |
 
-Until those exist, a deploy reports "not provisioned", changes nothing and succeeds. The secrets
-already in the `production` Environment (per-setting values from the project the kernel came from)
-are not read by `deploy.yml`.
+   Repository-wide, `DEPLOY_RUNNER_LABELS` (a JSON array, e.g. `["self-hosted","Linux","X64","clinicq"]`)
+   moves the deploy to a different runner without editing the workflow.
+
+If the deploy directory does not exist, the deploy reports "not provisioned", says exactly what to
+create, changes nothing and succeeds.
+
+> **Deploying over SSH is gone (Issue 230).** `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` and
+> `DEPLOY_KNOWN_HOSTS` are no longer read by `deploy.yml` and can be deleted from both Environments.
+> A run that reported *"Not provisioned (missing DEPLOY_HOST DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS
+> APP_ENV DEPLOY_DIR): nothing was deployed."* was asking for credentials to reach a host the job
+> was never going to be on.
 
 Staging and production can share one host: `DEPLOY_ENV` makes them separate compose projects
 (`btk-clinicq-staging` and `btk-clinicq`) on different `APP_PORT`s.
