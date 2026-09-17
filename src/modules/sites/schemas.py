@@ -578,6 +578,61 @@ class VerificationQueueOut(BaseModel):
     items: list[VerificationQueueItemOut]
 
 
+class SetupLinkIn(BaseModel):
+    """Who to send a clinic's setup link to (Issue 223)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailStr = Field(
+        description="The work address of whoever runs the clinic. Their account is created from it."
+    )
+    phone: str | None = Field(
+        default=None, description="An optional second channel for the link."
+    )
+
+
+class SetupLinkOut(BaseModel):
+    """The setup link that was sent. Never the link itself: it is in the recipient's inbox."""
+
+    invitation_id: str
+    email: str
+    expires_at: datetime
+
+
+class SetupStepOut(BaseModel):
+    """One thing a clinic settles before patients should see it (Issue 223)."""
+
+    step: str
+    title: str
+    why: str
+    done: bool
+    detail: str = Field(description="What the clinic has so far, in a few words.")
+    tab: str = Field(description="The settings tab that finishes this step.")
+
+
+class SetupStateOut(BaseModel):
+    """A clinic's whole setup: every step, and what it may do next (Issue 223).
+
+    Derived from the clinic's own rows on every read, so a step finished on a settings tab or
+    through the API is finished here too, with nothing to keep in step.
+    """
+
+    site_id: str
+    site_name: str
+    status: SiteStatus
+    steps: list[SetupStepOut]
+    done_count: int
+    total_count: int
+    complete: bool
+    can_submit: bool = Field(
+        description="Whether the clinic may put itself forward for checking now."
+    )
+    waiting: bool = Field(
+        description="Whether it has been submitted and awaits a decision."
+    )
+    completed_at: datetime | None
+
+
 class SiteOnboardingOut(BaseModel):
     """Where one clinic's listing stands, as the clinic itself sees it (Issue 221).
 

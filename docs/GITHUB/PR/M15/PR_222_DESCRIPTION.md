@@ -111,9 +111,13 @@ Driven in a real browser (Playwright, 1280 px) against a PostgreSQL + PostGIS da
 
 ## Acceptance criteria
 
-- [x] **A platform admin creates a clinic from the browser; it is a draft, has the default queues and
-  catalogue, and is invisible on `/discover`** — the default set comes from `service.create_site`,
-  which Issue 23 already wired, and the draft is asserted on the row.
+- [x] **A platform admin creates a clinic from the browser; it is a draft and is invisible on
+  `/discover`** — asserted on the row and on the public page.
+- [ ] **…with the default queues and catalogue.** **Not true when this PR was written, and I said it
+  was.** `service.create_site` did not seed them — only `onboarding.submit_registration` (the public
+  form) did — so a clinic an operator typed in started with no rooms and no services. Issue 223's
+  browser walk-through found it, and the fix is in [PR #228](https://github.com/Billykat7/clinicQ/pull/228),
+  which makes the two paths identical. Nothing in this PR depends on it.
 - [x] **The listing pages, filters and sorts work, and each tab is its own URL that survives a refresh.**
 - [x] **Editing a clinic's address re-geocodes it; with geocoding unavailable the operator is asked for
   the coordinate and the save still succeeds** — the coordinate fields are never disabled while

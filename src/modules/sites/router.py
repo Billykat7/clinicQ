@@ -38,6 +38,7 @@ from src.commons.enums import (
     SiteSector,
     SiteStatus,
     TransferPlacement,
+    UserRole,
 )
 from src.commons.time import business_date, now_sast
 from src.core.audit import record_audit_event
@@ -66,6 +67,7 @@ from src.modules.sites import (
     onboarding,
     payment_profile,
     service,
+    setup,
 )
 from src.modules.sites import settings as display_settings
 from src.modules.sites.availability import join_gate
@@ -101,6 +103,10 @@ from src.modules.sites.schemas import (
     RecallSettingsIn,
     RecallSettingsOut,
     SchemeOptionOut,
+    SetupLinkIn,
+    SetupLinkOut,
+    SetupStateOut,
+    SetupStepOut,
     SiteIn,
     SiteListOut,
     SiteLocationOut,
@@ -118,6 +124,7 @@ from src.modules.sites.schemas import (
     WeeklyHoursIn,
     WeeklyHoursOut,
 )
+from src.modules.staff import invitations
 
 router = APIRouter(prefix="/sites", tags=["sites"])
 
@@ -166,6 +173,12 @@ SiteProfileUpdate = Annotated[
 #: guard's 404 and a clinic manager reaches it at ``assigned`` through their grant on ``sites``.
 SiteOnboardingRead = Annotated[
     SiteAccess, Depends(require_site_access("sites.onboarding", "read"))
+]
+#: The clinic's own moves on its setup (Issue 223): confirming what it has looked at, and putting
+#: itself forward. ``assigned``, through a clinic manager's grant on ``sites``; the *decision* about
+#: a listing is ``business`` and is the operator's.
+SiteOnboardingUpdate = Annotated[
+    SiteAccess, Depends(require_site_access("sites.onboarding", "update"))
 ]
 #: Opening hours, holiday rules and closures are the clinic's profile: a receptionist reads them,
 #: a clinic manager changes them, and closing the clinic is the same grant as changing its hours
@@ -473,6 +486,220 @@ def get_onboarding_state(
             SiteStatus.PENDING_VERIFICATION
             in onboarding.ALLOWED_TRANSITIONS.get(site.status_enum, frozenset())
         ),
+    )
+
+
+# --------------------------------------------------------------------------------------
+# Setting a clinic up (Issue 223)
+#
+# The clinic's own side of onboarding: a checklist derived from its rows, and the one move it may
+# make on its own listing. ``sites.onboarding`` at ``assigned``, which a clinic manager reaches
+# through their grant on ``sites`` (Issue 221) — reading it is site-scoped like everything else a
+# clinic sees about itself, and submitting is theirs alone. The *decision* stays the operator's, at
+# ``business``, and both go through ``onboarding.transition``.
+# --------------------------------------------------------------------------------------
+
+
+def _setup_out(state: setup.SetupState) -> SetupStateOut:
+    """The checklist as the API returns it."""
+    return SetupStateOut(
+        site_id=state.site_id,
+        site_name=state.site_name,
+        status=state.status,
+        steps=[
+            SetupStepOut(
+                step=step.step.value,
+                title=step.title,
+                why=step.why,
+                done=step.done,
+                detail=step.detail,
+                tab=step.tab,
+            )
+            for step in state.steps
+        ],
+        done_count=state.done_count,
+        total_count=len(state.steps),
+        complete=state.complete,
+        can_submit=state.can_submit,
+        waiting=state.waiting,
+        completed_at=state.completed_at,
+    )
+
+
+@router.get(
+    "/{site_id}/setup",
+    response_model=SetupStateOut,
+    operation_id="sitesSetupState",
+    summary="What this clinic still needs before patients see it",
+)
+def get_setup_state(access: SiteOnboardingRead, db: DbSession) -> SetupStateOut:
+    """The setup checklist, asked of the clinic's own rows rather than remembered.
+
+    So a room added on the queues tab, hours set through the API and a service removed by an
+    operator all show here without anything having to be told twice.
+    """
+    return _setup_out(setup.setup_state(db, _site_or_404(db, access)))
+
+
+@router.post(
+    "/{site_id}/setup/details",
+    response_model=SetupStateOut,
+    operation_id="sitesSetupConfirmDetails",
+    summary="The clinic has checked the details somebody typed for it",
+)
+def confirm_setup_details(
+    request: Request,
+    access: SiteOnboardingUpdate,
+    db: DbSession,
+) -> SetupStateOut:
+    """Record that the clinic has looked at its name, address and map point and they are right.
+
+    No body: it means one thing. Changing any of those details is the profile tab's job, and doing
+    so does not un-confirm this — a clinic that corrected its own address has plainly looked at it.
+    """
+    site = _site_or_404(db, access)
+    site.setup_confirmed_details = True
+    _audit(
+        db,
+        request,
+        access.user.email,
+        str(access.user.id),
+        AuditAction.UPDATE,
+        site.id,
+        "setup: the clinic confirmed its own details",
+    )
+    db.commit()
+    db.refresh(site)
+    return _setup_out(setup.setup_state(db, site))
+
+
+@router.post(
+    "/{site_id}/setup/board",
+    response_model=SetupStateOut,
+    operation_id="sitesSetupConfirmBoard",
+    summary="The clinic has decided what its waiting-room screen shows",
+)
+def confirm_setup_board(
+    request: Request,
+    access: SiteOnboardingUpdate,
+    db: DbSession,
+) -> SetupStateOut:
+    """Record the decision, which the board's own default cannot express (non-negotiable 4).
+
+    ``display_mode`` is ``number_only`` until somebody chooses otherwise, so it cannot tell a clinic
+    that *chose* numbers only from one that has never been asked. This says which.
+    """
+    site = _site_or_404(db, access)
+    site.setup_confirmed_board = True
+    _audit(
+        db,
+        request,
+        access.user.email,
+        str(access.user.id),
+        AuditAction.UPDATE,
+        site.id,
+        f"setup: the clinic confirmed its board as {site.display_mode}",
+    )
+    db.commit()
+    db.refresh(site)
+    return _setup_out(setup.setup_state(db, site))
+
+
+@router.post(
+    "/{site_id}/setup/submit",
+    response_model=SetupStateOut,
+    operation_id="sitesSetupSubmit",
+    summary="Put this clinic forward to be checked",
+)
+def submit_setup(
+    request: Request,
+    access: SiteOnboardingUpdate,
+    db: DbSession,
+) -> SetupStateOut:
+    """``draft → pending_verification``, the one move a clinic may make on its own listing.
+
+    Refused with the list of what is still unfinished (422) rather than silently doing nothing, and
+    refused for a clinic that is not a draft — a verified clinic has nothing to submit, and one that
+    was sent back becomes a draft again by the admin's decision, not by this route.
+    """
+    site = _site_or_404(db, access)
+    try:
+        setup.submit_for_checking(
+            db,
+            site,
+            submitted_by=access.user,
+            ip_address=resolve_client_ip(request),
+        )
+    except setup.NotReadyError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    db.commit()
+    db.refresh(site)
+    return _setup_out(setup.setup_state(db, site))
+
+
+@router.post(
+    "/{site_id}/setup-link",
+    response_model=SetupLinkOut,
+    status_code=status.HTTP_201_CREATED,
+    operation_id="sitesSendSetupLink",
+    summary="Send the link that lets a clinic set itself up",
+)
+def send_setup_link(
+    site_id: str,
+    payload: SetupLinkIn,
+    request: Request,
+    db: DbSession,
+    staff: CurrentStaff,
+    _authz: SitesOnboardingUpdate,
+) -> SetupLinkOut:
+    """Invite whoever runs this clinic as its manager, and send them the link (Issue 223).
+
+    **It is Issue 22's staff invitation**, issued for ``clinic_manager`` at this clinic: single use,
+    expiring, and the row rather than the link is the authority. Following it creates that person's
+    account and their role here, and lands them on the clinic's setup checklist. So the operator
+    adds a clinic and sends one link, and the clinic does the rest.
+
+    An operator route — ``sites.onboarding`` + ``update`` at ``business``, not behind the site
+    guard — for the reason the directory edit is one (Issue 222): a platform admin is **assigned to
+    no clinic** (Issue 19), so ``POST /sites/{site_id}/staff/invitations`` answers 404 for them. The
+    scope is not weakened by that: this route can issue exactly one role, at exactly the clinic
+    named in the path, and the invitation it creates is the same row, with the same deadline and the
+    same single use, that a clinic manager's own invitation would be.
+    """
+    site = service.get_site(db, site_id)
+    if site is None:
+        raise site_not_found()
+    try:
+        issued = invitations.invite_staff(
+            # The business-tier grant above is what authorised this; the access object below only
+            # carries *which* clinic and *who* is asking, which is what the service needs to decide
+            # the two things a grant cannot: the role, and whether this person is already here.
+            db,
+            SiteAccess(site_id=site.id, user=staff),
+            email=str(payload.email),
+            role=UserRole.CLINIC_MANAGER,
+            phone=payload.phone,
+            base_url=str(request.base_url),
+        )
+    except invitations.InvitationError as exc:
+        raise HTTPException(exc.status_code, exc.detail) from exc
+    _audit(
+        db,
+        request,
+        staff.email,
+        str(staff.id),
+        AuditAction.CREATE,
+        site.id,
+        f"sent the setup link for {site.slug}",
+    )
+    db.commit()
+    db.refresh(issued.invitation)
+    invitations.deliver_invitation(db, issued)
+    db.commit()
+    return SetupLinkOut(
+        invitation_id=issued.invitation.id,
+        email=issued.invitation.email,
+        expires_at=issued.invitation.expires_at,
     )
 
 

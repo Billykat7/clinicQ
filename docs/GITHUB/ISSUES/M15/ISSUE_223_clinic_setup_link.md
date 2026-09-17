@@ -48,64 +48,64 @@ used row is refused however valid the signature still looks.
 
 ## Scope
 
-- Migration `0048`: `site_setup_link` (`id`, `site_id`, `email`, `phone_e164` nullable, `issued_by`,
-  `expires_at`, `accepted_at`, `completed_at`, `revoked_at`, `created_at`), and
-  `site.setup_completed_at` on the clinic.
-- `SETUP_LINK_EXPIRE_HOURS`, default `168` (a week — a clinic manager is not at a desk, and a weekend
-  must not expire it), beside `STAFF_INVITE_EXPIRE_HOURS` in `Settings`.
-- Issue, list and revoke a setup link: `POST/GET/DELETE
-  /api/v1/sites/{site_id}/setup-links[/{id}]`, gated `sites.onboarding` + `update`, so a platform
-  admin can send one for any clinic and a clinic manager can re-send their own. Sent by email, and by
-  SMS when a number is given.
-- `GET /setup/{token}`: the clinic's own setup journey, authenticated **by the token alone** — no
-  account, no session, no role. It reaches exactly one clinic's setup and nothing else: not another
-  clinic, not its tickets, not its patients, not its audit trail.
-- The journey, as a checklist a clinic can leave and come back to, each step saved on its own:
-  1. **Confirm the clinic** — name, address on the map, contact person;
-  2. **Rooms** — the default queues, renamed, removed or added to (a room *is* a queue, Issue 25);
-  3. **Services** — the default catalogue, with pharmacy / dispensary kept or removed, and expected
-     minutes per service;
-  4. **Hours** — the weekly schedule and public-holiday rule;
-  5. **The waiting-room board** — display mode, language, theme, announcements. Created
-     `number_only` and only ever changed *here*, by the clinic, never defaulted to anything else
-     (non-negotiable 4);
-  6. **Who runs it** — the first `clinic_manager` invited, which is the existing staff invitation;
-  7. **Submit for checking** — `draft → pending_verification` through `transition()`, never by a
-     direct write.
-- The checklist's state is derived from the clinic's own rows, not a column per step, so a change made
-  from the dashboard shows up here and nothing can disagree.
-- A link is single-use in the sense that matters: `accepted_at` on first open, refused once revoked,
-  expired or once the clinic is `verified`; re-openable until then by the person who holds it.
-- `/admin/clinics` shows each clinic's setup state and offers **Send setup link** / **Re-send** /
-  **Revoke**, with who it went to and when.
-- Every step writes an audit row whose actor is the setup link (`setup-link:<id>`), so what a clinic
-  configured for itself is attributable without inventing an account for it.
-- `docs/OPS/CLINIC_ONBOARDING.md`: the journey end to end, for the person running the pilot.
+> **The journey changed during the work, and this section is the one that was rewritten.** The first
+> draft gave the setup link a token of its own: a single-use JWT reaching a clinic's rooms, hours and
+> waiting-room board with **no account at all**. That is a second authentication surface into a
+> clinic's configuration, built beside `StaffInvitation`, which already does this job — and the
+> person setting a clinic up needs an account the next morning anyway to run its queue.
+>
+> So the link **is** the staff invitation (Issue 22), issued for `clinic_manager` at the new clinic.
+> Following it creates the account it was always going to need and lands them on the checklist. The
+> operator still sends one link and the clinic still does the rest; there is no new way in, every
+> step is audited under a real person, and every write goes through the settings pages, the API and
+> the site guard that already exist. The issue asked for "any other journey that would be better for
+> this"; this is it.
+
+- Migration `0048`: `site.setup_confirmed_details`, `site.setup_confirmed_board` and
+  `site.setup_completed_at`. **No new table**, and no `site_setup_link`: the invitation row is the
+  link.
+- The checklist is **derived** from the clinic's own rows on every read — its rooms, its services,
+  its hours, its staff invitations — so a step finished on a settings tab, through the API or by an
+  operator shows as done without anything being told twice. The three columns above are the
+  exceptions, each because no other row can answer its question: two steps are a *decision* (the
+  details somebody else typed; what the board shows, which is `number_only` by default whether or
+  not anyone has chosen), and `setup_completed_at` is *when the clinic said it was finished*.
+- `GET /api/v1/sites/{site_id}/setup` — the checklist, `sites.onboarding:read` at `assigned`.
+- `POST /api/v1/sites/{site_id}/setup/details` and `/setup/board` — the two confirms. No body: each
+  means one thing.
+- `POST /api/v1/sites/{site_id}/setup/submit` — `draft → pending_verification` through
+  `onboarding.transition`, the only writer of `status`. Refused `422` **with the list of what is
+  still unfinished**. The *decision* stays the operator's at `business` (Issue 221), so a clinic can
+  ask and can never list itself.
+- A **Setup** tab, first in the clinic's settings, gated on `sites.onboarding:update`.
+- **Send the setup link** in `/admin/clinics`, which posts the existing staff invitation for
+  `clinic_manager`.
+- `docs/OPS/CLINIC_ONBOARDING.md`: the journey end to end, for whoever runs the pilot.
 
 ## Out of scope
 
+- **A setup token of its own.** See the note above: it was specified, and deliberately not built.
 - Editing the clinic's slug from the setup journey: the public handle stays the operator's.
 - Uploading a logo or photographs.
 - Payment profile and medical-aid schemes (Issue 37's own settings page).
-- A setup link that can invite more than one staff member, or assign rooms to them (Issue 28's page,
-  once the first manager has an account).
 - Automatic approval on submission. A platform admin still decides.
 
 ## Acceptance criteria
 
-- [ ] An operator adds a clinic in `/admin/clinics` and sends a setup link; it arrives by email, and
-      by SMS when a number was given
-- [ ] Following the link opens the clinic's setup with no account and no sign-in, and completes all
-      seven steps; a step saved is still saved after closing and re-opening the link
-- [ ] The link reaches **only** that clinic's setup: another clinic's id inside the journey is a 404,
-      and the token opens no ticket, patient, report or audit row
-- [ ] An expired, revoked or already-completed link says so plainly and offers no form
-- [ ] The board's display mode is `number_only` until the clinic itself changes it in step 5
-- [ ] Submitting for checking moves `draft → pending_verification` through `transition()`, puts the
-      clinic in `/admin/verification`, and the checklist is complete
-- [ ] Every step's change is audited with the setup link as the actor
-- [ ] The checklist reflects a change made from the clinic dashboard instead of the link
-- [ ] The journey works on a 320 px screen and is completable by keyboard
+- [ ] An operator adds a clinic in `/admin/clinics` and sends a setup link; it arrives by email
+- [ ] Following the link creates the manager's account and their role at that clinic, and lands them
+      on the checklist
+- [ ] The checklist reflects a change made on a settings tab, on the next render, with nothing told
+      twice
+- [ ] Each of the six steps opens the tab that finishes it, and comes back
+- [ ] The board's display mode is `number_only` until the clinic itself changes it, and confirming
+      the step changes no setting
+- [ ] An incomplete clinic is refused with the list of what is missing, and nothing moves
+- [ ] A complete clinic moves `draft → pending_verification` through `transition()`, appears in
+      `/admin/verification`, and the move is audited under the manager's name
+- [ ] A clinic cannot approve itself, cannot submit twice, and a verified clinic has nothing to
+      submit
+- [ ] Another clinic's setup is the guard's 404, and the front desk reaches none of it
 
 ## How to verify
 
@@ -115,12 +115,13 @@ used row is refused however valid the signature still looks.
 
 ## Files touched
 
-- `alembic/versions/0048_site_setup_link.py`
-- `src/database/models/{site_setup_link,site}.py`
-- `src/modules/sites/{setup,onboarding,router,schemas}.py`
-- `src/web/setup.py`, `src/templates/setup/*.html`, `src/static/js/clinic-setup.js`
-- `src/core/{config,email_send}.py`
-- `src/templates/admin/clinics.html`
+- `alembic/versions/0048_clinic_setup.py`
+- `src/database/models/site.py`
+- `src/modules/sites/setup.py`, `src/modules/sites/{router,schemas}.py`
+- `src/web/dashboard/settings.py`, `src/templates/dashboard/settings_setup.html`
+- `src/templates/admin/clinics.html`, `src/static/js/admin-clinics.js`
+- `src/static/css/admin.css`
+- `contracts/sites.yaml`
 - `docs/OPS/CLINIC_ONBOARDING.md`
 
 ---

@@ -78,10 +78,16 @@ def _audits(dashboard: SimpleNamespace) -> int:
 def test_the_manager_opens_every_tab_and_the_bare_url_opens_the_first(
     dashboard: SimpleNamespace,
 ) -> None:
-    """Every tab is its own URL; the settings link and an unknown tab both land on the profile."""
+    """Every tab is its own URL; the settings link and an unknown tab both land on the first one.
+
+    The first is **Setup** since Issue 223 — it is where a clinic handed a setup link starts, and
+    it is the only tab that says what the other tabs still need. Read from ``SETTINGS_TABS`` rather
+    than named, so reordering them does not need this edited.
+    """
     manager = dashboard.client("manager.a")
+    first = SETTINGS_TABS[0].section.value
     assert manager.get(_settings(dashboard)).headers["location"] == _settings(
-        dashboard, "profile"
+        dashboard, first
     )
     assert manager.get(_settings(dashboard, "nonsense")).headers["location"] == (
         _settings(dashboard)
@@ -90,6 +96,7 @@ def test_the_manager_opens_every_tab_and_the_bare_url_opens_the_first(
         tab.label for tab in SETTINGS_TABS if tab.section is not SettingsSection.PAYMENT
     ]
     for section in (
+        SettingsSection.SETUP,
         SettingsSection.PROFILE,
         SettingsSection.HOURS,
         SettingsSection.QUEUES,

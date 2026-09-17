@@ -1,0 +1,106 @@
+{% extends "dashboard/settings_base.html" %}
+
+{#
+  Setting a clinic up: the checklist, and the button that puts it forward (Issue 223).
+
+  Where a clinic lands after following the setup link an operator sent. The link is Issue 22's staff
+  invitation, issued for `clinic_manager` at this clinic, so whoever is reading this has an account
+  and a role here — and every step below is finished on the tab that owns it, through the forms and
+  the API that already exist. There is no second way into a clinic.
+
+  Every step's state is derived from the clinic's own rows on each render (`setup.setup_state`), so
+  a room added on the Queues tab shows as done here the moment it is saved.
+
+  Two steps are a *decision* rather than a thing that exists — the details somebody else typed, and
+  what the waiting-room screen shows — so each carries its own confirm. Those, and the submission,
+  are declared with `data-api` and sent by dashboard-api.js like every other write on these screens:
+  the server decides, and a success reloads, so what is on screen afterwards is its state and not a
+  guess at it. There is no script of this page's own.
+#}
+
+{% block settings_content %}
+<div class="page-head">
+  <h1>Set up {{ setup.site_name }}</h1>
+  {% if setup.waiting %}
+  <p class="lead">This clinic has been put forward and is waiting to be checked. You can still
+  change anything below; a platform admin will look at it and let your contact person know.</p>
+  {% elif setup.status.value == 'verified' %}
+  <p class="lead">This clinic is listed and patients can find it. Everything below is still yours to
+  change whenever it changes.</p>
+  {% else %}
+  <p class="lead">A few things to settle before patients should see this clinic. Each one opens the
+  tab that handles it, and comes back here. Nothing is lost if you stop and come back later.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  {# A native <progress>, not a div with an inline width: the CSP is `style-src 'self'`, so an
+     inline style is dropped and a hand-rolled bar renders full whatever the number is — which is
+     exactly what it did before a browser was pointed at it. This one cannot lie, and a screen
+     reader reads it without an aria-label. #}
+  <div class="setup-progress">
+    <label class="setup-count" for="setup-progress">
+      <strong>{{ setup.done_count }} of {{ setup.steps | length }}</strong> done
+    </label>
+    <progress class="setup-bar" id="setup-progress"
+              value="{{ setup.done_count }}" max="{{ setup.steps | length }}"></progress>
+  </div>
+
+  <ol class="setup-steps">
+    {% for step in setup.steps %}
+    <li class="setup-step{% if step.done %} is-done{% endif %}" data-step="{{ step.step.value }}">
+      <span class="setup-tick" aria-hidden="true">{{ '✓' if step.done else '' }}</span>
+      <div class="setup-step-body">
+        <h2>{{ step.title }}</h2>
+        <p class="hint">{{ step.why }}</p>
+        <p class="setup-detail">
+          <span class="setup-state">{{ 'Done' if step.done else 'To do' }}</span> · {{ step.detail }}
+        </p>
+        <div class="form-actions">
+          <a class="btn btn-quiet btn-sm" href="{{ settings_href(step.tab) }}">
+            {{ 'Change it' if step.done else 'Do it now' }}
+          </a>
+          {% if step.step.value == 'clinic' and not step.done %}
+          <button type="button" class="btn btn-sm"
+                  data-api="/api/v1/sites/{{ site.id }}/setup/details" data-method="POST">
+            Yes, these are right
+          </button>
+          <span class="msg" data-api-msg aria-live="polite"></span>
+          {% elif step.step.value == 'board' and not step.done %}
+          <button type="button" class="btn btn-sm"
+                  data-api="/api/v1/sites/{{ site.id }}/setup/board" data-method="POST">
+            Yes, that is what we want
+          </button>
+          <span class="msg" data-api-msg aria-live="polite"></span>
+          {% endif %}
+        </div>
+      </div>
+    </li>
+    {% endfor %}
+  </ol>
+</div>
+
+{% if not setup.waiting and setup.status.value != 'verified' %}
+<div class="card">
+  <h2>Ask to be listed</h2>
+  {% if setup.can_submit %}
+  <p>Everything is settled. Put {{ setup.site_name }} forward and a platform admin will check it;
+  once it is verified, patients can find it and join your queues from their phones.</p>
+  {% else %}
+  <p class="hint">Finish everything above first. You can put this clinic forward once the list is
+  complete — that way the person checking it sees a clinic that is ready, not an empty one.</p>
+  {% endif %}
+  <div class="form-actions" data-api-scope>
+    {# A 422 here names every step still unfinished, which is the most useful sentence on the page,
+       so it is shown exactly as the API wrote it — beside the button that asked. #}
+    <button type="button" class="btn" data-api="/api/v1/sites/{{ site.id }}/setup/submit"
+            data-method="POST"
+            data-confirm="Put {{ setup.site_name }} forward to be checked? A platform admin looks at it and lets your contact person know. You can still change anything here while you wait."
+            {% if not setup.can_submit %}disabled{% endif %}>
+      Put this clinic forward
+    </button>
+    <span class="msg" data-api-msg aria-live="polite"></span>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
