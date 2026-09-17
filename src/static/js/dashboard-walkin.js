@@ -127,6 +127,11 @@
     Array.prototype.forEach.call(form.querySelectorAll('input[name="queue_id"]'), function (radio) {
       if (radio.value === pending.queueId) radio.checked = true;
     });
+    // The consent answer too, or `payload()` would rebuild a *different* body, the signature below
+    // would not match it, and the resumed submit would take a fresh key -- quietly turning "the
+    // same walk-in" into a second one. `syncConsent()` runs after this and enables the box, since
+    // the phone number it depends on has just been put back.
+    consent.checked = Boolean(pending.body.notifications_consent);
     // The same key as the submit that was refused, so pressing Enter now asks about that walk-in
     // rather than issuing a second one. The signature is rebuilt the way `payload()` builds it.
     retry = {
