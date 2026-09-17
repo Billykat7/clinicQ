@@ -285,13 +285,13 @@ def _audit_refresh_reuse(user_id: str, family_id: str, revoked: int) -> None:
 def _set_refresh_token_cookie(
     response: Response, token: str, settings: Settings
 ) -> None:
-    """Set the httpOnly, SameSite=Lax refresh token cookie (Secure outside dev)."""
+    """Set the httpOnly, SameSite=Lax refresh token cookie (Secure per SESSION_COOKIE_SECURE)."""
     response.set_cookie(
         key=settings.refresh_token_cookie_name,
         value=token,
         max_age=settings.refresh_token_expire_days * 86400,
         httponly=True,
-        secure=not settings.is_development,
+        secure=settings.session_cookies_secure,
         samesite="lax",
         path="/",
     )
@@ -313,7 +313,7 @@ def _set_access_token_cookie(
         value=token,
         max_age=settings.jwt_access_expire_minutes * 60,
         httponly=True,
-        secure=not settings.is_development,
+        secure=settings.session_cookies_secure,
         samesite="lax",
         path="/",
     )
@@ -337,7 +337,7 @@ def _set_csrf_cookie(response: Response, token: str, settings: Settings) -> None
         value=token,
         max_age=settings.refresh_token_expire_days * 86400,
         httponly=False,
-        secure=not settings.is_development,
+        secure=settings.session_cookies_secure,
         samesite="lax",
         path="/",
     )

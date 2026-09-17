@@ -1069,6 +1069,19 @@ class Settings(BaseSettings):
         default="bk_clinicq_csrf",
         description="Non-httpOnly CSRF cookie for double-submit (env: CSRF_COOKIE_NAME)",
     )
+    # Whether the session cookies carry ``Secure`` (Issue 229). Unset means "outside development",
+    # which is right for every environment that terminates TLS and wrong for the one that does not:
+    # a browser silently DISCARDS a ``Secure`` cookie served over plain ``http://``, so a staging or
+    # production instance reachable only by ``http://host:port`` signs a person in and then behaves
+    # as though they never signed in at all. Setting it false there is a deliberate, recorded choice;
+    # ``localhost`` is exempt from the rule in every current browser and needs no override.
+    session_cookie_secure: bool | None = Field(
+        default=None,
+        description=(
+            "Force the Secure flag on the session, refresh and CSRF cookies on or off. "
+            "Unset = Secure outside development (env: SESSION_COOKIE_SECURE)"
+        ),
+    )
 
     # Profile pictures (M23 — Issue #130). An avatar is small by definition, so the cap is far
     # below the document/attachment ones: an upload larger than this is a mistake or an attack,
@@ -1663,6 +1676,13 @@ class Settings(BaseSettings):
     @property
     def is_development(self) -> bool:
         return self.environment == AppEnvironment.DEVELOPMENT
+
+    @property
+    def session_cookies_secure(self) -> bool:
+        """Whether the session cookies get ``Secure``: the override when set, else "not dev"."""
+        if self.session_cookie_secure is not None:
+            return self.session_cookie_secure
+        return not self.is_development
 
     @property
     def is_production(self) -> bool:
