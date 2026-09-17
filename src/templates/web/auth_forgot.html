@@ -1,0 +1,32 @@
+{#
+  `/forgot-password` — ask for a reset link (Issue 231), rendered by
+  :func:`src.web.routes.forgot_password_page`.
+
+  The answer is deliberately the same whether or not the email has an account: the API never
+  reveals which addresses are registered, and this page must not either. It therefore says "if that
+  email has an account" and shows it for every submission.
+#}
+{% extends "layouts/auth.html" %}
+
+{% block auth_title %}Reset your password{% endblock %}
+{% block auth_description %}Ask {{ app_name }} for a password-reset link.{% endblock %}
+{% block auth_heading %}Reset your password{% endblock %}
+
+{% block auth_lede %}
+<p class="lp-auth-lede">Enter the email you sign in with. If it has an account, we email you a link
+  that sets a new password. The link works once and expires.</p>
+{% endblock %}
+
+{% block content %}
+<form id="forgot-form" novalidate>
+  <div class="lp-field">
+    <label for="forgot-email">Email</label>
+    <input type="email" id="forgot-email" name="email" autocomplete="email" required
+           placeholder="you@example.com" value="{{ prefill_email }}" autofocus>
+  </div>
+  <p class="lp-auth-msg" id="forgot-error" aria-live="polite"></p>
+  <button type="submit" class="lp-btn lp-auth-btn">Email me a reset link</button>
+</form>
+
+<p class="lp-auth-links"><a href="/signin">Back to sign in</a></p>
+{% endblock %}

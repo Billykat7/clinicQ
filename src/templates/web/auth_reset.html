@@ -1,0 +1,48 @@
+{#
+  `/reset-password?token=…` — set a new password (Issue 231), rendered by
+  :func:`src.web.routes.reset_password_page`. This is where the emailed link lands.
+
+  It used to land on the *home page* as `/?resetToken=…`, which opened the modal on the reset
+  screen and then rewrote the address bar to hide the token again. The link now has a page of its
+  own, and the token is a form field on it rather than something the landing page has to carry.
+
+  The token is not shown, logged or put back into the address bar, and the page never confirms
+  whether it is valid before it is used — the API answers that, once.
+#}
+{% extends "layouts/auth.html" %}
+
+{% block auth_title %}Choose a new password{% endblock %}
+{% block auth_description %}Set a new {{ app_name }} password.{% endblock %}
+{% block auth_heading %}Choose a new password{% endblock %}
+
+{% block content %}
+{% if token %}
+<p class="lp-auth-lede">Setting a new password signs out every device that is currently signed in
+  as you.</p>
+
+<form id="reset-form" novalidate>
+  <input type="hidden" id="reset-token" name="token" value="{{ token }}">
+  <div class="lp-field">
+    <label for="reset-password">New password</label>
+    <input type="password" id="reset-password" name="new_password" autocomplete="new-password"
+           placeholder="At least 8 characters" minlength="8" maxlength="128" required autofocus>
+  </div>
+  <div class="lp-field">
+    <label for="reset-password-confirm">Confirm new password</label>
+    <input type="password" id="reset-password-confirm" name="new_password_confirm"
+           autocomplete="new-password" placeholder="Re-enter your new password"
+           minlength="8" maxlength="128" required>
+  </div>
+  <p class="lp-auth-msg" id="reset-error" aria-live="polite"></p>
+  <button type="submit" class="lp-btn lp-auth-btn">Set new password</button>
+</form>
+{% else %}
+<p class="lp-auth-lede">This page needs the link from your reset email — it carries the one-time
+  token that proves the request was yours. Ask for a new link and open it from the email.</p>
+{% endif %}
+
+<p class="lp-auth-links">
+  <a href="/forgot-password">Send me a new link</a>
+  <a href="/signin">Back to sign in</a>
+</p>
+{% endblock %}

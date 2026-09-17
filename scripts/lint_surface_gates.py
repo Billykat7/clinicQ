@@ -90,6 +90,24 @@ _UNGATED_PAGES: dict[str, str] = {
     "/features": "public marketing page — anonymous by design",
     "/privacy": "public legal page — anonymous by design",
     "/terms": "public legal page — anonymous by design",
+    "/signin": (
+        "the sign-in page (Issue 231): the whole point is that the caller has no session yet, so "
+        "there is no grant to hold. It renders a form and nothing of anybody's; the API endpoints "
+        "it posts to are what decide anything"
+    ),
+    "/signup": (
+        "the sign-up page (Issue 231): the caller has no account. The page 404s when SIGNUP_ENABLED "
+        "is off, and /api/v1/auth/signup refuses it there too"
+    ),
+    "/forgot-password": (
+        "asking for a reset link (Issue 231): no session, and the page cannot tell whether an "
+        "email has an account — /api/v1/auth/password/forgot answers the same either way"
+    ),
+    "/reset-password": (
+        "where the emailed reset link lands (Issue 231): the one-time token in the link is the "
+        "authority, and only /api/v1/auth/password/reset checks it. The page renders a form "
+        "without looking at it"
+    ),
 }
 
 #: Mutating routes reachable without a grant, each with the reason (Issue #167's two exemptions).

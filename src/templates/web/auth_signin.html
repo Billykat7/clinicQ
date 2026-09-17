@@ -1,0 +1,72 @@
+{#
+  `/signin` — the staff sign-in page (Issue 231), rendered by
+  :func:`src.web.routes.sign_in_page`.
+
+  Two steps, both on this page and neither in a dialog: the email step, and the code step when the
+  deployment signs people in with a one-time code. The second replaces the first in place rather
+  than navigating, because the code belongs to the email just typed and a fresh GET would have
+  nothing to attach it to; the address bar stays `/signin`, and reloading starts over honestly.
+
+  Which controls appear is the *server's* answer, from `settings`, not a `/auth/config` fetch after
+  paint: the page arrives already shaped, so no one sees a password field flash and vanish. The
+  request that was interrupted rides along in `next`, a same-origin path checked in the route.
+#}
+{% extends "layouts/auth.html" %}
+
+{% block auth_title %}Sign in{% endblock %}
+{% block auth_description %}Sign in to {{ app_name }} to run your clinic's queues.{% endblock %}
+{% block auth_heading %}Sign in to {{ app_name }}{% endblock %}
+
+{% block auth_lede %}
+<p class="lp-auth-lede">For clinic staff. Patients follow their ticket from
+  <a href="/t/">their ticket page</a> — no account needed.</p>
+{% endblock %}
+
+{% block content %}
+<form id="signin-form" novalidate data-next="{{ next_path }}">
+  <div class="lp-field">
+    <label for="signin-email">Email</label>
+    <input type="email" id="signin-email" name="email" autocomplete="email" required
+           placeholder="you@example.com" value="{{ prefill_email }}" autofocus>
+  </div>
+
+  {% if password_login_enabled %}
+  <div class="lp-field">
+    <label for="signin-password">Password</label>
+    <input type="password" id="signin-password" name="password"
+           autocomplete="current-password" placeholder="Your password">
+  </div>
+  {% endif %}
+
+  <p class="lp-auth-msg" id="signin-error" aria-live="polite"></p>
+
+  {% if password_login_enabled %}
+  <button type="submit" class="lp-btn lp-auth-btn" id="btn-password-login">Sign in</button>
+  {% endif %}
+  {% if otp_login_enabled %}
+  <button type="{{ 'button' if password_login_enabled else 'submit' }}"
+          class="lp-btn lp-auth-btn {{ 'lp-btn-quiet' if password_login_enabled }}"
+          id="btn-send-code">Email me a code instead</button>
+  {% endif %}
+</form>
+
+{# The code step. Hidden until a code has actually been sent, so the page never asks for a code
+   nobody has. #}
+<form id="otp-form" novalidate hidden data-next="{{ next_path }}">
+  <p class="lp-auth-note">We sent a code to <strong id="otp-email"></strong>.
+    <a href="#" id="change-email-link">Use a different email</a>.</p>
+  <div class="lp-field">
+    <label for="otp-code">Code from the email</label>
+    <input type="text" id="otp-code" name="code" inputmode="numeric" pattern="[0-9]*"
+           autocomplete="one-time-code" placeholder="000000" minlength="4" maxlength="8" required>
+  </div>
+  <p class="lp-auth-msg" id="otp-error" aria-live="polite"></p>
+  <button type="submit" class="lp-btn lp-auth-btn">Verify and sign in</button>
+  <p class="lp-auth-links"><a href="#" id="resend-code-link">Send another code</a></p>
+</form>
+
+<p class="lp-auth-links" id="signin-links">
+  {% if password_login_enabled %}<a href="/forgot-password">Forgot your password?</a>{% endif %}
+  {% if signup_enabled %}<a href="/signup">Create an account</a>{% endif %}
+</p>
+{% endblock %}

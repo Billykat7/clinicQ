@@ -1,8 +1,10 @@
 """Integration tests for the forgot-password → reset flow (``/auth/password/*``).
 
-Drives the whole reset journey at the HTTP layer against an in-memory database, the way
-the login modal now does it (a user requests a link, follows the emailed ``?resetToken=``
-and sets a new password):
+Drives the whole reset journey at the HTTP layer against an in-memory database, the way the
+reset page does it (a user asks for a link, follows the emailed ``/reset-password?token=…`` and
+sets a new password). Issue 231 moved that link off the home page — it used to be
+``/?resetToken=…``, which opened the sign-in modal on its reset screen and then rewrote the
+address bar to take the token back out:
 
 * ``/auth/password/forgot`` emails a signed reset link for an eligible account and returns
   the *same* generic body whether or not the email exists or is verified (no enumeration);
@@ -158,11 +160,16 @@ def _refresh_rows(factory: sessionmaker[Session], user_id: str) -> list[RefreshT
 
 
 def _token_from_last_link(ctx: SimpleNamespace) -> str:
-    """Pull the ``resetToken`` query value out of the most recently captured link."""
+    """Pull the ``token`` out of the most recently emailed link, checking where it points.
+
+    The path is part of what is asserted: an emailed link that lands anywhere but the reset page
+    is a broken reset, and the test that finds it should be this one.
+    """
     assert ctx.sent_reset_links, "no reset link was emailed"
     _, link = ctx.sent_reset_links[-1]
-    qs = parse_qs(urlparse(link).query)
-    return qs["resetToken"][0]
+    parsed = urlparse(link)
+    assert parsed.path == "/reset-password", link
+    return parse_qs(parsed.query)["token"][0]
 
 
 # --- forgot → reset happy path ------------------------------------------------

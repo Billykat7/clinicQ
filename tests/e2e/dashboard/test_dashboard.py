@@ -250,6 +250,13 @@ def test_an_expired_session_asks_to_sign_in_again_and_then_finishes_the_action(
     walk_ins: Callable[[str, int], list[str]],
     signed_in: Callable[..., Any],
 ) -> None:
+    """Issue 231: signing in again is a trip to ``/signin``, not a dialog over the board.
+
+    What has to survive the trip is the held action. The outbox keeps its queue in this tab's
+    session storage and marks it ready to send again on the way back, so the round trip finishes
+    the work the same way the modal did — and the "unsent work" prompt must not fire on the way
+    there, or the redirect would stop at a browser dialog.
+    """
     walk_ins(fresh_day.triage, 1)
     with fresh_day.session() as db:
         call_next(
@@ -278,15 +285,17 @@ def test_an_expired_session_asks_to_sign_in_again_and_then_finishes_the_action(
         '.with-staff-ticket[data-number="T001"] button', has_text="Start"
     ).click()
 
-    modal = page.locator("#login-modal-backdrop")
-    expect(modal).to_have_class("modal-backdrop open", timeout=10_000)
-    expect(page.locator("#signin-error")).to_contain_text(
-        "Your session ended. Sign in again to finish: Start for T001."
-    )
+    # The board sends the caller to the sign-in page, saying why and carrying the way back.
+    page.wait_for_url("**/signin?**", timeout=10_000)
+    assert "expired=1" in page.url
+    expect(page.locator(".lp-auth-notice")).to_contain_text("Your session ended")
+
     page.fill("#signin-email", f"desk@{EMAIL_DOMAIN}")
     page.fill("#signin-password", FACTORY_STAFF_PASSWORD)
     page.click("#btn-password-login")
 
+    # Back on the board it came from, with the held action sent.
+    page.wait_for_url(lambda url: "/signin" not in url, timeout=15_000)
     expect(page.locator("#action-outbox")).to_contain_text(
         "Done: Start for T001", timeout=15_000
     )

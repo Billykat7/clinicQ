@@ -27,6 +27,11 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from src.core.security_headers import (
+    _generate_csp_nonce,
+    build_content_security_policy,
+)
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 TEMPLATE_ROOT = REPO_ROOT / "src" / "templates"
 JS_ROOT = REPO_ROOT / "src" / "static" / "js"
@@ -88,19 +93,37 @@ def test_every_style_element_carries_the_csp_nonce() -> None:
     )
 
 
-def test_at_least_one_style_element_exists_so_the_nonce_guard_is_not_vacuous() -> None:
-    """A guard that passes because it found nothing is not a guard.
+def test_the_nonce_the_rule_above_asks_for_is_still_minted_and_still_in_the_policy() -> (
+    None
+):
+    """A guard that passes because it found nothing is not a guard: prove the nonce path is alive.
 
-    The login modal's block is the one that keeps the rule above meaningful. If it is ever removed,
-    this test fails and someone decides deliberately whether the nonce path still needs covering.
+    The login modal's ``<style nonce="…">`` used to be the one block keeping the rule above
+    meaningful, and Issue 231 removed it with the modal — signing in is a set of pages now, styled
+    from ``landing.css`` like the rest of the front door. **The rule still matters**, because the
+    next person to add a ``<style>`` needs it, so the decision the old test asked for is this one:
+    keep the rule, and check the thing it depends on instead of the last user of it.
+
+    So: every request still gets a fresh nonce on ``request.state``, and the policy it is put into
+    still names that nonce. If either stops being true, a ``<style nonce="…">`` added tomorrow
+    would be blocked, and the rule above would be asking for something that does not work.
     """
-    total = sum(
-        len(_STYLE_ELEMENT.findall(path.read_text(encoding="utf-8")))
-        for path in _templates()
+    assert (
+        sum(
+            len(_STYLE_ELEMENT.findall(path.read_text(encoding="utf-8")))
+            for path in _templates()
+        )
+        == 0
+    ), (
+        "a `<style>` element is back — the rule above now has a real user again, which is fine"
     )
-    assert total >= 1, (
-        "no `<style>` element remains; the nonce guard now proves nothing"
+
+    nonce = _generate_csp_nonce()
+    assert nonce and nonce != _generate_csp_nonce(), (
+        "the nonce must be fresh per request"
     )
+    policy = build_content_security_policy(nonce)
+    assert f"'nonce-{nonce}'" in policy
 
 
 def test_no_javascript_builds_markup_containing_a_style_attribute() -> None:

@@ -273,15 +273,18 @@ def test_the_room_reads_only_the_queues_the_nurse_is_assigned_to(
 def test_a_signed_out_visit_goes_to_sign_in_and_the_page_opens_after_it(
     dashboard: SimpleNamespace,
 ) -> None:
-    """The redirect carries the page (and its query) as ``next``; signing in then opens it."""
+    """The redirect carries the page (and its query) as ``next``; signing in then opens it.
+
+    Issue 231: it lands on ``/signin``, a page of its own, rather than on the home page with
+    ``openSignin=1`` asking a modal to open itself.
+    """
     board = dashboard.page(dashboard.site_a, "board")
     refused = dashboard.anonymous().get(f"{board}?queue=triage")
     assert refused.status_code == status.HTTP_302_FOUND
     location = urlsplit(refused.headers["location"])
-    assert location.path == "/"
+    assert location.path == "/signin"
     query = parse_qs(location.query)
     assert query["next"] == [f"{board}?queue=triage"]
-    assert query["openSignin"] == ["1"]
 
     desk = dashboard.client("desk.a")
     assert desk.get(query["next"][0]).status_code == status.HTTP_200_OK

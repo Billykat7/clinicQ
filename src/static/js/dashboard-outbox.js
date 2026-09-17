@@ -21,7 +21,8 @@
  * Held actions are kept in this tab's session storage, so a reload while offline does not lose them,
  * and closing the tab while one still waits asks first.
  * The connection state comes from dashboard-live.js (`board:connection`, `window.ClinicQLive`), the
- * in-place sign-in from login-modal.js (`window.BKPAuth`). Each outcome is also announced to the card it
+ * sign-in from account-shell.js (`window.BKPAuth`, a trip to `/signin` since Issue 231; this queue
+ * lives in sessionStorage, so it survives it). Each outcome is also announced to the card it
  * belongs to (`outbox:settled`), whose status line says it again.
  *
  * External file with no inline handlers: the CSP allows script only from 'self'.
@@ -39,6 +40,7 @@
   var items = restore();
   var flushing = false;
   var signingIn = false;
+  var leavingToSignIn = false;
 
   // ── Keeping them ─────────────────────────────────────────────────────────────────────────────────
 
@@ -47,6 +49,9 @@
       var saved = JSON.parse(window.sessionStorage.getItem(STORE_KEY) || '[]');
       return saved.map(function (item) {
         if (item.state === 'sending') item.state = 'queued'; // the tab closed mid-send: ask again
+        // Waiting for a sign-in that has now happened: this page has been loaded again, which is
+        // what coming back from /signin looks like (Issue 231). Send it.
+        if (item.state === 'sign-in') item.state = 'queued';
         return item;
       });
     } catch (error) {
@@ -206,15 +211,16 @@
     if (signingIn) return;
     var auth = window.BKPAuth;
     if (!auth) {
-      window.location.reload(); // no in-place sign-in on this page: the held actions survive the reload
+      window.location.reload(); // no sign-in wired up on this page: the held actions survive it
       return;
     }
     signingIn = true;
-    var waiting = items.filter(function (item) { return item.state === 'sign-in'; });
-    var message = waiting.length
-      ? 'Your session ended. Sign in again to finish: ' + waiting.map(function (item) { return item.label; }).join('; ') + '.'
-      : 'Your session ended. Sign in again to keep this screen up to date.';
-    auth.reauthenticate(message).then(renewed);
+    // Signing in is a page now (Issue 231), so this leaves for it and comes back. The queue is in
+    // this tab's session storage and `restore()` puts it back ready to send, so the trip is not a
+    // loss — but the "you have unsent work" prompt below must not fire on the way there.
+    leavingToSignIn = true;
+    persist();
+    auth.reauthenticate();
   }
 
   function renewed() {
@@ -234,6 +240,7 @@
 
   // A held action lives in this tab: closing it while something waits asks first. (A reload keeps them.)
   window.addEventListener('beforeunload', function (event) {
+    if (leavingToSignIn) return; // on our way to sign in and come back, not walking away
     var waiting = items.some(function (item) {
       return item.state === 'queued' || item.state === 'sending' || item.state === 'sign-in';
     });

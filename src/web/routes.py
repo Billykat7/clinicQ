@@ -110,12 +110,138 @@ router = APIRouter(tags=["web"])
 
 
 def _redirect_to_sign_in(request: Request) -> RedirectResponse:
+    """Send a signed-out visitor to ``/signin``, remembering where they were going.
+
+    Issue 231: this used to be ``/?next=…&openSignin=1`` — the home page, with a modal told to
+    open itself. The sign-in page has an address of its own now, so the redirect points at it and
+    the person can reload, bookmark or come back to it.
+    """
     path = request.url.path
     query = request.url.query
     next_path = f"{path}?{query}" if query else path
     return RedirectResponse(
-        url=f"/?next={quote(next_path, safe='')}&openSignin=1",
+        url=f"/signin?next={quote(next_path, safe='')}",
         status_code=302,
+    )
+
+
+#: Where ``?next=`` may send someone after they sign in: a path on this site, and nothing else.
+#: ``//host`` is a URL a browser reads as another origin, so a second character of ``/`` is refused.
+def _safe_next(raw: str | None) -> str:
+    """Return ``raw`` when it is a same-origin path, else the dashboard."""
+    if raw and raw.startswith("/") and not raw.startswith("//"):
+        return raw
+    return "/dashboard"
+
+
+#: Why someone is looking at the sign-in page, when a redirect or a finished flow sent them there.
+#: The key is a query parameter and the sentence is written here, so a link cannot put words on
+#: the page.
+_SIGN_IN_NOTICES = {
+    "expired": "Your session ended. Sign in again to carry on.",
+    "reset": "Password updated. Sign in with your new password.",
+    "signedout": "You are signed out.",
+}
+
+
+@router.get("/signin", response_class=HTMLResponse)
+async def sign_in_page(
+    request: Request,
+    next: str | None = None,
+    email: str | None = None,
+    reset: str | None = None,
+    expired: str | None = None,
+    signedout: str | None = None,
+) -> HTMLResponse:
+    """The staff sign-in page (Issue 231).
+
+    What the page offers is decided **here**, from settings, and rendered into the template: the
+    password field, the "email me a code" button and the sign-up link exist or they do not. The
+    modal this replaces fetched ``/auth/config`` after paint and hid controls once the answer came
+    back, so a person could see a password field appear and disappear on a slow connection.
+
+    ``next`` is checked against :func:`_safe_next` before it reaches the page, so a crafted link
+    cannot turn a successful sign-in into a redirect off this site.
+    """
+    settings = get_settings()
+    # ``next`` is the query parameter's name, so the builtin is out of reach in here: a plain loop.
+    notice = None
+    for key, present in (
+        ("reset", reset),
+        ("expired", expired),
+        ("signedout", signedout),
+    ):
+        if present:
+            notice = _SIGN_IN_NOTICES[key]
+            break
+    return templates.TemplateResponse(
+        request,
+        "web/auth_signin.html",
+        public_page_context(
+            request,
+            next_path=_safe_next(next),
+            prefill_email=(email or "").strip(),
+            notice=notice,
+            otp_login_enabled=settings.auth_otp_login_enabled,
+            password_login_enabled=settings.auth_password_login_enabled,
+            signup_enabled=settings.signup_enabled,
+        ),
+    )
+
+
+@router.get("/signup", response_class=HTMLResponse)
+async def sign_up_page(request: Request) -> HTMLResponse:
+    """Create a staff account (Issue 231), when this deployment allows it.
+
+    A 404 rather than a form when ``SIGNUP_ENABLED`` is off: the only thing the form could do is
+    collect an email and be refused by the API with a 403, and a page that cannot work should not
+    be reachable.
+    """
+    if not get_settings().signup_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
+    return templates.TemplateResponse(
+        request, "web/auth_signup.html", public_page_context(request)
+    )
+
+
+@router.get("/forgot-password", response_class=HTMLResponse)
+async def forgot_password_page(
+    request: Request, email: str | None = None
+) -> HTMLResponse:
+    """Ask for a password-reset link (Issue 231).
+
+    Only reachable when passwords are a way in at all; ``/auth/password/forgot`` answers 403
+    otherwise, and the sign-in page does not link here in that case.
+    """
+    if not get_settings().auth_password_login_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
+    return templates.TemplateResponse(
+        request,
+        "web/auth_forgot.html",
+        public_page_context(request, prefill_email=(email or "").strip()),
+    )
+
+
+@router.get("/reset-password", response_class=HTMLResponse)
+async def reset_password_page(
+    request: Request, token: str | None = None
+) -> HTMLResponse:
+    """Where the emailed reset link lands (Issue 231).
+
+    It used to land on ``/?resetToken=…`` — the home page, which opened the modal on its reset
+    screen and then rewrote the address bar to take the token back out. The step has a page now,
+    and the token becomes a hidden field on the form rather than something the landing page carries.
+
+    The page does not check the token, or say whether it looks valid: the API decides that, once,
+    when it is used. Without one it explains what is missing instead of showing a form that cannot
+    work.
+    """
+    if not get_settings().auth_password_login_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
+    return templates.TemplateResponse(
+        request,
+        "web/auth_reset.html",
+        public_page_context(request, token=(token or "").strip()),
     )
 
 
@@ -186,8 +312,8 @@ async def home_page(request: Request) -> HTMLResponse:
     error, so the page still renders when the database is unavailable (same for ``/features``
     and ``/search``). When a valid session is present the shared topbar shows "Dashboard" and
     the apps-menu "Sign out" instead of "Sign in". ``settings``/``app_name`` still come from
-    config so the shared sign-in modal can render and honour ``?openSignin=1`` after a
-    redirect from a protected page.
+    config for the shared header; signing in is ``/signin`` now (Issue 231), so this page no longer
+    carries a dialog or a query parameter that opens one.
 
     The page has **two audiences**. The product half is public; the delivery plan, the team lanes
     and the tracked-issue count are internal and render only for a caller holding the operator

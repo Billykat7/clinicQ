@@ -14,8 +14,10 @@
  * carries an Idempotency-Key. When an answer is lost, the key is kept for that same form, so pressing
  * Enter again asks about the same walk-in rather than issuing a second one.
  *
- * An ended session never loses the form: the person signs in again in place (login-modal.js) and the
- * same walk-in is sent again with the same key (Issue 55).
+ * An ended session never loses the form. Signing in is a page of its own now (Issue 231), so what
+ * was typed is written to sessionStorage first and put back when the person lands here again, and
+ * the idempotency key goes with it: pressing Enter on the restored form asks about the *same*
+ * walk-in rather than issuing a second one (Issue 55).
  *
  * The consent box is switched on only once a phone number is typed, and its answer is sent only then;
  * the API refuses it without a number either way. What can be undone, and until when, is the server's
@@ -32,6 +34,10 @@
   var RETRY_KEY_MS = 120000;
   var UNDO_TICK_MS = 1000;
   var STORE_KEY = 'clinicq.walkin.queue.' + form.getAttribute('data-site-id');
+  //: What was being issued when the session ended, kept across the trip to /signin (Issue 231).
+  //: sessionStorage, not localStorage: it belongs to this tab and this trip, and must not outlive
+  //: either. It carries the idempotency key so the resumed submit is the same walk-in.
+  var PENDING_KEY = 'clinicq.walkin.pending.' + form.getAttribute('data-site-id');
 
   var name = form.querySelector('#walkin-name');
   var phone = form.querySelector('#walkin-phone');
@@ -90,6 +96,46 @@
       });
     }
   } catch (error) { /* no storage: the first queue stays chosen */ }
+
+  /** Remember an unsent walk-in across the trip to /signin (Issue 231). */
+  function keepPending(queueId, body, key) {
+    try {
+      window.sessionStorage.setItem(PENDING_KEY, JSON.stringify({
+        queueId: queueId, body: body, key: key, until: Date.now() + RETRY_KEY_MS,
+      }));
+    } catch (error) { /* no storage: the form is retyped, which is what used to happen anyway */ }
+  }
+
+  /**
+   * Put back the walk-in the session ended in the middle of, once, and with its key, so pressing
+   * Enter asks about that same walk-in. Nothing is sent by itself: a ticket is issued because
+   * somebody pressed something, never because a page loaded.
+   */
+  (function restorePending() {
+    var raw;
+    try {
+      raw = window.sessionStorage.getItem(PENDING_KEY);
+      window.sessionStorage.removeItem(PENDING_KEY);
+    } catch (error) { return; }
+    if (!raw) return;
+    var pending;
+    try { pending = JSON.parse(raw); } catch (error) { return; }
+    if (!pending || !pending.body || !(pending.until > Date.now())) return;
+    name.value = pending.body.name || '';
+    phone.value = pending.body.phone || '';
+    reason.value = pending.body.reason_text || '';
+    Array.prototype.forEach.call(form.querySelectorAll('input[name="queue_id"]'), function (radio) {
+      if (radio.value === pending.queueId) radio.checked = true;
+    });
+    // The same key as the submit that was refused, so pressing Enter now asks about that walk-in
+    // rather than issuing a second one. The signature is rebuilt the way `payload()` builds it.
+    retry = {
+      signature: pending.queueId + '|' + JSON.stringify(pending.body),
+      key: pending.key,
+      until: pending.until,
+    };
+    say('Signed in again. Press Enter to issue the ticket for ' + (pending.body.name || 'this walk-in') + '.', 'muted');
+  })();
 
   function syncConsent() {
     var hasNumber = /\d/.test(phone.value);
@@ -172,12 +218,13 @@
       .then(function (response) {
         return response.json().catch(function () { return {}; }).then(function (data) {
           if (response.status === 401) {
-            // The session ended: sign in again in place, then send the same walk-in with the same key.
+            // The session ended. Signing in is a page, so keep what was typed and the key that
+            // makes the resumed submit the same walk-in, then go and come back.
             retry = { signature: signature, key: key, until: Date.now() + RETRY_KEY_MS };
+            keepPending(queue.value, body, key);
             if (window.BKPAuth) {
               say('Your session ended. Sign in again, and the ticket for ' + body.name + ' will be issued.', 'muted');
-              window.BKPAuth.reauthenticate('Your session ended. Sign in again to issue the ticket for ' + body.name + '.')
-                .then(function () { form.requestSubmit(); });
+              window.BKPAuth.reauthenticate();
             } else {
               window.location.reload();
             }

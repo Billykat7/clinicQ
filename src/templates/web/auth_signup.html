@@ -1,0 +1,31 @@
+{#
+  `/signup` — create a staff account (Issue 231), rendered by
+  :func:`src.web.routes.sign_up_page`.
+
+  The route 404s when `AUTH_SIGNUP_ENABLED` is off, rather than rendering a form whose only
+  possible outcome is a 403: a page that cannot work should not exist.
+#}
+{% extends "layouts/auth.html" %}
+
+{% block auth_title %}Create an account{% endblock %}
+{% block auth_description %}Create a {{ app_name }} staff account.{% endblock %}
+{% block auth_heading %}Create your {{ app_name }} account{% endblock %}
+
+{% block auth_lede %}
+<p class="lp-auth-lede">Enter your work email. We send you a link to activate the account and
+  choose a password; nothing is created until you follow it.</p>
+{% endblock %}
+
+{% block content %}
+<form id="signup-form" novalidate>
+  <div class="lp-field">
+    <label for="signup-email">Email</label>
+    <input type="email" id="signup-email" name="email" autocomplete="email" required
+           placeholder="you@example.com" autofocus>
+  </div>
+  <p class="lp-auth-msg" id="signup-error" aria-live="polite"></p>
+  <button type="submit" class="lp-btn lp-auth-btn">Create account</button>
+</form>
+
+<p class="lp-auth-links"><a href="/signin">Already have an account? Sign in</a></p>
+{% endblock %}

@@ -36,7 +36,7 @@
 <script src="/static/js/site.js" defer></script>
 <script src="/static/js/landing.js" defer></script>
 <script src="/static/js/csrf-htmx.js" defer></script>
-<script src="/static/js/login-modal.js" defer></script>
+<script src="/static/js/account-shell.js" defer></script>
 </head>
 <body>
 
@@ -189,7 +189,7 @@
         {% if is_authenticated %}
         <a class="lp-btn lp-btn-ghost" href="/dashboard">Go to the dashboard</a>
         {% else %}
-        <button type="button" class="lp-btn lp-btn-ghost" data-open-signin>Sign in</button>
+        <a class="lp-btn lp-btn-ghost" href="/signin">Sign in</a>
         {% endif %}
       </div>
     </div>
@@ -199,7 +199,6 @@
 
 {% include "web/partials/lp_footer.html" %}
 
-{% include "partials/login_modal.html" %}
 
 </body>
 </html>
