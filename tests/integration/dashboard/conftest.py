@@ -54,7 +54,7 @@ from src.commons.enums import (
     UserRole,
 )
 from src.commons.ids import new_id
-from src.core import refresh_token_policy, security
+from src.core import email_send, refresh_token_policy, security
 from src.core.config import Settings, get_settings
 from src.core.rbac_manifest_sync import sync_rbac_catalog
 from src.core.site_scope import SiteAccess
@@ -68,6 +68,7 @@ from src.database.models import (
 from src.database.schema import sqlite_schema_translate_map
 from src.database.session import get_db
 from src.main import create_app
+from src.modules.notifications import dev_outbox
 from src.modules.queue.snapshot import NoSnapshotCache, set_snapshot_cache
 from src.modules.staff.assignments import set_room_assignments
 from tests.factories import (
@@ -202,7 +203,11 @@ def dashboard(monkeypatch: pytest.MonkeyPatch) -> Iterator[SimpleNamespace]:
         with factory() as db:
             yield db
 
-    for module in (security, refresh_token_policy):
+    # ``email_send`` and ``dev_outbox`` read settings directly, so they must read the test's own:
+    # this fixture sets ``smtp_host=""`` precisely so a staff invitation goes to the development
+    # outbox, and without the patch they read a developer's ``.env`` instead and send it for real.
+    # Issue 220's SMTP guard in ``tests/conftest.py`` is what caught that.
+    for module in (security, refresh_token_policy, email_send, dev_outbox):
         monkeypatch.setattr(module, "get_settings", lambda: settings)
 
     app = create_app(settings)

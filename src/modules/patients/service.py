@@ -1,7 +1,20 @@
-"""Patient identity: one number, one patient; codes by SMS; channels that vouch (Issue 17).
+"""Patient identity: one contact, one patient; codes by SMS or email; channels that vouch (Issue 17).
 
 Everything that touches the database or the OTP store, and nothing that touches HTTP. The router
 maps the three exceptions below to 429, 400 and 502.
+
+A patient is a **contact a one-time code can reach**. There are two, and everything below is
+written twice on purpose — once per contact, over one shared set of helpers:
+
+* a **mobile number**, proved by an SMS (Issue 17), and the only one a USSD or WhatsApp gateway
+  can vouch for;
+* an **email address**, proved by an emailed code (Issue 219), offered only where
+  ``PATIENT_EMAIL_SIGN_IN_ENABLED`` is on.
+
+They are peers. The same OTP store keyed by ``(kind, identifier)``, the same cooldown and budgets,
+the same outcomes and the same "no patient is created until a code is verified"; a patient created
+either way joins queues, holds tickets and opens ``/t/`` identically. A patient may hold one contact
+or both, and each is unique, so one contact is always one patient.
 """
 
 from __future__ import annotations
@@ -13,6 +26,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from src.commons.email_address import normalize_email
 from src.commons.enums import (
     GATEWAY_TRUSTED_CHANNELS,
     AuditAction,
@@ -31,6 +45,7 @@ from src.commons.time import now_sast
 from src.core import otp_store
 from src.core.audit import record_audit_event
 from src.core.config import get_settings
+from src.core.email_send import EmailDeliveryError, send_otp_email
 from src.database.models import Patient
 from src.modules.notifications import service as notifications
 from src.modules.notifications.sms import SmsProvider
@@ -64,6 +79,24 @@ class SmsSignInUnavailableError(BKPropertyError):
         )
 
 
+class EmailSignInUnavailableError(BKPropertyError):
+    """Email sign-in is switched off for this deployment (``PATIENT_EMAIL_SIGN_IN_ENABLED``): HTTP 503.
+
+    The twin of :class:`SmsSignInUnavailableError`, and answered the same way, so a client that
+    already handles "that way in is not available here" needs no new branch. It is a 503 rather
+    than a 404 because the route exists and the deployment has switched the method off, which is
+    exactly what 503 means.
+    """
+
+    status_code = HTTPStatus.SERVICE_UNAVAILABLE
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Signing in with an email address is not available here. Use your mobile number.",
+            code="patients.otp.email_disabled",
+        )
+
+
 class OtpThrottledError(Exception):
     """A code was requested too soon, or too often: the router answers 429 with ``Retry-After``."""
 
@@ -89,6 +122,51 @@ class CodeSent:
 
     expires_in_seconds: int
     resend_after_seconds: int
+
+
+# --------------------------------------------------------------------------------------
+# What both contacts share: the budget, the cooldown, and how a code is checked
+#
+# Written once and called twice, so the number and the address cannot drift apart. Every one of
+# these takes the :class:`~src.commons.enums.OtpSubjectKind` it is acting for, which is what keys
+# the store, so a code issued for an address can never be spent on a number.
+# --------------------------------------------------------------------------------------
+
+
+def _reserve_code(kind: OtpSubjectKind, identifier: str, ip: str) -> str:
+    """Check the budget and the cooldown, then issue a code. The caller sends it.
+
+    Raises:
+        OtpThrottledError: Over the per-identifier or per-IP budget, or inside the resend cooldown.
+    """
+    settings = get_settings()
+    if not otp_store.within_request_limit(kind, identifier, ip):
+        raise OtpThrottledError(settings.otp_rate_limit_window_minutes * 60)
+    wait = otp_store.resend_wait_seconds(kind, identifier)
+    if wait:
+        raise OtpThrottledError(wait)
+    return otp_store.issue_code(kind, identifier)
+
+
+def _code_sent(kind: OtpSubjectKind, identifier: str, ip: str) -> CodeSent:
+    """Count the request that just went out, and say what the patient may be told."""
+    settings = get_settings()
+    otp_store.record_request(kind, identifier, ip)
+    return CodeSent(
+        expires_in_seconds=settings.otp_ttl_minutes * 60,
+        resend_after_seconds=settings.otp_resend_cooldown_seconds,
+    )
+
+
+def _spend_code(kind: OtpSubjectKind, identifier: str, code: str) -> None:
+    """Check the code, or raise. On success it is spent and cannot be used again.
+
+    Raises:
+        OtpRejectedError: Wrong, expired, used or locked (400).
+    """
+    outcome = otp_store.check_code(kind, identifier, code)
+    if outcome is not OtpVerification.VERIFIED:
+        raise OtpRejectedError(outcome, otp_store.attempts_left(kind, identifier))
 
 
 # --------------------------------------------------------------------------------------
@@ -173,13 +251,7 @@ def send_code(
     if not settings.sms_enabled:
         raise SmsSignInUnavailableError()
     phone = normalize_phone(raw_phone)
-    if not otp_store.within_request_limit(OtpSubjectKind.PHONE, phone, ip):
-        raise OtpThrottledError(settings.otp_rate_limit_window_minutes * 60)
-    wait = otp_store.resend_wait_seconds(OtpSubjectKind.PHONE, phone)
-    if wait:
-        raise OtpThrottledError(wait)
-
-    code = otp_store.issue_code(OtpSubjectKind.PHONE, phone)
+    code = _reserve_code(OtpSubjectKind.PHONE, phone, ip)
     notification = notifications.send_sms(
         db,
         to=phone,
@@ -194,11 +266,7 @@ def send_code(
             "The code could not be sent. Try again in a minute.",
             code="patients.otp.not_sent",
         )
-    otp_store.record_request(OtpSubjectKind.PHONE, phone, ip)
-    return CodeSent(
-        expires_in_seconds=settings.otp_ttl_minutes * 60,
-        resend_after_seconds=settings.otp_resend_cooldown_seconds,
-    )
+    return _code_sent(OtpSubjectKind.PHONE, phone, ip)
 
 
 def verify_code(db: Session, *, raw_phone: str, code: str) -> Patient:
@@ -209,13 +277,107 @@ def verify_code(db: Session, *, raw_phone: str, code: str) -> Patient:
         OtpRejectedError: Wrong, expired, used or locked (400).
     """
     phone = normalize_phone(raw_phone)
-    outcome = otp_store.check_code(OtpSubjectKind.PHONE, phone, code)
-    if outcome is not OtpVerification.VERIFIED:
-        raise OtpRejectedError(
-            outcome, otp_store.attempts_left(OtpSubjectKind.PHONE, phone)
-        )
+    _spend_code(OtpSubjectKind.PHONE, phone, code)
     patient, created = get_or_create_patient(db, phone)
     patient.phone_verified_at = now_sast()
+    _touch(patient, PatientChannel.WEB)
+    db.flush()
+    if created:
+        _audit_created(
+            db, patient, actor=actor_for(patient), channel=PatientChannel.WEB
+        )
+    db.commit()
+    return patient
+
+
+# --------------------------------------------------------------------------------------
+# The web: a code by email (Issue 219)
+#
+# The phone path above, contact for contact. What is *not* different is the point: the same store,
+# the same budgets and cooldown, the same outcomes, the same "no patient until a code is verified",
+# and a patient at the end of it who is a patient like any other.
+# --------------------------------------------------------------------------------------
+
+
+def find_patient_by_email(db: Session, raw_email: str) -> Patient | None:
+    """The patient an address belongs to, however it is capitalised, or None."""
+    return db.execute(
+        select(Patient).where(Patient.email == normalize_email(raw_email))
+    ).scalar_one_or_none()
+
+
+def get_or_create_patient_by_email(db: Session, email: str) -> tuple[Patient, bool]:
+    """Return ``(patient, created)`` for an already-normalised address. Never makes a duplicate.
+
+    The twin of :func:`get_or_create_patient`, including the race: two first sign-ins at one
+    address can arrive together, the unique constraint lets exactly one insert win, and the loser
+    reads the winner's row inside its own savepoint so its transaction survives. A soft-deleted
+    patient comes back as a fresh record: nothing they shared before is restored.
+
+    The patient it creates has **no phone number**, which is allowed (the column is nullable since
+    Issue 84) and is the whole point: someone whose number changed, or who has no mobile, is still
+    a patient here. Until Issue 220 lands they cannot be reached by the notification chain, which
+    is why ``PATIENT_EMAIL_SIGN_IN_ENABLED`` is off by default.
+    """
+    existing = db.execute(
+        select(Patient).where(Patient.email == email)
+    ).scalar_one_or_none()
+    if existing is not None:
+        if existing.is_deleted:
+            existing.is_deleted = False
+            existing.display_name = None
+            existing.whatsapp_id = None
+        return existing, False
+    patient = Patient(email=email)
+    try:
+        with db.begin_nested():
+            db.add(patient)
+    except IntegrityError:
+        winner = db.execute(select(Patient).where(Patient.email == email)).scalar_one()
+        return winner, False
+    return patient, True
+
+
+def send_email_code(db: Session, *, raw_email: str, ip: str) -> CodeSent:
+    """Send a sign-in code to an address. No patient is created until the code is verified.
+
+    Raises:
+        EmailSignInUnavailableError: The flag is off: nothing is issued or counted (503).
+        InvalidEmailAddressError: The address cannot be normalised (422).
+        OtpThrottledError: Over the per-address or per-IP budget, or inside the resend cooldown.
+        UpstreamError: The email could not be handed to SMTP (502); the code is discarded, exactly
+            as an SMS the provider refused discards its own.
+    """
+    if not get_settings().patient_email_sign_in_enabled:
+        raise EmailSignInUnavailableError()
+    email = normalize_email(raw_email)
+    code = _reserve_code(OtpSubjectKind.EMAIL, email, ip)
+    try:
+        send_otp_email(email, code, client_ip=ip)
+    except EmailDeliveryError as exc:
+        otp_store.discard_code(OtpSubjectKind.EMAIL, email)
+        raise UpstreamError(
+            "The code could not be sent. Try again in a minute.",
+            code="patients.otp.not_sent",
+        ) from exc
+    return _code_sent(OtpSubjectKind.EMAIL, email, ip)
+
+
+def verify_email_code(db: Session, *, raw_email: str, code: str) -> Patient:
+    """Check the code; on success return the address's patient, created on first verification.
+
+    Raises:
+        EmailSignInUnavailableError: The flag is off (503). Checked here too, so switching the flag
+            off ends a sign-in half-way through it rather than letting an issued code finish.
+        InvalidEmailAddressError: The address cannot be normalised (422).
+        OtpRejectedError: Wrong, expired, used or locked (400).
+    """
+    if not get_settings().patient_email_sign_in_enabled:
+        raise EmailSignInUnavailableError()
+    email = normalize_email(raw_email)
+    _spend_code(OtpSubjectKind.EMAIL, email, code)
+    patient, created = get_or_create_patient_by_email(db, email)
+    patient.email_verified_at = now_sast()
     _touch(patient, PatientChannel.WEB)
     db.flush()
     if created:

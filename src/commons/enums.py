@@ -1463,9 +1463,10 @@ class PermissionAuditTargetType(StrEnum):
 class NotificationChannel(StrEnum):
     """Delivery channel for a notification. Stored in ``notification.channel``.
 
-    ``WEB_PUSH`` and ``WHATSAPP`` reach a patient for free and ``SMS`` costs money per message, so a
-    patient notification tries them in :data:`PATIENT_TRANSPORT_CHAIN` order (Issue 63). ``EMAIL``
-    is for account holders only: a patient has no email address on record.
+    ``WEB_PUSH``, ``EMAIL`` and ``WHATSAPP`` reach a patient for free and ``SMS`` costs money per
+    message, so a patient notification tries them in :data:`PATIENT_TRANSPORT_CHAIN` order
+    (Issue 63). ``EMAIL`` was for account holders only until Issue 219 gave a patient an address of
+    their own; it is now also how a patient with no mobile number is reached at all (Issue 220).
     """
 
     EMAIL = "email"
@@ -1476,8 +1477,13 @@ class NotificationChannel(StrEnum):
 
 #: The fallback chain for a patient notification (Issue 63): free transports first, SMS last. A
 #: patient's preferred transport, when it can reach them, is tried before the chain.
+#:
+#: ``EMAIL`` joined it in Issue 220, second: we hold an address for every patient who signed in with
+#: one (Issue 219) and only sometimes a WhatsApp id, and both are free, so the order between them is
+#: about which is likelier to arrive. ``SMS`` stays last because it is the one that costs money.
 PATIENT_TRANSPORT_CHAIN: tuple[NotificationChannel, ...] = (
     NotificationChannel.WEB_PUSH,
+    NotificationChannel.EMAIL,
     NotificationChannel.WHATSAPP,
     NotificationChannel.SMS,
 )

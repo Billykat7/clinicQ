@@ -540,11 +540,15 @@ CASES: tuple[Case, ...] = (
     ),
     *_operator_only("GET", _KEY, f"{_T}/ticket_next/sms/en"),
     Case(
+        # The same rule (`_patient_template`), driven on its other half. It used to be driven with
+        # `ticket_next/email`, because email was not a patient transport; Issue 220 made it one, and
+        # every member of NotificationChannel is now a patient channel, so only a real template that
+        # is not a *patient* template can reach this 404 any more.
         "GET",
         _KEY,
         404,
-        "email is not a patient transport",
-        lambda w: w.operator().get(f"{_T}/ticket_next/email/en"),
+        "a staff template is not a patient message",
+        lambda w: w.operator().get(f"{_T}/otp_sign_in/sms/en"),
         _NOT_FOUND,
     ),
     Case(
@@ -685,17 +689,6 @@ CASES: tuple[Case, ...] = (
         "no ticket has the link",
         lambda w: w.anonymous().put(f"{_N}/patient-preferences/{_NO_LINK}", json={}),
         _NOT_FOUND,
-    ),
-    Case(
-        "PUT",
-        "/notifications/patient-preferences/{page_token}",
-        422,
-        "email is not a patient transport",
-        lambda w: w.anonymous().put(
-            f"{_N}/patient-preferences/{w.page_token()}",
-            json={"preferred_channel": "email"},
-        ),
-        _REFUSED,
     ),
     Case(
         "PUT",

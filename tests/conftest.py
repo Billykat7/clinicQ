@@ -39,6 +39,34 @@ security._bcrypt_rounds = lambda: 4  # type: ignore[assignment]
 
 
 @pytest.fixture(autouse=True)
+def _no_test_ever_reaches_a_real_smtp_server() -> Generator[None]:
+    """Make :func:`src.core.email_send.deliver_smtp` raise rather than open a socket (Issue 220).
+
+    A developer's ``.env`` may name a working ``SMTP_HOST``, and a test that builds its own
+    ``Settings`` without clearing it reaches that server for real: while Issue 220 was being
+    written, one did, and mail left the machine. Every path that *should* send in a test goes
+    through a swapped transport (``use_transports``) or the development outbox, so nothing
+    legitimate calls this — and anything that does is a bug this turns into a loud failure instead
+    of somebody's inbox.
+    """
+    from src.core import email_send
+
+    def _refuse(**kwargs: object) -> str:
+        raise AssertionError(
+            "A test tried to send real email through SMTP "
+            f"(to={kwargs.get('to')!r}, subject={kwargs.get('subject')!r}). "
+            "Swap the transport with use_transports(), or set smtp_host='' so it goes to the "
+            "development outbox."
+        )
+
+    original, email_send.deliver_smtp = email_send.deliver_smtp, _refuse  # type: ignore[assignment]
+    try:
+        yield
+    finally:
+        email_send.deliver_smtp = original  # type: ignore[assignment]
+
+
+@pytest.fixture(autouse=True)
 def _reset_rate_limiters() -> Generator[None]:
     """Reset every process-global rate limiter around each test.
 

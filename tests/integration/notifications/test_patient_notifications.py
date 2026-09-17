@@ -20,6 +20,7 @@ from __future__ import annotations
 import time
 from collections.abc import Iterator
 from datetime import datetime, timedelta
+from datetime import time as clock
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -37,6 +38,7 @@ from src.commons.enums import (
     NotificationTemplate,
     PatientChannel,
     PatientEvent,
+    ProxyRelationship,
     TicketSource,
     TicketStatus,
 )
@@ -457,3 +459,175 @@ def test_call_next_tells_the_called_patient_and_the_one_now_first(
     )
     assert third_told == [NotificationTemplate.TICKET_NEXT.value]
     assert len(sms.sent) == 4
+
+
+# --- the patient who has an address and no number (Issues 219, 220) ----------------------------
+
+
+def _email_only_patient(db: Session, address: str = "nomsa@example.com") -> Patient:
+    """A patient who signed in with an email address (Issue 219): no number, and consenting."""
+    patient = PatientFactory.create(db, phone_e164=None, email=address)
+    record_consent(
+        db,
+        patient,
+        ConsentPurpose.NOTIFICATIONS,
+        granted=True,
+        channel=PatientChannel.WEB,
+    )
+    return patient
+
+
+def _email(address: str | None = "nomsa@example.com") -> NoopTransport:
+    """The email transport, standing in for SMTP. No test here may reach a real server."""
+    return NoopTransport(channel=NotificationChannel.EMAIL, free=True, address=address)
+
+
+def _unreachable_but_email() -> tuple[NoopTransport, ...]:
+    """The set a patient with **only** an address really faces.
+
+    ``NoopTransport`` reports its configured address whoever the patient is, so a patient with no
+    push subscription, no WhatsApp id and no number is modelled by giving those three no address —
+    which is what the real adapters would answer for them.
+    """
+    return (
+        NoopTransport(channel=NotificationChannel.WEB_PUSH, free=True, address=None),
+        NoopTransport(channel=NotificationChannel.WHATSAPP, free=True, address=None),
+        NoopTransport(channel=NotificationChannel.SMS, address=None),
+        _email(),
+    )
+
+
+def test_a_patient_with_an_address_and_no_number_is_told_their_ticket_was_called(
+    desk: SimpleNamespace,
+) -> None:
+    """Issue 220's reason to exist: before it this row was ``suppressed`` with nothing to send on."""
+    push, whatsapp, sms, email = _unreachable_but_email()
+    with desk.session() as db, use_transports(push, whatsapp, sms, email):
+        patient = _email_only_patient(db)
+        _notify(db, patient)
+        db.commit()
+        (row,) = _ledger(db, patient.id)
+
+    assert row.status == NotificationStatus.SENT.value
+    assert row.channel == NotificationChannel.EMAIL.value
+    assert row.cost == Decimal("0")
+    assert len(email.sent) == 1
+    assert email.sent[0].to == "nomsa@example.com"
+    # The message says the ticket number, and nothing a corridor screen may not.
+    assert "T001" in email.sent[0].text
+    assert sms.sent == [] and push.sent == [] and whatsapp.sent == []
+
+
+def test_a_patient_with_both_is_reached_free_and_never_costs_an_sms(
+    desk: SimpleNamespace,
+) -> None:
+    """Email is free and ahead of SMS, so holding a number does not mean paying for one."""
+    _push, whatsapp, sms = _chain()
+    email = _email()
+    with desk.session() as db, use_transports(whatsapp, sms, email):
+        patient = _consenting_patient(db)
+        patient.email = "nomsa@example.com"
+        db.flush()
+        _notify(db, patient)
+        db.commit()
+        (row,) = _ledger(db, patient.id)
+
+    assert row.channel == NotificationChannel.EMAIL.value
+    assert row.cost == Decimal("0")
+    assert len(email.sent) == 1 and sms.sent == []
+
+
+def test_an_address_the_server_refuses_falls_back_rather_than_retrying_it(
+    desk: SimpleNamespace,
+) -> None:
+    """A permanently rejected address ends that attempt at once and the chain moves on."""
+    _push, _whatsapp, sms = _chain()
+    dead = NoopTransport(
+        channel=NotificationChannel.EMAIL,
+        free=True,
+        address="nomsa@example.com",
+        fail_permanently=True,
+    )
+    with desk.session() as db, use_transports(dead, sms):
+        patient = _consenting_patient(db)
+        patient.email = "nomsa@example.com"
+        db.flush()
+        _notify(db, patient)
+        db.commit()
+        rows = _ledger(db, patient.id)
+
+    assert dead.attempts == 1, "a permanent failure is not retried"
+    assert any(row.channel == NotificationChannel.SMS.value for row in rows)
+    assert len(sms.sent) == 1
+
+
+def test_an_email_only_patients_message_still_waits_out_their_quiet_hours(
+    desk: SimpleNamespace,
+) -> None:
+    """The gate runs before any transport, so email is subject to it like every other channel."""
+    email = _email()
+    with desk.session() as db, use_transports(email):
+        patient = _email_only_patient(db)
+        db.add(
+            PatientNotificationPreference(
+                patient_id=patient.id,
+                quiet_hours_start=clock(0, 0),
+                quiet_hours_end=clock(23, 59),
+            )
+        )
+        db.flush()
+        # A booking confirmation is not urgent, so quiet hours hold it rather than letting it
+        # through; "you are next" and "come in now" are exempt, as they must be.
+        _notify(db, patient, event=PatientEvent.BOOKED)
+        db.commit()
+        (row,) = _ledger(db, patient.id)
+
+    assert row.status == NotificationStatus.QUEUED.value
+    assert row.next_attempt_at is not None
+    assert email.sent == []
+
+
+def test_a_dependants_email_goes_to_the_person_who_acts_for_them(
+    desk: SimpleNamespace,
+) -> None:
+    """``reachable_patient`` redirects the address exactly as it redirects the number (Issue 84).
+
+    Asserted at that seam rather than on what the double was handed: ``NoopTransport`` reports its
+    configured address whoever the patient is, so only the real redirection can be tested here.
+    """
+    from src.database.models import PatientLink
+
+    email = _email("parent@example.com")
+    with desk.session() as db, use_transports(email):
+        proxy = _email_only_patient(db, "parent@example.com")
+        child = PatientFactory.create(db, phone_e164=None, email=None)
+        record_consent(
+            db,
+            child,
+            ConsentPurpose.NOTIFICATIONS,
+            granted=True,
+            channel=PatientChannel.WEB,
+        )
+        db.add(
+            PatientLink(
+                proxy_patient_id=proxy.id,
+                dependant_patient_id=child.id,
+                relationship_kind=ProxyRelationship.PARENT.value,
+            )
+        )
+        db.flush()
+        child_id = child.id
+
+        # The seam: whose contact the dependant's messages go to.
+        reached = service.reachable_patient(db, child)
+        assert reached.id == proxy.id
+        assert reached.email == "parent@example.com"
+
+        _notify(db, child)
+        db.commit()
+        (row,) = _ledger(db, child_id)
+        row_patient_id, row_recipient = row.patient_id, row.recipient
+
+    assert row_patient_id == child_id, "the message is still the dependant's"
+    assert row_recipient == "parent@example.com", "delivered to the address that exists"
+    assert len(email.sent) == 1

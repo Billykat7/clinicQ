@@ -197,3 +197,81 @@ body = "{app}: we did not see you for your collection at {clinic}. Please come i
 version = 1
 subject = "You missed your collection"
 body = "At {clinic}. Tap below to take a place in the queue."
+
+# ── Email (Issue 220) ───────────────────────────────────────────────────────────────────────────
+#
+# For a patient who signed in with an email address and may have no mobile number at all (Issue 219).
+# An email carries a subject and has no segment to fit, so these say the same things as the SMS with
+# room to be plain about them: what happened, where to go, and what to do next. They are still short
+# — this is read on a phone, standing in a corridor — and they still say nothing a corridor screen
+# may not: no name, no reason for the visit, exactly as every other channel.
+
+[ticket_next.email]
+version = 1
+subject = "You are next at {clinic}"
+body = "Ticket {number} at {clinic}: you are next. Please be ready at {where}."
+
+[ticket_called.email]
+version = 1
+subject = "Please come in now - {clinic}"
+body = "Ticket {number} at {clinic}: it is your turn. Please come to {where} now."
+
+[ticket_recalled.email]
+version = 1
+subject = "Called again - {clinic}"
+body = "Ticket {number} at {clinic}: we called you once more. Please come to {where} within {minutes} minutes, or the ticket is marked missed."
+
+[ticket_no_show.email]
+version = 1
+subject = "Ticket {number} was marked missed"
+body = "Ticket {number} at {clinic} was marked missed after two calls. To join the queue again, ask at the front desk."
+
+[ticket_transferred.email]
+version = 1
+subject = "Moved to {queue} - {clinic}"
+body = "At {clinic} you are now ticket {number} in {queue}. The expected wait is {wait}. There is no need to join again."
+
+[ticket_cancelled.email]
+version = 1
+subject = "Ticket {number} was cancelled"
+body = "Ticket {number} at {clinic} was cancelled by the clinic. To join the queue again, ask at the front desk."
+
+[ticket_leave_now.email]
+version = 1
+subject = "Time to leave for {clinic}"
+body = "Ticket {number} at {clinic}: time to leave. Your turn is in {wait}, and you told us your trip takes about {minutes} minutes."
+
+[ticket_feedback.email]
+version = 1
+subject = "How was your visit to {clinic}?"
+body = "How was your visit to {clinic} today (ticket {number})? Open your ticket to answer with one tap, from 1 (very poor) to 5 (very good). You can add a comment if you want to."
+
+[appointment_booked.email]
+version = 1
+subject = "Booked: {when} at {clinic}"
+body = "Your appointment at {clinic} is booked for {when}, {queue}. Your reference is {number}. Please arrive a little early."
+
+[appointment_lapsed.email]
+version = 1
+subject = "Your booking could not go ahead"
+body = "Sorry: your {when} booking at {clinic} (reference {number}) could not go ahead. Please book again when you can."
+
+[appointment_reminder_24h.email]
+version = 1
+subject = "Tomorrow: {when} at {clinic}"
+body = "A reminder of your appointment at {clinic}, {when}, reference {number}. Reply CONFIRM to keep it, or CANCEL to free the time for someone else."
+
+[appointment_reminder_2h.email]
+version = 1
+subject = "In 2 hours: {when} at {clinic}"
+body = "Your appointment at {clinic} is in about 2 hours, {when}, reference {number}. Reply CONFIRM or CANCEL."
+
+[collection_due.email]
+version = 1
+subject = "Your medicine collection is due"
+body = "Your medicine collection at {clinic} is due {when}. Reply COLLECT to take a place in the queue today."
+
+[collection_missed.email]
+version = 1
+subject = "We missed you at {clinic}"
+body = "We did not see you for your medicine collection at {clinic}. Please come in when you can, or reply COLLECT for a place in today's queue."
