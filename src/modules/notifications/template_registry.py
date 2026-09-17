@@ -68,11 +68,17 @@ LOCALES_DIR: Final = Path(__file__).resolve().parents[2] / "locales"
 PATIENT_TEMPLATES: Final = frozenset(PATIENT_EVENT_TEMPLATE.values())
 #: The only path a web push's reply buttons may send to (Issue 82).
 REPLY_PATH_PREFIX: Final = "/api/v1/appointments/replies/"
-#: The channels a patient message is written for.
+#: The channels a patient message is written for. ``EMAIL`` joined them in Issue 220, once a patient
+#: could have an address of their own (Issue 219); before that it was for account holders only.
 PATIENT_CHANNELS: Final = (
     NotificationChannel.SMS,
     NotificationChannel.WHATSAPP,
     NotificationChannel.WEB_PUSH,
+    NotificationChannel.EMAIL,
+)
+#: The channels whose messages carry a title of their own, and must have one.
+TITLED_CHANNELS: Final = frozenset(
+    {NotificationChannel.WEB_PUSH, NotificationChannel.EMAIL}
 )
 
 #: The blanks every ticket message may use.
@@ -264,12 +270,14 @@ def validate(text: TemplateText) -> SegmentCount | None:
     missing = (REQUIRED & VARIABLES[text.template]) - blanks(text.body)
     if missing:
         raise TemplateError("The message must say the ticket number: add {number}.")
-    if (
-        text.channel is NotificationChannel.WEB_PUSH
-        and not (text.subject or "").strip()
-    ):
-        raise TemplateError("A web push needs a title.")
-    if text.channel is not NotificationChannel.WEB_PUSH and text.subject:
+    if text.channel in TITLED_CHANNELS and not (text.subject or "").strip():
+        titled = (
+            "A web push needs a title."
+            if text.channel is NotificationChannel.WEB_PUSH
+            else "An email needs a subject line."
+        )
+        raise TemplateError(titled)
+    if text.channel not in TITLED_CHANNELS and text.subject:
         raise TemplateError(f"A {text.channel.value} message has no title.")
     if text.channel is not NotificationChannel.SMS:
         return None

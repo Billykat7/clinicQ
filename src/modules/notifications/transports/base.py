@@ -49,12 +49,18 @@ class PatientAddresses:
     """Every way the service knows to reach one patient, read once per send.
 
     ``push_targets`` are the patient's browsers that allowed notifications, newest first (Issue 64);
-    ``whatsapp_id`` is set once a patient has used WhatsApp (Issue 75).
+    ``whatsapp_id`` is set once a patient has used WhatsApp (Issue 75); ``email`` is set for a
+    patient who signed in with an address (Issue 219), who may have **no number at all**.
+
+    Every field is optional and a patient may have only one of them, which is why
+    :func:`~src.modules.notifications.service.plan_transports` leaves a transport out rather than
+    failing it when it finds nothing to send to.
     """
 
     patient_id: str
     phone_e164: str | None = None
     whatsapp_id: str | None = None
+    email: str | None = None
     push_targets: tuple[PushTarget, ...] = ()
 
 

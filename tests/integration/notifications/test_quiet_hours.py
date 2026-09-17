@@ -349,12 +349,24 @@ def test_preferences_are_editable_without_an_account_by_the_ticket_link(
     )
 
     for bad in (
-        {"preferred_channel": "email"},
+        # ``email`` used to be here: a patient had no address, so preferring it was nonsense.
+        # Issue 219 gave them one and Issue 220 made it a transport, so it is a real choice now —
+        # ``letter`` stands in as the channel that still is not one.
+        {"preferred_channel": "letter"},
         {"language": "tsn"},
         {"quiet_hours_start": "22:00"},
         {"patient_id": "someone-else"},
     ):
         assert nobody.put(_preferences(desk, token), json=bad).status_code == 422, bad
+
+    # And the one that changed: a patient may now ask to be reached by email first (Issue 220).
+    by_email = nobody.put(
+        _preferences(desk, token), json={"preferred_channel": "email"}
+    )
+    assert by_email.status_code == status.HTTP_200_OK, by_email.text
+    assert by_email.json()["preferred_channel"] == "email"
+    # Put it back: the rest of this test is about the SMS preference being honoured.
+    nobody.put(_preferences(desk, token), json={"preferred_channel": "sms"})
     assert (
         nobody.get(_preferences(desk, "x" * 43)).status_code
         == status.HTTP_404_NOT_FOUND

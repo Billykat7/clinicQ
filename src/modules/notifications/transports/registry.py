@@ -18,6 +18,7 @@ from src.commons.enums import NotificationChannel
 from src.core.config import Settings, get_settings
 from src.modules.notifications.sms import SmsProvider, build_sms_provider
 from src.modules.notifications.transports.base import Transport
+from src.modules.notifications.transports.email import EmailTransport
 from src.modules.notifications.transports.sms import SmsTransport
 from src.modules.notifications.transports.webpush import WebPushTransport
 from src.modules.notifications.transports.whatsapp import WhatsAppTransport
@@ -32,12 +33,20 @@ _override_lock = Lock()
 def build_transports(
     settings: Settings | None = None, *, sms_provider: SmsProvider | None = None
 ) -> TransportSet:
-    """The configured transports: web push (when VAPID keys are set), WhatsApp (not yet), and SMS."""
+    """The configured transports: web push (when VAPID keys are set), email, WhatsApp (not yet), SMS.
+
+    Email is built as configured exactly when ``SMTP_HOST`` is set (Issue 220); with no SMTP server
+    it has no address to offer and the chain passes over it, the same way web push does without
+    VAPID keys.
+    """
     cfg = settings or get_settings()
     return MappingProxyType(
         {
             NotificationChannel.WEB_PUSH: WebPushTransport(
                 VapidSender(cfg) if cfg.web_push_enabled else None
+            ),
+            NotificationChannel.EMAIL: EmailTransport(
+                configured=bool((cfg.smtp_host or "").strip())
             ),
             NotificationChannel.WHATSAPP: WhatsAppTransport(),
             NotificationChannel.SMS: SmsTransport(
