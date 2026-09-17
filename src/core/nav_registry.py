@@ -209,6 +209,17 @@ NAV_DESTINATIONS: tuple[NavDestination, ...] = (
         scope=GrantScope.ASSIGNED,
         shortcut="s",
     ),
+    # The operator's clinics console (Issue 222): the whole directory, and the only screen from
+    # which a clinic is created, corrected or archived. ``business`` is the tier ``GET
+    # /api/v1/sites`` enforces, and deliberately not ``assigned``: a clinic manager reaches their
+    # own clinic through its dashboard, and holds nothing cross-clinic.
+    NavDestination(
+        key="clinics",
+        label="Clinics",
+        href="/admin/clinics",
+        resource="sites",
+        verb=PermissionVerb.READ,
+    ),
     NavDestination(
         key="widgets",
         label="Widgets",

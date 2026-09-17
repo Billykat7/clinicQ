@@ -133,6 +133,9 @@ SitesDirectory = Annotated[
 SitesCreate = Annotated[
     None, Depends(require("sites", "create", scope=GrantScope.BUSINESS))
 ]
+SitesUpdate = Annotated[
+    None, Depends(require("sites", "update", scope=GrantScope.BUSINESS))
+]
 SitesDelete = Annotated[
     None, Depends(require("sites", "delete", scope=GrantScope.BUSINESS))
 ]
@@ -564,6 +567,60 @@ def update_site(
         site.id,
         f"updated the profile of {site.slug}"
         + ("; removed its payment profile, as a public clinic" if dropped else ""),
+    )
+    db.commit()
+    db.refresh(site)
+    return service.site_out(site)
+
+
+@router.put(
+    "/{site_id}/directory",
+    response_model=SiteOut,
+    operation_id="sitesUpdateDirectoryEntry",
+    summary="Correct a clinic's directory entry (the operator's)",
+)
+def update_directory_entry(
+    site_id: str,
+    payload: SiteIn,
+    request: Request,
+    db: DbSession,
+    staff: CurrentStaff,
+    _authz: SitesUpdate,
+) -> SiteOut:
+    """The operator's edit: the same fields as ``PUT /sites/{site_id}``, at the ``business`` tier.
+
+    It exists because the guarded route cannot serve the operator, and that is not an oversight in
+    either direction (Issue 222):
+
+    * ``PUT /sites/{site_id}`` is behind :func:`~src.core.site_scope.require_site_access`, which is
+      what keeps a **clinic manager** to their own clinic;
+    * a **platform admin is assigned to no clinic** (Issue 19), so that guard 404s them, and the
+      cross-site escape hatch covers *reads only* — a cross-site write is refused outright, on
+      purpose. Without this route an operator could create a clinic and remove one and never fix a
+      typed address in between, which is exactly the gap the clinics console found.
+
+    So the split is the router's usual one, stated once more: the directory entry is the operator's
+    and gates on ``sites`` at ``business``, deliberately **not** behind the site guard; the clinic's
+    own profile is its staff's and stays guarded. Both call the same
+    :func:`~src.modules.sites.service.update_site`, so there is one writer and the two cannot
+    disagree about what an update does. ``status`` is untouched by either: only the verification
+    decision writes it.
+    """
+    site = service.get_site(db, site_id)
+    if site is None:
+        raise site_not_found()
+    try:
+        service.update_site(db, site, payload)
+    except service.SlugAlreadyUsedError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    _audit(
+        db,
+        request,
+        staff.email,
+        str(staff.id),
+        AuditAction.UPDATE,
+        site.id,
+        f"corrected the directory entry for {site.slug}",
     )
     db.commit()
     db.refresh(site)
