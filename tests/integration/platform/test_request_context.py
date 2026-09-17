@@ -285,9 +285,16 @@ def test_the_redis_probe_is_skipped_without_a_url() -> None:
 def test_a_request_the_csrf_middleware_refuses_still_carries_an_id(
     logs: io.StringIO,
 ) -> None:
-    """The context middleware is outermost, so even a CSRF refusal has an id and a log line."""
+    """The context middleware is outermost, so even a CSRF refusal has an id and a log line.
+
+    The refusal needs a session for the token to protect: a refresh cookie is one, and a sign-out
+    acts on the session it names. With a CSRF cookie and nothing else the request is a sign-in in
+    all but name, and is let through to be answered by the route (Issue 229).
+    """
+    settings = get_settings()
     client = TestClient(_app())
-    client.cookies.set(get_settings().csrf_cookie_name, "cookie-token")
+    client.cookies.set(settings.csrf_cookie_name, "cookie-token")
+    client.cookies.set(settings.refresh_token_cookie_name, "a-session-of-some-kind")
 
     response = client.post("/api/v1/auth/logout")  # no X-CSRF-Token header
 
