@@ -11,11 +11,20 @@ see their colleagues without seeing the reports.
     ├── settings        operational settings (Issue 27)
     ├── display         the waiting-room board's display mode (Issue 27)
     ├── staff           who works there: invitations, deactivation (Issues 22, 28)
+    ├── onboarding      whether it is listed, and how far its setup has got (Issues 29, 221)
     ├── reports         wait times, no-shows, channel mix (M12)
     └── audit           the clinic's own audit trail (Issue 20)
 
 Grants at the ``assigned`` tier reach the sites a member holds a role at; the site guard (Issue 19)
 turns that into rows. ``platform_admin`` reaches every clinic at ``business``.
+
+``onboarding`` is its own resource rather than a verb on ``sites`` because **deciding whether a
+clinic is listed is not the same authority as removing one** (Issue 221). It used to be: the
+verification routes gated on ``sites`` + ``delete``, the widest grant the resource has, so nobody
+could be given authority to check clinics without also being given authority to delete them, and
+``/admin/rbac`` answered "who may approve a clinic?" with the delete grant. Splitting it also gives
+a clinic manager somewhere to *read* their own clinic's setup checklist and listing state without
+being able to decide either.
 """
 
 from src.commons.enums import GrantScope, PermissionVerb, ScopeShape, UserRole
@@ -43,6 +52,11 @@ MANIFEST = ModuleManifest(
         ),
         ResourceSpec(
             key="staff", name="Sites / Staff", description="Who works at the clinic."
+        ),
+        ResourceSpec(
+            key="onboarding",
+            name="Sites / Onboarding",
+            description="Whether a clinic is listed, and how far its own setup has got.",
         ),
         ResourceSpec(
             key="reports", name="Sites / Reports", description="The clinic's reports."
@@ -86,7 +100,11 @@ MANIFEST = ModuleManifest(
             PermissionVerb.READ.value,
             _ASSIGNED,
         ),
-        # Clinic manager: runs the clinic; may invite and deactivate its staff.
+        # Clinic manager: runs the clinic; may invite and deactivate its staff. The grant below
+        # cascades to ``sites.onboarding`` at ``assigned``, which is how a manager reads their own
+        # clinic's setup checklist and re-sends its setup link (Issue 223). It does **not** let them
+        # decide their own clinic's listing: the verification routes ask for ``business``, and a
+        # manager holds nothing at that tier.
         RoleGrant(
             UserRole.CLINIC_MANAGER.value,
             "sites",
@@ -99,7 +117,12 @@ MANIFEST = ModuleManifest(
             PermissionVerb.DELETE.value,
             _ASSIGNED,
         ),
-        # The operator: onboards and supports every clinic.
+        # The operator: onboards and supports every clinic. Cascades to ``sites.onboarding`` at
+        # ``business``, which is what the verification queue and its decision ask for — so no
+        # platform admin gains or loses anything from the split. What the split buys is a grant an
+        # operator can hand out on its own: ``sites.onboarding`` without ``sites`` approves clinics
+        # and deletes none, which is the verification officer a pilot wants and could not be
+        # expressed while approving *was* ``sites:delete``.
         RoleGrant(
             UserRole.PLATFORM_ADMIN.value,
             "sites",

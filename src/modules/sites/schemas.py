@@ -578,6 +578,26 @@ class VerificationQueueOut(BaseModel):
     items: list[VerificationQueueItemOut]
 
 
+class SiteOnboardingOut(BaseModel):
+    """Where one clinic's listing stands, as the clinic itself sees it (Issue 221).
+
+    The clinic's own view of the decision made *about* it: what its listing is, when it was put
+    forward, when it was last looked at, and what the reviewing admin wrote — which is written for
+    the submitter to read, so this is the surface it is read on. It carries no reviewer's name: who
+    decided is in the audit trail, which is the operator's, not the clinic's.
+    """
+
+    site_id: str
+    status: SiteStatus
+    submitted_at: datetime | None
+    reviewed_at: datetime | None
+    review_note: str | None
+    visible_to_patients: bool
+    """Whether patients can find this clinic now: ``verified`` and nothing else (Issue 29)."""
+    can_submit_for_checking: bool
+    """Whether ``pending_verification`` is a move this listing may make from where it is."""
+
+
 # --------------------------------------------------------------------------------------
 # Payment and medical aid (Issue 37): a private clinic's self-reported directory tag
 # --------------------------------------------------------------------------------------

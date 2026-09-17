@@ -132,6 +132,16 @@ CASES: dict[str, dict[str, object]] = {
             f"/api/v1/sites/{site}/reports/discovery-conversion",
         ),
     },
+    "sites.onboarding": {
+        # Where a clinic's own listing stands (Issues 29, 221): its status, and what the reviewing
+        # admin wrote for the submitter to read. The *decision* is the operator's cross-clinic
+        # console, at the ``business`` tier and deliberately not behind the guard — a platform
+        # admin is assigned to no clinic, and the guard would 404 them. This is the other side of
+        # it: the clinic reading about itself, which is site-scoped like everything else here.
+        "resource": "sites.onboarding",
+        "reader": "manager.a@clinicq.example",
+        "paths": lambda site, _row: (f"/api/v1/sites/{site}/onboarding",),
+    },
     "sites.settings": {
         # The clinic's analytics switch (Issue 38): the first operational setting, the manager's.
         "resource": "sites.settings",

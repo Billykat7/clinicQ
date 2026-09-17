@@ -77,6 +77,7 @@ shows what ships.
 | `sites` | — | — | — | update · assigned | delete · business | — | — |
 | `sites.audit` | — | — | — | update · assigned | delete · business | — | — |
 | `sites.display` | — | read · assigned | — | update · assigned | delete · business | — | — |
+| `sites.onboarding` | — | — | — | update · assigned | delete · business | — | — |
 | `sites.profile` | — | read · assigned | read · assigned | update · assigned | delete · business | — | — |
 | `sites.reports` | — | — | — | update · assigned | delete · business | — | — |
 | `sites.settings` | — | — | — | update · assigned | delete · business | — | — |

@@ -150,6 +150,10 @@ resource | role=admin | key=sites.display | verb=create | deny | tier=own
 resource | role=admin | key=sites.display | verb=delete | deny | tier=own
 resource | role=admin | key=sites.display | verb=read | deny | tier=own
 resource | role=admin | key=sites.display | verb=update | deny | tier=own
+resource | role=admin | key=sites.onboarding | verb=create | deny | tier=own
+resource | role=admin | key=sites.onboarding | verb=delete | deny | tier=own
+resource | role=admin | key=sites.onboarding | verb=read | deny | tier=own
+resource | role=admin | key=sites.onboarding | verb=update | deny | tier=own
 resource | role=admin | key=sites.profile | verb=create | deny | tier=own
 resource | role=admin | key=sites.profile | verb=delete | deny | tier=own
 resource | role=admin | key=sites.profile | verb=read | deny | tier=own
@@ -322,6 +326,10 @@ resource | role=clinic_manager | key=sites.display | verb=create | allow | tier=
 resource | role=clinic_manager | key=sites.display | verb=delete | deny | tier=assigned
 resource | role=clinic_manager | key=sites.display | verb=read | allow | tier=assigned
 resource | role=clinic_manager | key=sites.display | verb=update | allow | tier=assigned
+resource | role=clinic_manager | key=sites.onboarding | verb=create | allow | tier=assigned
+resource | role=clinic_manager | key=sites.onboarding | verb=delete | deny | tier=assigned
+resource | role=clinic_manager | key=sites.onboarding | verb=read | allow | tier=assigned
+resource | role=clinic_manager | key=sites.onboarding | verb=update | allow | tier=assigned
 resource | role=clinic_manager | key=sites.profile | verb=create | allow | tier=assigned
 resource | role=clinic_manager | key=sites.profile | verb=delete | deny | tier=assigned
 resource | role=clinic_manager | key=sites.profile | verb=read | allow | tier=assigned
@@ -494,6 +502,10 @@ resource | role=nurse_doctor | key=sites.display | verb=create | deny | tier=own
 resource | role=nurse_doctor | key=sites.display | verb=delete | deny | tier=own
 resource | role=nurse_doctor | key=sites.display | verb=read | deny | tier=own
 resource | role=nurse_doctor | key=sites.display | verb=update | deny | tier=own
+resource | role=nurse_doctor | key=sites.onboarding | verb=create | deny | tier=own
+resource | role=nurse_doctor | key=sites.onboarding | verb=delete | deny | tier=own
+resource | role=nurse_doctor | key=sites.onboarding | verb=read | deny | tier=own
+resource | role=nurse_doctor | key=sites.onboarding | verb=update | deny | tier=own
 resource | role=nurse_doctor | key=sites.profile | verb=create | deny | tier=assigned
 resource | role=nurse_doctor | key=sites.profile | verb=delete | deny | tier=assigned
 resource | role=nurse_doctor | key=sites.profile | verb=read | allow | tier=assigned
@@ -666,6 +678,10 @@ resource | role=patient | key=sites.display | verb=create | deny | tier=own
 resource | role=patient | key=sites.display | verb=delete | deny | tier=own
 resource | role=patient | key=sites.display | verb=read | deny | tier=own
 resource | role=patient | key=sites.display | verb=update | deny | tier=own
+resource | role=patient | key=sites.onboarding | verb=create | deny | tier=own
+resource | role=patient | key=sites.onboarding | verb=delete | deny | tier=own
+resource | role=patient | key=sites.onboarding | verb=read | deny | tier=own
+resource | role=patient | key=sites.onboarding | verb=update | deny | tier=own
 resource | role=patient | key=sites.profile | verb=create | deny | tier=own
 resource | role=patient | key=sites.profile | verb=delete | deny | tier=own
 resource | role=patient | key=sites.profile | verb=read | deny | tier=own
@@ -838,6 +854,10 @@ resource | role=platform_admin | key=sites.display | verb=create | allow | tier=
 resource | role=platform_admin | key=sites.display | verb=delete | allow | tier=business
 resource | role=platform_admin | key=sites.display | verb=read | allow | tier=business
 resource | role=platform_admin | key=sites.display | verb=update | allow | tier=business
+resource | role=platform_admin | key=sites.onboarding | verb=create | allow | tier=business
+resource | role=platform_admin | key=sites.onboarding | verb=delete | allow | tier=business
+resource | role=platform_admin | key=sites.onboarding | verb=read | allow | tier=business
+resource | role=platform_admin | key=sites.onboarding | verb=update | allow | tier=business
 resource | role=platform_admin | key=sites.profile | verb=create | allow | tier=business
 resource | role=platform_admin | key=sites.profile | verb=delete | allow | tier=business
 resource | role=platform_admin | key=sites.profile | verb=read | allow | tier=business
@@ -1010,6 +1030,10 @@ resource | role=receptionist | key=sites.display | verb=create | deny | tier=ass
 resource | role=receptionist | key=sites.display | verb=delete | deny | tier=assigned
 resource | role=receptionist | key=sites.display | verb=read | allow | tier=assigned
 resource | role=receptionist | key=sites.display | verb=update | deny | tier=assigned
+resource | role=receptionist | key=sites.onboarding | verb=create | deny | tier=own
+resource | role=receptionist | key=sites.onboarding | verb=delete | deny | tier=own
+resource | role=receptionist | key=sites.onboarding | verb=read | deny | tier=own
+resource | role=receptionist | key=sites.onboarding | verb=update | deny | tier=own
 resource | role=receptionist | key=sites.profile | verb=create | deny | tier=assigned
 resource | role=receptionist | key=sites.profile | verb=delete | deny | tier=assigned
 resource | role=receptionist | key=sites.profile | verb=read | allow | tier=assigned
@@ -1182,6 +1206,10 @@ resource | role=user | key=sites.display | verb=create | deny | tier=own
 resource | role=user | key=sites.display | verb=delete | deny | tier=own
 resource | role=user | key=sites.display | verb=read | deny | tier=own
 resource | role=user | key=sites.display | verb=update | deny | tier=own
+resource | role=user | key=sites.onboarding | verb=create | deny | tier=own
+resource | role=user | key=sites.onboarding | verb=delete | deny | tier=own
+resource | role=user | key=sites.onboarding | verb=read | deny | tier=own
+resource | role=user | key=sites.onboarding | verb=update | deny | tier=own
 resource | role=user | key=sites.profile | verb=create | deny | tier=own
 resource | role=user | key=sites.profile | verb=delete | deny | tier=own
 resource | role=user | key=sites.profile | verb=read | deny | tier=own
