@@ -303,7 +303,13 @@ def attempt(
         db.flush()
         return False
     message = _message_for(db, notification, context)
-    if channel is NotificationChannel.EMAIL:
+    # An **account holder's** email goes straight to SMTP: it is the staff path (Issue #113's
+    # centre, the unsubscribe header, the recipient's own preferences), and it has no patient.
+    # A **patient's** email is a patient transport like any other (Issue 220) and goes through the
+    # registry below, so it is swappable in a test, classified permanent-or-retryable by its own
+    # adapter, and never carries the staff unsubscribe header. The `patient_id is None` test is what
+    # keeps the two apart, and it is the only difference between them.
+    if channel is NotificationChannel.EMAIL and notification.patient_id is None:
         try:
             message_id = _deliver_email_transport(
                 to=notification.recipient,
@@ -428,19 +434,21 @@ def attempt_or_record(
 def _addresses(
     db: Session, patient: Patient, *, now: datetime | None = None
 ) -> PatientAddresses:
-    """Every way the service knows to reach ``patient``: number, WhatsApp id and push subscriptions.
+    """Every way the service knows to reach ``patient``: number, address, WhatsApp id, subscriptions.
 
-    For a **dependant** (Issue 84) that is their proxy's phone, browser and preferences: a small child
-    has no number of their own, and it is the parent's phone that rings. The message is still the
-    dependant's — the ledger row, the ticket and the board all name them — but it is delivered to the
-    phone that exists, under its owner's own quiet hours and opt-out. :func:`reachable_patient` is the
-    one place that redirection happens, so every send path and every fallback follows it.
+    For a **dependant** (Issue 84) that is their proxy's phone, address, browser and preferences: a
+    small child has no number of their own, and it is the parent's phone that rings. The message is
+    still the dependant's — the ledger row, the ticket and the board all name them — but it is
+    delivered to the contact that exists, under its owner's own quiet hours and opt-out.
+    :func:`reachable_patient` is the one place that redirection happens, so every send path and every
+    fallback follows it, and the address follows it for the same reason the number does.
     """
     reached = reachable_patient(db, patient)
     return PatientAddresses(
         patient_id=reached.id,
         phone_e164=reached.phone_e164,
         whatsapp_id=reached.whatsapp_id,
+        email=reached.email,
         push_targets=webpush.targets_for(db, reached.id, now=now),
     )
 

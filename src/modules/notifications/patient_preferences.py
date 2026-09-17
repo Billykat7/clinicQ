@@ -48,10 +48,14 @@ from src.modules.notifications.schemas import (
 
 logger = logging.getLogger(__name__)
 
-#: The channels a patient may prefer.
+#: The channels a patient may prefer. ``EMAIL`` joined them in Issue 220: a patient who signed in
+#: with an address (Issue 219) may have no number to prefer instead. Choosing one this deployment
+#: cannot reach them on is not refused here — a preference is only tried when it has an address, and
+#: the chain carries the message either way (:func:`~src.modules.notifications.service.plan_transports`).
 PREFERABLE_CHANNELS = frozenset(
     {
         NotificationChannel.WEB_PUSH,
+        NotificationChannel.EMAIL,
         NotificationChannel.WHATSAPP,
         NotificationChannel.SMS,
     }
@@ -138,7 +142,7 @@ def update(
         None,
         *PREFERABLE_CHANNELS,
     ):
-        raise PreferenceError("Choose web push, WhatsApp or SMS.")
+        raise PreferenceError("Choose web push, email, WhatsApp or SMS.")
     codes = {language.value for language in NOTIFICATION_LANGUAGES}
     if (
         "language" in fields

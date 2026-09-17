@@ -203,10 +203,10 @@ def test_words_that_break_the_contract_are_refused_and_the_preview_says_why(
 
     assert desk.staff("desk.a").get(_BASE).status_code == status.HTTP_403_FORBIDDEN
     listing = operator.get(_BASE).json()
-    assert (
-        listing["languages"] == ["en"]
-        and len(listing["items"]) == len(PatientEvent) * 3
-    )
+    # One row per patient template per channel it is written for. Read from PATIENT_CHANNELS
+    # rather than a literal, so adding a channel (email, Issue 220) does not need this edited.
+    assert listing["languages"] == ["en"]
+    assert len(listing["items"]) == len(PatientEvent) * len(registry.PATIENT_CHANNELS)
 
 
 @pytest.fixture
