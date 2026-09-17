@@ -47,12 +47,12 @@ docs/
 | **[M12: Reporting & Analytics](MILESTONES/M12_reporting_analytics.md)** | Stats worker, reports UI, KPIs, exports, district dashboard, no-show insight | 88–94 | Data & Research | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** 📋 planned |
 | **[M13: Security, Privacy & POPIA](MILESTONES/M13_security_privacy_compliance.md)** | Data map, retention, DSAR, hardening, encryption, audit chain, pen test, a11y | 95–101 | DevOps/QA | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** 📋 planned |
 | **[M14: Production, Pilot & Go-live](MILESTONES/M14_production_pilot_golive.md)** | Prod infra, shared S3 layout, backups, monitoring, load test, pilot kit, support, UAT, capstone | 102–109, 197 | DevOps/QA + all | 🟩⬜⬜⬜⬜⬜⬜⬜⬜⬜ **11%** 🚧 in progress |
-| **[M15: Clinic Onboarding & Patient Sign-in](MILESTONES/M15_clinic_onboarding_patient_sign_in.md)** | Patient email sign-in behind a flag, email transport, `sites.onboarding` RBAC, clinics console, clinic setup link | 219–223 | Backend Lead + Frontend/Clinic | 🟩🟩🟩🟩🟩🟩⬜⬜⬜⬜ **60%** 🚧 in progress |
+| **[M15: Clinic Onboarding & Patient Sign-in](MILESTONES/M15_clinic_onboarding_patient_sign_in.md)** | Patient email sign-in behind a flag, email transport, `sites.onboarding` RBAC, clinics console, clinic setup link | 219–223 | Backend Lead + Frontend/Clinic | 🟩🟩🟩🟩🟩🟩🟩🟩⬜⬜ **80%** 🚧 in progress |
 
 **Total: 116 tracked issues across M1–M15**, plus 6 parked
 [backlog items](ISSUES/BACKLOG/).
 
-**Progress:** 🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜ **72%** (84/116 issues) closed · **10 of 15 milestones done**
+**Progress:** 🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜ **73%** (85/116 issues) closed · **10 of 15 milestones done**
 
 > ⚠️ **M6 is the critical path.** Six of the seven milestones after it are consumers of the queue
 > engine. Anything that delays M6 delays the whole second half of the project, see the
