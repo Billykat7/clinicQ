@@ -58,15 +58,16 @@ cd ~/actions-clinicq
   --url https://github.com/Billykat7/clinicQ \
   --token '<REGISTRATION_TOKEN>' \
   --name clinicq-runner \
-  --labels self-hosted,linux,x64,clinicq-deploy \
+  --labels self-hosted,linux,x64,clinicq \
   --work _work \
   --unattended \
   --replace
 ```
 
 - `--name clinicq-runner` keeps it distinct from the other runners on the host.
-- `--labels …,clinicq-deploy` is how a workflow targets **this** runner:
-  `runs-on: [self-hosted, clinicq-deploy]`.
+- `--labels …,clinicq` is how a workflow targets **this** runner:
+  `runs-on: [self-hosted, Linux, X64, clinicq]`. `Linux` and `X64` the runner adds itself; add
+  `infra` too if this is the shared platform runner the other BTK products deploy through.
 - `--replace` only replaces a runner **with the same name**, so it cannot disturb the existing one.
 
 ## 4. Install as a service (survives reboot)
@@ -112,24 +113,25 @@ host's other runner is still Idle too.
 ```yaml
 jobs:
   deploy:
-    runs-on: [self-hosted, clinicq-deploy]
+    runs-on: ${{ fromJSON(vars.DEPLOY_RUNNER_LABELS || '["self-hosted","Linux","X64","clinicq"]') }}
 ```
 
-Without the `clinicq-deploy` label, a job using plain `runs-on: self-hosted` may land on the other
-runner on the same host — which has neither ClinicQ's deploy directory nor its `.env`.
+Without the `clinicq` label, a job using plain `runs-on: self-hosted` may land on the other runner on
+the same host — which has neither ClinicQ's deploy directory nor its `.env`.
 
-Moving `deploy.yml` onto a runner also retires the SSH hop and its four `DEPLOY_*` secrets; see
-[README.md § Point the deploy at it](./README.md#4-point-the-deploy-at-it) before changing the
-workflow, and run `./scripts/ci-local.sh` afterwards.
+`deploy.yml` already runs here (Issue 230), so there is no SSH hop and no `DEPLOY_*` secret left to
+set; see [README.md § The deploy already points at it](./README.md#4-the-deploy-already-points-at-it-issue-230),
+and run `./scripts/ci-local.sh` after any change to the workflow.
 
 ## Sharing the host with staging
 
 Staging and production are separate compose projects (`btk-clinicq-staging` and `btk-clinicq`) on
 different `APP_PORT`s, so they can share one machine
 ([RUNBOOK_DEPLOY.md](../../CICD/RUNBOOK_DEPLOY.md#setting-up-a-host-once-per-environment)). One
-runner can serve both environments — the GitHub Environment supplies the `DEPLOY_DIR` and `APP_ENV`
-that differ. Register a second runner only when the two live on different hosts, and then give it
-its own label (`clinicq-staging`).
+runner can serve both environments — the deploy derives `/opt/btk/clinicq-staging` from the chosen
+environment, and the GitHub Environment supplies any `DEPLOY_DIR` or `APP_ENV` that differ. Register
+a second runner only when the two live on different hosts, and then give it its own label
+(`clinicq-staging`) and point staging at it with the `DEPLOY_RUNNER_LABELS` variable.
 
 ## Removing this runner
 

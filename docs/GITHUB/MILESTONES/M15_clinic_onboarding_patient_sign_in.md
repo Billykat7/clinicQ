@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | **Status** | 📋 Planned |
-| **Progress** | 🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜ **67%** (6/9 issues) |
+| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩⬜⬜ **78%** (7/9 issues) |
 | **Sprints** | 15–16 (weeks 29–32) |
 | **Release tag** | `v0.15.0` |
 | **Primary owner** | A, Backend Lead · D, Frontend/Clinic |

@@ -949,3 +949,50 @@ def test_the_app_settings_reach_the_host_privately(
         assert 'echo "$APP_ENV"' not in run and "cat .env" not in run
         if "$APP_ENV" in run and "printf" in run:
             assert "umask 077" in run
+
+
+def test_the_deploy_runs_on_the_host_rather_than_reaching_it_over_ssh(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """Issue 230: the runner **is** the host, so no step may ssh, scp or handle a deploy key.
+
+    ClinicQ runs on the BTK platform server, which hosts this repository's own self-hosted runner.
+    Reaching that same machine over SSH meant four Environment secrets whose only job was to let the
+    job travel to where it already was, and a deploy that reported "Not provisioned (missing
+    DEPLOY_HOST DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS APP_ENV DEPLOY_DIR)" until every one of them
+    existed.
+    """
+    deploy = workflows[Workflow.DEPLOY]
+    job = _jobs(deploy)["deploy"]
+    labels = str(job["runs-on"])
+    assert "self-hosted" in labels and "clinicq" in labels, labels
+
+    banned = ("DEPLOY_HOST", "DEPLOY_SSH_KEY", "DEPLOY_KNOWN_HOSTS", "DEPLOY_USER")
+    for step in job["steps"]:
+        source = str(step.get("run", "")) + str(step.get("env", {}))
+        for name in banned:
+            assert name not in source, f"{step.get('name')}: {name}"
+        for command in ("ssh ", "scp ", "ssh-keyscan", "known_hosts"):
+            assert command not in str(step.get("run", "")), (
+                f"{step.get('name')}: {command}"
+            )
+
+
+def test_a_deploy_needs_no_configuration_on_a_platform_host(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """Issue 230: the deploy directory and the settings both have a working default.
+
+    ``/opt/btk/<slug>`` is the platform layout, and the app's ``.env`` lives in it; ``DEPLOY_DIR``
+    and ``APP_ENV`` stay as overrides for a host laid out differently or a team that would rather
+    keep the settings in GitHub.
+    """
+    steps = {str(step.get("name", "")): step for step in _deploy_steps(workflows)}
+    target = steps["Where this environment lives"]
+    assert "/opt/btk/clinicq" in str(target["run"])
+
+    settings = steps["The app's settings"]
+    run = str(settings["run"])
+    # Either source is enough on its own; only having neither is an error.
+    assert 'if [[ -n "$APP_ENV" ]]' in run
+    assert 'elif [[ -s "$DEPLOY_DIR/.env" ]]' in run

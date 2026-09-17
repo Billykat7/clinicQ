@@ -74,7 +74,7 @@ that are not settings (compose and deploy keys such as `IMAGE`, or typos) are li
 |-------|------|-----------------|
 | `.env.example` (in git) | every setting, with safe defaults and **no real secret** | everyone |
 | `.env` on a laptop (git-ignored) | local values; copy of `.env.example` plus anything personal | the developer |
-| GitHub Environment `staging` (secrets) | staging's `JWT_SECRET`, `DATABASE_URL`, provider test keys, the deploy SSH key | the deploy workflow (Issue 11) |
+| GitHub Environment `staging` (secrets) | staging's `JWT_SECRET`, `DATABASE_URL`, provider test keys — only when the settings are kept in GitHub rather than in the host's own `.env` (Issue 230) | the deploy workflow (Issue 11) |
 | GitHub Environment `production` (secrets, approval required) | production's secrets | the deploy workflow, after the DevOps/QA Lead approves |
 | `/opt/btk/clinicq/.env` on each host (mode 600) | the running app's settings, written by the deploy | the host's deploy user |
 

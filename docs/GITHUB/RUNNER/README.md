@@ -7,15 +7,16 @@ Do **not** rely on `./run.sh` for anything permanent — that process dies when 
 | Doc | Purpose |
 |-----|---------|
 | **This file** | Service install, enable-on-boot, verify, day-2 operations, troubleshoot |
-| [clinicq.md](./clinicq.md) | ClinicQ install (`~/actions-clinicq`, label `clinicq-deploy`) on a host that already runs another runner |
+| [clinicq.md](./clinicq.md) | ClinicQ install (`~/actions-clinicq`, label `clinicq`) on a host that already runs another runner |
 
 ## Where ClinicQ stands today
 
-**Nothing in this repository needs a self-hosted runner yet.** Every job in `ci.yml`, `release.yml`
-and `deploy.yml` runs on `ubuntu-24.04`, and the deploy reaches the host over SSH with the
-environment's `DEPLOY_HOST` / `DEPLOY_USER` / `DEPLOY_SSH_KEY` / `DEPLOY_KNOWN_HOSTS` secrets
-([RUNBOOK_DEPLOY.md](../../CICD/RUNBOOK_DEPLOY.md)). A runner installed by these notes is an
-*alternative* to that SSH hop, not an addition to it.
+**`deploy.yml` needs one; nothing else does.** `ci.yml` and `release.yml` run on `ubuntu-24.04`, and
+since Issue 230 the deploy runs on the host itself
+(`runs-on: [self-hosted, Linux, X64, clinicq]`), because the BTK platform server that ClinicQ lives
+on hosts its own runner. The SSH hop and its four `DEPLOY_*` secrets are gone
+([RUNBOOK_DEPLOY.md](../../CICD/RUNBOOK_DEPLOY.md)): a job cannot need credentials to reach the
+machine it is already running on.
 
 Minutes are not the argument either: **the repository is public, and GitHub does not bill standard
 runners for public repositories** — the timing API reports 0 billable milliseconds
@@ -107,7 +108,7 @@ cd "$RUNNER_DIR"
   --url https://github.com/Billykat7/clinicQ \
   --token '<REGISTRATION_TOKEN>' \
   --name clinicq-runner \
-  --labels self-hosted,linux,x64,clinicq-deploy \
+  --labels self-hosted,linux,x64,clinicq \
   --work _work \
   --unattended \
   --replace
@@ -115,9 +116,13 @@ cd "$RUNNER_DIR"
 
 | Target | `--name` | Label | Workflow `runs-on` |
 |--------|----------|-------|--------------------|
-| ClinicQ deploy host (this repo) | `clinicq-runner` | `clinicq-deploy` | `[self-hosted, clinicq-deploy]` |
-| A separate staging host | `clinicq-staging-runner` | `clinicq-staging` | `[self-hosted, clinicq-staging]` |
+| ClinicQ deploy host (this repo) | `clinicq-runner` | `clinicq` | `[self-hosted, Linux, X64, clinicq]` |
+| A separate staging host | `clinicq-staging-runner` | `clinicq-staging` | `[self-hosted, clinicq-staging]`, via `DEPLOY_RUNNER_LABELS` |
 | Shared BTK platform (CD) | (infra host) | `infra` | `[self-hosted, Linux, X64, infra]` |
+
+`Linux` and `X64` are added by the runner itself, so a runner registered with
+`--labels self-hosted,linux,x64,clinicq` answers to all four. The platform runner carries `infra`
+as well, which is what the other BTK products target.
 
 Labels are how a workflow picks the machine, so **give the runner a narrow, repository-specific
 label and never target `self-hosted` alone**: a bare `self-hosted` job will happily land on another
@@ -177,29 +182,33 @@ sudo "$RUNNER_DIR/svc.sh" status
 
 ---
 
-## 4. Point the deploy at it
+## 4. The deploy already points at it (Issue 230)
 
-`deploy.yml` runs on `ubuntu-24.04` and SSHes to the host. Moving it onto the runner means the job
-executes **on** the deploy host, so the SSH hop and its four secrets go away:
+`deploy.yml` runs on the host, so registering the runner with the `clinicq` label is the whole of
+"pointing the deploy at it":
 
 ```yaml
 jobs:
   deploy:
-    runs-on: [self-hosted, clinicq-deploy]
+    runs-on: ${{ fromJSON(vars.DEPLOY_RUNNER_LABELS || '["self-hosted","Linux","X64","clinicq"]') }}
 ```
 
-Two things must change with it, or the deploy breaks in a way the runbook does not describe:
+What follows from that, and is already true in the workflow:
 
-- `scripts/cd/deploy.sh` is invoked locally rather than over SSH, and `DEPLOY_DIR`
-  (`/opt/btk/clinicq`, or `/opt/btk/clinicq-staging`) becomes a path on the runner's own filesystem.
+- `scripts/cd/deploy.sh` is invoked locally rather than over SSH, and the deploy directory
+  (`/opt/btk/clinicq`, or `/opt/btk/clinicq-staging`) is a path on the runner's own filesystem.
+  It needs no configuration on a host laid out by the platform; `DEPLOY_DIR` overrides it.
   Staging and production may share the host — they are separate compose projects on different
-  `APP_PORT`s — so one runner can serve both, or each environment can have its own label.
+  `APP_PORT`s — so one runner can serve both, or each environment can have its own label through
+  `DEPLOY_RUNNER_LABELS`.
 - The GitHub Environment's `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` and `DEPLOY_KNOWN_HOSTS`
-  are no longer read. Delete them rather than leaving a live deploy key with nothing to check it.
+  are no longer read. **Delete them** rather than leaving a live deploy key with nothing to check it.
+- `APP_ENV` is optional: without it, the `.env` already in the deploy directory is the source of
+  truth and the deploy leaves it alone.
 
-`tests/unit/platform/test_workflow_guardrails.py` reads the workflow files, so run
-`./scripts/ci-local.sh` after the change — a guard test, not review attention, is what notices when
-the pipeline's shape moves.
+`tests/unit/platform/test_workflow_guardrails.py` reads the workflow files and fails if an `ssh`,
+`scp` or `DEPLOY_SSH_KEY` comes back, so run `./scripts/ci-local.sh` after any change here — a guard
+test, not review attention, is what notices when the pipeline's shape moves.
 
 ---
 
