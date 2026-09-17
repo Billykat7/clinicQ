@@ -283,3 +283,99 @@ def test_the_module_metadata_endpoint_needs_no_session(
         info = anonymous.get("/api/v1/sites/info")
     assert info.status_code == status.HTTP_200_OK
     assert info.json()["context"] == "sites"
+
+
+# --- the operator's own edit (Issue 222) -------------------------------------------------------
+
+
+def test_the_operator_corrects_a_directory_entry_the_guarded_route_refuses_them(
+    clinics: SimpleNamespace,
+) -> None:
+    """The gap the clinics console found: create and remove worked, correcting never did.
+
+    A platform admin is assigned to no clinic (Issue 19), so the site guard 404s them on
+    ``PUT /sites/{id}`` and its escape hatch covers reads only — a cross-site write is refused
+    outright. Without ``/directory`` an operator could add a clinic and archive one and never fix a
+    typed address in between.
+    """
+    operator = clinics.client("operator@clinicq.example")
+    before = operator.get(f"/api/v1/sites/{clinics.site_a}/directory")
+    assert before.status_code == status.HTTP_405_METHOD_NOT_ALLOWED, "it is a PUT only"
+
+    guarded = operator.put(f"/api/v1/sites/{clinics.site_a}", json=_payload())
+    assert guarded.status_code == status.HTTP_404_NOT_FOUND
+
+    corrected = operator.put(
+        f"/api/v1/sites/{clinics.site_a}/directory",
+        json=_payload(
+            address_line="14 Klein Street", notes="Entrance on Klein Street."
+        ),
+    )
+
+    assert corrected.status_code == status.HTTP_200_OK, corrected.text
+    assert corrected.json()["address_line"] == "14 Klein Street"
+    assert corrected.json()["notes"] == "Entrance on Klein Street."
+
+
+def test_the_directory_edit_leaves_the_listing_alone(clinics: SimpleNamespace) -> None:
+    """Only the verification decision writes ``status``; an edit never does, on either route."""
+    operator = clinics.client("operator@clinicq.example")
+    was = operator.get("/api/v1/sites").json()
+    listed = {row["id"]: row["status"] for row in was["items"]}
+
+    operator.put(
+        f"/api/v1/sites/{clinics.site_a}/directory", json=_payload(name="Renamed")
+    )
+
+    now = operator.get("/api/v1/sites").json()
+    assert {row["id"]: row["status"] for row in now["items"]} == listed
+
+
+def test_a_clinic_manager_cannot_use_the_operators_edit_even_on_their_own_clinic(
+    clinics: SimpleNamespace,
+) -> None:
+    """It is a ``business``-tier route. A manager edits their own clinic through the guarded one."""
+    manager = clinics.client("manager.a@clinicq.example")
+
+    refused = manager.put(f"/api/v1/sites/{clinics.site_a}/directory", json=_payload())
+    allowed = manager.put(f"/api/v1/sites/{clinics.site_a}", json=_payload())
+
+    assert refused.status_code == status.HTTP_403_FORBIDDEN
+    assert allowed.status_code == status.HTTP_200_OK, allowed.text
+
+
+def test_the_operators_edit_refuses_a_slug_another_clinic_holds(
+    clinics: SimpleNamespace,
+) -> None:
+    """The 409 the console shows in the API's own words."""
+    operator = clinics.client("operator@clinicq.example")
+    other = operator.get(f"/api/v1/sites/{clinics.site_b}").status_code
+    assert other in (status.HTTP_200_OK, status.HTTP_404_NOT_FOUND)
+    taken = operator.get("/api/v1/sites").json()["items"]
+    slugs = {row["id"]: row["slug"] for row in taken}
+
+    clash = operator.put(
+        f"/api/v1/sites/{clinics.site_a}/directory",
+        json=_payload(slug=slugs[clinics.site_b]),
+    )
+
+    assert clash.status_code == status.HTTP_409_CONFLICT
+    assert "already in use" in clash.json()["detail"]
+
+
+def test_the_operators_edit_is_audited(clinics: SimpleNamespace) -> None:
+    """Every mutation on this router writes its trail before the commit."""
+    operator = clinics.client("operator@clinicq.example")
+    operator.put(
+        f"/api/v1/sites/{clinics.site_a}/directory", json=_payload(name="Corrected")
+    )
+
+    with clinics.session() as db:
+        rows = list(
+            db.execute(
+                select(AuditEvent).where(AuditEvent.entity_id == clinics.site_a)
+            ).scalars()
+        )
+
+    assert any("directory entry" in (row.context or "") for row in rows)
+    assert all(row.actor for row in rows)

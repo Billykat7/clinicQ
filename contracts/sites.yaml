@@ -294,6 +294,44 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
               example: { detail: "Say what is wrong, or what more is needed. The person who submitted this clinic is shown exactly what you write here." }
 
+  /sites/{site_id}/directory:
+    put:
+      tags: [sites]
+      operationId: sitesUpdateDirectoryEntry
+      summary: Correct a clinic's directory entry
+      description: |
+        The operator's edit, at `business` tier on `sites` and deliberately **not** behind the site
+        guard — the same shape as creating and removing a clinic, and for the same reason: a
+        platform admin is assigned to no clinic (Issue 19), and the guard's cross-site escape hatch
+        covers **reads only**, so a cross-site write is refused outright.
+
+        Without it an operator could create a clinic and remove one and never correct a typed
+        address in between (Issue 222). The same fields and the same writer as
+        `PUT /sites/{site_id}`; `status` is untouched by either.
+      parameters:
+        - $ref: "#/components/parameters/SiteId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SiteIn" }
+      responses:
+        "200":
+          description: The clinic, corrected.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SiteOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Another clinic already holds that slug.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "The slug 'zola-clinic' is already in use." }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
   /sites/{site_id}/onboarding:
     get:
       tags: [sites]
@@ -342,7 +380,10 @@ paths:
       tags: [sites]
       operationId: sitesUpdate
       summary: Replace a clinic's editable profile
-      description: The clinic manager's. `status` and `display_mode` are not editable here.
+      description: |
+        The clinic manager's, behind the site guard, which is what keeps them to their own clinic.
+        `status` and `display_mode` are not editable here. A platform admin is assigned to no
+        clinic, so this route 404s them: theirs is `PUT /sites/{site_id}/directory`.
       requestBody:
         required: true
         content:
