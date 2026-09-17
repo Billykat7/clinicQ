@@ -3,8 +3,8 @@
 Every page here is one clinic's, at ``/dashboard/sites/{site_id}/…``, and opens through
 :func:`open_clinic_page`, which applies the rules in the order that keeps each answer honest:
 
-1. **Signed in?** A signed-out visitor is sent to sign in with the page as ``next``, and lands back on
-   it afterwards (``login-modal.js`` follows ``next`` when it is a local path).
+1. **Signed in?** A signed-out visitor is redirected to ``/signin`` with the page as ``next``, and
+   lands back on it afterwards (Issue 231: a page of its own, checked to be a same-origin path).
 2. **Your clinic?** A clinic the caller holds no role at renders the not-found page, the same as an id
    that does not exist, so a status code cannot confirm another clinic's id (non-negotiable 3).
 3. **Your screen?** The page's gate, evaluated with the roles held **at this clinic**: a caller who

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{#- The sign-in layout (Issue 231): the frame every auth page sits in — `/signin`, `/signup`,
+    `/forgot-password`, `/reset-password`.
+
+    **These are pages now, not a dialog.** Signing in used to happen in a modal laid over whatever
+    page you were on: no address of its own, nothing to link to or bookmark, no back button, four
+    screens swapped by JavaScript inside one `<div>`, and a password-reset link that had to open
+    the *home* page with `?resetToken=…` in the address bar. Each step is now a URL a person can be
+    sent to, return to and reload.
+
+    It wears the front door's clothes — `landing.css` and the shared `lp_header` / `lp_footer`, like
+    `/register-clinic` — because that is where someone signing in has come from, and the header and
+    footer are the way back out. A fourth layout rather than a page that extends `base.html`
+    directly: every page reaches its layout, and this one is a layout.
+
+    Pages fill `auth_title`, `auth_heading`, `auth_lede` and `content`. Context comes from
+    `public_page_context`, which takes no database session of its own, so these pages still render
+    when the database is unavailable — a sign-in page that is down when the database is down tells
+    nobody anything. -#}
+
+{% block title %}{% block auth_title %}Sign in{% endblock %} · {{ app_name }}{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="/static/css/landing.css">
+{% endblock %}
+
+{% block layout_head %}
+  <meta name="description" content="{% block auth_description %}Sign in to {{ app_name }}.{% endblock %}">
+  {# A sign-in page has nothing worth indexing and everything worth keeping out of a search result. #}
+  <meta name="robots" content="noindex, nofollow">
+  <script src="/static/js/site.js" defer></script>
+  <script src="/static/js/landing.js" defer></script>
+  <script src="/static/js/auth-pages.js" defer></script>
+{% endblock %}
+
+{% block body_class %}layout-auth{% endblock %}
+
+{% block body %}
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  {% include "web/partials/lp_header.html" %}
+
+  <main id="main" class="lp-main">
+    <div class="lp-wrap lp-auth-wrap">
+      <section class="lp-auth-card" aria-labelledby="auth-heading">
+        <h1 id="auth-heading">{% block auth_heading %}{{ self.auth_title() }}{% endblock %}</h1>
+        {% block auth_lede %}{% endblock %}
+
+        {# Why the person is here, when a redirect sent them. Server-rendered, so it survives a
+           reload and needs no JavaScript to appear — and the sentence is written in the route, so
+           a crafted link cannot put words on the page. #}
+        {% if notice %}<p class="lp-auth-notice" role="status">{{ notice }}</p>{% endif %}
+
+        {% block content %}{% endblock %}
+      </section>
+    </div>
+  </main>
+
+  {% include "web/partials/lp_footer.html" %}
+{% endblock %}

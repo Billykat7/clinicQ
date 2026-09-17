@@ -47,7 +47,14 @@ FONTS = REPO_ROOT / "src" / "static" / "fonts"
 TOKEN_ONLY_STYLESHEETS = ("components.css", "layouts.css", "dev.css", "discover.css")
 
 #: The three layouts, and the only templates allowed to extend base.html directly.
-LAYOUTS = ("layouts/patient.html", "layouts/dashboard.html", "layouts/board.html")
+LAYOUTS = (
+    "layouts/patient.html",
+    "layouts/dashboard.html",
+    "layouts/board.html",
+    # Issue 231: the sign-in pages. A layout, not a page extending base.html directly, so
+    # the rule below stays the one rule it has always been.
+    "layouts/auth.html",
+)
 
 #: A reference to another host: an absolute or protocol-relative URL in the attributes that load
 #: code, style or fonts, or in a CSS url()/@import.

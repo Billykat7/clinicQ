@@ -250,6 +250,13 @@ def test_an_expired_session_asks_to_sign_in_again_and_then_finishes_the_action(
     walk_ins: Callable[[str, int], list[str]],
     signed_in: Callable[..., Any],
 ) -> None:
+    """Issue 231: signing in again is a trip to ``/signin``, not a dialog over the board.
+
+    What has to survive the trip is the held action. The outbox keeps its queue in this tab's
+    session storage and marks it ready to send again on the way back, so the round trip finishes
+    the work the same way the modal did — and the "unsent work" prompt must not fire on the way
+    there, or the redirect would stop at a browser dialog.
+    """
     walk_ins(fresh_day.triage, 1)
     with fresh_day.session() as db:
         call_next(
@@ -278,15 +285,17 @@ def test_an_expired_session_asks_to_sign_in_again_and_then_finishes_the_action(
         '.with-staff-ticket[data-number="T001"] button', has_text="Start"
     ).click()
 
-    modal = page.locator("#login-modal-backdrop")
-    expect(modal).to_have_class("modal-backdrop open", timeout=10_000)
-    expect(page.locator("#signin-error")).to_contain_text(
-        "Your session ended. Sign in again to finish: Start for T001."
-    )
+    # The board sends the caller to the sign-in page, saying why and carrying the way back.
+    page.wait_for_url("**/signin?**", timeout=10_000)
+    assert "expired=1" in page.url
+    expect(page.locator(".lp-auth-notice")).to_contain_text("Your session ended")
+
     page.fill("#signin-email", f"desk@{EMAIL_DOMAIN}")
     page.fill("#signin-password", FACTORY_STAFF_PASSWORD)
     page.click("#btn-password-login")
 
+    # Back on the board it came from, with the held action sent.
+    page.wait_for_url(lambda url: "/signin" not in url, timeout=15_000)
     expect(page.locator("#action-outbox")).to_contain_text(
         "Done: Start for T001", timeout=15_000
     )
@@ -294,3 +303,57 @@ def test_an_expired_session_asks_to_sign_in_again_and_then_finishes_the_action(
         "T001": TicketStatus.IN_PROGRESS.value
     }
     _live(page, timeout=20_000)
+
+
+def test_a_session_that_ends_mid_walk_in_keeps_the_form_across_the_sign_in_page(
+    fresh_day: SimpleNamespace,
+    signed_in: Callable[..., Any],
+) -> None:
+    """Issue 231: signing in again is a page, so the walk-in has to survive the round trip.
+
+    The modal this replaced kept the person on the form, so nothing had to be saved. A trip to
+    ``/signin`` would have lost what was typed — and the previous fallback for a page with no
+    sign-in wired up reloaded, which lost it too. The form now writes itself to this tab's session
+    storage before it leaves, **with the idempotency key**, so pressing Enter afterwards asks about
+    the *same* walk-in rather than issuing a second ticket for the same person.
+
+    The consent answer travels with it deliberately. Without it, ``payload()`` would rebuild a
+    different body on the way back, the signature would not match, the resumed submit would take a
+    fresh key, and "the same walk-in" would quietly become a second one.
+    """
+    page = signed_in("desk", f"/dashboard/sites/{fresh_day.site}/walk-in")
+    expect(page.locator("#walkin-name")).to_be_focused()
+
+    page.fill("#walkin-name", "Nomsa Dlamini")
+    page.fill("#walkin-phone", "+27821234567")
+    page.fill("#walkin-reason", "Chest pain since morning")
+    page.check("#walkin-consent")
+
+    # End the session on the server, so the next write comes back 401 exactly as an expired one does.
+    page.evaluate(
+        "() => fetch('/api/v1/auth/logout',"
+        " {method: 'POST', headers: window.BKP.writeHeaders(), credentials: 'same-origin'})"
+    )
+    page.keyboard.press("Enter")
+
+    # Out to the sign-in page, saying why, and carrying the way back.
+    page.wait_for_url("**/signin?**", timeout=10_000)
+    assert "expired=1" in page.url
+    expect(page.locator(".lp-auth-notice")).to_contain_text("Your session ended")
+
+    page.fill("#signin-email", f"desk@{EMAIL_DOMAIN}")
+    page.fill("#signin-password", FACTORY_STAFF_PASSWORD)
+    page.click("#btn-password-login")
+
+    # Back on the walk-in page with every field as it was left, consent included.
+    page.wait_for_url("**/walk-in", timeout=15_000)
+    expect(page.locator("#walkin-name")).to_have_value("Nomsa Dlamini")
+    expect(page.locator("#walkin-phone")).to_have_value("+27821234567")
+    expect(page.locator("#walkin-reason")).to_have_value("Chest pain since morning")
+    expect(page.locator("#walkin-consent")).to_be_checked()
+    expect(page.locator("[data-walkin-msg]")).to_contain_text("Nomsa Dlamini")
+
+    # And one press issues one ticket — the held key, not a second walk-in.
+    page.keyboard.press("Enter")
+    expect(page.locator("[data-result-number]")).to_have_text("T001")
+    expect(page.locator(".walkin-recent-item")).to_have_count(1)

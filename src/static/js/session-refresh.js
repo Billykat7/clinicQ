@@ -154,7 +154,9 @@
     return refreshInFlight;
   }
 
-  // After the person signs in again in place (login-modal.js, Issue 55), the session is alive once more.
+  // After the person signs in again (the `/signin` page, Issue 231), the session is alive once more.
+  // The page that calls this has reloaded by then; it is kept because the dashboard's own scripts
+  // also dispatch `session:renewed` (Issue 55).
   window.BKP = window.BKP || {};
   window.BKP.reviveSession = function () {
     sessionDead = false;

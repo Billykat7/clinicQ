@@ -734,7 +734,7 @@ async def password_forgot(
     token = create_password_reset_token(
         user_id=str(user.id), email=email, password_hash=user.password
     )
-    reset_link = f"{base_url}/?resetToken={quote(token, safe='')}"
+    reset_link = f"{base_url}/reset-password?token={quote(token, safe='')}"
     try:
         # Blocking SMTP send — offload to a thread so it never stalls the event loop.
         await asyncio.to_thread(

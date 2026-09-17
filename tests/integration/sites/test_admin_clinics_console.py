@@ -146,7 +146,7 @@ def test_nobody_signed_in_is_sent_to_sign_in_rather_than_shown_the_directory(
     anonymous = TestClient(clinics.app).get(f"{_CONSOLE}/all", follow_redirects=False)
 
     assert anonymous.status_code == status.HTTP_302_FOUND
-    assert "openSignin=1" in anonymous.headers["location"]
+    assert anonymous.headers["location"].startswith("/signin?next=")
 
 
 # --- what it renders with --------------------------------------------------------------------
