@@ -1,16 +1,16 @@
 # Milestone 15: Clinic Onboarding & Patient Sign-in
 
-> **In short:** A clinic is added and finishes its own setup from one link, and a patient can sign in with an email address as well as a phone number when the deployment switches it on.
+> **In short:** A clinic is added and finishes its own setup from one link, a patient can sign in with an email address as well as a phone number, and the four things using all of that in anger turned up: a CSRF check that locked a browser out, a deploy that could not reach its own host, a sign-in with no address, and a README whose status had stopped being true.
 
 | | |
 |---|---|
 | **Status** | 📋 Planned |
-| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ **89%** (8/9 issues) |
+| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (9/9 issues) |
 | **Sprints** | 15–16 (weeks 29–32) |
 | **Release tag** | `v0.15.0` |
 | **Primary owner** | A, Backend Lead · D, Frontend/Clinic |
-| **Who does the work** | A: 2 issues · B: 1 issue · D: 2 issues (see each issue for the backup) |
-| **Issues** | 219–223 (5 issues, about 14 person-days of estimates) |
+| **Who does the work** | A: 3 issues · B: 1 issue · D: 3 issues · E: 2 issues (see each issue for the backup) |
+| **Issues** | 219–223, 229–232 (9 issues, about 19½ person-days of estimates) |
 | **Depends on** | [M3](M3_identity_auth_rbac.md), [M4](M4_clinics_queues_config.md), [M9](M9_notifications_patient_pwa.md) |
 | **Blocks** | The pilot rollout kit ([Issue 106](../ISSUES/M14/ISSUE_106_pilot_rollout_kit.md), M14) |
 
@@ -50,6 +50,16 @@ That is fixed first, because the console and the setup link are built on top of 
 - A single-use clinic setup link and the guided journey behind it: rooms, services, hours, the board,
   the first manager, and submission for verification
 
+Then the four things that using all of that turned up, none of which was in the plan:
+
+- The CSRF check refusing its own user: a browser holding a staff **and** a patient session, and a
+  browser holding a CSRF cookie it cannot echo, both locked out with no way back from the UI
+- A deploy that asked for an address, a key and a `known_hosts` line so it could SSH to the machine
+  its runner was already on — and refused to deploy until all five secrets existed
+- Signing in as a modal with no address: nothing to link to, bookmark, reload or go Back from, and a
+  password-reset email that had to open the home page with the token in the address bar
+- A README whose *Delivery at a glance* had no M15 row at all, and whose Status prose had drifted
+
 ## Issues
 
 | # | Issue | Owner | Estimate | Sprint | Needs first (this milestone) |
@@ -59,6 +69,10 @@ That is fixed first, because the console and the setup link are built on top of 
 | [221](../ISSUES/M15/ISSUE_221_rbac_sites_onboarding.md) | RBAC review: a `sites.onboarding` resource and its grants | A | 2 days | 15 | nothing |
 | [222](../ISSUES/M15/ISSUE_222_admin_clinics_console.md) | The platform admin's clinics console: create, edit, archive | D | 3 days | 15 | [221](../ISSUES/M15/ISSUE_221_rbac_sites_onboarding.md) |
 | [223](../ISSUES/M15/ISSUE_223_clinic_setup_link.md) | The clinic setup link and its guided setup journey | A · D | 4 days | 16 | [221](../ISSUES/M15/ISSUE_221_rbac_sites_onboarding.md), [222](../ISSUES/M15/ISSUE_222_admin_clinics_console.md) |
+| [229](../ISSUES/M15/ISSUE_229_csrf_sign_in_lockout.md) | The CSRF check that locks a browser out of signing in | A | 1 day | 16 | nothing |
+| [230](../ISSUES/M15/ISSUE_230_deploy_on_self_hosted_runner.md) | Deploy from the self-hosted runner, not over SSH | E | 1 day | 16 | nothing |
+| [231](../ISSUES/M15/ISSUE_231_auth_pages_not_modal.md) | Sign in, sign up and reset password on their own pages | D | 3 days | 16 | [229](../ISSUES/M15/ISSUE_229_csrf_sign_in_lockout.md) |
+| [232](../ISSUES/M15/ISSUE_232_readme_status_progress.md) | The README's status, from the milestones and their progress bars | E | ½ day | 16 | [229](../ISSUES/M15/ISSUE_229_csrf_sign_in_lockout.md), [230](../ISSUES/M15/ISSUE_230_deploy_on_self_hosted_runner.md), [231](../ISSUES/M15/ISSUE_231_auth_pages_not_modal.md) |
 
 ## Order of work
 
@@ -72,10 +86,18 @@ flowchart LR
     I221["221: RBAC review: sites.onboarding…"]
     I222["222: The platform admin's clinics…"]
     I223["223: The clinic setup link and…"]
+    I229["229: The CSRF check that locks…"]
+    I230["230: Deploy from the self-hosted…"]
+    I231["231: Sign in, sign up and reset…"]
+    I232["232: The README's status, from…"]
     I219 --> I220
     I221 --> I222
     I221 --> I223
     I222 --> I223
+    I229 --> I231
+    I229 --> I232
+    I230 --> I232
+    I231 --> I232
 ```
 
 **Start here:** [Issue 219](../ISSUES/M15/ISSUE_219_patient_email_sign_in.md), [Issue 221](../ISSUES/M15/ISSUE_221_rbac_sites_onboarding.md).
@@ -102,6 +124,14 @@ Re-derived from the code at the end of the milestone, each against the test or t
 - [ ] **A platform admin creates, corrects and archives a clinic from the browser**, with no `curl`
 - [ ] **A clinic completes its own rooms, services, hours and board from one emailed link**, with no
       account, and submits itself for verification with a complete checklist
+- [ ] **A browser signed in as staff and as a patient at once can write on both sides**, and a
+      leftover CSRF cookie never refuses a sign-in
+- [ ] **A production deploy runs with no Environment secret and no variable set**, on the host's own
+      runner, and says what to create when the deploy directory is not there
+- [ ] **Signing in, signing up and resetting a password each have an address** that can be linked
+      to, reloaded and returned to — and a session that ends mid-action loses no unsent work
+- [ ] **The README's status is the progress bars**, M15 among them, written from GitHub's issue
+      states by `make milestone-progress` and checked by CI
 
 ## Demo at the end of the milestone
 
