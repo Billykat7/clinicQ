@@ -167,6 +167,13 @@ def create_site(db: Session, payload: SiteIn) -> Site:
     The status is not taken from the payload: a clinic becomes visible through the verification
     workflow (Issue 29), never by asking to be.
 
+    It gets the default queue set and services catalogue, **exactly as a clinic that signs itself
+    up does** (:func:`~src.modules.sites.onboarding.submit_registration`). Until Issue 223 the two
+    paths differed: a clinic an operator typed in started with no rooms and no services, so its
+    setup checklist opened on an empty clinic while a self-registered one opened on a working
+    one — a difference nobody chose, and one the person setting the clinic up pays for. Both seeds
+    are idempotent, so this is safe wherever it is called from.
+
     Raises:
         SlugAlreadyUsedError: If another clinic already holds the slug.
     """
@@ -187,6 +194,12 @@ def create_site(db: Session, payload: SiteIn) -> Site:
     )
     db.add(site)
     db.flush()
+    # Imported here rather than at module load: queues' service imports this one.
+    from src.modules.queues.service import create_default_queues
+    from src.modules.sites.catalogue import seed_default_catalogue
+
+    create_default_queues(db, site.id)
+    seed_default_catalogue(db, site.id)
     return site
 
 

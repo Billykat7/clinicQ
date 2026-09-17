@@ -61,7 +61,7 @@ from src.modules.display.router import device_out
 from src.modules.patients.consent import display_preview
 from src.modules.queues.schemas import QueueIn
 from src.modules.queues.service import list_queues
-from src.modules.sites import catalogue, hours_service, service
+from src.modules.sites import catalogue, hours_service, service, setup
 from src.modules.staff import assignments, invitations
 from src.modules.staff.service import list_staff
 from src.web.dashboard.routes import ClinicPage, open_clinic_page, render_clinic_page
@@ -89,6 +89,7 @@ SPANS_ON_FORM: Final = 2
 class SettingsSection(StrEnum):
     """The settings tabs, each its own URL segment under ``/dashboard/sites/{id}/settings/``."""
 
+    SETUP = "setup"
     PROFILE = "profile"
     HOURS = "hours"
     QUEUES = "queues"
@@ -122,6 +123,12 @@ class SettingsTab:
 #: The tabs in the order they appear. Each names the grant its API writes need, except the
 #: waiting-room screen, which keeps Issue 27's read gate so the front desk can see its setting.
 SETTINGS_TABS: Final[tuple[SettingsTab, ...]] = (
+    # First, because it is where a clinic that has just been handed a link starts, and because it
+    # is the only tab that says what the *other* tabs still need (Issue 223). It disappears once
+    # the clinic is verified: there is then nothing left to put forward.
+    SettingsTab(
+        SettingsSection.SETUP, "Setup", "sites.onboarding", PermissionVerb.UPDATE
+    ),
     SettingsTab(
         SettingsSection.PROFILE, "Profile", "sites.profile", PermissionVerb.UPDATE
     ),
@@ -273,6 +280,33 @@ async def clinic_settings(site_id: str, request: Request, db: DbSession) -> Resp
         return opened
     first = open_tabs(opened.shell.nav)[0]
     return RedirectResponse(_settings_href(site_id, first.section), status_code=302)
+
+
+@router.get("/dashboard/sites/{site_id}/settings/setup", response_class=HTMLResponse)
+async def settings_setup(site_id: str, request: Request, db: DbSession) -> Response:
+    """What this clinic still needs before patients see it, and the button that puts it forward.
+
+    Where a clinic lands after following the setup link an operator sent (Issue 223): the link is
+    the staff invitation of Issue 22, issued for ``clinic_manager`` at this clinic, so accepting it
+    created the account and the role that opened this page.
+
+    The checklist is derived from the clinic's own rows on every render
+    (:func:`src.modules.sites.setup.setup_state`), so a step finished on another tab is finished
+    here the moment it is saved — there is nothing to keep in step.
+    """
+    opened = _open_settings(
+        request, db, site_id, SettingsSection.SETUP, "Set up this clinic"
+    )
+    if not isinstance(opened, ClinicPage):
+        return opened
+    site = service.get_site(db, site_id, site_ids=frozenset({site_id}))
+    if site is None:
+        return _not_found_html(request, db)
+    opened.context.update(
+        setup=setup.setup_state(db, site),
+        settings_href=lambda section: _settings_href(site_id, SettingsSection(section)),
+    )
+    return render_clinic_page(request, opened, "dashboard/settings_setup.html")
 
 
 @router.get("/dashboard/sites/{site_id}/settings/profile", response_class=HTMLResponse)

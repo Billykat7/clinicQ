@@ -227,6 +227,36 @@ class Site(Base, TimestampMixin, ActiveMixin, SoftDeleteMixin):
     Off by default: a clinic switches it on when its manager wants patients waiting at home or nearby.
     While off, nobody is asked for a travel time and nobody is sent a "time to leave" alert."""
 
+    # ── Setting the clinic up (Issue 223) ─────────────────────────────────────────────────
+    #
+    # The setup checklist is **derived** from the clinic's own rows — how many rooms it has, whether
+    # it has hours — so a step finished on a settings tab, through the API or on the checklist all
+    # show the same thing and nothing has to be told twice. These three columns are the exceptions,
+    # and each is here because no other row can answer its question:
+    #
+    # * two steps are a **decision**, not a thing that exists. A clinic starts with the operator's
+    #   typed details and with ``display_mode = number_only``; "the clinic looked and said yes" is
+    #   not visible in either, and it is what those steps ask;
+    # * ``setup_completed_at`` is *when the clinic said it was finished*, which is a different
+    #   question from "is everything done" — that one the checklist answers by asking.
+
+    setup_confirmed_details: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    """Whether the clinic has checked the name, address and map point somebody typed for it."""
+    setup_confirmed_board: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    """Whether the clinic has decided what its waiting-room board shows (Issue 27).
+
+    Separate from ``display_mode`` on purpose: the column's default is ``number_only`` and stays
+    that way until somebody chooses otherwise (non-negotiable 4), so it cannot tell a clinic that
+    *chose* to show numbers only from one that has never been asked. This can."""
+    setup_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """When the clinic said its setup was finished and put itself forward (Africa/Johannesburg)."""
+
     kiosk_walk_ins_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )

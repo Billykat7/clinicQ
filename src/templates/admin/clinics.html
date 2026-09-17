@@ -233,10 +233,32 @@
         </div>
       </form>
 
+      {# Sending the setup link (Issue 223). It is Issue 22's staff invitation, issued for
+         `clinic_manager` at this clinic: accepting it creates the account and the role, and lands
+         the person on the clinic's own setup checklist. So the operator adds the clinic and sends
+         one link, and the clinic does the rest. #}
+      {% if can('sites.onboarding', 'update', 'business') %}
+      <div id="cl-setup">
+        <h3>Send the setup link</h3>
+        <p class="hint">Invites whoever runs this clinic as its manager. Following the link creates
+          their account and opens a checklist of what the clinic still needs — its rooms, services,
+          hours and waiting-room screen — and lets them put it forward to be checked.</p>
+        <form class="sign-in-form" id="cl-setup-form" novalidate>
+          <label class="sign-in-label" for="cld-setup-email">Their work email address</label>
+          <input class="sign-in-input" id="cld-setup-email" name="email" type="email"
+                 autocomplete="off" maxlength="254" placeholder="manager@clinic.example">
+          <button class="btn btn-sm" type="submit" id="cl-setup-send">Send the link</button>
+        </form>
+        <p class="msg" id="cld-setup-msg" role="alert"></p>
+        <p class="hint" id="cld-setup-sent"></p>
+      </div>
+      {% endif %}
+
       <div id="cl-links">
         <h3>Elsewhere</h3>
         <ul class="plain">
           <li><a id="cld-link-public" href="#">The clinic's public page</a></li>
+          <li><a id="cld-link-setup" href="#">Its setup checklist</a></li>
           <li><a id="cld-link-dashboard" href="#">Its dashboard settings</a></li>
           <li><a href="/admin/verification/pending">The verification queue</a></li>
         </ul>

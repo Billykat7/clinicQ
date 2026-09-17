@@ -358,6 +358,141 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  # ── Setting a clinic up (Issue 223) ─────────────────────────────────────────────────────
+  /sites/{site_id}/setup-link:
+    post:
+      tags: [sites]
+      operationId: sitesSendSetupLink
+      summary: Send the link that lets a clinic set itself up
+      description: |
+        Invites whoever runs this clinic as its `clinic_manager` and sends them the link. **It is
+        Issue 22's staff invitation** — single use, expiring, and the row rather than the link is
+        the authority. Following it creates their account and their role here, and lands them on
+        the clinic's setup checklist.
+
+        The operator's route: `sites.onboarding` + `update` at `business`, not behind the site
+        guard, for the reason `PUT /sites/{site_id}/directory` is not — a platform admin is
+        assigned to no clinic (Issue 19), so `POST /sites/{site_id}/staff/invitations` 404s them.
+        It can issue exactly one role, at exactly the clinic in the path.
+      parameters:
+        - $ref: "#/components/parameters/SiteId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetupLinkIn" }
+      responses:
+        "201":
+          description: "The link was sent. Never the link itself: it is in the recipient's inbox."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SetupLinkOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: That person already works at this clinic.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/setup:
+    get:
+      tags: [sites]
+      operationId: sitesSetupState
+      summary: What this clinic still needs before patients see it
+      description: |
+        The checklist, derived from the clinic's own rows on every read — its rooms, its services,
+        its hours — so a step finished on a settings tab or through the API is finished here too,
+        with nothing to keep in step.
+
+        `sites.onboarding` at `assigned`: the clinic's own view of its own setup. Another clinic's
+        id is the guard's `404`.
+      parameters:
+        - $ref: "#/components/parameters/SiteId"
+      responses:
+        "200":
+          description: Every step, and what the clinic may do next.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SetupStateOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /sites/{site_id}/setup/details:
+    post:
+      tags: [sites]
+      operationId: sitesSetupConfirmDetails
+      summary: The clinic has checked the details somebody typed for it
+      description: |
+        No body: it means one thing. An operator creates a clinic from what it told them
+        (Issue 222); this records that the clinic has since looked at its own name, address and map
+        point and they are right. Changing any of them is the profile route's job and does not
+        un-confirm this.
+      parameters:
+        - $ref: "#/components/parameters/SiteId"
+      responses:
+        "200":
+          description: The checklist, with that step settled.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SetupStateOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /sites/{site_id}/setup/board:
+    post:
+      tags: [sites]
+      operationId: sitesSetupConfirmBoard
+      summary: The clinic has decided what its waiting-room screen shows
+      description: |
+        `display_mode` is `number_only` until somebody chooses otherwise (non-negotiable 4), so it
+        cannot tell a clinic that **chose** numbers only from one that has never been asked. This
+        says which. It changes no setting; the board's own route does that.
+      parameters:
+        - $ref: "#/components/parameters/SiteId"
+      responses:
+        "200":
+          description: The checklist, with that step settled.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SetupStateOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /sites/{site_id}/setup/submit:
+    post:
+      tags: [sites]
+      operationId: sitesSetupSubmit
+      summary: Put this clinic forward to be checked
+      description: |
+        `draft → pending_verification`: the one move a clinic may make on its own listing, through
+        `onboarding.transition`, the only writer of `status`. The **decision** stays the operator's,
+        at `business` tier (Issue 221), so a clinic can ask and never approve itself.
+
+        Refused `422` with the list of what is still unfinished, rather than silently doing nothing.
+      parameters:
+        - $ref: "#/components/parameters/SiteId"
+      responses:
+        "200":
+          description: The checklist, now waiting for a decision.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SetupStateOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422":
+          description: Something on the checklist is unfinished, or the listing cannot make this move.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { detail: "There is still something to do before this clinic can be checked: Set your opening hours." }
+
   # ── One clinic's profile (Issue 23) ─────────────────────────────────────────────────────
   /sites/{site_id}:
     parameters:
@@ -1974,6 +2109,64 @@ components:
         total: { type: integer, minimum: 0 }
         status: { $ref: "#/components/schemas/SiteStatus" }
         items: { type: array, items: { $ref: "#/components/schemas/VerificationQueueItemOut" } }
+    SetupLinkIn:
+      type: object
+      description: Who to send a clinic's setup link to (Issue 223).
+      required: [email]
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+          description: The work address of whoever runs the clinic. Their account is created from it.
+        phone:
+          type: [string, "null"]
+          description: An optional second channel for the link.
+    SetupLinkOut:
+      type: object
+      description: The setup link that was sent. Never the link itself.
+      required: [invitation_id, email, expires_at]
+      properties:
+        invitation_id: { type: string }
+        email: { type: string }
+        expires_at: { type: string, format: date-time }
+    SetupStepOut:
+      type: object
+      description: One thing a clinic settles before patients should see it (Issue 223).
+      required: [step, title, why, done, detail, tab]
+      properties:
+        step: { type: string, enum: [clinic, rooms, services, hours, board, staff] }
+        title: { type: string }
+        why: { type: string }
+        done: { type: boolean }
+        detail:
+          type: string
+          description: What the clinic has so far, in a few words ("4 rooms", "No hours yet").
+        tab:
+          type: string
+          description: The settings tab that finishes this step.
+    SetupStateOut:
+      type: object
+      description: |
+        A clinic's whole setup (Issue 223), derived from its own rows on every read.
+      required:
+        [site_id, site_name, status, steps, done_count, total_count, complete, can_submit,
+         waiting, completed_at]
+      properties:
+        site_id: { type: string }
+        site_name: { type: string }
+        status: { $ref: "#/components/schemas/SiteStatus" }
+        steps: { type: array, items: { $ref: "#/components/schemas/SetupStepOut" } }
+        done_count: { type: integer, minimum: 0 }
+        total_count: { type: integer, minimum: 0 }
+        complete: { type: boolean }
+        can_submit:
+          type: boolean
+          description: Whether the clinic may put itself forward for checking now.
+        waiting:
+          type: boolean
+          description: Whether it has been submitted and awaits a decision.
+        completed_at: { type: [string, "null"], format: date-time }
     SiteOnboardingOut:
       type: object
       description: |

@@ -65,6 +65,8 @@
     const archive = el('cl-archive');
     if (archive) archive.hidden = on || !current;
     el('cl-links').hidden = on || !current;
+    const setup = el('cl-setup');
+    if (setup) setup.hidden = on || !current;
   }
 
   function fill(data) {
@@ -86,7 +88,14 @@
     el('cld-meta').textContent = `${d.status} · /discover/clinics/${d.slug}`;
     fill(d);
     el('cld-link-public').href = `/discover/clinics/${d.slug}`;
+    el('cld-link-setup').href = `/dashboard/sites/${d.id}/settings/setup`;
     el('cld-link-dashboard').href = `/dashboard/sites/${d.id}/settings/profile`;
+    const setupMsg = el('cld-setup-msg');
+    if (setupMsg) {
+      A.setMsg(setupMsg, '');
+      el('cld-setup-sent').textContent = '';
+      el('cld-setup-email').value = '';
+    }
     A.setMsg(msg, '');
     setEditing(false);
   }
@@ -236,6 +245,39 @@
         return;
       }
       window.location.reload();
+    });
+  }
+
+  /* The setup link (Issue 223): the staff invitation Issue 22 already built, issued for
+     `clinic_manager` at this clinic. The API decides who may invite whom and sends the email; this
+     only asks for the address and shows what it answers. */
+  const setupForm = el('cl-setup-form');
+  if (setupForm) {
+    setupForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!current) return;
+      const email = el('cld-setup-email').value.trim();
+      const message = el('cld-setup-msg');
+      if (!email) {
+        A.setMsg(message, 'Type the address to send it to.', 'error');
+        return;
+      }
+      A.setMsg(message, 'Sending…');
+      /* The operator's route, not the clinic's own staff one: a platform admin is assigned to
+         no clinic (Issue 19), so the guarded invitation answers 404 for them. */
+      const answer = await A.writeJson(
+        'POST',
+        `/api/v1/sites/${current.dataset.id}/setup-link`,
+        { email }
+      );
+      if (!answer.ok) {
+        A.setMsg(message, A.errorText(answer, 'That link could not be sent.'), 'error');
+        return;
+      }
+      A.setMsg(message, `Sent to ${email}.`, 'ok');
+      el('cld-setup-sent').textContent =
+        'It is single use and expires; send another if it is not used in time.';
+      el('cld-setup-email').value = '';
     });
   }
 
