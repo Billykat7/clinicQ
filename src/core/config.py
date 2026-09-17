@@ -1385,6 +1385,22 @@ class Settings(BaseSettings):
     # Discovery (M5). The clinic detail page (Issue 35) shows a "Join the queue" action that is
     # enabled only when joining is possible. It opens the join page (Issue 200): sign in by phone,
     # then the queue. Off by default, so a deployment switches patients' web joins on deliberately.
+    # Patient sign-in (Issue 219). A patient's identity is a mobile number and nothing else
+    # (Issue 17): right for the walk-in population ClinicQ is built for, and no use to a patient
+    # whose number changed, or to anyone testing or demoing the product without a handset and SMS
+    # credit. Off by default, so a deployment offers the second way in deliberately. While off,
+    # /t/ and the join page are exactly what they were, and an `email` body is refused 503
+    # (`patients.otp.email_disabled`), the shape `patients.otp.sms_disabled` already uses.
+    patient_email_sign_in_enabled: bool = Field(
+        default=False,
+        description=(
+            "Let a patient sign in with an email address and an emailed code, beside the phone "
+            "number and its SMS (env: PATIENT_EMAIL_SIGN_IN_ENABLED). A patient who signs in this "
+            "way is a patient like any other: they join queues, hold tickets and open /t/. While "
+            "off, no patient-facing surface offers or accepts an address."
+        ),
+    )
+
     patient_join_enabled: bool = Field(
         default=False,
         description=(

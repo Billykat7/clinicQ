@@ -6,8 +6,9 @@ joins, and lands on their ticket page (Issue 68).
 
 * **The page decides what to show, the API does the rest.** The route renders the clinic, the queues a
   phone may join, the notifications question and the step to start at, as :class:`JoinPage` (tested as
-  data). ``patient-sign-in.js`` and ``patient-join.js`` then call the same endpoints every other client
-  calls: ``/api/v1/patients/otp/request`` and ``/otp/verify`` (Issue 17),
+  data). Whether an email address is offered beside the number is the deployment's
+  (``PATIENT_EMAIL_SIGN_IN_ENABLED``, Issue 219) and is decided here too. ``patient-sign-in.js`` and
+  ``patient-join.js`` then call the same endpoints every other client calls: ``/api/v1/patients/otp/request`` and ``/otp/verify`` (Issue 17),
   ``/api/v1/patients/me/consents/notifications`` (Issue 21) and
   ``/api/v1/clinics/{site_id}/queues/{queue_id}/tickets`` (Issue 40). Every refusal a patient reads is the
   API's own sentence, so the page cannot disagree with the USSD menu about why.
@@ -33,6 +34,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from src.commons.email_address import INVALID_EMAIL_MESSAGE
 from src.commons.enums import ConsentPurpose
 from src.commons.phone import INVALID_PHONE_MESSAGE
 from src.core.config import get_settings
@@ -44,7 +46,7 @@ from src.modules.discovery import profile as profile_service
 from src.modules.discovery.profile import ClinicProfile
 from src.modules.patients.consent import has_consent
 from src.modules.patients.consent_text import CONSENT_WORDING
-from src.modules.patients.schemas import PHONE_NOTICE
+from src.modules.patients.schemas import EMAIL_NOTICE, PHONE_NOTICE
 from src.modules.patients.sessions import signed_in_patient_id
 from src.web.context import public_page_context
 from src.web.discover import (
@@ -83,7 +85,11 @@ class JoinStep(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class SignInView:
-    """The phone-number sign-in both the join page and the installed app's start page show."""
+    """The sign-in both the join page and the installed app's start page show.
+
+    One way in or two, decided by the deployment (Issue 219). With ``email_enabled`` false the page
+    is exactly what it was before that issue: one phone field, no tabs, nothing about an address.
+    """
 
     #: Why the number is asked for, shown before it is typed: the words the code request answers with.
     phone_notice: str
@@ -92,14 +98,22 @@ class SignInView:
     #: What a number that cannot be read is told. The API answers it for most wrong numbers, but one too
     #: short or too long is refused by request validation first, which has no sentence for a patient.
     invalid_phone: str
+    #: Whether an email address is offered beside the number (``PATIENT_EMAIL_SIGN_IN_ENABLED``).
+    email_enabled: bool = False
+    #: Why the address is asked for. The number's promise, with one noun changed.
+    email_notice: str = EMAIL_NOTICE
+    #: What an address that cannot be read is told, for the same reason as ``invalid_phone``.
+    invalid_email: str = INVALID_EMAIL_MESSAGE
 
 
 def sign_in_view() -> SignInView:
     """The sign-in as this deployment is configured."""
+    settings = get_settings()
     return SignInView(
         phone_notice=PHONE_NOTICE,
-        code_length=get_settings().otp_length,
+        code_length=settings.otp_length,
         invalid_phone=INVALID_PHONE_MESSAGE,
+        email_enabled=settings.patient_email_sign_in_enabled,
     )
 
 

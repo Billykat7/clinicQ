@@ -1,7 +1,11 @@
-"""HTTP routes for patient identity (Issue 17): a code by SMS, a session, the patient's own record.
+"""HTTP routes for patient identity (Issues 17, 219): a code, a session, the patient's own record.
 
-``/otp/request`` and ``/otp/verify`` are public: they are how a patient signs in. ``/me`` and
-``/logout`` take the patient's own session through the ``patient`` role's grant on
+``/otp/request`` and ``/otp/verify`` are public: they are how a patient signs in. Each names
+**exactly one** contact — a ``phone``, whose code goes by SMS, or an ``email``, whose code goes by
+email where ``PATIENT_EMAIL_SIGN_IN_ENABLED`` is on. Both, or neither, is a 422 from the schema
+before anything is issued or counted.
+
+``/me`` and ``/logout`` take the patient's own session through the ``patient`` role's grant on
 ``patients.self`` (:func:`src.api.rbac_deps.require_patient`, Issue 18) and act only on the record
 the session names, so they carry no id a caller could change.
 """
@@ -15,6 +19,7 @@ from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
 from src.api.rbac_deps import require_patient
+from src.commons.email_address import mask_email
 from src.commons.enums import ConsentPurpose, OtpVerification, PatientChannel
 from src.commons.phone import mask_phone
 from src.core.client_ip import client_ip_or_unknown
@@ -30,6 +35,10 @@ from src.modules.patients.consent_text import (
     CONSENT_WORDING_VERSION,
 )
 from src.modules.patients.schemas import (
+    EMAIL_CODE_SENT,
+    EMAIL_NOTICE,
+    PHONE_NOTICE,
+    SMS_CODE_SENT,
     ConsentAnswerOut,
     ConsentStateOut,
     ConsentUpdateIn,
@@ -69,13 +78,16 @@ _REJECTED: dict[OtpVerification, str] = {
 
 
 def _out(patient: Patient) -> PatientOut:
-    """The patient as their own session sees them, number masked."""
+    """The patient as their own session sees them, both contacts masked."""
     return PatientOut(
         id=patient.id,
-        # A dependant with no phone of their own (Issue 84) has no number to mask.
+        # A dependant with no phone of their own (Issue 84) has no number to mask; a patient who
+        # signed in with an address (Issue 219) may have neither a number nor ever have had one.
         phone=mask_phone(patient.phone_e164) if patient.phone_e164 else "",
+        email=mask_email(patient.email) if patient.email else "",
         display_name=patient.display_name,
         phone_verified_at=patient.phone_verified_at,
+        email_verified_at=patient.email_verified_at,
         created_at=patient.created_at,
     )
 
@@ -94,16 +106,20 @@ def patients_info() -> dict[str, str]:
     operation_id="patientsOtpRequest",
 )
 def request_code(body: OtpRequestIn, request: Request, db: DbSession) -> OtpRequestOut:
-    """Send a 6-digit sign-in code to a mobile number by SMS.
+    """Send a 6-digit sign-in code to a mobile number by SMS, or to an email address by email.
 
-    The same answer whether or not the number already belongs to a patient; no patient is created
-    until the code is verified. 422 for a number that cannot be read, 429 (with ``Retry-After``)
-    inside the resend cooldown or over the request budget, 503 (``patients.otp.sms_disabled``) while
-    SMS is switched off for the deployment (``SMS_ENABLED``).
+    The same answer whether or not the contact already belongs to a patient; no patient is created
+    until the code is verified. 422 for a contact that cannot be read and for a request naming both
+    or neither, 429 (with ``Retry-After``) inside the resend cooldown or over the request budget,
+    503 while that way in is switched off for the deployment: ``patients.otp.sms_disabled``
+    (``SMS_ENABLED``) or ``patients.otp.email_disabled`` (``PATIENT_EMAIL_SIGN_IN_ENABLED``).
     """
+    ip = client_ip_or_unknown(request)
     try:
-        sent = service.send_code(
-            db, raw_phone=body.phone, ip=client_ip_or_unknown(request)
+        sent = (
+            service.send_email_code(db, raw_email=body.email, ip=ip)
+            if body.email
+            else service.send_code(db, raw_phone=str(body.phone), ip=ip)
         )
     except service.OtpThrottledError as exc:
         raise HTTPException(
@@ -112,6 +128,8 @@ def request_code(body: OtpRequestIn, request: Request, db: DbSession) -> OtpRequ
             headers={"Retry-After": str(exc.retry_after_seconds)},
         ) from exc
     return OtpRequestOut(
+        detail=EMAIL_CODE_SENT if body.email else SMS_CODE_SENT,
+        notice=EMAIL_NOTICE if body.email else PHONE_NOTICE,
         expires_in_seconds=sent.expires_in_seconds,
         resend_after_seconds=sent.resend_after_seconds,
     )
@@ -122,9 +140,16 @@ def verify_code(
     body: OtpVerifyIn, db: DbSession, settings: SettingsDep
 ) -> JSONResponse:
     """Verify the code and sign the patient in: their record (created on first verification), and
-    an httpOnly session cookie. 400 for a wrong, expired, used or locked code."""
+    an httpOnly session cookie. 400 for a wrong, expired, used or locked code.
+
+    The contact named here is the one the code was asked for: the store is keyed by ``(kind,
+    identifier)``, so a code issued for an address can never be spent on a number."""
     try:
-        patient = service.verify_code(db, raw_phone=body.phone, code=body.code)
+        patient = (
+            service.verify_email_code(db, raw_email=body.email, code=body.code)
+            if body.email
+            else service.verify_code(db, raw_phone=str(body.phone), code=body.code)
+        )
     except service.OtpRejectedError as exc:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
