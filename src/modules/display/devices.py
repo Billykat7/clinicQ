@@ -17,6 +17,13 @@ member of that clinic) shows nothing: the address is not a credential and cannot
 its open stream ends at its next access check, and its heartbeat tells it to go back to the pairing
 screen.
 
+**A screen the server found itself** (Issue 237) is paired the other way round. Where the code above
+travels from the screen to a person to the dashboard, there the dashboard picks a screen off its own
+network (:mod:`src.modules.display.discovery`), holds a row for it (:func:`start_claimable_device`)
+and sends the code *to* it (:mod:`src.modules.display.casting`); the screen hands the code back
+(:func:`claim_device`) and is given its secret. The same row, the same cookie, the same board — only
+the direction the code travels differs, and with it whether anyone has to read anything off a wall.
+
 **Knowing it is alive.** The board page reports every minute (:func:`record_heartbeat`).
 :func:`watch_devices`, run every minute by the scheduler, alerts the team once when a paired box has
 been silent for ``DISPLAY_DEVICE_SILENT_MINUTES``, naming the box and its clinic, and once more when it
@@ -255,6 +262,133 @@ def pair_device(
     device.last_seen_at = now
     db.flush()
     return device
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimableDevice:
+    """A row held open for a screen the server is about to reach over the network (Issue 237)."""
+
+    device: DisplayDevice
+    #: The one-time code the screen presents to take the row up. Never stored, only its digest.
+    code: str
+
+
+class ClaimNotFoundError(LookupError):
+    """No screen is being waited for with that claim code, or it has expired or been used."""
+
+
+def start_claimable_device(
+    db: Session,
+    access: SiteAccess,
+    *,
+    label: str | None,
+    kind: DisplayDeviceKind = DisplayDeviceKind.BOARD,
+    queue_ids: Collection[str] | None = None,
+    moment: datetime | None = None,
+    settings: Settings | None = None,
+) -> ClaimableDevice:
+    """Hold a row open for a screen the dashboard is about to reach itself (Issue 237).
+
+    The mirror image of :func:`pair_device`. There, a box the clinic already owns shows a code and a
+    manager carries it to the dashboard; here the manager has picked a screen out of a list of what
+    answered on the network (:mod:`src.modules.display.discovery`), so the clinic, the label and the
+    queues are known *before* the screen is contacted and the code travels the other way — to the
+    screen, over the clinic's own network, never through a person.
+
+    The row is the clinic's from this moment (``site_id`` is set) but not yet paired (``paired_at``
+    is ``None``), so :func:`status_of` reports it as ``PAIRING``: it appears in the clinic's list as
+    a screen being set up, and a screen that never answers leaves a visible, expiring row rather
+    than a silent nothing. :func:`purge_unpaired` does not touch it — that sweep is for boxes
+    belonging to no clinic — so an abandoned reservation is removed by the manager, like any screen.
+
+    ``token_hash`` gets a placeholder secret that is generated here and never leaves this function:
+    the column cannot be empty, and the *real* secret is minted by :func:`claim_device` when the
+    screen actually turns up. A reservation is therefore not a credential — nothing can sign in with
+    it — and the code alone is what the screen spends.
+
+    The caller audits and commits.
+
+    Raises:
+        UnknownQueueError: A chosen queue is not this clinic's.
+    """
+    cfg = settings or get_settings()
+    now = moment or now_sast()
+    code = _new_code()
+    device = DisplayDevice(
+        site_id=access.site_id,
+        kind=kind.value,
+        label=(label or "").strip()[:MAX_LABEL_LENGTH] or None,
+        queue_ids=_clinic_queue_ids(db, access, queue_ids),
+        token_hash=hash_refresh_token(secrets.token_urlsafe(DEVICE_SECRET_BYTES)),
+        pairing_code_hash=hash_refresh_token(code),
+        pairing_expires_at=_code_expiry(now, cfg),
+    )
+    db.add(device)
+    db.flush()
+    return ClaimableDevice(device=device, code=code)
+
+
+def _reserved_by_code(db: Session, code: str, moment: datetime) -> DisplayDevice | None:
+    """The row a clinic is holding open under ``code``, if it is still open.
+
+    The counterpart of :func:`_pending_by_code`, and deliberately its opposite on every axis that
+    matters: that one finds a box belonging to **no** clinic (a screen waiting to be claimed by
+    whoever types its code), this one finds a row that already belongs to a clinic and is waiting
+    for its screen. Keeping them apart is what stops a code minted for one purpose being spent on
+    the other.
+    """
+    device = db.execute(
+        select(DisplayDevice).where(
+            DisplayDevice.pairing_code_hash == hash_refresh_token(code),
+            DisplayDevice.site_id.is_not(None),
+            DisplayDevice.paired_at.is_(None),
+            DisplayDevice.revoked_at.is_(None),
+        )
+    ).scalar_one_or_none()
+    if device is None or device.pairing_expires_at is None:
+        return None
+    if stored_sast(device.pairing_expires_at) <= moment:
+        return None
+    return device
+
+
+def claim_device(
+    db: Session,
+    *,
+    code: str,
+    user_agent: str | None,
+    moment: datetime | None = None,
+) -> StartedDevice:
+    """Let the screen presenting ``code`` take up the row its clinic is holding for it (Issue 237).
+
+    Called by the screen itself, not by a person: the code reached it over the clinic's network and
+    it hands it straight back, which is what proves it is the screen that was contacted. In return
+    it gets the secret it will authenticate with from then on — minted **here**, replacing the
+    placeholder :func:`start_claimable_device` wrote, so that a reservation sitting in the database
+    is never a working credential.
+
+    One use only: the code's digest is cleared in the same flush, so a second screen presenting the
+    same code (or the same screen reloading) finds nothing waiting.
+
+    The caller commits.
+
+    Raises:
+        ClaimNotFoundError: The code is unknown, expired, already spent, or its row was removed.
+    """
+    now = moment or now_sast()
+    normalised = normalise_code(code)
+    device = _reserved_by_code(db, normalised, now) if normalised else None
+    if device is None:
+        raise ClaimNotFoundError
+    secret = secrets.token_urlsafe(DEVICE_SECRET_BYTES)
+    device.token_hash = hash_refresh_token(secret)
+    device.user_agent = (user_agent or "")[:200] or None
+    device.paired_at = now
+    device.last_seen_at = now
+    device.pairing_code_hash = None
+    device.pairing_expires_at = None
+    db.flush()
+    return StartedDevice(device=device, secret=secret, code="")
 
 
 def devices_at(db: Session, access: SiteAccess) -> Sequence[DisplayDevice]:

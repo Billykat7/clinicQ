@@ -125,6 +125,12 @@ _READERS: dict[str, Callable[[TestClient, str], tuple[Any, str]]] = {
     # nothing; a check-in tablet is shown one number, its own, and never a board.
     "/display/check-in": _no_board,
     "/display/check-in/state": _no_board,
+    # A screen the server found (Issue 237). Neither carries board data: the receiver page is a
+    # splash that frames the board once it has one, and the claim link spends a code and redirects.
+    # Searched all the same, because "it only frames the board" is exactly the assumption this
+    # sweep exists to stop anyone making on their own say-so.
+    "/display/cast": _no_board,
+    "/display/claim": _no_board,
     "/display/{site_id}": _page,
     "/display/{site_id}/state": _state,
     "/display/{site_id}/stream": _stream,

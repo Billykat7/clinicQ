@@ -8,6 +8,13 @@
 
 {% set can_change = can('sites.display', 'update') %}
 
+{% block head %}
+  {{ super() }}
+  {% if can_change and can_find_screens %}
+  <script src="/static/js/display-screen-finder.js" defer></script>
+  {% endif %}
+{% endblock %}
+
 {% block settings_content %}
 <div class="settings-devices">
   {% if can_change %}
@@ -46,6 +53,37 @@
         <span class="msg" data-api-msg aria-live="polite"></span>
       </div>
     </form>
+  </section>
+  {% endif %}
+
+  {% if can_change and can_find_screens %}
+  {#- Screens this server can find for itself (Issue 237).
+
+      The section renders only where it can work: the search is a question shouted on the *server's*
+      network, so a deployment that does not share a network with the clinic never shows the button
+      (can_find_screens, from SMART_TV_DISCOVERY_ENABLED). Everything it does is a request to the
+      clinic's display-devices API, which checks the grant and records the change like any other. -#}
+  <section class="card" aria-labelledby="find-title" id="screen-finder"
+           data-discover="/api/v1/sites/{{ site.id }}/display-devices/discover"
+           data-connect="/api/v1/sites/{{ site.id }}/display-devices/connect">
+    <h2 id="find-title">Screens on this network</h2>
+    <p class="card-sub">A television with Chromecast built in can be sent the board from here, with no code to carry and no box behind it. It has to be switched on, and on the same network as this server.</p>
+    <div class="form-actions">
+      <button type="button" class="btn" id="find-screens">Search the network</button>
+      <span class="msg" id="find-msg" aria-live="polite"></span>
+    </div>
+    <ul class="screen-list" id="screen-list" hidden></ul>
+    {#- One row per screen, cloned by display-screen-finder.js. Kept in the page as a template so the
+        markup a person sees lives in the template, like every other list on this screen. -#}
+    <template id="screen-row">
+      <li class="screen-row">
+        <div class="screen-what">
+          <strong class="screen-name"></strong>
+          <span class="hint screen-where"></span>
+        </div>
+        <button type="button" class="btn btn-sm screen-send">Send the board</button>
+      </li>
+    </template>
   </section>
   {% endif %}
 

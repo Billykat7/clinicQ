@@ -4,13 +4,13 @@
 
 | | |
 |---|---|
-| **Status** | ✅ Done: issues 56–62 closed with the merge of the Issue 62 pull request, release note [`v0.8.0`](../RELEASES/RELEASE_v0_8_0.md), whose tag follows that merge. Four exit criteria are met; two are met in software and wait for people: the physical five-metre reading (Issues 56, 59) and a fluent speaker's check of each announcement language (Issue 60) |
-| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (7/7 issues) |
+| **Status** | ✅ Done: issues 56–62 closed with the merge of the Issue 62 pull request, release note [`v0.8.0`](../RELEASES/RELEASE_v0_8_0.md), whose tag follows that merge, and Issue 237 (finding a Smart TV on the clinic's network, added after `v0.8.0` for clinics whose television is the computer) with its own. Four exit criteria are met; two are met in software and wait for people: the physical five-metre reading (Issues 56, 59) and a fluent speaker's check of each announcement language (Issue 60) |
+| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (8/8 issues) |
 | **Sprints** | 9 (weeks 17–18), semester 2. The sprint plan spreads its issues over sprints 5–11: some start early against stubs and some are scheduled after this window, which moves the milestone's close (and its tag) to sprint 11 (see the table) |
 | **Release tag** | `v0.8.0` |
 | **Primary owner** | D, Frontend/Clinic · E, DevOps/QA (device provisioning) |
-| **Who does the work** | D: 4 issues · A: 2 issues · E: 1 issue (see each issue for the backup) |
-| **Issues** | 56–62 (7 issues, about 15 person-days of estimates) |
+| **Who does the work** | D: 4 issues · A: 2 issues · E: 2 issues (see each issue for the backup) |
+| **Issues** | 56–62 and 237 (8 issues, about 18 person-days of estimates) |
 | **Depends on** | [M6](M6_queue_engine_core.md), [M7](M7_clinic_dashboard.md) |
 | **Blocks** | [M14](M14_production_pilot_golive.md) pilot |
 
@@ -56,6 +56,7 @@ and audio-announcement requirements.
 | [60](../ISSUES/M8/ISSUE_60_board_audio_tts.md) | Audio chime and multi-language text-to-speech call announcements | D | 2 days | 10 | [57](../ISSUES/M8/ISSUE_57_board_sse_channel.md), [58](../ISSUES/M8/ISSUE_58_board_privacy_rendering.md) |
 | [61](../ISSUES/M8/ISSUE_61_kiosk_device_registry.md) | Kiosk device registry, pairing codes and heartbeat monitoring | E | 2 days | 10 | [56](../ISSUES/M8/ISSUE_56_board_page_kiosk.md) |
 | [62](../ISSUES/M8/ISSUE_62_board_resilience_tests.md) | Board resilience: cached last-known state, stale banner, recovery tests | D | 2 days | 10–11 | [57](../ISSUES/M8/ISSUE_57_board_sse_channel.md), [61](../ISSUES/M8/ISSUE_61_kiosk_device_registry.md) |
+| [237](../ISSUES/M8/ISSUE_237_smart_tv_casting.md) | Find the clinic's Smart TV on the network and send it the board | E | 3 days | 5 | [61](../ISSUES/M8/ISSUE_61_kiosk_device_registry.md) |
 
 ## Order of work
 

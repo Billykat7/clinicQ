@@ -7,6 +7,11 @@ board without anyone touching it, comes back after a power cut, and tells the te
 prepare the box once, before it leaves for the clinic. At the clinic, nobody types an address or a
 password into it: the clinic manager types a six-character code into ClinicQ, and the board appears.
 
+> **The television has Chromecast built in?** There is a second way, with no box behind the TV: the
+> server finds the screen on the clinic's network and sends it the board. It needs the server to be
+> on that network and a one-off registration with Google — see [SMART_TV_SETUP.md](SMART_TV_SETUP.md).
+> The box below is still the way that works with every television, on any network, in every deployment.
+
 **You need:**
 
 - a **Raspberry Pi 4 or 5** (2 GB or more) with its official power supply and a 16 GB+ microSD card, **or**

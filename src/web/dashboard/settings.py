@@ -684,6 +684,10 @@ async def settings_devices(
         status_filter=status.value if status else "",
         status_words={key.value: words for key, words in DEVICE_STATUS_WORDS.items()},
         silent_minutes=get_settings().display_device_silent_minutes,
+        # Whether this deployment can look for screens on its own network (Issue 237). The section
+        # is not rendered at all when it cannot, rather than offering a button that always fails:
+        # a cloud instance shares no network with the clinic and never will.
+        can_find_screens=get_settings().smart_tv_discovery_enabled,
     )
     return render_clinic_page(request, opened, "dashboard/settings_devices.html")
 

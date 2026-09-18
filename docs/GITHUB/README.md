@@ -19,7 +19,7 @@ docs/
     ├── MILESTONES/               # M1 … M15, plus README.md: how to read a milestone
     ├── ISSUES/
     │   ├── README.md             # how to read and pick up an issue, where code goes, open decisions
-    │   ├── M1/  … M15/           # Issues 1–109, 197, 200 and 219–223
+    │   ├── M1/  … M15/           # Issues 1–109, 197, 200, 219–223 and 237
     │   └── BACKLOG/              # deliberately parked, post-capstone
     ├── PR/                       # PR_<N>_DESCRIPTION.md per merged issue
     ├── RELEASES/                 # RELEASE_v<major>_<minor>_<patch>.md
@@ -40,7 +40,7 @@ docs/
 | **[M5: Discovery & Geolocation](MILESTONES/M5_discovery_geolocation.md)** | Nearby search, sector toggle, map, area fallback, snapshot cache, payment filter | 31–38 | Frontend (Patient) | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** ✅ done |
 | **[M6: Queue Engine Core](MILESTONES/M6_queue_engine_core.md)** ⚠️ | Tickets, join, lifecycle, wait estimates, recall/no-show, transfer, priority | 39–47 | Backend Lead | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** ✅ done |
 | **[M7: Clinic Dashboard](MILESTONES/M7_clinic_dashboard.md)** | Front-desk board, call next, walk-in intake, reorder, room view, settings | 48–55 | Frontend (Clinic) | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** ✅ done |
-| **[M8: Waiting-room Display Monitor](MILESTONES/M8_display_monitor.md)** | Kiosk board, SSE, privacy modes, accessibility, audio call-out, device registry | 56–62 | Frontend (Clinic) | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** ✅ done |
+| **[M8: Waiting-room Display Monitor](MILESTONES/M8_display_monitor.md)** | Kiosk board, SSE, privacy modes, accessibility, audio call-out, device registry, Smart TV casting | 56–62, 237 | Frontend (Clinic) | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** ✅ done |
 | **[M9: Notifications & Patient PWA](MILESTONES/M9_notifications_patient_pwa.md)** | Notification service, push, SMS, templates, preferences, ticket page, PWA, QR | 63–71, 200 | Backend (Integrations) | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** ✅ done |
 | **[M10: USSD & WhatsApp Channels](MILESTONES/M10_ussd_whatsapp_channels.md)** | Adapter framework, USSD menu, WhatsApp bot, 5 languages, simulators, parity | 72–79 | Backend (Integrations) | ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ **0%** 📋 planned |
 | **[M11: Appointments, Check-in & Patient Care](MILESTONES/M11_appointments_checkin_patient_care.md)** | Slots, booking, reminders, kiosk check-in, proxy booking, chronic, feedback | 80–87 | Backend Lead | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** ✅ done |
@@ -49,10 +49,10 @@ docs/
 | **[M14: Production, Pilot & Go-live](MILESTONES/M14_production_pilot_golive.md)** | Prod infra, shared S3 layout, backups, monitoring, load test, pilot kit, support, UAT, capstone | 102–109, 197 | DevOps/QA + all | 🟩⬜⬜⬜⬜⬜⬜⬜⬜⬜ **11%** 🚧 in progress |
 | **[M15: Clinic Onboarding & Patient Sign-in](MILESTONES/M15_clinic_onboarding_patient_sign_in.md)** | Patient email sign-in behind a flag, email transport, `sites.onboarding` RBAC, clinics console, clinic setup link, the CSRF lockout, the deploy's own runner, sign-in pages, the README's status | 219–223, 229–232 | Backend Lead + Frontend/Clinic | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** ✅ done |
 
-**Total: 120 tracked issues across M1–M15**, plus 6 parked
+**Total: 121 tracked issues across M1–M15**, plus 6 parked
 [backlog items](ISSUES/BACKLOG/).
 
-**Progress:** 🟩🟩🟩🟩🟩🟩🟩🟩⬜⬜ **75%** (90/120 issues) closed · **11 of 15 milestones done**
+**Progress:** 🟩🟩🟩🟩🟩🟩🟩🟩⬜⬜ **75%** (91/121 issues) closed · **11 of 15 milestones done**
 
 > ⚠️ **M6 is the critical path.** Six of the seven milestones after it are consumers of the queue
 > engine. Anything that delays M6 delays the whole second half of the project, see the

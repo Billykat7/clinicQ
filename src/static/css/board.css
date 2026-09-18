@@ -374,3 +374,17 @@
   padding-left: calc(var(--u) * 5) !important;
 }
 .pair-expiry { font-size: calc(var(--u) * 3); color: var(--kb-muted); }
+
+/* The Cast receiver (Issue 237): the board fills the television, and the splash gets out of its way.
+   A receiver page frames the board rather than navigating to it, so that the receiver keeps running
+   and the Cast session is not dropped out from under a screen that must stay up all day. */
+.cast-receiver { margin: 0; overflow: hidden; }
+.cast-board {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  border: 0;
+  background: var(--kb-bg, #000);
+}
+.cast-board[hidden] { display: none; }

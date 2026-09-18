@@ -16,6 +16,8 @@ console (Issue 29), and reads across clinics on purpose.
 
 from __future__ import annotations
 
+import asyncio
+import functools
 from datetime import datetime
 from typing import Annotated
 
@@ -32,10 +34,12 @@ from src.commons.enums import (
 )
 from src.core.audit import record_audit_event
 from src.core.client_ip import resolve_client_ip
+from src.core.config import Settings, get_settings
 from src.core.site_scope import SiteAccess, require_site_access
 from src.database.models import DisplayDevice
-from src.modules.display import devices
+from src.modules.display import casting, devices, discovery
 from src.modules.display.devices import MAX_LABEL_LENGTH
+from src.modules.display.discovery import CAST_PORT
 
 router = APIRouter(tags=["display"])
 
@@ -48,6 +52,10 @@ DisplayUpdate = Annotated[
 PlatformDirectory = Annotated[
     None, Depends(require("sites", "read", scope=GrantScope.BUSINESS))
 ]
+#: The deployment's own settings, resolved like every other request's. Read through the dependency
+#: rather than by calling ``get_settings()`` inside the handler, so that a deployment (or a test)
+#: that injects its own settings governs whether this server searches its network at all.
+SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 #: Said for a wrong, expired or used code alike, so the answer does not help anyone guess.
 #: How an audit row names each kind of device (Issue 83).
@@ -253,6 +261,190 @@ def revoke(
         )
     db.commit()
     return device_out(device)
+
+
+# --------------------------------------------------------------------------------------
+# Screens the server can find and reach itself (Issue 237)
+# --------------------------------------------------------------------------------------
+
+
+class DiscoveredScreenOut(BaseModel):
+    """One Chromecast-capable screen that answered on the server's network.
+
+    Nothing here is a secret: it is what the screen shouts to anyone on the network who asks. The
+    address comes back with the manager's choice (:class:`ScreenConnectIn`) rather than being kept
+    on the server, because a search is a snapshot of a room, not a record worth storing.
+    """
+
+    uuid: str
+    name: str
+    model: str
+    manufacturer: str
+    address: str
+    port: int
+    suggested_label: str
+
+
+class ScreenScanOut(BaseModel):
+    """What a search of the network found, and a sentence when it found nothing."""
+
+    total: int
+    items: list[DiscoveredScreenOut]
+    #: Why the list is empty, written for the manager. Empty when screens were found.
+    note: str
+    #: Whether the search actually ran; False when the deployment has it switched off.
+    searched: bool
+
+
+class ScreenConnectIn(BaseModel):
+    """The screen a manager picked, and what the board on it should be."""
+
+    address: str = Field(min_length=3, max_length=64)
+    port: int = Field(default=CAST_PORT, ge=1, le=65535)
+    name: str = Field(default="", max_length=120)
+    uuid: str = Field(default="", max_length=120)
+    label: str | None = Field(default=None, max_length=MAX_LABEL_LENGTH)
+    kind: DisplayDeviceKind = DisplayDeviceKind.BOARD
+    queue_ids: list[str] | None = None
+
+
+class ScreenConnectOut(BaseModel):
+    """What happened when the server tried to put the board on the chosen screen."""
+
+    #: Whether the screen answered the server at all.
+    reached: bool
+    #: Whether it was handed the board and started opening it.
+    showing: bool
+    note: str
+    #: The row now held for this screen. It reads as ``pairing`` until the screen takes it up, and
+    #: is a real row either way, so a screen that never answers is visible and removable.
+    device: DisplayDeviceOut
+
+
+#: Hosts that mean "this machine" and therefore mean something different on a television. A screen
+#: told to claim itself at ``localhost`` would ask *itself*, which is nobody.
+_LOOPBACK_HOSTS: frozenset[str] = frozenset({"localhost", "127.0.0.1", "::1", "[::1]"})
+
+
+def _claim_url_for(request: Request) -> str:
+    """The absolute address a screen should hand its claim code back to, or ``""`` for "your own".
+
+    A manager working on the server itself reaches the dashboard at ``localhost``, and a television
+    handed that address would call on itself. In that case nothing is sent and the receiver uses the
+    address it was served from — which is the registered receiver URL, so it is by definition an
+    address the screen could reach.
+    """
+    url = request.url_for("display_claim")
+    if (url.hostname or "").lower() in _LOOPBACK_HOSTS:
+        return ""
+    return str(url)
+
+
+@router.post(
+    "/sites/{site_id}/display-devices/discover",
+    response_model=ScreenScanOut,
+    operation_id="displayDiscoverScreens",
+)
+async def discover_screens(
+    access: DisplayUpdate, settings: SettingsDep
+) -> ScreenScanOut:
+    """Search the **server's** network for Chromecast-capable screens (Issue 237).
+
+    A POST because it is an action with a cost — it holds the network open for several seconds — not
+    a page that may be re-fetched and cached. It needs the grant that pairs a screen, because what
+    it returns is the list a manager picks from to take a screen over.
+
+    Run off the event loop: the search listens on a socket for :data:`Settings.smart_tv_discovery_seconds`
+    and would otherwise stall every other request on this worker for that long.
+    """
+    outcome = await asyncio.to_thread(
+        functools.partial(discovery.scan_for_screens, settings=settings)
+    )
+    return ScreenScanOut(
+        total=outcome.found,
+        items=[
+            DiscoveredScreenOut(
+                uuid=screen.uuid,
+                name=screen.name,
+                model=screen.model,
+                manufacturer=screen.manufacturer,
+                address=screen.address,
+                port=screen.port,
+                suggested_label=screen.label_suggestion,
+            )
+            for screen in outcome.screens
+        ],
+        note=outcome.note,
+        searched=outcome.searched,
+    )
+
+
+@router.post(
+    "/sites/{site_id}/display-devices/connect",
+    response_model=ScreenConnectOut,
+    status_code=status.HTTP_201_CREATED,
+    operation_id="displayConnectScreen",
+)
+async def connect_screen(
+    payload: ScreenConnectIn,
+    request: Request,
+    access: DisplayUpdate,
+    db: DbSession,
+    settings: SettingsDep,
+) -> ScreenConnectOut:
+    """Hold a row for the chosen screen and ask it to open this clinic's board (Issue 237).
+
+    The row is created **before** the screen is contacted and kept whatever the screen does, because
+    the two outcomes a manager needs to tell apart — "the TV is off" and "the TV is showing the
+    board" — both leave a screen in the clinic's list, one waiting and one live. A row nobody ever
+    claims expires as a pairing code does and can be removed like any screen.
+
+    Audited either way: taking over a screen in a waiting room is a change to what the public sees,
+    whether or not the screen cooperated.
+    """
+    try:
+        reserved = devices.start_claimable_device(
+            db,
+            access,
+            label=payload.label,
+            kind=payload.kind,
+            queue_ids=payload.queue_ids,
+        )
+    except devices.UnknownQueueError as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "A chosen queue is not one of this clinic's.",
+        ) from exc
+    device = reserved.device
+    outcome = await asyncio.to_thread(
+        casting.send_board_to_screen,
+        discovery.ScreenTarget(
+            address=payload.address,
+            port=payload.port,
+            name=payload.name,
+            uuid=payload.uuid,
+        ),
+        claim_code=reserved.code,
+        board_url=_claim_url_for(request),
+        settings=settings,
+    )
+    _audit(
+        db,
+        request,
+        access,
+        device,
+        (
+            f"{_KIND_WORDS[device.kind_enum]} sent to the screen at {payload.address}: "
+            f"{'opening the board' if outcome.showing else 'not shown (' + outcome.note[:80] + ')'}"
+        ),
+    )
+    db.commit()
+    return ScreenConnectOut(
+        reached=outcome.reached,
+        showing=outcome.showing,
+        note=outcome.note,
+        device=device_out(device),
+    )
 
 
 @router.get(

@@ -139,9 +139,17 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # opener that framed it) cannot share a window reference — closes the reverse-tabnabbing
         # and Spectre-style cross-origin leakage vectors that frame-ancestors alone does not.
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
-        response.headers["Content-Security-Policy"] = build_content_security_policy(
-            request.state.csp_nonce
-        )
+        # The one page allowed its own policy is the Cast receiver (Issue 237): a Chromecast will
+        # not run a receiver that does not load Google's receiver SDK, and that SDK is served only
+        # from ``www.gstatic.com`` — it cannot be vendored under ``/static`` like Leaflet was. Rather
+        # than add a third-party script host to *every* page's policy for the sake of one, the
+        # handler writes the policy it needs and this middleware leaves it alone, exactly as
+        # ``_apply_html_cache_control`` below leaves a handler's own ``Cache-Control`` alone. A
+        # handler that sets no policy — every other route — still gets the strict one.
+        if "Content-Security-Policy" not in response.headers:
+            response.headers["Content-Security-Policy"] = build_content_security_policy(
+                request.state.csp_nonce
+            )
         if request.url.scheme == "https":
             response.headers["Strict-Transport-Security"] = (
                 "max-age=31536000; includeSubDomains; preload"

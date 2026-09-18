@@ -58,6 +58,12 @@ _UNSCOPED_BY_DESIGN: dict[str, str] = {
         "it): the code's digest finds the one row, and pair_device then writes the manager's clinic from "
         "the SiteAccess the site guard resolved (Issue 61)"
     ),
+    "modules/display/devices.py::_reserved_by_code": (
+        "a screen the server reached claiming the row held for it (Issue 237): the screen presents the "
+        "one-time code and holds no role anywhere, so there is no SiteAccess to scope by — the code's "
+        "digest finds the one row, and the clinic on it was written by start_claimable_device from the "
+        "SiteAccess the site guard had already resolved for the manager who chose the screen"
+    ),
     "modules/display/devices.py::_watched": (
         "the display device watch (Issue 61) is a scheduled system job with no caller and no clinic: it "
         "reads every paired box on the platform to find the silent ones, like the recall timer sweep"
