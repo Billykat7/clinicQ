@@ -46,7 +46,9 @@ SMART_TV_DISCOVERY_ENABLED=true
 ```
 
 While it is off, the **Screens on this network** section is not rendered at all — no button that
-could only ever fail. Pair the board with the code on its screen instead.
+could only ever fail. The other two ways in are unaffected: pair the board with the code on its
+screen ([KIOSK_SETUP.md](KIOSK_SETUP.md)), or make an address for the screen to open
+([below](#where-the-address-comes-from)).
 
 Also check the network itself. A guest SSID, a VLAN, or "AP isolation" / "client isolation" on the
 access point will each keep the server and the television from hearing one another even when both say
@@ -156,6 +158,30 @@ https://clinicq.example/display/claim?code=XXXXXX
 
 Opening it in the television's own browser pairs that screen and goes straight to the board. The code
 is spent the instant it is opened, so the address in a history opens nothing afterwards.
+
+### Where the address comes from
+
+**Clinic settings → Display boards → Open the board on the screen itself.** Choose what the device
+is, name it if you like, and press **Make an address**. The page shows the whole address and the code
+inside it, with a **Copy the address** button and how long it has left.
+
+This is the path that needs nothing else to be true. It contacts no screen and searches no network,
+so unlike **Screens on this network** it is offered by every deployment — including a cloud one,
+where finding a clinic's television is impossible and this is the only way in. Reach for it when:
+
+* the television browses the web but will not be cast to;
+* `CAST_RECEIVER_APP_ID` is not registered yet, so a cast reports *reached, but no ClinicQ page to
+  open* — the **Screens on this network** section offers the same address there, under the failure,
+  because the row it held is still waiting for a screen;
+* you are **trying the board out without a television at all**: open the address in a second browser
+  window, or another browser, and that window becomes the clinic's board. This works against a
+  laptop on `localhost`, which nothing else here does.
+
+The address is a credential for as long as it lives, so treat it like the code it contains: it is
+shown only when asked for, it is single-use, and whoever opens it first becomes that screen —
+including you, if you open it in the tab you made it in.
+
+To undo a screen made this way, remove it in the list below, exactly like one paired with a code.
 
 ---
 

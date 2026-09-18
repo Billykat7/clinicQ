@@ -1025,6 +1025,43 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
+  /sites/{site_id}/display-devices/claim-link:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    post:
+      tags: [sites]
+      operationId: displayCreateClaimLink
+      summary: Hold a row for a screen and return the address that screen opens
+      description: |
+        The other way round from typing the code a screen displays: here the clinic holds the row
+        and the **screen** is given a one-time address (`sites.display` update). Opening
+        `/display/claim?code=…` on the screen pairs it and goes straight to the board.
+
+        Nothing is contacted and no network is searched, so this works wherever the dashboard does
+        — including a cloud deployment, which can never find a clinic's television, and a laptop on
+        `localhost`. It is the way in for a television that browses the web but will not be cast to,
+        for a deployment with no registered Cast receiver application, and for trying the board out
+        in a second browser window with no television at all (`docs/OPS/SMART_TV_SETUP.md`).
+
+        The code is returned because the manager who asked for it is the person this grant already
+        lets pair a screen. It is single-use, spent by whoever opens it first, and expires with the
+        row (`DISPLAY_PAIRING_CODE_MINUTES`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClaimLinkIn" }
+      responses:
+        "201":
+          description: The address a screen opens, and the row now held for it.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClaimLinkOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
   # ── Payment and medical aid (Issue 37) ────────────────────────────────────────────────
   /sites/{site_id}/payment-profile:
     parameters:
@@ -2412,6 +2449,12 @@ components:
       type: string
       enum: [pairing, online, silent, revoked]
       description: Derived, never stored. `silent` is a paired screen not heard from for DISPLAY_DEVICE_SILENT_MINUTES.
+    DisplayDeviceKind:
+      type: string
+      enum: [board, check_in]
+      description: |
+        What the device is. `board` shows the waiting-room board; `check_in` is the tablet at the
+        door that takes patients' arrivals and never shows the board (Issue 83).
     DisplayDevicePairIn:
       type: object
       required: [pairing_code]
@@ -2459,6 +2502,30 @@ components:
         reached: { type: boolean, description: Whether the screen answered the server at all. }
         showing: { type: boolean, description: Whether it was handed the board and started opening it. }
         note: { type: string, description: A sentence for the manager, whatever the outcome. }
+        device: { $ref: "#/components/schemas/DisplayDeviceOut" }
+        claim_url:
+          type: string
+          description: |
+            The address to open on the screen's own browser — **only when `showing` is false**, and
+            empty otherwise. The row is held either way, so a cast that could not show the board
+            still has a way out; a screen that took the board has already spent its code.
+        claim_code:
+          type: string
+          description: The code inside `claim_url`, on the same terms. Empty when `showing`.
+    ClaimLinkIn:
+      type: object
+      properties:
+        label: { type: [string, "null"], maxLength: 80 }
+        kind: { $ref: "#/components/schemas/DisplayDeviceKind" }
+        queue_ids: { type: [array, "null"], items: { type: string } }
+      example: { label: "TV in the corridor", kind: "board" }
+    ClaimLinkOut:
+      type: object
+      required: [claim_url, claim_code, expires_at, device]
+      properties:
+        claim_url: { type: string, description: The whole address to open on the screen, code included. }
+        claim_code: { type: string, description: The code on its own, for typing the address by hand. }
+        expires_at: { type: [string, "null"], format: date-time, description: When the code stops working. }
         device: { $ref: "#/components/schemas/DisplayDeviceOut" }
     DisplayDeviceUpdateIn:
       type: object
