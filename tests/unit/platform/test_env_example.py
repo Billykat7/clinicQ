@@ -20,8 +20,17 @@ from src.core.config import setting_env_names
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
-#: The env files git may track: templates, never a filled-in file.
-TRACKED_ENV_FILES = {".env.example", "scripts/cd/setup.env.example"}
+#: The env files git may track: templates, and the non-secret half of each deployed environment.
+#: Never a filled-in file holding a credential. ``deploy/env/*.env`` carries only settings
+#: ``src.core.config.setting_is_secret`` clears, which ``test_deploy_env.py`` enforces key by key;
+#: that is what makes committing them safe, and reviewable configuration is what makes it useful
+#: (deploy/env/README.md).
+TRACKED_ENV_FILES = {
+    ".env.example",
+    "scripts/cd/setup.env.example",
+    "deploy/env/staging.env",
+    "deploy/env/production.env",
+}
 
 
 def _documented() -> list[str]:
@@ -67,7 +76,11 @@ def test_env_example_carries_no_secret_a_deployment_could_use() -> None:
 
 
 def test_no_filled_in_env_file_is_tracked() -> None:
-    """Only templates are in git; a real .env committed once stays in history for good."""
+    """Only templates and the reviewed non-secret half are in git.
+
+    A real .env committed once stays in history for good, which is why this lists what may be
+    tracked rather than what may not.
+    """
     try:
         tracked = subprocess.run(
             ["git", "ls-files", "*.env", "*.env.*", ".env*", "**/.env*"],
