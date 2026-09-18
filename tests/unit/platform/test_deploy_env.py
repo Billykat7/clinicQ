@@ -115,19 +115,39 @@ def test_the_two_environments_do_not_collide_on_one_host(environment: str) -> No
     )
 
 
-def test_the_committed_files_are_the_only_env_files_ever_tracked() -> None:
-    """``deploy/env/*.env`` is the one exception to "no env file is in git" (ENVIRONMENTS.md).
-
-    Every other ``.env*`` is ignored, and a new tracked one is the shape a leak takes.
-    """
-    tracked = subprocess.run(
+def _tracked_env_files() -> set[str]:
+    """Every ``*.env`` / ``.env*`` path git has, as repository-relative posix paths."""
+    listed = subprocess.run(
         ["git", "-C", str(REPO_ROOT), "ls-files", "-z", "*.env", ".env*"],
         capture_output=True,
         text=True,
         check=True,
     ).stdout.split("\0")
+    return set(filter(None, listed))
+
+
+def test_the_committed_half_is_actually_committed(environment: str) -> None:
+    """The file exists on disk *and* git has it.
+
+    Not a formality. ``.gitignore`` carried the virtualenv patterns ``env/`` and ``ENV/``
+    unanchored, and git is case-insensitive on macOS, so ``deploy/env/`` was ignored on a Mac and
+    tracked on Linux -- the deployed configuration would have been committed by CI and invisible
+    to the person editing it. Everything here rests on these two files being in the repository,
+    so that is asserted rather than assumed.
+    """
+    assert f"deploy/env/{environment}.env" in _tracked_env_files(), (
+        f"deploy/env/{environment}.env is not tracked -- check .gitignore "
+        f"(`git check-ignore -v deploy/env/{environment}.env`)"
+    )
+
+
+def test_no_other_env_file_is_ever_tracked() -> None:
+    """``deploy/env/*.env`` is the one exception to "no env file is in git" (ENVIRONMENTS.md).
+
+    Every other ``.env*`` is ignored, and a new tracked one is the shape a leak takes.
+    """
     allowed = {".env.example", "scripts/cd/setup.env.example"} | {
         f"deploy/env/{name}.env" for name in ENVIRONMENTS
     }
-    unexpected = sorted(set(filter(None, tracked)) - allowed)
+    unexpected = sorted(_tracked_env_files() - allowed)
     assert not unexpected, f"env files are tracked that should not be: {unexpected}"
