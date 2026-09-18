@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Status** | ✅ Done: issues 56–62 closed with the merge of the Issue 62 pull request, release note [`v0.8.0`](../RELEASES/RELEASE_v0_8_0.md), whose tag follows that merge, and Issue 237 (finding a Smart TV on the clinic's network, added after `v0.8.0` for clinics whose television is the computer) with its own. Four exit criteria are met; two are met in software and wait for people: the physical five-metre reading (Issues 56, 59) and a fluent speaker's check of each announcement language (Issue 60) |
-| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 **100%** (8/8 issues) |
+| **Status** | 🚧 In progress: issues 56–62 closed with the merge of the Issue 62 pull request, release note [`v0.8.0`](../RELEASES/RELEASE_v0_8_0.md), whose tag follows that merge, and Issue 237 (finding a Smart TV on the clinic's network, added after `v0.8.0` for clinics whose television is the computer) with its own. Reopened for [Issue 240](../ISSUES/M8/ISSUE_240_claim_link_in_the_dashboard.md), which makes Issue 237's claim address reachable from the dashboard. Four exit criteria are met; two are met in software and wait for people: the physical five-metre reading (Issues 56, 59) and a fluent speaker's check of each announcement language (Issue 60) |
+| **Progress** | 🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ **89%** (8/9 issues) |
 | **Sprints** | 9 (weeks 17–18), semester 2. The sprint plan spreads its issues over sprints 5–11: some start early against stubs and some are scheduled after this window, which moves the milestone's close (and its tag) to sprint 11 (see the table) |
 | **Release tag** | `v0.8.0` |
 | **Primary owner** | D, Frontend/Clinic · E, DevOps/QA (device provisioning) |
