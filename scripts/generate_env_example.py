@@ -33,7 +33,9 @@ if str(REPO_ROOT) not in sys.path:
 
 from pydantic.fields import FieldInfo  # noqa: E402 - after the sys.path bootstrap
 
+# One classifier for what counts as a secret, shared with deploy/env/'s guard test.
 from src.core.config import Settings, setting_env_names  # noqa: E402
+from src.core.config import setting_is_secret as is_secret  # noqa: E402
 
 ENV_EXAMPLE = REPO_ROOT / ".env.example"
 
@@ -46,12 +48,6 @@ LOCAL_VALUES: dict[str, str] = {
 
 #: A setting line, active or commented: what the drift test and this script count as documented.
 SETTING_LINE = re.compile(r"^(?:# )?([A-Z][A-Z0-9_]*)=")
-
-#: Words in an env var name that mark it as a credential.
-SECRET_MARKERS = ("SECRET", "PASSWORD", "TOKEN", "_KEY", "KEYS")
-
-#: Credential-looking names that are public by design (handed to the browser).
-PUBLIC_KEY_SUFFIXES = ("_PUBLISHABLE_KEY", "_PUBLIC_KEY")
 
 #: Comment width: the file is read in a terminal and in review diffs.
 WIDTH = 100
@@ -75,13 +71,6 @@ HEADER = """\
 
 #: ``(env: NAME)`` and ``(env: NAME; ALIAS accepted as alias)`` notes, redundant beside the name.
 _ENV_NOTE = re.compile(r"\s*\(env: [^)]*\)")
-
-
-def is_secret(env_name: str) -> bool:
-    """Whether a setting holds a credential, by its name (``JWT_SECRET``, ``SMTP_PASSWORD``…)."""
-    return any(
-        marker in env_name for marker in SECRET_MARKERS
-    ) and not env_name.endswith(PUBLIC_KEY_SUFFIXES)
 
 
 def env_value(value: object) -> str:

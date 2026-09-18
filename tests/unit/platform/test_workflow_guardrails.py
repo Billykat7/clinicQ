@@ -1017,9 +1017,15 @@ def test_the_deploy_directory_comes_only_from_deploy_dir(
 
     settings = steps["The app's settings"]
     settings_run = str(settings["run"])
-    # Either source is enough on its own; only having neither is an error.
-    assert 'if [[ -n "$APP_ENV" ]]' in settings_run
+    # The settings are composed from their two halves, never pasted in from one GitHub secret:
+    # APP_ENV is gone (write-only, unversioned, and against GitHub's 48 KB/64 KB limits).
+    assert "compose-env.sh" in settings_run
+    assert "APP_ENV" not in settings_run and "APP_ENV" not in str(
+        settings.get("env", {})
+    )
+    # A host still running on its own .env keeps deploying while the secrets are moved across.
     assert 'elif [[ -s "$DEPLOY_DIR/.env" ]]' in settings_run
+    assert 'chmod 600 "$DEPLOY_DIR/.env"' in settings_run
 
 
 #: Merged pull-request records may still name a host path: they are an account of what shipped,

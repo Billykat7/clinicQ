@@ -6,7 +6,7 @@ import json
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, ClassVar, NamedTuple
+from typing import Annotated, ClassVar, Final, NamedTuple
 
 from pydantic import AliasChoices, Field, PrivateAttr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -1945,6 +1945,90 @@ def setting_env_names() -> dict[str, tuple[str, ...]]:
         else:
             names[name] = (name.upper(),)
     return names
+
+
+#: Words in a setting's env-var name that mean the value is a credential.
+SECRET_NAME_MARKERS: Final = (
+    "SECRET",
+    "PASSWORD",
+    "TOKEN",
+    "_KEY",
+    "KEYS",
+    "CREDENTIAL",
+)
+
+#: Credential-looking names that are public by design: the browser is given these, and a cookie's
+#: name is not the cookie's value.
+PUBLIC_NAME_SUFFIXES: Final = ("_PUBLISHABLE_KEY", "_PUBLIC_KEY", "_COOKIE_NAME")
+
+#: Settings whose names carry no marker but whose values embed a credential anyway. A connection
+#: URL hides a password in its userinfo, a DSN hides a project key, an SMTP username is half of a
+#: login, and a webhook URL is a capability to post into someone's channel. Missing one of these
+#: would publish it, so the list is explicit rather than clever.
+CREDENTIAL_BEARING_SETTINGS: Final = frozenset(
+    {
+        "DATABASE_URL",
+        "DATABASE_URL_TEST",
+        "REDIS_URL",
+        "SENTRY_DSN",
+        "SMTP_USER",
+        "SMTP_SUPPORT_USER",
+        "TEAM_WEBHOOK_URL",
+        "AWS_ACCESS_KEY_ID",
+    }
+)
+
+
+@lru_cache
+def secret_setting_names() -> frozenset[str]:
+    """Every env-var name whose value is a credential, and so may never be committed.
+
+    A credential is a **string**: a setting the class types as a bool, an int or a float cannot
+    hold one, which is what tells ``REFRESH_TOKEN_EXPIRE_DAYS`` and
+    ``PASSWORD_LOGIN_RATE_LIMIT_PER_IP`` -- policy knobs that merely contain a marker word -- from
+    ``JWT_SECRET``. On top of that: a marker word in the name, or membership of
+    :data:`CREDENTIAL_BEARING_SETTINGS` for the values whose names give no hint.
+
+    One classifier, so the generator that writes ``.env.example``, the per-environment files under
+    ``deploy/env/`` and the test that guards them cannot disagree about what a secret is. It errs
+    towards *secret*: a setting wrongly called one is merely inconvenient to change, and the
+    converse is a leak.
+    """
+    secrets: set[str] = set()
+    for field_name, names in setting_env_names().items():
+        annotation = Settings.model_fields[field_name].annotation
+        if annotation in (bool, int, float):
+            continue
+        for name in names:
+            if name.endswith(PUBLIC_NAME_SUFFIXES):
+                continue
+            if name in CREDENTIAL_BEARING_SETTINGS or any(
+                marker in name for marker in SECRET_NAME_MARKERS
+            ):
+                secrets.update(names)
+                break
+    return frozenset(secrets)
+
+
+def setting_is_secret(env_name: str) -> bool:
+    """Whether the value of this env-var name is a credential, and so may never be committed.
+
+    For a name the class knows, the typed answer of :func:`secret_setting_names`. For any other
+    key an env file may carry -- the compose and deploy keys (``IMAGE``, ``APP_PORT``), and the
+    platform-wide keys ClinicQ does not read (``OAUTH_GOOGLE_CLIENT_SECRET``) -- the name rule
+    alone, because there is no field to ask about the type. Callers pass every key in a file, not
+    only the settings, so a credential that is not a setting is still caught.
+    """
+    name = env_name.upper()
+    if name in secret_setting_names():
+        return True
+    if name in {alias for names in setting_env_names().values() for alias in names}:
+        return False  # a known setting the typed rule cleared
+    if name.endswith(PUBLIC_NAME_SUFFIXES):
+        return False
+    return name in CREDENTIAL_BEARING_SETTINGS or any(
+        marker in name for marker in SECRET_NAME_MARKERS
+    )
 
 
 @lru_cache
