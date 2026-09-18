@@ -20,14 +20,16 @@
 #   DOMAIN=clinicq.bkatalayi.com
 #   PROJECT_SLUG=clinicq
 #   TRUST_PROXY_HEADERS=true
-#   GATEWAY_COMPOSE_DIR=/opt/btk/gateway   # gateway deploy root; source of the edge cert
-#                                          # mount below (the canonical env writer sets it).
+#   GATEWAY_COMPOSE_DIR=<gateway deploy root>  # source of the edge cert mount below (the
+#                                              # canonical env writer sets it). No default: an
+#                                              # unset value fails the deploy instead of mounting
+#                                              # a path nobody chose.
 #
-# Deploy by hand (on the server, /opt/btk/clinicq), which is what deploy.sh does step by step:
+# Deploy by hand (on the server, in $DEPLOY_DIR), which is what deploy.sh does step by step:
 #   DEPLOY_ENV=production ./deploy.sh preflight ghcr.io/billykat7/clinicq:0.2.0 production
 #
 # Lint before deploy:
-#   /opt/btk/gateway/scripts/cd/lint-product-compose.sh infra/docker/docker-compose.prod.yml
+#   "$GATEWAY_COMPOSE_DIR/scripts/cd/lint-product-compose.sh" infra/docker/docker-compose.prod.yml
 #
 # See docs/CICD/CICD-PIPELINES.md and infra docs/ARCHITECTURE/project-onboarding-runbook.md
 
@@ -55,12 +57,12 @@ services:
     # edge PEMs itself). Same source the edge nginx bind-mounts and renders as
     # ssl_certificate: <gateway>/infra/nginx/certs/<FQDN>/fullchain.pem. GATEWAY_COMPOSE_DIR
     # is the gateway deploy root, written into this product's .env by the canonical env
-    # writer (falls back to the standard /opt/btk/gateway layout). Only the PUBLIC
+    # writer; it has no default here, so a missing value stops the deploy. Only the PUBLIC
     # fullchain.pem for THIS domain is mounted — never a private key, never a sibling's
     # cert. Before the FQDN's cert is first issued the file is absent; the probe then just
     # omits the cert block (health is unaffected).
     volumes:
-      - ${GATEWAY_COMPOSE_DIR:-/opt/btk/gateway}/infra/nginx/certs/${DOMAIN}/fullchain.pem:/etc/edge-cert/fullchain.pem:ro
+      - ${GATEWAY_COMPOSE_DIR:?Set GATEWAY_COMPOSE_DIR in .env to the gateway deploy root}/infra/nginx/certs/${DOMAIN}/fullchain.pem:/etc/edge-cert/fullchain.pem:ro
     environment:
       TLS_CERT_PATH: /etc/edge-cert/fullchain.pem
     ports:

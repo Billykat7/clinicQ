@@ -15,9 +15,10 @@ failed checks a minute apart.
    "resolved" message and stop here.
 2. **What changed?** The channel shows the last deploy. If one ran in the last hour, roll it back
    (step 5) before you investigate anything.
-3. **On the host:** `cd /opt/btk/clinicq && export DEPLOY_ENV=production` (staging:
-   `/opt/btk/clinicq-staging`, `DEPLOY_ENV=staging`), then `./deploy.sh status`. It shows what should
-   be serving.
+3. **On the host:** `cd "$DEPLOY_DIR" && export DEPLOY_ENV=production` (staging: that
+   environment's own `DEPLOY_DIR`, `DEPLOY_ENV=staging`), then `./deploy.sh status`. It shows what
+   should be serving. `DEPLOY_DIR` is the variable on the environment's GitHub Environment
+   (**Settings → Environments**); the last deploy's run log names the directory it used.
 4. **Container stopped or crashing?**
    `docker compose -f docker-compose.prod.yml --project-directory . -p btk-clinicq ps`, then `… logs --tail 100 app`.
    To start it again as it was: `IMAGE=$(cat .deploy/current) docker compose -f docker-compose.prod.yml --project-directory . -p btk-clinicq up -d app`.

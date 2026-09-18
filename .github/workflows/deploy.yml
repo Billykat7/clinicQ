@@ -8,7 +8,7 @@
 # **The runner is the host.** ClinicQ runs on the BTK platform server, which hosts its own GitHub
 # Actions runner (labels `self-hosted, Linux, X64, clinicq, infra`), so this workflow runs *on the
 # machine it is deploying to*. There is nothing to SSH into and no key to hold: the steps below are
-# the same commands a person would type in `/opt/btk/clinicq`. That is the shape the other BTK
+# the same commands a person would type in the deploy directory. That is the shape the other BTK
 # products use (`Billykat7/infra`'s `cd-product.yml`); ClinicQ keeps its own sequence rather than
 # calling that one, because its sequence runs the migrations before any traffic and smoke-tests a
 # candidate on a side port first, and because `write-prod-env.sh` there knows a shared key list that
@@ -28,16 +28,18 @@
 #
 # **What has to be configured** (docs/CICD/ENVIRONMENTS.md):
 #
-#   * nothing, on a runner laid out by `btk-platform-layout.sh`. The deploy directory defaults to
-#     `/opt/btk/clinicq` (`-staging` for staging) and the app's settings are the `.env` already in
-#     it, maintained on the host.
-#   * `DEPLOY_DIR` (an Environment *variable*) overrides that directory.
+#   * `DEPLOY_DIR` (an Environment *variable*): the absolute directory on this runner that holds
+#     this environment. It is the only required setting, and the only place the host's layout is
+#     written down -- deliberately not in this repository, which is public. The app's settings are
+#     the `.env` already in that directory, maintained on the host.
+#     (`btk-platform-layout.sh` in `Billykat7/infra` is what creates the directory.)
 #   * `APP_ENV` (an Environment *secret*, the whole .env) replaces the host's `.env` on every
 #     deploy, for a team that would rather keep the settings in GitHub. Optional: without it the
 #     file on the host is used and never touched.
 #   * `TEAM_WEBHOOK_URL` (optional) posts the result to the team channel.
 #
-# Until the deploy directory exists the deploy says exactly what to do and changes nothing.
+# Until `DEPLOY_DIR` is set and the directory exists, the deploy says exactly what to do, changes
+# nothing and succeeds.
 
 name: Deploy
 
@@ -91,6 +93,13 @@ jobs:
       ENVIRONMENT: ${{ inputs.environment }}
       ROLLBACK: ${{ inputs.rollback }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      # Where this environment lives on the runner. A *secret* is the right kind on a public
+      # repository -- Actions logs are world-readable, and GitHub masks secrets but not variables.
+      # A variable still works (the next step masks the value itself either way); the legacy
+      # PRODUCTION_DEPLOY_PATH is accepted verbatim so nothing has to be renamed to deploy.
+      DEPLOY_DIR: >-
+        ${{ secrets.DEPLOY_DIR || vars.DEPLOY_DIR
+         || secrets.PRODUCTION_DEPLOY_PATH || vars.PRODUCTION_DEPLOY_PATH }}
     steps:
       - name: Check out the deploy scripts
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -112,40 +121,45 @@ jobs:
           echo "image=$image" >> "$GITHUB_OUTPUT"
           echo "### $ENVIRONMENT ← \`$image\`" >> "$GITHUB_STEP_SUMMARY"
 
-      # Where on this host the environment lives. The platform layout puts each product beside the
-      # gateway (/opt/btk/<slug>), so the default needs no configuration at all; DEPLOY_DIR and
-      # PRODUCTION_DEPLOY_PATH override it for a host laid out differently.
+      # Whether this environment is provisioned, and nothing else: the directory itself stays in
+      # $DEPLOY_DIR, never in a step output and never in a log line. Each Environment names its own
+      # directory, so this repository -- which is public -- holds no path on anybody's server, and
+      # a host laid out differently needs no change here.
       - name: Where this environment lives
         id: target
-        env:
-          DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
-          PRODUCTION_DEPLOY_PATH: ${{ vars.PRODUCTION_DEPLOY_PATH || secrets.PRODUCTION_DEPLOY_PATH }}
         run: |
-          suffix=""
-          [[ "$ENVIRONMENT" == "staging" ]] && suffix="-staging"
-          dir="$DEPLOY_DIR"
-          if [[ -z "$dir" && -n "$PRODUCTION_DEPLOY_PATH" ]]; then
-            dir="$(dirname "${PRODUCTION_DEPLOY_PATH%/}")/clinicq$suffix"
+          # Mask it whatever it came from, so a DEPLOY_DIR kept as a variable is not published by
+          # an error message, a `set -x`, or a stack trace later in the job.
+          [[ -n "$DEPLOY_DIR" ]] && echo "::add-mask::${DEPLOY_DIR%/}"
+          dir="${DEPLOY_DIR%/}"
+          if [[ -z "$dir" ]]; then
+            echo "provisioned=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=$ENVIRONMENT has no DEPLOY_DIR::nothing was deployed (docs/CICD/RUNBOOK_DEPLOY.md)"
+            {
+              echo "**Not provisioned:** the \`$ENVIRONMENT\` Environment has no \`DEPLOY_DIR\`, so nothing was deployed."
+              echo
+              echo "Set the \`DEPLOY_DIR\` **variable** on **Settings → Environments → $ENVIRONMENT**"
+              echo "to this runner's absolute deploy directory for $ENVIRONMENT."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
-          dir="${dir:-/opt/btk/clinicq$suffix}"
           if [[ "$dir" != /* ]]; then
-            echo "::error title=DEPLOY_DIR must be absolute::got '$dir'"
+            echo "::error title=DEPLOY_DIR must be absolute::got a relative path"
             exit 1
           fi
           if [[ ! -d "$dir" ]]; then
             echo "provisioned=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=$ENVIRONMENT not provisioned::$dir does not exist on this runner; nothing was deployed (docs/CICD/RUNBOOK_DEPLOY.md)"
+            echo "::notice title=$ENVIRONMENT not provisioned::the DEPLOY_DIR directory does not exist on this runner; nothing was deployed (docs/CICD/RUNBOOK_DEPLOY.md)"
             {
-              echo "**Not provisioned:** \`$dir\` does not exist on this runner, so nothing was deployed."
+              echo "**Not provisioned:** the \`$ENVIRONMENT\` \`DEPLOY_DIR\` does not exist on this runner, so nothing was deployed."
               echo
-              echo "Create it once (\`mkdir -p $dir\`, put the app's \`.env\` in it), or set the"
-              echo "\`DEPLOY_DIR\` variable on the \`$ENVIRONMENT\` Environment to where it does live."
+              echo "Create it once (\`mkdir -p\` it and put the app's \`.env\` in it), or point"
+              echo "\`DEPLOY_DIR\` at where this environment does live."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           echo "provisioned=true" >> "$GITHUB_OUTPUT"
-          echo "dir=$dir" >> "$GITHUB_OUTPUT"
-          echo "Deploy directory: \`$dir\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deploy directory: set by \`DEPLOY_DIR\` on the \`$ENVIRONMENT\` Environment." >> "$GITHUB_STEP_SUMMARY"
 
       # Pulling the image is the deploy script's job (pre-flight), but the runner has to be able to
       # read the package first. GITHUB_TOKEN can, for this repository's own package.
@@ -158,8 +172,6 @@ jobs:
 
       - name: Copy the compose file and the deploy scripts into place
         if: steps.target.outputs.provisioned == 'true'
-        env:
-          DEPLOY_DIR: ${{ steps.target.outputs.dir }}
         run: |
           install -m 644 infra/docker/docker-compose.prod.yml "$DEPLOY_DIR/"
           install -m 755 scripts/cd/deploy.sh scripts/cd/prune-old-app-images.sh "$DEPLOY_DIR/"
@@ -171,7 +183,6 @@ jobs:
         if: steps.target.outputs.provisioned == 'true'
         env:
           APP_ENV: ${{ secrets.APP_ENV }}
-          DEPLOY_DIR: ${{ steps.target.outputs.dir }}
         run: |
           if [[ -n "$APP_ENV" ]]; then
             printf '%s\n' "$APP_ENV" | (umask 077 && cat > "$DEPLOY_DIR/.env")
@@ -186,38 +197,34 @@ jobs:
 
       - name: Pre-flight (pull the image, check the settings with its own rules)
         if: steps.target.outputs.provisioned == 'true'
-        working-directory: ${{ steps.target.outputs.dir }}
         env:
           DEPLOY_ENV: ${{ inputs.environment }}
           IMAGE: ${{ steps.release.outputs.image }}
-        run: ./deploy.sh preflight "$IMAGE" "$ENVIRONMENT"
+        run: cd "$DEPLOY_DIR" && ./deploy.sh preflight "$IMAGE" "$ENVIRONMENT"
 
       # Before the new image serves anything: the one deploy sequence CI also runs on every pull
       # request (Issue 9), inside the new image. Migrations must stay backward compatible with the
       # previous release, which keeps serving through this step and after a failed deploy.
       - name: Migrations (scripts/db/deploy-sequence.sh in the new image)
         if: steps.target.outputs.provisioned == 'true' && env.ROLLBACK != 'true'
-        working-directory: ${{ steps.target.outputs.dir }}
         env:
           DEPLOY_ENV: ${{ inputs.environment }}
           IMAGE: ${{ steps.release.outputs.image }}
-        run: ./deploy.sh run-new "$IMAGE" ./scripts/db/deploy-sequence.sh
+        run: cd "$DEPLOY_DIR" && ./deploy.sh run-new "$IMAGE" ./scripts/db/deploy-sequence.sh
 
       - name: Smoke-test the new image on a side port (no traffic)
         if: steps.target.outputs.provisioned == 'true'
-        working-directory: ${{ steps.target.outputs.dir }}
         env:
           DEPLOY_ENV: ${{ inputs.environment }}
           IMAGE: ${{ steps.release.outputs.image }}
-        run: ./deploy.sh candidate "$IMAGE"
+        run: cd "$DEPLOY_DIR" && ./deploy.sh candidate "$IMAGE"
 
       - name: Swap it in and smoke-test it live (rolls back by itself on failure)
         if: steps.target.outputs.provisioned == 'true'
-        working-directory: ${{ steps.target.outputs.dir }}
         env:
           DEPLOY_ENV: ${{ inputs.environment }}
           IMAGE: ${{ steps.release.outputs.image }}
-        run: ./deploy.sh swap "$IMAGE" && ./deploy.sh status | tee -a "$GITHUB_STEP_SUMMARY"
+        run: cd "$DEPLOY_DIR" && ./deploy.sh swap "$IMAGE" && ./deploy.sh status | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Tell the team channel
         if: ${{ always() && steps.release.outputs.version != '' }}

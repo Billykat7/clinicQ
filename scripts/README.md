@@ -22,7 +22,7 @@ Scripts for **BK ClinicQ**.
 - **`db/seed-dev-user.sh`** – idempotent dev/admin user bootstrap in the configured PostgreSQL schema.
 - **`cd/create-hetzner-server.sh`** – create a Hetzner Cloud server via API and print its public IP; requires `HETZNER_API_TOKEN` in env.
 - **`cd/setup-server.sh`**, **`cd/server-initial-setup.sh`**, **`cd/server_setup.sh`** – provision a fresh Ubuntu/Debian host: system updates, Docker, base packages, and the Actions runner as a systemd service when `GITHUB_RUNNER_TOKEN` is set (see [docs/GITHUB/RUNNER/README.md](../docs/GITHUB/RUNNER/README.md)).
-- **`cd/write-prod-env.sh`** – legacy helper (refuses unless `BTK_ALLOW_LEGACY_WRITE_PROD_ENV=1`). **Production CD** uses `/opt/btk/gateway/scripts/cd/write-prod-env.sh` via infra `cd-product.yml`.
+- **`cd/write-prod-env.sh`** – legacy helper (refuses unless `BTK_ALLOW_LEGACY_WRITE_PROD_ENV=1`). **Production CD** uses the gateway's own `scripts/cd/write-prod-env.sh` (`$GATEWAY_COMPOSE_DIR`) via infra `cd-product.yml`.
 - **`cd/free-http-ports-before-compose.sh`** – **retired** (exits 1). It would free host 80/443 and take down the gateway's edge nginx.
 - **`cd/prune-old-app-images.sh`** – after a successful deploy, remove local GHCR app images whose semver tag is **strictly older** than the deployed tag; skips images still used by running containers. Production CD runs the gateway prune script instead.
 - **`deploy/install-argocd.sh`**, **`install-fluxcd.sh`**, **`install-gitops.sh`** – optional GitOps installers; not used by the current gateway-based CD.

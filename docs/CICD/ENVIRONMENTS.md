@@ -61,7 +61,7 @@ Set one or the other: `DATABASE_URL` alone is simplest.
 ```bash
 python scripts/check_config.py                                  # ./.env
 python scripts/check_config.py .env --environment production     # as if it were production
-make check-config ENV_FILE=/opt/btk/clinicq/.env                 # on the host, before a deploy
+make check-config ENV_FILE="$DEPLOY_DIR/.env"                     # on the host, before a deploy
 ```
 
 It reads only the file (an exported shell variable cannot rescue it), prints setting names and
@@ -76,7 +76,7 @@ that are not settings (compose and deploy keys such as `IMAGE`, or typos) are li
 | `.env` on a laptop (git-ignored) | local values; copy of `.env.example` plus anything personal | the developer |
 | GitHub Environment `staging` (secrets) | staging's `JWT_SECRET`, `DATABASE_URL`, provider test keys — only when the settings are kept in GitHub rather than in the host's own `.env` (Issue 230) | the deploy workflow (Issue 11) |
 | GitHub Environment `production` (secrets, approval required) | production's secrets | the deploy workflow, after the DevOps/QA Lead approves |
-| `/opt/btk/clinicq/.env` on each host (mode 600) | the running app's settings, written by the deploy | the host's deploy user |
+| `$DEPLOY_DIR/.env` on each host (mode 600) — `DEPLOY_DIR` is the variable on that GitHub Environment | the running app's settings | the host's deploy user |
 
 Secrets never go in the repository, in any branch, in any form. Three things hold that line:
 

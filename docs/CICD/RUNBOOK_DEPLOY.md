@@ -10,7 +10,7 @@ roll back in under a minute. Images come from [`RELEASE.md`](RELEASE.md); settin
 |-----------|----|
 | Deploy to staging | **Actions → Deploy → Run workflow**: `staging`, the version (e.g. `0.2.0`). Nothing to approve; it starts at once. |
 | Deploy to production | **Actions → Deploy → Run workflow**: `production`, the version (e.g. `0.2.0`). The DevOps/QA Lead approves it under the run's *Review deployments*. |
-| Roll back **now** | On the host: `cd /opt/btk/clinicq && DEPLOY_ENV=production ./deploy.sh rollback`. **Measured: 9.4 s** (below). |
+| Roll back **now** | On the host: `cd "$DEPLOY_DIR" && DEPLOY_ENV=production ./deploy.sh rollback`. **Measured: 9.4 s** (below). |
 | Roll back to a chosen version | **Run workflow**: the environment, that version, tick **rollback** (it skips the migrations). |
 | See what runs | `curl https://<host>/health` (version and commit), or `./deploy.sh status` on the host. |
 
@@ -60,34 +60,35 @@ branch can never reach an environment's secrets. `make gh-sync-environments` app
 
 ## Setting up a host (once per environment)
 
-**On a host laid out by the platform, there is nothing to configure.** The runner is the host, the
-deploy directory defaults to `/opt/btk/clinicq` (`/opt/btk/clinicq-staging` for staging), and the
-app's settings are the `.env` already in it.
+The runner is the host, so the only thing the deploy has to be told is **which directory on it**
+holds each environment: `DEPLOY_DIR`. The app's settings are the `.env` already in that directory.
+This repository is public, so it names no path on anybody's server — `DEPLOY_DIR` is where the
+layout is written down, and it lives in the GitHub Environment, not in git. The deploy masks the
+value in its own log before it uses it, and never puts it in a step output.
 
 1. **The runner.** A self-hosted GitHub Actions runner on the host, registered against this
    repository with the labels `self-hosted`, `Linux`, `X64` and **`clinicq`**. `clinicq` is what
    pins the deploy to the machine ClinicQ lives on; add `infra` too if it is the shared platform
    runner. Its user needs Docker (the `docker` group) and write access to the deploy directory.
-2. **The deploy directory.** `/opt/btk/clinicq` for production, `/opt/btk/clinicq-staging` for
-   staging, holding the app's `.env` (check it first:
+2. **The deploy directory.** One per environment, holding the app's `.env` (check it first:
    `python scripts/check_config.py <file> --environment production`, and it needs `APP_PORT`,
    `DOMAIN` and `GATEWAY_COMPOSE_DIR` for the compose file). `scripts/cd/setup-server.sh` does the
    base install; `btk-platform-layout.sh` in `Billykat7/infra` creates the layout.
-3. **Optional**, in the GitHub Environment (**Settings → Environments → staging / production**):
+3. **In the GitHub Environment** (**Settings → Environments → staging / production**):
 
-   | Kind | Name | When you need it |
-   |------|------|------------------|
-   | secret | `APP_ENV` | to keep the settings in GitHub instead of on the host: the whole `.env`, rewritten (mode 600) on every deploy. Without it the host's own `.env` is used and never touched. |
-   | secret | `TEAM_WEBHOOK_URL` | to post the result to Slack or Discord |
-   | variable | `DEPLOY_DIR` | a deploy directory that is not `/opt/btk/clinicq[-staging]` |
-   | variable | `PUBLIC_URL` | the environment's URL, shown on the run |
-   | variable | `TEAM_WEBHOOK_KIND` | `slack` (default) or `discord` |
+   | Kind | Name | Required | What it is |
+   |------|------|----------|------------|
+   | **secret** | `DEPLOY_DIR` | **yes** | the absolute directory on the runner that holds this environment. Without it the deploy reports "not provisioned", changes nothing and succeeds. A *variable* also works and the deploy masks the value either way (`::add-mask::`), but a secret is masked by GitHub itself — and this repository is public, so its Actions logs are too. |
+   | secret | `APP_ENV` | no | to keep the settings in GitHub instead of on the host: the whole `.env`, rewritten (mode 600) on every deploy. Without it the host's own `.env` is used and never touched. |
+   | secret | `TEAM_WEBHOOK_URL` | no | to post the result to Slack or Discord |
+   | variable | `PUBLIC_URL` | no | the environment's URL, shown on the run |
+   | variable | `TEAM_WEBHOOK_KIND` | no | `slack` (default) or `discord` |
 
    Repository-wide, `DEPLOY_RUNNER_LABELS` (a JSON array, e.g. `["self-hosted","Linux","X64","clinicq"]`)
    moves the deploy to a different runner without editing the workflow.
 
-If the deploy directory does not exist, the deploy reports "not provisioned", says exactly what to
-create, changes nothing and succeeds.
+If `DEPLOY_DIR` is unset, or names a directory that does not exist, the deploy reports "not
+provisioned", says exactly what to set or create, changes nothing and succeeds.
 
 > **Deploying over SSH is gone (Issue 230).** `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` and
 > `DEPLOY_KNOWN_HOSTS` are no longer read by `deploy.yml` and can be deleted from both Environments.
@@ -138,7 +139,7 @@ infrastructure work (Issue 102).
 ## Commands on the host
 
 ```bash
-cd /opt/btk/clinicq-staging && export DEPLOY_ENV=staging
+cd "$DEPLOY_DIR" && export DEPLOY_ENV=staging       # the staging Environment's DEPLOY_DIR
 ./deploy.sh status                                   # what serves, what a rollback restores
 ./deploy.sh rollback                                 # back one release, smoke-checked
 ./deploy.sh smoke 8012 ghcr.io/billykat7/clinicq:0.2.0   # the smoke check alone, against a port
