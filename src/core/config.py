@@ -1476,6 +1476,41 @@ class Settings(BaseSettings):
         default="clinicq_display",
         description="The httpOnly cookie a kiosk box keeps its device secret in (env: DISPLAY_DEVICE_COOKIE_NAME).",
     )
+
+    # Smart TVs (Issue 237). The waiting-room board's usual home is a small box on the TV's HDMI
+    # port (docs/OPS/KIOSK_SETUP.md), which needs no network permission and no vendor's blessing.
+    # These settings add the other way in: find the Chromecast-capable screens on the *server's*
+    # own network and send one of them the board, so nobody carries a code across the room. That
+    # only means anything where the server shares a network with the TV — a clinic's own box, or a
+    # laptop during a demo. A cloud instance is on another continent from the clinic's Wi-Fi and
+    # finds nothing, which is why this is off unless a deployment turns it on.
+    smart_tv_discovery_enabled: bool = Field(
+        default=False,
+        description=(
+            "Let a clinic manager search the *server's* network for Chromecast-capable screens and "
+            "send one the waiting-room board (env: SMART_TV_DISCOVERY_ENABLED). Only useful when "
+            "the server runs on the clinic's own network; a cloud instance cannot see it. Needs "
+            "the optional PyChromecast package."
+        ),
+    )
+    smart_tv_discovery_seconds: float = Field(
+        default=5.0,
+        ge=1.0,
+        le=30.0,
+        description=(
+            "How long a search of the network listens for screens to answer, in seconds "
+            "(env: SMART_TV_DISCOVERY_SECONDS). A screen that is asleep can take several."
+        ),
+    )
+    cast_receiver_app_id: str = Field(
+        default="",
+        description=(
+            "The Cast application id of the ClinicQ web receiver, registered once at "
+            "cast.google.com/publish (env: CAST_RECEIVER_APP_ID). A Chromecast only loads a page "
+            "belonging to a registered receiver, so without this a screen can be found and reached "
+            "but not shown the board. See docs/OPS/SMART_TV_SETUP.md."
+        ),
+    )
     team_webhook_url: str = Field(
         default="",
         description=(

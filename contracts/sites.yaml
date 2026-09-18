@@ -964,6 +964,67 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
+  # ── Screens the server can find on its own network (Issue 237) ────────────────────────
+  /sites/{site_id}/display-devices/discover:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    post:
+      tags: [sites]
+      operationId: displayDiscoverScreens
+      summary: Search the server's network for Chromecast-capable screens
+      description: |
+        Asks the network **the server** is on which screens are there, and lists what answered
+        (`sites.display` update — what comes back is the list a manager picks from to take a screen
+        over). A `POST` because it holds the network open for several seconds; it changes nothing.
+
+        Only useful where the server shares a network with the clinic: a clinic's own box, or a
+        laptop during a demo. A cloud instance shares none and always answers an empty list, with
+        `note` saying which of the reasons it is — the feature is off, the package is missing, or
+        nothing answered. `note` is written for a clinic manager and is safe to show as it is.
+      responses:
+        "200":
+          description: The screens that answered; empty with a reason in `note`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScreenScanOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sites/{site_id}/display-devices/connect:
+    parameters:
+      - $ref: "#/components/parameters/SiteId"
+    post:
+      tags: [sites]
+      operationId: displayConnectScreen
+      summary: Send this clinic's board to a screen found on the network
+      description: |
+        Holds a row for the chosen screen, then connects to it and hands it a one-time claim code
+        (`sites.display` update). The screen spends the code at `/display/claim` and opens the
+        board; nobody types anything.
+
+        The row is created **before** the screen is contacted and kept whatever the screen does, so
+        a screen that never answers is visible in the clinic's list as `pairing` and can be removed
+        like any other. `reached` and `showing` are separate answers: a screen can answer and still
+        have no ClinicQ receiver application to open (see `docs/OPS/SMART_TV_SETUP.md`), and `note`
+        says which.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ScreenConnectIn" }
+      responses:
+        "201":
+          description: What the screen did, and the row now held for it.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScreenConnectOut" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
   # ── Payment and medical aid (Issue 37) ────────────────────────────────────────────────
   /sites/{site_id}/payment-profile:
     parameters:
@@ -2359,6 +2420,46 @@ components:
         label: { type: [string, "null"], maxLength: 80 }
         queue_ids: { type: [array, "null"], items: { type: string }, description: The queues the screen shows; omitted for all. }
       example: { pairing_code: "K7M 4PQ", label: "TV by reception" }
+    DiscoveredScreenOut:
+      type: object
+      required: [uuid, name, model, manufacturer, address, port, suggested_label]
+      properties:
+        uuid: { type: string, description: The screen's own identifier, stable across reboots and address changes. }
+        name: { type: string, description: What the screen calls itself. }
+        model: { type: string }
+        manufacturer: { type: string }
+        address: { type: string, description: Where the server reached it; sent back with the manager's choice. }
+        port: { type: integer }
+        suggested_label: { type: string, description: A name to offer for this screen, which the manager may overwrite. }
+      example: { uuid: "ec9b8350-bd0d-f7e8-9faa-ace4909c455f", name: "Smart TV Pro", model: "Smart TV Pro", manufacturer: "Generic", address: "192.168.3.106", port: 8009, suggested_label: "Smart TV Pro" }
+    ScreenScanOut:
+      type: object
+      required: [total, items, note, searched]
+      properties:
+        total: { type: integer }
+        items: { type: array, items: { $ref: "#/components/schemas/DiscoveredScreenOut" } }
+        note: { type: string, description: Why the list is empty, in words a clinic manager can act on. Empty when screens were found. }
+        searched: { type: boolean, description: Whether the search actually ran; false when the deployment has it switched off. }
+      example: { total: 0, items: [], note: "Searching the network for screens is switched off for this deployment. A waiting-room board is paired with the code on its screen instead.", searched: false }
+    ScreenConnectIn:
+      type: object
+      required: [address]
+      properties:
+        address: { type: string, minLength: 3, maxLength: 64, description: From a discover result; the screen is reached over the clinic's own network. }
+        port: { type: integer, minimum: 1, maximum: 65535, default: 8009 }
+        name: { type: string, maxLength: 120 }
+        uuid: { type: string, maxLength: 120 }
+        label: { type: [string, "null"], maxLength: 80 }
+        queue_ids: { type: [array, "null"], items: { type: string }, description: The queues the screen shows; omitted for all. }
+      example: { address: "192.168.3.106", port: 8009, name: "Smart TV Pro", uuid: "ec9b8350-bd0d-f7e8-9faa-ace4909c455f", label: "TV by reception" }
+    ScreenConnectOut:
+      type: object
+      required: [reached, showing, note, device]
+      properties:
+        reached: { type: boolean, description: Whether the screen answered the server at all. }
+        showing: { type: boolean, description: Whether it was handed the board and started opening it. }
+        note: { type: string, description: A sentence for the manager, whatever the outcome. }
+        device: { $ref: "#/components/schemas/DisplayDeviceOut" }
     DisplayDeviceUpdateIn:
       type: object
       properties:

@@ -2241,3 +2241,17 @@ fieldset.field > legend { margin-bottom: .3rem; padding: 0; font-size: .85rem; c
 @media (max-width: 30rem) {
   .setup-progress { flex-direction: column; align-items: stretch; gap: var(--space-2); }
 }
+
+/* Screens found on the server's own network (Issue 237): one row per television that answered. */
+.screen-list { display: grid; gap: var(--space-2); list-style: none; margin: var(--space-3) 0 0; padding: 0; }
+.screen-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.screen-what { display: grid; gap: 2px; min-width: 0; }
+.screen-where { overflow-wrap: anywhere; }

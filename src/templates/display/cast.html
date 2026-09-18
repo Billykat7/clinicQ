@@ -1,0 +1,43 @@
+{#- The Cast receiver ClinicQ registers with Google (Issue 237).
+
+    This is the page a Chromecast loads, and the *only* page it will load: a Chromecast runs an
+    application, an application is a URL registered at cast.google.com/publish under an id, and a
+    sender may launch a registered id and nothing else. So the clinic cannot be named in the address
+    — it arrives afterwards, as a message over the Cast connection carrying a one-time claim code
+    (src/modules/display/casting.py), which cast-receiver.js spends at /display/claim.
+
+    Deliberately not extending layouts/board.html: this page frames the board rather than being it,
+    and it carries a policy of its own (see below), so it owns its whole document.
+
+    **Its own Content-Security-Policy.** A receiver that does not load Google's receiver SDK is not a
+    receiver, and that SDK is served only from www.gstatic.com — it cannot be vendored under /static
+    the way Leaflet was. Writing the exception here, on the one page that needs it, is what keeps it
+    off every other page's policy: src/core/security_headers.py leaves a policy a handler already set
+    alone. Everything else stays shut — 'self' for styles, images, fonts and connections, and no
+    object, base or form target at all. -#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ app_name }} · Waiting-room board</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="/static/css/site.css">
+  <link rel="stylesheet" href="/static/css/board.css">
+  <script src="{{ cast_sdk_url }}"></script>
+  <script src="/static/js/cast-receiver.js" defer></script>
+</head>
+<body class="board-page cast-receiver">
+  {#- The splash a TV shows between "ClinicQ opened" and "the board arrived". A waiting room can see
+      this screen, so it says something calm and true rather than nothing. -#}
+  <main id="cast-splash" class="kiosk kiosk-pair">
+    <h1 class="kiosk-clinic">{{ app_name }}</h1>
+    <p class="pair-expiry" id="cast-status">Starting…</p>
+  </main>
+
+  {#- The board itself, same-origin, so frame-ancestors 'self' is satisfied and the page behaves
+      exactly as it does on a box plugged into the TV's HDMI port. Hidden until there is a board to
+      show. -#}
+  <iframe id="cast-board" class="cast-board" title="Waiting-room board" hidden></iframe>
+</body>
+</html>
