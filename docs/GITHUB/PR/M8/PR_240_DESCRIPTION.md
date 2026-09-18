@@ -35,6 +35,10 @@ The third one is why "just show the code on the cast failure" would not have bee
 is, name it, press **Make an address**. The card shows the whole address, the code inside it, how
 long it has left, and a copy button.
 
+![The new card in Clinic settings → Display boards: "Open the board on the screen itself", with a device-kind selector, an optional name filled in as "TV by the pharmacy", a "Make an address" button reading "Address ready. It works for 10 minutes.", the address http://localhost:8063/display/claim?code=ABC6YW in a read-only field, the warning that opening it here spends it, the code ABC6YW for typing by hand, and a "Copy the address" button](assets/pr240/claim-address.png)
+
+*(A throwaway code from a local demo database, long since spent.)*
+
 It contacts nothing and searches no network, so it renders on **every** deployment — including one
 with `SMART_TV_DISCOVERY_ENABLED=false`, where **Screens on this network** is deliberately hidden
 because a cloud instance can never find a clinic's television. That deployment is the one that needs
