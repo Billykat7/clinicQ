@@ -153,11 +153,19 @@ activemq-data/
 !.env.example
 .envrc
 .venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+# Virtualenv directories, at the repository root only. Unanchored, `env/` and `ENV/` would also
+# swallow deploy/env/ -- and on a case-insensitive filesystem (macOS) `ENV/` matches it even when
+# `env/` is anchored, so the deployed configuration would be committed on Linux and silently
+# ignored on a Mac. tests/unit/platform/test_deploy_env.py asserts those files are tracked.
+/env/
+/venv/
+/ENV/
+/env.bak/
+/venv.bak/
+
+# The non-secret half of each environment's settings is committed on purpose (deploy/env/README.md).
+!deploy/env/
+!deploy/env/*.env
 
 # Spyder project settings
 .spyderproject

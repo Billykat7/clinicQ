@@ -24,6 +24,7 @@ Note on `on:` — PyYAML reads YAML 1.1, where a bare `on` key is the boolean `T
 
 import ast
 import re
+import subprocess
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -978,21 +979,110 @@ def test_the_deploy_runs_on_the_host_rather_than_reaching_it_over_ssh(
             )
 
 
-def test_a_deploy_needs_no_configuration_on_a_platform_host(
+def test_the_deploy_directory_comes_only_from_deploy_dir(
     workflows: dict[Workflow, dict[str, Any]],
 ) -> None:
-    """Issue 230: the deploy directory and the settings both have a working default.
+    """The deploy's target directory is ``DEPLOY_DIR`` and nothing else.
 
-    ``/opt/btk/<slug>`` is the platform layout, and the app's ``.env`` lives in it; ``DEPLOY_DIR``
-    and ``APP_ENV`` stay as overrides for a host laid out differently or a team that would rather
-    keep the settings in GitHub.
+    This repository is public. A hard-coded deploy path publishes the layout of the machine the
+    app runs on -- free reconnaissance, and one more thing to change in git the day the host
+    moves. ``DEPLOY_DIR`` is an Environment *variable*, so the path lives with the environment
+    that owns it. Without it the deploy reports "not provisioned" and changes nothing, which is
+    the same shape as a directory that does not exist yet.
     """
+    job = _jobs(workflows[Workflow.DEPLOY])["deploy"]
+    assert "DEPLOY_DIR" in job["env"], (
+        "DEPLOY_DIR is the job's, so every step has the same one"
+    )
+
     steps = {str(step.get("name", "")): step for step in _deploy_steps(workflows)}
     target = steps["Where this environment lives"]
-    assert "/opt/btk/clinicq" in str(target["run"])
+    run = str(target["run"])
+
+    assert 'dir="${DEPLOY_DIR%/}"' in run
+    # No path is built here: nothing is appended to, or derived from, a name in this file.
+    assert "clinicq-staging" not in run and "clinicq$suffix" not in run
+    # An unset variable is "not provisioned", never a guess.
+    assert 'if [[ -z "$dir" ]]' in run
+    assert "provisioned=false" in run
+
+    # Actions logs on a public repository are world-readable, and GitHub masks secrets but not
+    # variables. Masking the value here covers both, and every later step's output with it.
+    assert "::add-mask::${DEPLOY_DIR%/}" in run
+    # The directory is never a step output: `working-directory: ${{ steps... }}` and the like
+    # would put it back into expressions the masker does not reach.
+    assert "dir=$dir" not in run
+    for step in _deploy_steps(workflows):
+        assert "working-directory" not in step, str(step.get("name"))
 
     settings = steps["The app's settings"]
-    run = str(settings["run"])
-    # Either source is enough on its own; only having neither is an error.
-    assert 'if [[ -n "$APP_ENV" ]]' in run
-    assert 'elif [[ -s "$DEPLOY_DIR/.env" ]]' in run
+    settings_run = str(settings["run"])
+    # The settings are composed from their two halves, never pasted in from one GitHub secret:
+    # APP_ENV is gone (write-only, unversioned, and against GitHub's 48 KB/64 KB limits).
+    assert "compose-env.sh" in settings_run
+    assert "APP_ENV" not in settings_run and "APP_ENV" not in str(
+        settings.get("env", {})
+    )
+    # A host still running on its own .env keeps deploying while the secrets are moved across.
+    assert 'elif [[ -s "$DEPLOY_DIR/.env" ]]' in settings_run
+    assert 'chmod 600 "$DEPLOY_DIR/.env"' in settings_run
+
+
+#: Merged pull-request records may still name a host path: they are an account of what shipped,
+#: and editing them would make the record wrong rather than the repository safer. (Not one of
+#: ci.yml's PROSE_PATHS, so a change to one still runs this test.)
+_MERGED_PR_RECORDS = "docs/GITHUB/PR/"
+
+
+def test_no_absolute_host_path_is_written_down_in_the_repository(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """No tracked file names an absolute path on the deploy host.
+
+    The deploy directory is ``$DEPLOY_DIR`` and the gateway root is ``$GATEWAY_COMPOSE_DIR``; both
+    are supplied by the environment, never by this repository, which is public. A path written
+    down here publishes the layout of the machine the app runs on, and has to be edited in git the
+    day that machine moves.
+
+    Scope: every tracked file except the merged pull-request records and the paths ci.yml treats
+    as prose. Those last are excluded because a pull request touching only them skips the test
+    suite, so a guard over them would pass by never running -- the same reason
+    ``test_the_prose_only_fast_path_skips_nothing_a_test_reads`` exists.
+    """
+    step = next(
+        step
+        for step in _jobs(workflows[Workflow.CI])[CiJob.CHANGES]["steps"]
+        if "PROSE_PATHS" in step.get("env", {})
+    )
+    skipped = (*step["env"]["PROSE_PATHS"].split(), _MERGED_PR_RECORDS)
+    here = Path(__file__).relative_to(REPO_ROOT).as_posix()
+
+    tracked = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "ls-files", "-z"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split("\0")
+
+    offenders: list[str] = []
+    for name in filter(None, tracked):
+        if name == here or any(
+            name.startswith(entry) if entry.endswith("/") else name == entry
+            for entry in skipped
+        ):
+            continue
+        try:
+            text = (REPO_ROOT / name).read_text(encoding="utf-8")
+        except UnicodeDecodeError, OSError:
+            continue
+        offenders += [
+            f"{name}:{number}"
+            for number, line in enumerate(text.splitlines(), start=1)
+            if "/opt/btk" in line
+        ]
+
+    assert not offenders, (
+        "an absolute path on the deploy host is written down in "
+        + ", ".join(offenders)
+        + " -- use $DEPLOY_DIR (the Environment variable) or $GATEWAY_COMPOSE_DIR instead"
+    )

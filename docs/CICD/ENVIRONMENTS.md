@@ -61,7 +61,7 @@ Set one or the other: `DATABASE_URL` alone is simplest.
 ```bash
 python scripts/check_config.py                                  # ./.env
 python scripts/check_config.py .env --environment production     # as if it were production
-make check-config ENV_FILE=/opt/btk/clinicq/.env                 # on the host, before a deploy
+make check-config ENV_FILE="$DEPLOY_DIR/.env"                     # on the host, before a deploy
 ```
 
 It reads only the file (an exported shell variable cannot rescue it), prints setting names and
@@ -70,13 +70,36 @@ that are not settings (compose and deploy keys such as `IMAGE`, or typos) are li
 
 ## Where values live
 
+A deployed `.env` has two halves, and they are kept apart on purpose. Of the 182 settings, **21
+hold a credential** and 161 do not. Treating all 182 as secret is what put the whole file into one
+GitHub Environment secret — write-only, unversioned, unreviewable, and pressing against GitHub's
+48 KB-per-secret and 64 KB-per-repository limits. Treating none of them as secret would publish
+the database password.
+
 | Where | What | Who can read it |
 |-------|------|-----------------|
 | `.env.example` (in git) | every setting, with safe defaults and **no real secret** | everyone |
+| `deploy/env/{staging,production}.env` (in git) | the **non-secret** half: what that environment sets differently from the code's default — flags, ports, log format, public URLs | everyone, and that is the point: it is reviewed in a pull request |
+| `clinicq/{staging,production}.env` in **`Billykat7/infra`** (private), SOPS-encrypted with age | the **secret** half: the ~21 credential-bearing settings | whoever holds an age identity listed in that repo's `.sops.yaml` |
+| the age identity on the deploy host (`$SECRETS_DIR/age.key`, mode 600) | what decrypts the above | the host's deploy user, and root |
 | `.env` on a laptop (git-ignored) | local values; copy of `.env.example` plus anything personal | the developer |
-| GitHub Environment `staging` (secrets) | staging's `JWT_SECRET`, `DATABASE_URL`, provider test keys — only when the settings are kept in GitHub rather than in the host's own `.env` (Issue 230) | the deploy workflow (Issue 11) |
-| GitHub Environment `production` (secrets, approval required) | production's secrets | the deploy workflow, after the DevOps/QA Lead approves |
-| `/opt/btk/clinicq/.env` on each host (mode 600) | the running app's settings, written by the deploy | the host's deploy user |
+| `$DEPLOY_DIR/.env` on each host (mode 600) | the two halves composed, written by `scripts/cd/compose-env.sh` on each deploy | the host's deploy user |
+
+`DEPLOY_DIR` and `SECRETS_DIR` are set per GitHub Environment, so no path on the server is written
+down in this repository (see [RUNBOOK_DEPLOY.md](RUNBOOK_DEPLOY.md#setting-up-a-host-once-per-environment)).
+
+**What decides which half a setting goes in:** `setting_is_secret()` in `src/core/config.py`, one
+classifier used by `.env.example`'s generator and by the guard test, so they cannot disagree. A
+setting is a secret if its value is a string *and* its name carries a marker (`SECRET`, `PASSWORD`,
+`TOKEN`, `_KEY`, `KEYS`, `CREDENTIAL`) or is one of the names whose value hides a credential
+without saying so — `DATABASE_URL`, `REDIS_URL`, `SENTRY_DSN`, `SMTP_USER`, `TEAM_WEBHOOK_URL`,
+`AWS_ACCESS_KEY_ID`. The string test is what keeps `REFRESH_TOKEN_EXPIRE_DAYS` (an int) and
+`ACCESS_TOKEN_COOKIE_NAME` (a name, not a value) out of the encrypted file. It errs towards
+*secret*: getting that wrong costs an inconvenience, and the converse is a leak.
+
+`tests/unit/platform/test_deploy_env.py` fails if any key in the committed half is one the
+classifier calls a secret. Adding a credential-bearing setting therefore breaks the build until it
+is put in the encrypted file — which is the behaviour we want.
 
 Secrets never go in the repository, in any branch, in any form. Three things hold that line:
 

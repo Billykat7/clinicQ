@@ -128,8 +128,8 @@ and run `./scripts/ci-local.sh` after any change to the workflow.
 Staging and production are separate compose projects (`btk-clinicq-staging` and `btk-clinicq`) on
 different `APP_PORT`s, so they can share one machine
 ([RUNBOOK_DEPLOY.md](../../CICD/RUNBOOK_DEPLOY.md#setting-up-a-host-once-per-environment)). One
-runner can serve both environments — the deploy derives `/opt/btk/clinicq-staging` from the chosen
-environment, and the GitHub Environment supplies any `DEPLOY_DIR` or `APP_ENV` that differ. Register
+runner can serve both environments — each GitHub Environment names its own `DEPLOY_DIR` (and any
+`APP_ENV` that differs), so the deploy lands in the right directory for the chosen one. Register
 a second runner only when the two live on different hosts, and then give it its own label
 (`clinicq-staging`) and point staging at it with the `DEPLOY_RUNNER_LABELS` variable.
 
