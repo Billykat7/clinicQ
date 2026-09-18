@@ -10,7 +10,7 @@ roll back in under a minute. Images come from [`RELEASE.md`](RELEASE.md); settin
 |-----------|----|
 | Deploy to staging | **Actions → Deploy → Run workflow**: `staging`, the version (e.g. `0.2.0`). Nothing to approve; it starts at once. |
 | Deploy to production | **Actions → Deploy → Run workflow**: `production`, the version (e.g. `0.2.0`). The DevOps/QA Lead approves it under the run's *Review deployments*. |
-| Roll back **now** | On the host: `cd /opt/btk/clinicq && DEPLOY_ENV=production ./deploy.sh rollback`. **Measured: 9.4 s** (below). |
+| Roll back **now** | On the host: `cd "$DEPLOY_DIR" && DEPLOY_ENV=production ./deploy.sh rollback`. **Measured: 9.4 s** (below). |
 | Roll back to a chosen version | **Run workflow**: the environment, that version, tick **rollback** (it skips the migrations). |
 | See what runs | `curl https://<host>/health` (version and commit), or `./deploy.sh status` on the host. |
 
@@ -60,34 +60,36 @@ branch can never reach an environment's secrets. `make gh-sync-environments` app
 
 ## Setting up a host (once per environment)
 
-**On a host laid out by the platform, there is nothing to configure.** The runner is the host, the
-deploy directory defaults to `/opt/btk/clinicq` (`/opt/btk/clinicq-staging` for staging), and the
-app's settings are the `.env` already in it.
+The runner is the host, so the only thing the deploy has to be told is **which directory on it**
+holds each environment: `DEPLOY_DIR`. The app's settings are the `.env` already in that directory.
+This repository is public, so it names no path on anybody's server — `DEPLOY_DIR` is where the
+layout is written down, and it lives in the GitHub Environment, not in git. The deploy masks the
+value in its own log before it uses it, and never puts it in a step output.
 
 1. **The runner.** A self-hosted GitHub Actions runner on the host, registered against this
    repository with the labels `self-hosted`, `Linux`, `X64` and **`clinicq`**. `clinicq` is what
    pins the deploy to the machine ClinicQ lives on; add `infra` too if it is the shared platform
    runner. Its user needs Docker (the `docker` group) and write access to the deploy directory.
-2. **The deploy directory.** `/opt/btk/clinicq` for production, `/opt/btk/clinicq-staging` for
-   staging, holding the app's `.env` (check it first:
+2. **The deploy directory.** One per environment. The deploy writes its `.env` ([Secrets](#secrets)); on a host still keeping its own, check it first (
    `python scripts/check_config.py <file> --environment production`, and it needs `APP_PORT`,
    `DOMAIN` and `GATEWAY_COMPOSE_DIR` for the compose file). `scripts/cd/setup-server.sh` does the
    base install; `btk-platform-layout.sh` in `Billykat7/infra` creates the layout.
-3. **Optional**, in the GitHub Environment (**Settings → Environments → staging / production**):
+3. **In the GitHub Environment** (**Settings → Environments → staging / production**):
 
-   | Kind | Name | When you need it |
-   |------|------|------------------|
-   | secret | `APP_ENV` | to keep the settings in GitHub instead of on the host: the whole `.env`, rewritten (mode 600) on every deploy. Without it the host's own `.env` is used and never touched. |
-   | secret | `TEAM_WEBHOOK_URL` | to post the result to Slack or Discord |
-   | variable | `DEPLOY_DIR` | a deploy directory that is not `/opt/btk/clinicq[-staging]` |
-   | variable | `PUBLIC_URL` | the environment's URL, shown on the run |
-   | variable | `TEAM_WEBHOOK_KIND` | `slack` (default) or `discord` |
+   | Kind | Name | Required | What it is |
+   |------|------|----------|------------|
+   | **secret** | `DEPLOY_DIR` | **yes** | the absolute directory on the runner that holds this environment. Without it the deploy reports "not provisioned", changes nothing and succeeds. A *variable* also works and the deploy masks the value either way (`::add-mask::`), but a secret is masked by GitHub itself — and this repository is public, so its Actions logs are too. |
+   | variable | `SECRETS_DIR` | no | where `Billykat7/infra` is checked out on this runner, if not `/etc/btk/secrets` ([Secrets](#secrets)) |
+   | secret | `SOPS_AGE_KEY` | no | the age identity, **only** for a host that cannot hold its own. Prefer the key on the host: see [Secrets](#secrets). |
+   | secret | `TEAM_WEBHOOK_URL` | no | to post the result to Slack or Discord |
+   | variable | `PUBLIC_URL` | no | the environment's URL, shown on the run |
+   | variable | `TEAM_WEBHOOK_KIND` | no | `slack` (default) or `discord` |
 
    Repository-wide, `DEPLOY_RUNNER_LABELS` (a JSON array, e.g. `["self-hosted","Linux","X64","clinicq"]`)
    moves the deploy to a different runner without editing the workflow.
 
-If the deploy directory does not exist, the deploy reports "not provisioned", says exactly what to
-create, changes nothing and succeeds.
+If `DEPLOY_DIR` is unset, or names a directory that does not exist, the deploy reports "not
+provisioned", says exactly what to set or create, changes nothing and succeeds.
 
 > **Deploying over SSH is gone (Issue 230).** `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` and
 > `DEPLOY_KNOWN_HOSTS` are no longer read by `deploy.yml` and can be deleted from both Environments.
@@ -97,6 +99,74 @@ create, changes nothing and succeeds.
 
 Staging and production can share one host: `DEPLOY_ENV` makes them separate compose projects
 (`btk-clinicq-staging` and `btk-clinicq`) on different `APP_PORT`s.
+
+## Secrets
+
+The deployed `.env` is composed on the host, on every deploy, from two halves:
+
+```
+deploy/env/<environment>.env          in this repository, reviewed, no credential ever
++ clinicq/<environment>.env           in Billykat7/infra (private), SOPS-encrypted with age
+= $DEPLOY_DIR/.env                    mode 600, written by scripts/cd/compose-env.sh
+```
+
+**Why not GitHub secrets.** They are write-only — you cannot read one back to see what is in it,
+diff it, or tell when it changed. There is no audit of reads and no rotation story. And the whole
+`.env` as one `APP_ENV` secret was pressing against GitHub's limits: 48 KB per secret, 64 KB for
+all of a repository's secrets together, 100 secrets. `APP_ENV` has been removed.
+
+**Why not encrypted files in this repository.** It is public. Committing ciphertext here would
+publish it permanently, so a future compromise of the age key would read every value this project
+has ever held, retroactively. In a private repository, the ciphertext is a second lock rather than
+the only one.
+
+### Setting the host up (once)
+
+1. Install [`sops`](https://github.com/getsops/sops) and [`age`](https://github.com/FiloSottile/age).
+2. Generate the host's identity and keep the **private** half on the host only:
+   ```bash
+   sudo install -d -m 700 /etc/btk/secrets
+   sudo sh -c 'age-keygen -o /etc/btk/secrets/age.key && chmod 600 /etc/btk/secrets/age.key'
+   sudo grep "public key:" /etc/btk/secrets/age.key   # the recipient; safe to share
+   ```
+3. Add that public key to `.sops.yaml` in `Billykat7/infra` and re-encrypt, so the host can read
+   the files. Check the repository out at `/etc/btk/secrets` (or anywhere, and set the
+   `SECRETS_DIR` variable on the GitHub Environment to it).
+4. Make both readable by the runner's user and nobody else.
+
+The age *public* key is not a secret — it only encrypts. The private key never leaves the host, so
+a compromise of this repository's GitHub Environments does not reach production's secrets.
+
+`SOPS_AGE_KEY` (an Environment secret holding the identity itself) is the alternative for a host
+that cannot keep its own. It works, and `compose-env.sh` writes it to a private temporary file and
+removes it — but it puts the key back into GitHub, which is the thing this arrangement avoids.
+
+### Adding or rotating a secret
+
+```bash
+cd <Billykat7/infra checkout>
+sops clinicq/production.env          # opens decrypted in $EDITOR, re-encrypts on save
+git commit -am "clinicq: rotate JWT_SECRET" && git push
+```
+
+Then deploy. The next run composes the new value; there is no box in a web UI to remember. `git
+log -p` on that file shows when a value last changed (the ciphertext changes, not the value), and
+rolling one back is `git revert`.
+
+**A new setting that holds a credential** belongs here, not in `deploy/env/`. If you put it in the
+committed half, `tests/unit/platform/test_deploy_env.py` fails by name before it can be pushed.
+
+### When it goes wrong
+
+| Symptom in the run log | Cause |
+|---|---|
+| `no secrets file for <environment>` | `Billykat7/infra` is not checked out at `SECRETS_DIR` on this runner, or `SECRETS_DIR` points elsewhere. |
+| `no age identity to decrypt` | `/etc/btk/secrets/age.key` is missing or the runner's user cannot read it. |
+| `sops is not installed on this host` | step 1 above. |
+| `Secrets not composed` **warning**, deploy continues | none of the above worked, so the `.env` already on the host was used. The deploy is fine; fix the cause before the next one. |
+
+A failure here never leaves a half-written `.env`: `compose-env.sh` builds the file in a temporary
+directory and replaces the live one only once it is whole.
 
 ## When a deploy fails
 
@@ -138,7 +208,7 @@ infrastructure work (Issue 102).
 ## Commands on the host
 
 ```bash
-cd /opt/btk/clinicq-staging && export DEPLOY_ENV=staging
+cd "$DEPLOY_DIR" && export DEPLOY_ENV=staging       # the staging Environment's DEPLOY_DIR
 ./deploy.sh status                                   # what serves, what a rollback restores
 ./deploy.sh rollback                                 # back one release, smoke-checked
 ./deploy.sh smoke 8012 ghcr.io/billykat7/clinicq:0.2.0   # the smoke check alone, against a port

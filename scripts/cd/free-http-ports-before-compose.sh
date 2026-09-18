@@ -7,7 +7,7 @@
 # Running this would stop the platform edge and take down all products.
 #
 # Production CD uses Billykat7/infra cd-product.yml (app-only compose
-# on 127.0.0.1:8002). TLS and routing live in /opt/btk/gateway.
+# on 127.0.0.1:8002). TLS and routing live in the gateway deploy root (GATEWAY_COMPOSE_DIR).
 #
 set -euo pipefail
 

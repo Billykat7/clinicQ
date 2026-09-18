@@ -65,7 +65,7 @@ Example: `actions.runner.Billykat7-clinicQ.clinicq-runner.service`.
 
 - Linux host with systemd (Ubuntu 22.04+ / Debian 12+)
 - A **non-root** user that owns the runner, in the `docker` group because the deploy drives
-  `docker compose`. On a host set up by the runbook that is `deploy`, the owner of `/opt/btk/clinicq`;
+  `docker compose`. On a host set up by the runbook that is `deploy`, the owner of `$DEPLOY_DIR`;
   `scripts/cd/server-initial-setup.sh` calls its own user `deployer`. Use whichever the host has —
   the runner must not be root.
 - A fresh registration token from GitHub → `Billykat7/clinicQ` → **Settings → Actions → Runners →
@@ -195,9 +195,10 @@ jobs:
 
 What follows from that, and is already true in the workflow:
 
-- `scripts/cd/deploy.sh` is invoked locally rather than over SSH, and the deploy directory
-  (`/opt/btk/clinicq`, or `/opt/btk/clinicq-staging`) is a path on the runner's own filesystem.
-  It needs no configuration on a host laid out by the platform; `DEPLOY_DIR` overrides it.
+- `scripts/cd/deploy.sh` is invoked locally rather than over SSH, and the deploy directory is a
+  path on the runner's own filesystem, named by the `DEPLOY_DIR` variable on each GitHub
+  Environment. That variable is the only place the host's layout is written down: this repository is
+  public and holds no path on the server.
   Staging and production may share the host — they are separate compose projects on different
   `APP_PORT`s — so one runner can serve both, or each environment can have its own label through
   `DEPLOY_RUNNER_LABELS`.

@@ -4,13 +4,13 @@
 
 | | |
 |---|---|
-| **Status** | 🚧 In progress: Issue 197 in review |
-| **Progress** | 🟩⬜⬜⬜⬜⬜⬜⬜⬜⬜ **10%** (1/10 issues) |
+| **Status** | 🚧 In progress: Issues 197 and 239 done, 102–109 to come |
+| **Progress** | 🟩🟩⬜⬜⬜⬜⬜⬜⬜⬜ **20%** (2/10 issues) |
 | **Sprints** | 13–14 (weeks 25–28), semester 2 |
 | **Release tag** | `v0.14.0`, then **`v1.0.0`** when the last tracked issue closes |
 | **Primary owner** | E, DevOps/QA · whole team |
 | **Who does the work** | E: 6 issues · F: 3 issues (see each issue for the backup) |
-| **Issues** | 102–109 and 197 (9 issues, about 25 person-days of estimates) |
+| **Issues** | 102–109, 197 and 239 (10 issues, about 27 person-days of estimates) |
 | **Depends on** | [M7](M7_clinic_dashboard.md), [M8](M8_display_monitor.md), [M9](M9_notifications_patient_pwa.md), [M13](M13_security_privacy_compliance.md) |
 | **Blocks** | None |
 
@@ -54,6 +54,7 @@ leave until the final week.
 | [108](../ISSUES/M14/ISSUE_108_uat_clinic_staff.md) | User acceptance testing with clinic staff and remediation | F | 4 days | 14 | [106](../ISSUES/M14/ISSUE_106_pilot_rollout_kit.md), [107](../ISSUES/M14/ISSUE_107_support_incident_sla.md) |
 | [109](../ISSUES/M14/ISSUE_109_capstone_deliverables.md) | Capstone deliverables: demo script, video, report, poster, presentation | F | 5 days | 14 | [105](../ISSUES/M14/ISSUE_105_load_soak_testing.md), [108](../ISSUES/M14/ISSUE_108_uat_clinic_staff.md) |
 | [197](../ISSUES/M14/ISSUE_197_shared_s3_bucket_keys.md) | Shared S3 bucket: put the project slug first in every key | E | 1 day | 13 | nothing |
+| [239](../ISSUES/M14/ISSUE_239_cd_secrets_and_deploy_paths.md) | Where a public repository keeps its deployment secrets, and its host's paths | E | 2 days | 11 | nothing |
 
 ## Order of work
 

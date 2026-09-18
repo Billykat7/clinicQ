@@ -2,9 +2,8 @@
 # shellcheck disable=SC2016
 #
 # LEGACY / emergency helper only.
-# Production CD must use the gateway copy:
-#   /opt/btk/gateway/scripts/cd/write-prod-env.sh
-# via Billykat7/infra cd-product.yml.
+# Production CD must use the gateway copy, `scripts/cd/write-prod-env.sh` under the gateway deploy
+# root ($GATEWAY_COMPOSE_DIR), via Billykat7/infra cd-product.yml.
 #
 # To run this copy (local emergency / offline host):
 #   BTK_ALLOW_LEGACY_WRITE_PROD_ENV=1 ./scripts/cd/write-prod-env.sh
@@ -18,7 +17,7 @@ set -e
 
 if [[ "${BTK_ALLOW_LEGACY_WRITE_PROD_ENV:-}" != "1" ]]; then
   echo "error: clinicq scripts/cd/write-prod-env.sh is legacy." >&2
-  echo "  Production CD uses: /opt/btk/gateway/scripts/cd/write-prod-env.sh" >&2
+  echo "  Production CD uses: \$GATEWAY_COMPOSE_DIR/scripts/cd/write-prod-env.sh" >&2
   echo "  Override for emergency use: BTK_ALLOW_LEGACY_WRITE_PROD_ENV=1 $0 $*" >&2
   exit 1
 fi
@@ -119,7 +118,7 @@ FLIGHT_MODEL_S3_PREFIX=${FLIGHT_MODEL_S3_PREFIX}
 FLIGHT_RECO_WEIGHTS=${FLIGHT_RECO_WEIGHTS}
 FLIGHT_SCHEDULER_ENABLED=${FLIGHT_SCHEDULER_ENABLED}
 FRONTEND_URL=${FRONTEND_URL}
-GATEWAY_COMPOSE_DIR=${GATEWAY_COMPOSE_DIR:-/opt/btk/gateway}
+GATEWAY_COMPOSE_DIR=${GATEWAY_COMPOSE_DIR}
 GIT_SHA=${GIT_SHA}
 HOST=${HOST}
 IMAGE=${IMAGE}

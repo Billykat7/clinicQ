@@ -2,8 +2,9 @@
 #
 # Deploy one ClinicQ image on this host, without ever leaving it with nothing that works (Issue 11).
 #
-# Runs on the target host, from its deploy directory (/opt/btk/clinicq, or /opt/btk/clinicq-staging),
-# which holds this script, docker-compose.prod.yml, prune-old-app-images.sh and the app's .env.
+# Runs on the target host, from its deploy directory (DEPLOY_DIR, the variable on the environment's
+# GitHub Environment), which holds this script, docker-compose.prod.yml, prune-old-app-images.sh and
+# the app's .env. The script takes that directory from its own location, so it never needs the path.
 # .github/workflows/deploy.yml copies those in and calls each step below over SSH, in this order:
 #
 #   deploy.sh preflight <image> <environment>  pull the image; check .env against its own rules

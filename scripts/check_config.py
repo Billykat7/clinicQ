@@ -14,7 +14,7 @@ Values are never printed, only setting names: the file is expected to hold secre
 Usage::
 
     python scripts/check_config.py                      # ./.env
-    python scripts/check_config.py /opt/btk/clinicq/.env
+    python scripts/check_config.py "$DEPLOY_DIR/.env"
     python scripts/check_config.py .env.staging --environment staging
     python scripts/check_config.py - --environment production < .env   # from stdin
 
