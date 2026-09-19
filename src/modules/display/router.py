@@ -32,6 +32,7 @@ from src.commons.enums import (
     DisplayDeviceStatus,
     GrantScope,
 )
+from src.commons.time import stored_sast
 from src.core.audit import record_audit_event
 from src.core.client_ip import resolve_client_ip
 from src.core.config import Settings, get_settings
@@ -308,6 +309,33 @@ class ScreenConnectIn(BaseModel):
     queue_ids: list[str] | None = None
 
 
+class ClaimLinkIn(BaseModel):
+    """What the board opened by link should be. No address: no screen is contacted."""
+
+    label: str | None = Field(default=None, max_length=MAX_LABEL_LENGTH)
+    kind: DisplayDeviceKind = DisplayDeviceKind.BOARD
+    queue_ids: list[str] | None = None
+
+
+class ClaimLinkOut(BaseModel):
+    """A row held open for a screen, and the one-time address that screen opens to take it up.
+
+    The code is in the response because the manager who asked for it is the person entitled to
+    pair a screen -- the same grant, the same audit row -- and because a code nobody can read is a
+    code nobody can use. It is single-use, spent the instant the link is opened, and expires with
+    the row.
+    """
+
+    #: The whole address to open on the screen, including the code.
+    claim_url: str
+    #: The code on its own, for a screen that cannot be given a link (typed into /display/claim).
+    claim_code: str
+    #: When the code stops working, so the page can say how long is left.
+    expires_at: datetime | None
+    #: The row now held. It reads as ``pairing`` until a screen opens the link.
+    device: DisplayDeviceOut
+
+
 class ScreenConnectOut(BaseModel):
     """What happened when the server tried to put the board on the chosen screen."""
 
@@ -319,6 +347,12 @@ class ScreenConnectOut(BaseModel):
     #: The row now held for this screen. It reads as ``pairing`` until the screen takes it up, and
     #: is a real row either way, so a screen that never answers is visible and removable.
     device: DisplayDeviceOut
+    #: The claim link, **only when the board was not shown**. The row is held either way, so a cast
+    #: that failed for a reason the manager cannot fix from here -- no receiver registered, a set
+    #: that will not be cast to -- still has a way out: open this on the screen's own browser. When
+    #: the board *is* showing, the screen has already spent the code and there is nothing to offer.
+    claim_url: str = ""
+    claim_code: str = ""
 
 
 #: Hosts that mean "this machine" and therefore mean something different on a television. A screen
@@ -379,6 +413,89 @@ async def discover_screens(
     )
 
 
+def _claim_link_for(request: Request, code: str) -> str:
+    """The address a screen opens to take up the row held under ``code``.
+
+    ``display_claim_link`` is the GET twin of the receiver's POST: a television with a browser but
+    no Chromecast, and a box being set up by hand, open one address instead of somebody carrying a
+    code across the room. Unlike :func:`_claim_url_for` this keeps a loopback host -- a person
+    testing on the server itself wants exactly the address their own browser can open.
+    """
+    return str(request.url_for("display_claim_link").include_query_params(code=code))
+
+
+def _reserve(
+    request: Request,
+    db: DbSession,
+    access: SiteAccess,
+    *,
+    label: str | None,
+    kind: DisplayDeviceKind,
+    queue_ids: list[str] | None,
+) -> devices.ClaimableDevice:
+    """Hold a row open for a screen that has not turned up yet, or refuse an unknown queue."""
+    try:
+        return devices.start_claimable_device(
+            db, access, label=label, kind=kind, queue_ids=queue_ids
+        )
+    except devices.UnknownQueueError as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "A chosen queue is not one of this clinic's.",
+        ) from exc
+
+
+@router.post(
+    "/sites/{site_id}/display-devices/claim-link",
+    response_model=ClaimLinkOut,
+    status_code=status.HTTP_201_CREATED,
+    operation_id="displayCreateClaimLink",
+)
+def create_claim_link(
+    payload: ClaimLinkIn,
+    request: Request,
+    access: DisplayUpdate,
+    db: DbSession,
+) -> ClaimLinkOut:
+    """Hold a row for a screen and return the one-time address that screen opens (Issue 237).
+
+    The other half of "the screen shows a code and somebody types it": here the *clinic* holds the
+    row and the screen is given the address. That suits three cases the cast path does not reach --
+    a Smart TV with a browser but no Chromecast, a deployment with no registered receiver
+    application, and anyone testing the board without a television at all, who can open the link in
+    a second browser window.
+
+    Nothing is contacted and no network is searched, so this works wherever the dashboard does,
+    including on a laptop. Audited like every other way of adding a screen: a row that can become a
+    waiting-room display is a change to what the public sees, however it was made.
+    """
+    reserved = _reserve(
+        request,
+        db,
+        access,
+        label=payload.label,
+        kind=payload.kind,
+        queue_ids=payload.queue_ids,
+    )
+    device = reserved.device
+    _audit(
+        db,
+        request,
+        access,
+        device,
+        f"link made for a {_KIND_WORDS[device.kind_enum]}, to be opened on the screen itself",
+    )
+    db.commit()
+    return ClaimLinkOut(
+        claim_url=_claim_link_for(request, reserved.code),
+        claim_code=reserved.code,
+        expires_at=stored_sast(device.pairing_expires_at)
+        if device.pairing_expires_at
+        else None,
+        device=device_out(device),
+    )
+
+
 @router.post(
     "/sites/{site_id}/display-devices/connect",
     response_model=ScreenConnectOut,
@@ -402,19 +519,14 @@ async def connect_screen(
     Audited either way: taking over a screen in a waiting room is a change to what the public sees,
     whether or not the screen cooperated.
     """
-    try:
-        reserved = devices.start_claimable_device(
-            db,
-            access,
-            label=payload.label,
-            kind=payload.kind,
-            queue_ids=payload.queue_ids,
-        )
-    except devices.UnknownQueueError as exc:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "A chosen queue is not one of this clinic's.",
-        ) from exc
+    reserved = _reserve(
+        request,
+        db,
+        access,
+        label=payload.label,
+        kind=payload.kind,
+        queue_ids=payload.queue_ids,
+    )
     device = reserved.device
     outcome = await asyncio.to_thread(
         casting.send_board_to_screen,
@@ -444,6 +556,9 @@ async def connect_screen(
         showing=outcome.showing,
         note=outcome.note,
         device=device_out(device),
+        # Only while the code is still worth something. A screen that took the board has spent it.
+        claim_url="" if outcome.showing else _claim_link_for(request, reserved.code),
+        claim_code="" if outcome.showing else reserved.code,
     )
 
 

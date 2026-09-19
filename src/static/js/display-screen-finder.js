@@ -104,6 +104,10 @@
         say(data.note || "The screen is opening the waiting-room board.", data.showing);
         button.textContent = data.showing ? "Sent" : "Send the board";
         button.disabled = Boolean(data.showing);
+        // The row is held whether or not the screen took the board, so a cast the manager cannot
+        // fix from here -- no receiver registered, a set that will not be cast to -- still has a
+        // way out. The server sends the claim address only while it is still worth something.
+        offerLink(data.claim_url);
         if (data.showing) {
           // The screen is now one of this clinic's, so the list below it is out of date.
           window.setTimeout(function () { window.location.reload(); }, 2500);
@@ -114,6 +118,32 @@
         button.disabled = false;
         button.textContent = "Send the board";
       });
+  }
+
+  /**
+   * Put the claim address under the message, as something to open on the screen itself.
+   *
+   * A link rather than the code: the code alone needs somebody to know where to type it, and the
+   * point of this whole section is that nobody carries anything across the room. The full section
+   * for making one on purpose is above; this is the same thing offered where the failure happened.
+   */
+  function offerLink(url) {
+    var existing = document.getElementById("cast-fallback");
+    if (existing) existing.remove();
+    if (!url || !message || !message.parentNode) return;
+    var note = document.createElement("p");
+    note.id = "cast-fallback";
+    note.className = "hint";
+    note.appendChild(
+      document.createTextNode("This screen is still waiting for a board. Open it on the screen's own browser: ")
+    );
+    var link = document.createElement("a");
+    link.href = url;
+    link.rel = "noreferrer";
+    // Not a link to follow from here: opening it makes *this* browser the screen.
+    link.textContent = url;
+    note.appendChild(link);
+    message.parentNode.insertBefore(note, message.nextSibling);
   }
 
   function render(screens) {

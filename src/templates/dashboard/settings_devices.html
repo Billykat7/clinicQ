@@ -10,6 +10,9 @@
 
 {% block head %}
   {{ super() }}
+  {% if can_change %}
+  <script src="/static/js/display-claim-link.js" defer></script>
+  {% endif %}
   {% if can_change and can_find_screens %}
   <script src="/static/js/display-screen-finder.js" defer></script>
   {% endif %}
@@ -53,6 +56,55 @@
         <span class="msg" data-api-msg aria-live="polite"></span>
       </div>
     </form>
+  </section>
+  {% endif %}
+
+  {% if can_change %}
+  {#- The other way round (Issue 237): the clinic holds a row open and the *screen* opens a link,
+      instead of the screen showing a code for somebody to type. This is what reaches a Smart TV
+      that has a browser but will not be cast to, a deployment with no registered Cast receiver,
+      and anyone checking the board with no television at hand -- the link opens in a second
+      browser window. It contacts nothing, so unlike the search below it works everywhere the
+      dashboard does, including a laptop. docs/OPS/SMART_TV_SETUP.md explains when to reach for it. -#}
+  <section class="card" aria-labelledby="link-title" id="claim-link"
+           data-api="/api/v1/sites/{{ site.id }}/display-devices/claim-link">
+    <h2 id="link-title">Open the board on the screen itself</h2>
+    <p class="card-sub">Make a one-time address, then open it on the screen's own browser. The screen becomes this clinic's and shows the board straight away — nobody types a code. The address works once and expires in {{ code_minutes }} minutes.</p>
+    <div class="field-row cols-2">
+      <div class="field">
+        <label for="link-kind">What this device is</label>
+        <select id="link-kind">
+          {% for value, words in kind_words.items() %}
+          <option value="{{ value }}">{{ words }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="link-label">Name for this screen (optional)</label>
+        <input type="text" id="link-label" maxlength="80" autocomplete="off" placeholder="For example: TV in the corridor">
+      </div>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn" id="make-link">Make an address</button>
+      <span class="msg" id="link-msg" aria-live="polite"></span>
+    </div>
+    {#- Filled by display-claim-link.js. Hidden until there is something to show, because an empty
+        box that sometimes holds a credential is worse than no box. -#}
+    <div class="claim-result" id="link-result" hidden>
+      <div class="field">
+        <label for="link-url">Open this on the screen</label>
+        <input type="text" id="link-url" readonly spellcheck="false" onfocus="this.select()">
+        <p class="hint">Single use. Opening it here instead of on the screen spends it, and this browser becomes the screen.</p>
+      </div>
+      {#- The code on its own, for typing the address into a television's on-screen keyboard, and
+          for reading it to somebody standing at the screen. There is no page to type it into: the
+          code travels *in* the address, so this says where it goes rather than implying a form. -#}
+      <p class="claim-code">Typing it in by hand on the screen? The address is <code>{{ claim_path }}?code=</code> followed by <strong id="link-code"></strong></p>
+      <div class="form-actions">
+        <button type="button" class="btn btn-sm" id="copy-link">Copy the address</button>
+        <span class="msg" id="copy-msg" aria-live="polite"></span>
+      </div>
+    </div>
   </section>
   {% endif %}
 

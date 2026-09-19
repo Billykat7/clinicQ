@@ -404,3 +404,180 @@ def test_a_screen_is_never_told_to_claim_itself(
     )
 
     assert sent[0]["board_url"] == ""
+
+
+# --- The address a screen opens for itself (Issue 237) ---------------------------
+
+
+def _make_link(
+    board: SimpleNamespace,
+    who: str = "manager.a",
+    site: str | None = None,
+    **extra: object,
+):  # type: ignore[no-untyped-def]
+    """Ask clinic A to hold a row open and hand back the address a screen opens."""
+    site_id = site or board.world.site_a
+    return board.world.client(who).post(
+        f"/api/v1/sites/{site_id}/display-devices/claim-link",
+        json={"label": "TV in the corridor", **extra},
+    )
+
+
+def test_a_manager_can_make_the_address_without_any_screen_at_all(
+    board: SimpleNamespace,
+) -> None:
+    """The path that needs no Chromecast, no discovery and no second device.
+
+    Until this existed, ``GET /display/claim`` could only be reached by a code that had travelled
+    over a Cast connection — so a deployment with no registered receiver, a television that will
+    not be cast to, and anyone checking the board on a laptop all had no way to produce one. The
+    address is returned to the manager who asked for it, which is the same person the same grant
+    already lets pair a screen by typing a code.
+    """
+    made = _make_link(board)
+
+    assert made.status_code == status.HTTP_201_CREATED
+    body = made.json()
+    assert body["claim_code"]
+    assert body["claim_url"].endswith(f"/display/claim?code={body['claim_code']}")
+    assert body["device"]["status"] == DisplayDeviceStatus.PAIRING.value
+    assert body["expires_at"]
+
+    # Nothing was contacted: this works where the network search cannot.
+    screen = TestClient(board.world.app, follow_redirects=False)
+    opened = screen.get(f"/display/claim?code={body['claim_code']}")
+    assert opened.status_code == status.HTTP_302_FOUND
+    assert opened.headers["location"] == f"/display/{board.world.site_a}"
+    assert "clinicq_display=" in opened.headers["set-cookie"]
+
+
+def test_making_an_address_needs_the_grant_that_pairs_a_screen(
+    board: SimpleNamespace,
+) -> None:
+    """It mints a credential for a waiting-room screen, so it is held to the pairing grant.
+
+    The front desk reads the list of screens; it does not get to put one on the wall. And a
+    manager of one clinic cannot hold a row open in another's.
+    """
+    assert _make_link(board, who="desk.a").status_code == status.HTTP_403_FORBIDDEN
+    assert _make_link(board, who="desk.b", site=board.world.site_a).status_code in (
+        status.HTTP_403_FORBIDDEN,
+        status.HTTP_404_NOT_FOUND,
+    )
+
+
+def test_making_an_address_is_audited_like_any_other_way_of_adding_a_screen(
+    board: SimpleNamespace,
+) -> None:
+    """A row that can become a waiting-room display is a change to what the public sees."""
+    made = _make_link(board)
+    assert made.status_code == status.HTTP_201_CREATED
+
+    with board.session() as db:
+        events = (
+            db.execute(
+                select(AuditEvent).where(
+                    AuditEvent.entity_type == AuditEntityType.DISPLAY_DEVICE
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert [event.entity_id for event in events] == [made.json()["device"]["id"]]
+    assert "link made" in (events[0].context or "")
+
+
+def test_the_address_is_single_use_like_every_other_claim_code(
+    board: SimpleNamespace,
+) -> None:
+    """Two screens opening the same address: the second gets the ordinary pairing page."""
+    code = _make_link(board).json()["claim_code"]
+
+    first = TestClient(board.world.app, follow_redirects=False).get(
+        f"/display/claim?code={code}"
+    )
+    second = TestClient(board.world.app, follow_redirects=False).get(
+        f"/display/claim?code={code}"
+    )
+
+    assert first.headers["location"] == f"/display/{board.world.site_a}"
+    assert second.headers["location"] == "/display"
+
+
+def test_a_cast_that_did_not_show_the_board_hands_back_the_address(
+    board: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The way out of the failure a manager cannot fix from the dashboard.
+
+    A screen that was *reached* but has no ClinicQ receiver to open is the case the setup guide
+    warns about, and the row is held either way. Returning the claim address turns a dead end into
+    "open this on the screen's own browser" — which is exactly what the row is waiting for.
+    """
+
+    def _refuse(target: discovery.ScreenTarget, **_: object) -> casting.CastOutcome:
+        return casting.CastOutcome(
+            reached=True,
+            showing=False,
+            note=casting.NO_APP_ID_NOTE,
+            screen_name=target.name,
+        )
+
+    monkeypatch.setattr(casting, "send_board_to_screen", _refuse)
+    answered = _connect(board)
+
+    assert answered.status_code == status.HTTP_201_CREATED
+    body = answered.json()
+    assert body["reached"] is True and body["showing"] is False
+    assert body["claim_code"]
+    assert body["claim_url"].endswith(f"/display/claim?code={body['claim_code']}")
+
+    # And it really is the row that was held, not a second one.
+    screen = TestClient(board.world.app, follow_redirects=False)
+    opened = screen.get(body["claim_url"])
+    assert opened.headers["location"] == f"/display/{board.world.site_a}"
+
+
+def test_a_cast_that_worked_hands_back_nothing_to_spend(
+    board: SimpleNamespace, sent: list[dict[str, object]]
+) -> None:
+    """The screen has the code and is spending it; repeating it here would only widen its reach.
+
+    ``sent`` accepts the cast, so the board is showing. The response carries the row — a manager
+    needs to see the screen appear — and no code.
+    """
+    body = _connect(board).json()
+
+    assert body["showing"] is True
+    assert body["claim_code"] == "" and body["claim_url"] == ""
+
+
+def test_the_page_offers_the_address_even_where_it_cannot_search(
+    board: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The two sections answer different questions, so the link one is not tied to discovery.
+
+    A cloud instance can never find a clinic's television, which is why **Screens on this network**
+    is hidden there. It can still hold a row open and hand out an address, and that deployment is
+    the one that needs it most.
+    """
+    from src.web.dashboard import settings as settings_page
+
+    pinned = board.world.settings.model_copy(
+        update={"smart_tv_discovery_enabled": False}
+    )
+    monkeypatch.setattr(settings_page, "get_settings", lambda: pinned)
+
+    page = board.world.client("manager.a").get(
+        f"/dashboard/sites/{board.world.site_a}/settings/devices"
+    )
+
+    assert page.status_code == status.HTTP_200_OK
+    assert page.context["can_find_screens"] is False  # type: ignore[attr-defined]
+    assert page.context["claim_path"] == "/display/claim"  # type: ignore[attr-defined]
+    assert page.context["code_minutes"] > 0  # type: ignore[attr-defined]
+    body = page.text
+    assert 'id="claim-link"' in body and "Open the board on the screen itself" in body
+    assert "display-devices/claim-link" in body
+    # The code travels in the address; the page must not imply a form to type it into.
+    assert "/display/claim?code=" in body
+    assert 'id="screen-finder"' not in body

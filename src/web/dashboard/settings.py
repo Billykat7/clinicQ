@@ -688,6 +688,10 @@ async def settings_devices(
         # is not rendered at all when it cannot, rather than offering a button that always fails:
         # a cloud instance shares no network with the clinic and never will.
         can_find_screens=get_settings().smart_tv_discovery_enabled,
+        # For the "open the board on the screen itself" card (Issue 237): how long an address it
+        # makes is good for, and where a screen that cannot open a link types the code instead.
+        code_minutes=get_settings().display_pairing_code_minutes,
+        claim_path=request.url_for("display_claim_link").path,
     )
     return render_clinic_page(request, opened, "dashboard/settings_devices.html")
 
