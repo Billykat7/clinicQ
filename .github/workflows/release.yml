@@ -1,8 +1,10 @@
 # Release (Issue 10): a version tag builds the image once, checks it, and publishes it to GHCR under
-# three tags that all point at the one manifest that was checked:
+# four tags that all point at the one manifest that was checked:
 #
 #   ghcr.io/<owner>/clinicq:<git sha>    pushed by the build, the image every check below runs
 #   ghcr.io/<owner>/clinicq:<version>    added after the checks pass (v0.2.0 → 0.2.0)
+#   ghcr.io/<owner>/clinicq:v<version>   the same digest under the git tag's own name, which is
+#                                        what the platform's shared CD asks GHCR for (Issue 243)
 #   ghcr.io/<owner>/clinicq:latest       moved at the same moment, to the same digest
 #
 # Nothing is rebuilt to add a tag, and an old tag is never overwritten, so a rollback is a deploy
@@ -153,14 +155,19 @@ jobs:
             || { echo "::error title=Wrong /health::expected version $VERSION and sha $GITHUB_SHA"; exit 1; }
           docker rm -f smoke >/dev/null
 
-      - name: Tag the checked manifest :<version> and :latest
+      # `:v<version>` beside `:<version>` because the platform's shared CD resolves
+      # `ghcr.io/<repo>:<tag>` from the *git* tag and insists on the `v` (Issue 243). Both names
+      # point at this one checked digest, so neither can drift from the other.
+      - name: Tag the checked manifest :<version>, :v<version> and :latest
         env:
           IMAGE: ${{ steps.meta.outputs.image }}
           DIGEST: ${{ steps.build.outputs.digest }}
           VERSION: ${{ steps.meta.outputs.version }}
-        run: docker buildx imagetools create --tag "$IMAGE:$VERSION" --tag "$IMAGE:latest" "$IMAGE@$DIGEST"
+        run: >-
+          docker buildx imagetools create
+          --tag "$IMAGE:$VERSION" --tag "$IMAGE:v$VERSION" --tag "$IMAGE:latest" "$IMAGE@$DIGEST"
 
-      - name: All three tags resolve to one digest
+      - name: All four tags resolve to one digest
         env:
           IMAGE: ${{ steps.meta.outputs.image }}
           DIGEST: ${{ steps.build.outputs.digest }}
@@ -170,7 +177,7 @@ jobs:
             echo "| Tag | Digest |"
             echo "|-----|--------|"
           } >> "$GITHUB_STEP_SUMMARY"
-          for tag in "$GITHUB_SHA" "$VERSION" latest; do
+          for tag in "$GITHUB_SHA" "$VERSION" "v$VERSION" latest; do
             digest="$(docker buildx imagetools inspect "$IMAGE:$tag" --format '{{json .Manifest}}' | jq -r .digest)"
             echo "| \`$IMAGE:$tag\` | \`$digest\` |" >> "$GITHUB_STEP_SUMMARY"
             if [[ "$digest" != "$DIGEST" ]]; then

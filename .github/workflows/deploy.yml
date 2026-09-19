@@ -1,80 +1,61 @@
-# Deploy (Issues 11, 230): put a released image on staging or production, safely.
+# CD ClinicQ (Issues 11, 230, 239, 243): put a released image on production, safely.
 #
-#   Run workflow, environment=staging  →  deploys staging
-#   Run workflow, environment=production  →  waits for the DevOps/QA Lead's approval (the GitHub
-#                                             Environment "production"), then deploys
-#   Run workflow with an older version and "rollback"  →  that tag, without its migrations
+#   Run workflow, version=0.11.0  →  migrations, then the platform's shared deploy
+#   Run workflow with an older version  →  that version, which is how a rollback is done
 #
-# **The runner is the host.** ClinicQ runs on the BTK platform server, which hosts its own GitHub
-# Actions runner (labels `self-hosted, Linux, X64, clinicq, infra`), so this workflow runs *on the
-# machine it is deploying to*. There is nothing to SSH into and no key to hold: the steps below are
-# the same commands a person would type in the deploy directory. That is the shape the other BTK
-# products use (`Billykat7/infra`'s `cd-product.yml`); ClinicQ keeps its own sequence rather than
-# calling that one, because its sequence runs the migrations before any traffic and smoke-tests a
-# candidate on a side port first, and because `write-prod-env.sh` there knows a shared key list that
-# does not include ClinicQ's own settings.
+# **Two jobs, and the split is the point.** `migrations` is ClinicQ's, and runs first; `deploy`
+# hands the rest to the gateway's `cd-product.yml`, the workflow every BTK product deploys through,
+# so the pull, the compose up, the nginx render and the registry row are defined once for all of
+# them instead of eleven times.
 #
-# **Every deploy is a manual run**, the same shape as BK Properties' CD: release.yml publishes the
-# image on a tag, and a person decides when that image reaches an environment. Nothing here starts
-# by itself, so a release is never also a deploy, and "what is running where" only changes when
-# somebody chose it. Deploying a fresh release is therefore two steps, not one: push the tag, wait
-# for Release to publish the image, then run this with that version.
+# What stays here is what the shared workflow does not do and ClinicQ will not give up: the
+# migrations run **inside the new image, before anything serves it**, and they run the same
+# `scripts/db/deploy-sequence.sh` that CI runs on every pull request (Issue 9), so "what a deploy
+# does to a database" has one definition. If they fail, the previous version is still serving and
+# the deploy job never starts.
 #
-# The work happens in scripts/cd/deploy.sh, one visible step at a time: pre-flight (the image's own
-# settings check), the migrations as their own step before any traffic, a candidate on a side port
-# nothing routes to, the swap with a live smoke check that rolls back by itself, and a message to
-# the team channel. A failure at any step leaves the previous version serving.
-# docs/CICD/RUNBOOK_DEPLOY.md is the runbook, including the timed rollback.
+# **Production only, deliberately (Issue 243).** `cd-product.yml` takes no environment: it pins
+# `environment: production` and derives its path from the gateway's own root. A `staging` choice
+# here would therefore have read the *production* Environment's secrets and deployed to the
+# *production* directory while the run said "staging" — so the choice is gone rather than
+# misleading. Staging returns when the shared workflow can express it.
 #
-# **What has to be configured** (docs/CICD/ENVIRONMENTS.md):
+# **The image must already exist.** release.yml publishes `:<version>`, `:v<version>`, `:<sha>` and
+# `:latest` on a tag; this only deploys. `cd-product.yml` resolves `ghcr.io/<repo>:<image_tag>` and
+# insists on a `v`-prefixed semver tag, which is why `v` is added below and why release.yml pushes
+# that tag at all. A release is still never also a deploy: somebody chooses this run.
 #
-#   * `DEPLOY_DIR` (an Environment *variable*): the absolute directory on this runner that holds
-#     this environment. It is the only required setting, and the only place the host's layout is
-#     written down -- deliberately not in this repository, which is public. The app's settings are
-#     the `.env` already in that directory, maintained on the host.
-#     (`btk-platform-layout.sh` in `Billykat7/infra` is what creates the directory.)
-#   * the secrets, encrypted with SOPS + age in the private `Billykat7/infra` repository, checked
-#     out on this host at `SECRETS_DIR` (default `/etc/btk/secrets`) with the age identity beside
-#     them. `scripts/cd/compose-env.sh` merges them with `deploy/env/<environment>.env` -- the
-#     half that is *not* secret and lives in this repository, reviewed like code.
-#     `SOPS_AGE_KEY` (an Environment secret) is the alternative for a host that holds no identity
-#     of its own; not setting it is better, because then the key never travels.
-#   * `TEAM_WEBHOOK_URL` (optional) posts the result to the team channel.
+# ⚠️ **NOT MERGEABLE YET — one conflict is not ours to resolve.** `cd-product.yml` writes its own
+# `$DEPLOY_PATH/.env` from the gateway's `write-prod-env.sh`, whose key list is shared across every
+# BTK product and contains none of ClinicQ's ~179 settings. It runs *after* the job below has
+# composed the real one, so it would overwrite it, and the app would come up on defaults for every
+# `SMS_*`, `QUEUE_*`, `DISPLAY_*`, `PATIENT_*` and `VAPID_*` value. Issue 239 built the two-half
+# split precisely to avoid that. `Billykat7/infra` has to leave an existing `.env` alone, or take a
+# product env hook, before this workflow may deploy anything.
 #
-# `APP_ENV` (the whole .env as one Environment secret) is gone: GitHub secrets are write-only and
-# unversioned, and the file was pushing against the 48 KB-per-secret / 64 KB-per-repository
-# limits. deploy/env/README.md and docs/CICD/RUNBOOK_DEPLOY.md have the replacement.
-#
-# Until `DEPLOY_DIR` is set and the directory exists, the deploy says exactly what to do, changes
-# nothing and succeeds.
+# **What has to be configured** (docs/CICD/ENVIRONMENTS.md): `DEPLOY_DIR` as a *secret* on the
+# `production` Environment (Issue 239 — this repository is public, and `vars.*` are not masked in
+# Actions logs), plus the secrets `cd-product.yml` inherits. Without `DEPLOY_DIR` the run says so,
+# changes nothing and succeeds.
 
-name: Deploy
+name: CD ClinicQ
 
 # What the Actions list shows for this run, so a deploy is told apart from a release at a glance,
-# and one deploy from another: "Deploy ClinicQ 0.2.0". The environment is on the job below it.
+# and one deploy from another: "Deploy ClinicQ 0.2.0".
 run-name: Deploy ClinicQ ${{ inputs.version }}
 
 on:
   workflow_dispatch:
     inputs:
-      environment:
-        description: Where to deploy
-        type: choice
-        options: [staging, production]
-        required: true
       version:
-        description: "The released version to deploy, e.g. 0.2.0 (an older one rolls back)"
+        description: "The released version to deploy, e.g. 0.11.0 (an older one rolls back)"
         type: string
         required: true
-      rollback:
-        description: "Rolling back: skip the migrations (they only ever move forward)"
-        type: boolean
-        default: false
 
-# One deploy per environment at a time, never cancelled half-way: a half-applied deploy is worse than
-# a slow one. The group names the environment, not the ref, so two tags queue for the same host.
+# One deploy at a time, never cancelled half-way: a half-applied deploy is worse than a slow one.
+# The group names the product, not the ref, so two versions queue for the same host.
 concurrency:
-  group: deploy-${{ inputs.environment }}
+  group: deploy-clinicq
   cancel-in-progress: false
 
 permissions:
@@ -86,27 +67,26 @@ defaults:
     shell: bash
 
 jobs:
-  deploy:
-    name: Deploy ${{ inputs.version }} to ${{ inputs.environment }}
-    # The platform server's own runner. `clinicq` is the label that pins it to the machine ClinicQ
-    # lives on; `DEPLOY_RUNNER_LABELS` (a repository variable, a JSON array) moves the deploy to a
-    # different runner without editing this file.
+  # ── ClinicQ's own gate ───────────────────────────────────────────────────────────────────────
+  # The migrations, in the new image, before the shared deploy replaces anything.
+  migrations:
+    name: Migrations before anything serves
+    # The platform server's own runner, which is also the deploy host: there is nothing to SSH
+    # into. `DEPLOY_RUNNER_LABELS` (a repository variable, a JSON array) moves this to another
+    # runner without editing the file.
     runs-on: ${{ fromJSON(vars.DEPLOY_RUNNER_LABELS || '["self-hosted","Linux","X64","clinicq"]') }}
-    timeout-minutes: 20
+    timeout-minutes: 15
     environment:
-      name: ${{ inputs.environment }}
+      name: production
       url: ${{ vars.PUBLIC_URL }}
     env:
-      ENVIRONMENT: ${{ inputs.environment }}
-      ROLLBACK: ${{ inputs.rollback }}
-      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      # Where this environment lives on the runner. A *secret* is the right kind on a public
-      # repository -- Actions logs are world-readable, and GitHub masks secrets but not variables.
-      # A variable still works (the next step masks the value itself either way); the legacy
-      # PRODUCTION_DEPLOY_PATH is accepted verbatim so nothing has to be renamed to deploy.
-      DEPLOY_DIR: >-
-        ${{ secrets.DEPLOY_DIR || vars.DEPLOY_DIR
-         || secrets.PRODUCTION_DEPLOY_PATH || vars.PRODUCTION_DEPLOY_PATH }}
+      # The one source of the deploy directory (Issue 239). A secret, not a variable, because this
+      # repository is public and Actions masks secrets in the log.
+      DEPLOY_DIR: ${{ secrets.DEPLOY_DIR }}
+    outputs:
+      provisioned: ${{ steps.target.outputs.provisioned }}
+      # Normalised once, here, so the shared deploy below cannot be handed "vv0.11.0".
+      version: ${{ steps.release.outputs.version }}
     steps:
       - name: Check out the deploy scripts
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -118,58 +98,44 @@ jobs:
         env:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
-          version="${INPUT_VERSION#v}"   # v0.2.0 and 0.2.0 both name the same release
+          version="${INPUT_VERSION#v}"   # v0.11.0 and 0.11.0 both name the same release
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]; then
-            echo "::error title=Not a version::'$version' is not a released version (e.g. 0.2.0)"
+            echo "::error title=Not a version::'$version' is not a released version (e.g. 0.11.0)"
             exit 1
           fi
           image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/clinicq:$version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "image=$image" >> "$GITHUB_OUTPUT"
-          echo "### $ENVIRONMENT ← \`$image\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "### production ← \`$image\`" >> "$GITHUB_STEP_SUMMARY"
 
-      # Whether this environment is provisioned, and nothing else: the directory itself stays in
-      # $DEPLOY_DIR, never in a step output and never in a log line. Each Environment names its own
-      # directory, so this repository -- which is public -- holds no path on anybody's server, and
-      # a host laid out differently needs no change here.
+      # The directory is never printed, never a step output and never in a `working-directory:`
+      # expression — steps `cd "$DEPLOY_DIR"`. Each Environment names its own.
       - name: Where this environment lives
         id: target
         run: |
           # Mask it whatever it came from, so a DEPLOY_DIR kept as a variable is not published by
-          # an error message, a `set -x`, or a stack trace later in the job.
+          # a step that echoes its own command line.
           [[ -n "$DEPLOY_DIR" ]] && echo "::add-mask::${DEPLOY_DIR%/}"
           dir="${DEPLOY_DIR%/}"
           if [[ -z "$dir" ]]; then
             echo "provisioned=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=$ENVIRONMENT has no DEPLOY_DIR::nothing was deployed (docs/CICD/RUNBOOK_DEPLOY.md)"
-            {
-              echo "**Not provisioned:** the \`$ENVIRONMENT\` Environment has no \`DEPLOY_DIR\`, so nothing was deployed."
-              echo
-              echo "Set the \`DEPLOY_DIR\` **variable** on **Settings → Environments → $ENVIRONMENT**"
-              echo "to this runner's absolute deploy directory for $ENVIRONMENT."
-            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=production has no DEPLOY_DIR::nothing was deployed (docs/CICD/RUNBOOK_DEPLOY.md)"
+            echo "**Not provisioned:** set \`DEPLOY_DIR\` as a secret on the \`production\` Environment." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           if [[ "$dir" != /* ]]; then
-            echo "::error title=DEPLOY_DIR must be absolute::got a relative path"
+            echo "::error title=DEPLOY_DIR must be absolute::it is not"
             exit 1
           fi
           if [[ ! -d "$dir" ]]; then
             echo "provisioned=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=$ENVIRONMENT not provisioned::the DEPLOY_DIR directory does not exist on this runner; nothing was deployed (docs/CICD/RUNBOOK_DEPLOY.md)"
-            {
-              echo "**Not provisioned:** the \`$ENVIRONMENT\` \`DEPLOY_DIR\` does not exist on this runner, so nothing was deployed."
-              echo
-              echo "Create it once (\`mkdir -p\` it and put the app's \`.env\` in it), or point"
-              echo "\`DEPLOY_DIR\` at where this environment does live."
-            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=production not provisioned::the deploy directory does not exist on this runner"
+            echo "**Not provisioned:** the deploy directory does not exist on this runner." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           echo "provisioned=true" >> "$GITHUB_OUTPUT"
-          echo "Deploy directory: set by \`DEPLOY_DIR\` on the \`$ENVIRONMENT\` Environment." >> "$GITHUB_STEP_SUMMARY"
 
-      # Pulling the image is the deploy script's job (pre-flight), but the runner has to be able to
-      # read the package first. GITHUB_TOKEN can, for this repository's own package.
+      # The migrations pull the image themselves; the runner has to be able to read the package.
       - name: Log in to GHCR
         if: steps.target.outputs.provisioned == 'true'
         env:
@@ -177,30 +143,25 @@ jobs:
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
         run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
 
-      - name: Copy the compose file and the deploy scripts into place
+      - name: Copy the deploy scripts into place
         if: steps.target.outputs.provisioned == 'true'
-        run: |
-          install -m 644 infra/docker/docker-compose.prod.yml "$DEPLOY_DIR/"
-          install -m 755 scripts/cd/deploy.sh scripts/cd/prune-old-app-images.sh "$DEPLOY_DIR/"
+        run: install -m 755 scripts/cd/deploy.sh scripts/cd/prune-old-app-images.sh "$DEPLOY_DIR/"
 
-      # The app's settings, composed from their two halves: deploy/env/<environment>.env, which is
-      # in this repository and reviewed like code, plus the SOPS-encrypted secrets from the private
-      # Billykat7/infra checkout on this host. compose-env.sh writes the result to $DEPLOY_DIR/.env
-      # (mode 600) and prints counts, never a value. deploy/env/README.md says why it is split.
+      # The app's settings, composed from their two halves: deploy/env/production.env, which is in
+      # this repository and reviewed like code, plus the SOPS-encrypted secrets from the private
+      # Billykat7/infra checkout on this host (Issue 239). compose-env.sh writes the result to
+      # $DEPLOY_DIR/.env (mode 600) and prints counts, never a value.
       #
-      # SOPS_AGE_KEY is only for a host that does not keep its own age identity; leaving it unset
-      # is the better arrangement, because then the key never travels and a compromise of this
-      # repository's Environments does not reach production's secrets.
-      #
-      # If there is no secrets file yet, the .env already on the host is used and left alone -- so
-      # a host provisioned the old way keeps deploying while the secrets are moved across.
+      # The migrations below need the real settings, so this runs before them. **It is also the
+      # unresolved half of Issue 243** — see the header: `cd-product.yml` writes its own `.env`
+      # over this one from a key list shared across products.
       - name: The app's settings
         if: steps.target.outputs.provisioned == 'true'
         env:
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
           SECRETS_DIR: ${{ vars.SECRETS_DIR }}
         run: |
-          if ./scripts/cd/compose-env.sh "$ENVIRONMENT" "$DEPLOY_DIR/.env"; then
+          if ./scripts/cd/compose-env.sh production "$DEPLOY_DIR/.env"; then
             :
           elif [[ -s "$DEPLOY_DIR/.env" ]]; then
             echo "::warning title=Secrets not composed::fell back to the .env already on this host ($(grep -c '^[A-Za-z_]' "$DEPLOY_DIR/.env") keys). See the step log and docs/CICD/RUNBOOK_DEPLOY.md."
@@ -210,45 +171,33 @@ jobs:
           fi
           chmod 600 "$DEPLOY_DIR/.env"
 
-      - name: Pre-flight (pull the image, check the settings with its own rules)
+      # The one deploy sequence CI also runs on every pull request (Issue 9), inside the new image,
+      # before the shared deploy below replaces the serving container. Migrations must stay
+      # backward compatible with the previous release, which keeps serving through this step and
+      # after a failed one.
+      - name: Migrations (scripts/db/deploy-sequence.sh in the new image)
         if: steps.target.outputs.provisioned == 'true'
         env:
-          DEPLOY_ENV: ${{ inputs.environment }}
-          IMAGE: ${{ steps.release.outputs.image }}
-        run: cd "$DEPLOY_DIR" && ./deploy.sh preflight "$IMAGE" "$ENVIRONMENT"
-
-      # Before the new image serves anything: the one deploy sequence CI also runs on every pull
-      # request (Issue 9), inside the new image. Migrations must stay backward compatible with the
-      # previous release, which keeps serving through this step and after a failed deploy.
-      - name: Migrations (scripts/db/deploy-sequence.sh in the new image)
-        if: steps.target.outputs.provisioned == 'true' && env.ROLLBACK != 'true'
-        env:
-          DEPLOY_ENV: ${{ inputs.environment }}
+          DEPLOY_ENV: production
           IMAGE: ${{ steps.release.outputs.image }}
         run: cd "$DEPLOY_DIR" && ./deploy.sh run-new "$IMAGE" ./scripts/db/deploy-sequence.sh
 
-      - name: Smoke-test the new image on a side port (no traffic)
-        if: steps.target.outputs.provisioned == 'true'
-        env:
-          DEPLOY_ENV: ${{ inputs.environment }}
-          IMAGE: ${{ steps.release.outputs.image }}
-        run: cd "$DEPLOY_DIR" && ./deploy.sh candidate "$IMAGE"
-
-      - name: Swap it in and smoke-test it live (rolls back by itself on failure)
-        if: steps.target.outputs.provisioned == 'true'
-        env:
-          DEPLOY_ENV: ${{ inputs.environment }}
-          IMAGE: ${{ steps.release.outputs.image }}
-        run: cd "$DEPLOY_DIR" && ./deploy.sh swap "$IMAGE" && ./deploy.sh status | tee -a "$GITHUB_STEP_SUMMARY"
-
-      - name: Tell the team channel
-        if: ${{ always() && steps.release.outputs.version != '' }}
-        env:
-          TEAM_WEBHOOK_URL: ${{ secrets.TEAM_WEBHOOK_URL }}
-          TEAM_WEBHOOK_KIND: ${{ vars.TEAM_WEBHOOK_KIND }}
-          VERSION: ${{ steps.release.outputs.version }}
-          SHA: ${{ github.sha }}
-          RESULT: ${{ steps.target.outputs.provisioned == 'false' && 'skipped' || job.status }}
-        run: >-
-          python3 scripts/cd/notify_deploy.py --environment "$ENVIRONMENT" --version "$VERSION"
-          --sha "$SHA" --result "$RESULT" --run-url "$RUN_URL"
+  # ── The platform's shared deploy ─────────────────────────────────────────────────────────────
+  # Pull, compose up, nginx render, registry row and deploy events, defined once in the gateway
+  # for every BTK product. Pinned to a commit: a branch can be repointed at other code after review.
+  deploy:
+    needs: migrations
+    if: needs.migrations.outputs.provisioned == 'true'
+    uses: Billykat7/infra/.github/workflows/cd-product.yml@b9c3e64fae66fba7d8f35e8690d30e8ca857bf87
+    with:
+      project_slug: clinicq
+      app_port: "8011"
+      domain: clinicq.bkatalayi.com
+      db_schema: clinicq
+      display_name: BK ClinicQ
+      compose_file: infra/docker/docker-compose.prod.yml
+      # cd-product.yml insists on a v-prefixed semver tag and resolves ghcr.io/<repo>:<tag>;
+      # release.yml publishes that tag beside the bare one. The version is the one the job above
+      # normalised, so typing "v0.11.0" cannot become "vv0.11.0".
+      image_tag: v${{ needs.migrations.outputs.version }}
+    secrets: inherit
