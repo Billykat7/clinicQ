@@ -885,10 +885,22 @@ def test_the_conventions_check_is_its_own_job_that_blocks_nothing_but_the_gate(
 # ── Issue 11: the deploy ──────────────────────────────────────────────────────────────────────
 
 
+#: deploy.yml's own job: the migrations gate that runs before the platform's shared CD (Issue 243).
+#: The other job is a `uses:` call and has no steps, `runs-on` or `env` of its own.
+DEPLOY_GATE_JOB = "migrations"
+
+#: The job that hands the deploy itself to `Billykat7/infra`'s `cd-product.yml`.
+DEPLOY_SHARED_JOB = "deploy"
+
+
+def _deploy_gate(workflows: dict[Workflow, dict[str, Any]]) -> dict[str, Any]:
+    """deploy.yml's steps-bearing job — the part that is ClinicQ's rather than the platform's."""
+    return _jobs(workflows[Workflow.DEPLOY])[DEPLOY_GATE_JOB]
+
+
 def _deploy_steps(workflows: dict[Workflow, dict[str, Any]]) -> list[dict[str, Any]]:
-    """The steps of deploy.yml's one job, in order."""
-    (job,) = _jobs(workflows[Workflow.DEPLOY]).values()
-    return job["steps"]
+    """The steps of deploy.yml's own job, in order."""
+    return _deploy_gate(workflows)["steps"]
 
 
 def test_nothing_deploys_itself_every_deploy_is_a_manual_run(
@@ -905,12 +917,25 @@ def test_nothing_deploys_itself_every_deploy_is_a_manual_run(
     """
     deploy = workflows[Workflow.DEPLOY]
     assert set(_triggers(deploy)) == {Trigger.WORKFLOW_DISPATCH}
-    (job,) = _jobs(deploy).values()
-    assert job["environment"]["name"] == "${{ inputs.environment }}"
-    assert "if" not in job, "a manual run needs no condition to tell the events apart"
+    gate = _deploy_gate(workflows)
+    assert "if" not in gate, "a manual run needs no condition to tell the events apart"
     raw = (WORKFLOW_DIR / Workflow.DEPLOY).read_text(encoding="utf-8")
     assert "workflow_run" not in raw, (
         "a leftover github.event.workflow_run.* expression is empty on a manual run"
+    )
+
+    # **Rewritten again by Issue 243.** The environment used to be the caller's choice
+    # (`${{ inputs.environment }}`). The shared `cd-product.yml` takes no environment at all: it
+    # pins `environment: production` and derives its path from the gateway's root. A `staging`
+    # choice here would have read the *production* Environment's secrets and deployed to the
+    # *production* directory while the run said "staging", so the choice is gone rather than
+    # misleading, and the gate names the one environment it really uses.
+    assert gate["environment"]["name"] == "production"
+    dispatch = _triggers(deploy)[Trigger.WORKFLOW_DISPATCH.value]
+    dispatch_inputs = (dispatch or {}).get("inputs", {})
+    assert "environment" not in dispatch_inputs, (
+        "an environment input the shared CD cannot honour would deploy production while "
+        "the run says staging"
     )
 
 
@@ -930,26 +955,58 @@ def test_the_deploy_run_names_the_product_and_the_version(
 def test_migrations_run_before_the_new_image_serves_and_never_on_a_rollback(
     workflows: dict[Workflow, dict[str, Any]],
 ) -> None:
-    """Migrate, then a candidate nothing routes to, then the swap; a rollback skips the migrations."""
+    """The migrations finish before the shared deploy starts, and their failure stops it.
+
+    **Rewritten by Issue 243.** The order used to be three steps in one job — migrate, a candidate
+    on a side port, then the swap — and the candidate and the swap now belong to the platform's
+    `cd-product.yml`. What ClinicQ keeps is the part that shared workflow does not do: the
+    migrations run in the new image *before anything serves it*. That ordering is now a job
+    dependency rather than a step index, which is stronger — a failed migration means the deploy
+    job never starts at all, and the previous version keeps serving.
+
+    The rollback condition went with the `rollback` input: `cd-product.yml` has no rollback, so a
+    rollback is a deploy of an older version, and an older version's migrations are already applied
+    and are a no-op rather than something to skip.
+    """
+    jobs = _jobs(workflows[Workflow.DEPLOY])
+    shared = jobs[DEPLOY_SHARED_JOB]
+    needs = shared["needs"]
+    assert DEPLOY_GATE_JOB in ([needs] if isinstance(needs, str) else needs), (
+        "the shared deploy must wait for the migrations, or it can serve an unmigrated schema"
+    )
     runs = [str(step.get("run", "")) for step in _deploy_steps(workflows)]
-    (migrate,) = [i for i, run in enumerate(runs) if DEPLOY_SEQUENCE_SCRIPT in run]
-    (candidate,) = [i for i, run in enumerate(runs) if "deploy.sh candidate" in run]
-    (swap,) = [i for i, run in enumerate(runs) if "deploy.sh swap" in run]
-    assert migrate < candidate < swap
-    assert "env.ROLLBACK != 'true'" in _deploy_steps(workflows)[migrate]["if"]
+    assert any(DEPLOY_SEQUENCE_SCRIPT in run for run in runs), (
+        "the migrations job must run the one deploy sequence CI also runs"
+    )
+    assert "uses" in shared and "steps" not in shared, (
+        "the deploy itself is the platform's; this repository only gates it"
+    )
 
 
-def test_the_app_settings_reach_the_host_privately(
+def test_the_deploy_never_prints_the_app_settings(
     workflows: dict[Workflow, dict[str, Any]],
 ) -> None:
-    """APP_ENV holds every secret: it is written with umask 077 and never echoed to the log."""
+    """Nothing in the deploy may put the app's settings in a log this repository publishes.
+
+    **Rewritten by Issues 239 and 243.** This used to guard `APP_ENV`, the whole `.env` as one
+    GitHub secret, which Issue 239 removed in favour of `deploy/env/` plus the SOPS-encrypted half
+    composed on the host. There is no `APP_ENV` left, so the old test passed by finding nothing —
+    a guard that cannot fail. The property worth keeping is the one that outlived the mechanism:
+    the settings never reach the Actions log. This repository is public, so its logs are too.
+    """
     for step in _deploy_steps(workflows):
-        if "secrets.APP_ENV" not in str(step.get("env", {})):
-            continue
-        run = str(step["run"])
-        assert 'echo "$APP_ENV"' not in run and "cat .env" not in run
-        if "$APP_ENV" in run and "printf" in run:
-            assert "umask 077" in run
+        run = str(step.get("run", ""))
+        for leak in (
+            "cat .env",
+            'cat "$DEPLOY_DIR/.env"',
+            "echo $APP_ENV",
+            'echo "$APP_ENV"',
+        ):
+            assert leak not in run, f"{step.get('name')}: {leak}"
+    raw = (WORKFLOW_DIR / Workflow.DEPLOY).read_text(encoding="utf-8")
+    assert "secrets.APP_ENV" not in raw, (
+        "APP_ENV was retired by Issue 239; settings come from deploy/env/ and SOPS"
+    )
 
 
 def test_the_deploy_runs_on_the_host_rather_than_reaching_it_over_ssh(
@@ -963,8 +1020,7 @@ def test_the_deploy_runs_on_the_host_rather_than_reaching_it_over_ssh(
     DEPLOY_HOST DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS APP_ENV DEPLOY_DIR)" until every one of them
     existed.
     """
-    deploy = workflows[Workflow.DEPLOY]
-    job = _jobs(deploy)["deploy"]
+    job = _deploy_gate(workflows)
     labels = str(job["runs-on"])
     assert "self-hosted" in labels and "clinicq" in labels, labels
 
@@ -990,7 +1046,7 @@ def test_the_deploy_directory_comes_only_from_deploy_dir(
     that owns it. Without it the deploy reports "not provisioned" and changes nothing, which is
     the same shape as a directory that does not exist yet.
     """
-    job = _jobs(workflows[Workflow.DEPLOY])["deploy"]
+    job = _deploy_gate(workflows)
     assert "DEPLOY_DIR" in job["env"], (
         "DEPLOY_DIR is the job's, so every step has the same one"
     )
@@ -1085,4 +1141,40 @@ def test_no_absolute_host_path_is_written_down_in_the_repository(
         "an absolute path on the deploy host is written down in "
         + ", ".join(offenders)
         + " -- use $DEPLOY_DIR (the Environment variable) or $GATEWAY_COMPOSE_DIR instead"
+    )
+
+
+def test_the_deploy_asks_ghcr_for_a_tag_the_release_actually_publishes(
+    workflows: dict[Workflow, dict[str, Any]],
+) -> None:
+    """The name the deploy asks GHCR for must be a name release.yml pushed (Issue 243).
+
+    The platform's `cd-product.yml` resolves `ghcr.io/<repo>:<image_tag>` and insists the tag is
+    `v`-prefixed semver, while release.yml published `:<version>` with the `v` stripped
+    (`v0.11.0` → `0.11.0`). A deploy would have asked for `clinicq:v0.11.0`, which did not exist,
+    and failed at "Verify release image exists" — after the migrations had already run.
+
+    So release.yml now publishes `:v<version>` beside `:<version>`, both pointing at the one
+    digest every check ran against. This pins the pair together: neither name can move without the
+    other.
+    """
+    deploy_raw = (WORKFLOW_DIR / Workflow.DEPLOY).read_text(encoding="utf-8")
+    release_raw = (WORKFLOW_DIR / Workflow.RELEASE).read_text(encoding="utf-8")
+
+    assert "image_tag: v${{ needs." in deploy_raw, (
+        "the shared CD wants a v-prefixed tag; passing the bare version asks for an image "
+        "release.yml never pushed"
+    )
+    assert '--tag "$IMAGE:v$VERSION"' in release_raw, (
+        "release.yml must publish the v-prefixed tag the deploy asks for"
+    )
+    # …and it must be the same digest as the rest, not a second build.
+    tag_step = next(
+        step
+        for job in _jobs(workflows[Workflow.RELEASE]).values()
+        for step in job.get("steps", [])
+        if '--tag "$IMAGE:v$VERSION"' in str(step.get("run", ""))
+    )
+    assert '"$IMAGE@$DIGEST"' in str(tag_step["run"]), (
+        "the v-prefixed tag must point at the checked digest, never a rebuild"
     )
