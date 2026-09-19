@@ -1,18 +1,3 @@
-# CI (Issue 9): the merge gate. Every pull request to main runs the checks of
-# scripts/ci-local.sh against real PostgreSQL 18 + PostGIS and Redis 8 service containers, and the
-# one check branch protection requires, "CI gate", is green only when every one of them passed.
-#
-#   ci-local.sh stage  →  job here          what runs
-#   quality            →  quality           ruff check, ruff format --check, mypy src/, ruff pin
-#   secrets            →  quality           gitleaks over the whole history, the same command
-#   tests              →  test (14 shards)  pytest with coverage, in parallel; deploy sequence too
-#   coverage           →  report            the fail_under floor, over the combined shards
-#   docker             →  docker            the image builds, when one of its inputs changed
-#   pip-audit, Trivy and the --compose smoke stay local-only by design (scripts/README.md).
-#
-# tests/unit/platform/test_workflow_guardrails.py holds that map, the timeouts, the concurrency
-# group and the action pins; docs/CICD/PIPELINES.md explains them and what a month of runs costs.
-# Every third-party action is pinned to a full commit SHA, with its release in a comment.
 
 name: CI
 
@@ -23,8 +8,6 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
-# One run per pull request: a new push cancels the run it supersedes. Only pull-request runs are
-# ever cancelled; a manual run is left to finish.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -34,15 +17,11 @@ permissions:
 
 defaults:
   run:
-    # Explicit bash runs every step with -eo pipefail; the implicit default has no pipefail.
     shell: bash
 
 env:
   FORCE_COLOR: "1"
-  # Where uv keeps downloads. Set here, not by setup-uv, so the actions/cache path below is the
-  # directory uv really writes to (a workflow-level env is not overridden by an action).
   UV_CACHE_DIR: /home/runner/.cache/uv
-  # ruff check annotates the pull request's diff instead of only printing to the log.
   RUFF_OUTPUT_FORMAT: github
 
 jobs:
@@ -65,10 +44,6 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           DRAFT: ${{ github.event.pull_request.draft }}
-          # Prose that no test reads. A change made only of these skips every job below and the
-          # gate still passes, so a docs-only pull request costs one short job. Entries ending in
-          # "/" are folders, the rest exact files. test_workflow_guardrails.py fails if a test
-          # starts reading one of them.
           PROSE_PATHS: >-
             docs/GITHUB/ISSUES/ docs/GITHUB/MILESTONES/ docs/GITHUB/RELEASES/ docs/GITHUB/RUNNER/
             docs/GITHUB/README.md docs/PLAN/ docs/PROJECTS/ docs/DEMO/ docs/IDE/
@@ -220,8 +195,7 @@ jobs:
         id: gitleaks
         if: ${{ !cancelled() }}
         env:
-          # The version the pre-commit hook pins (.pre-commit-config.yaml); the guard test fails if
-          # the two differ. The checksum is from the release's gitleaks_<version>_checksums.txt.
+          # The version the pre-commit hook pins (.pre-commit-config.yaml)
           GITLEAKS_VERSION: "8.27.2"
           GITLEAKS_SHA256: 141c3b2dede46d8b3a53b47116da756bd223decc0374797559a6b50ecba5590c
         run: |
@@ -241,32 +215,12 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
-    # Every shard measured under a minute; the ceiling is here to cap a wedged job, not as a target.
     timeout-minutes: 10
-    # The suite is split into shards that run as parallel jobs, so the pull request waits for the
-    # slowest shard rather than for the sum. Four shards (unit, integration, flows, browser) took
-    # 7m45s, because "integration" alone was 1,444 seconds of work on four cores; the shards below
-    # are balanced by each directory's *measured* cost, from the JUnit files CI itself uploads, to
-    # land inside a minute each.
-    #
-    # The per-shard fixed cost is what limits how fine this can usefully go: about 30 seconds of
-    # service containers, checkout, Python, uv and install before pytest starts. A shard under
-    # ~20 seconds of tests is mostly that overhead, so directories are grouped until they are worth
-    # a job. Going finer still works and costs nothing on a public repository (GitHub bills no
-    # minutes for one), but each job is billed rounded up to the minute if this repository ever
-    # goes private — docs/CICD/PIPELINES.md carries that projection.
-    #
-    # Every test file must be claimed by exactly one shard, or it silently stops running:
-    # `test_every_test_file_runs_in_exactly_one_shard` in tests/unit/platform/ expands these paths
-    # and fails when a file is missing or claimed twice. Add a new test directory to a shard in the
-    # same pull request that creates it.
     strategy:
-      # Every shard reports, so one red shard does not hide another's failures.
       fail-fast: false
       matrix:
         include:
-          # ── integration: the slow half. Each entry is whole directories, grouped to ~100 seconds
-          # of measured work; discovery and queue are heavy enough to sit alone.
+          # ── integration: the slow half.
           - name: int-discovery
             paths: tests/integration/discovery
           # Carries the 07:30 rush budget (Issue 47), which runs alone after the parallel pass.
@@ -301,36 +255,19 @@ jobs:
               tests/unit/notifications tests/unit/platform tests/unit/scripts
               tests/unit/seed tests/unit/sites
           # The cross-domain flow files at the top of tests/, and any added later: the whole tree
-          # with the three layer folders ignored. The guard test fails if this shard disappears.
           - name: flows
             paths: tests --ignore=tests/unit --ignore=tests/integration --ignore=tests/e2e
-          # ── browser (Issue 55): a real server and Chromium, driven by Playwright. Each xdist
-          # worker is its own process and builds its own module fixtures — its own database, its own
-          # server on a free port, its own browser — so nothing is shared between workers and the
-          # only question is how a shard's tests are handed out.
-          #
-          # By module (the default) is enough for a shard holding several files, which is what the
-          # last two do. The seven resilience tests are one file and 250 seconds between them,
-          # almost all of it waiting out real backoff and recovery budgets, so that shard hands out
-          # tests one by one instead and the waits overlap.
           - name: board-resilience
             browser: "1"
             paths: >-
               tests/e2e/display/test_board_resilience.py
               --deselect tests/e2e/display/test_board_resilience.py::test_a_day_offline_leaves_the_heap_the_listeners_and_the_layout_where_they_were
             dist: load
-          # Kept out of the shard above, and out of each other's way: these tests measure the board
-          # rather than exercise it — the contrast of every text as drawn, and whether a day offline
-          # leaked listeners or heap — and a busy machine changes the answer. The leak test failed
-          # exactly this way beside its six neighbours (45 listeners against 39), so this shard runs
-          # one test at a time.
           - name: board-measured
             browser: "1"
             paths: >-
               tests/e2e/display/test_board_accessibility.py
               tests/e2e/display/test_board_resilience.py::test_a_day_offline_leaves_the_heap_the_listeners_and_the_layout_where_they_were
-            # One worker, not "-n auto": four workers would still run these two modules side by
-            # side, which is the thing they cannot tolerate.
             workers: "0"
           - name: board-pages
             browser: "1"
@@ -342,9 +279,6 @@ jobs:
             browser: "1"
             paths: tests/e2e/patient tests/e2e/dashboard
     services:
-      # The images the dev stack pins (decision 4; infra/docker/docker-compose.db.yml), with its
-      # default credentials. test_dev_stack_compose.py fails if the PostgreSQL image differs, and
-      # the guard test if the Redis image does.
       db:
         image: postgis/postgis:18-3.6
         env:
@@ -353,8 +287,6 @@ jobs:
           POSTGRES_DB: btk
         ports:
           - 5432:5432
-        # Over TCP, like the compose health check: on first boot a socket-only server installs
-        # PostGIS, and a socket check would call it ready too early.
         options: >-
           --health-cmd "pg_isready -h 127.0.0.1 -U btk_user -d btk"
           --health-interval 5s
@@ -370,15 +302,10 @@ jobs:
           --health-timeout 3s
           --health-retries 20
     env:
-      # The server the postgres-marked tests create throwaway databases on, and the Redis the
-      # redis-marked ones use. REQUIRE_* turns "no server" into a failure, so a service container
-      # that never started cannot pass as a skip. DATABASE_URL and REDIS_URL are deliberately not
-      # set for pytest: tests build their own Settings, and a global URL would leak into them.
       TEST_DATABASE_URL: postgresql://btk_user:change-me@localhost:5432/btk
       TEST_REDIS_URL: redis://localhost:6379/15
       REQUIRE_POSTGRES_TESTS: "1"
       REQUIRE_REDIS_TESTS: "1"
-      # A browser shard fails, rather than skips, when Chromium is missing (tests/e2e/conftest.py).
       REQUIRE_BROWSER_TESTS: ${{ matrix.browser || '0' }}
     steps:
       - name: Check out
@@ -390,16 +317,14 @@ jobs:
       - *uv-cache
       - *install
 
-      # What a deploy does to a database (Issue 11 runs the same script inside the new image), on
-      # the service container: a migration or seed that fails, fails here, not during a release.
+      # What a deploy does to a database
       - name: Deploy sequence on the service database
         if: matrix.name == 'int-platform'
         env:
           DATABASE_URL: postgresql://btk_user:change-me@localhost:5432/btk
         run: ./scripts/db/deploy-sequence.sh
 
-      # Chromium for the browser shard, at the version requirements.txt pins Playwright to, with the
-      # system libraries it needs. The download is cached; the libraries come from apt each run.
+      # Chromium for the browser shard
       - name: Cache Playwright's Chromium
         if: matrix.browser
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -407,9 +332,6 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
       # Without `--with-deps`: that flag spent 22 seconds a shard on apt, and the ubuntu-24.04
-      # image already ships Chrome and its libraries. The browser is cached above, so this step is
-      # the browser being unpacked. If a future runner image drops those libraries, Chromium fails
-      # to launch and the shard fails loudly (REQUIRE_BROWSER_TESTS=1) rather than skipping.
       - name: Install Chromium for Playwright
         if: matrix.browser
         run: python -m playwright install chromium
@@ -425,8 +347,7 @@ jobs:
           --dist ${{ matrix.dist || 'loadscope' }}
           --cov --cov-report= --cov-fail-under=0 --junitxml="junit-$SHARD.xml"
 
-      # The 07:30 rush (Issue 47) measures latency, so it runs alone after the parallel run, which
-      # skips it: a budget judged while every CPU is busy with other tests measures the runner.
+      # The 07:30 rush
       - name: 07:30 rush, alone
         if: matrix.name == 'int-queue'
         run: >-
@@ -513,8 +434,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: cat summary.md >> "$GITHUB_STEP_SUMMARY"
 
-      # One comment per pull request, edited in place on every run rather than stacked up.
-      # Skipped for a fork, whose token cannot write to this repository.
+      # One comment per pull request
       - name: Comment on the pull request
         if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
         env:
